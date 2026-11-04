@@ -54,6 +54,10 @@ struct ObjectKey {
 Json key_json(const ObjectKey &key);
 ObjectKey parse_key(const Json &value);
 using Refs = std::map<std::string, ObjectKey>;
+struct RefUpdate {
+  std::string name;
+  std::optional<ObjectKey> expected, value;
+};
 // Local recovery metadata. Endpoint is a hash of the canonical URL, never a credential.
 struct TransferSession {
   std::string id, direction, endpoint, reference, state = "transferring";
@@ -220,6 +224,9 @@ public:
   bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
                        std::stop_token = {}) const;
   void remove_ref(std::string_view) const;
+  // Compare all expected values, verify replacement closures, then publish
+  // one refs document. Null value removes a ref; null expected means absent.
+  bool compare_update_refs(const std::vector<RefUpdate> &, OperationOptions = {}) const;
   std::vector<TransferSession> transfer_sessions(std::stop_token = {}) const;
   std::optional<TransferSession> transfer_session(std::string_view id) const;
   void write_transfer_session(const TransferSession &, std::stop_token = {}) const;

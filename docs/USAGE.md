@@ -135,6 +135,8 @@ Pour les pointeurs Git LFS déjà commités, utiliser `syrnck git lfs-preview HE
 
 Les pins `git/<manifeste>` protègent les assets même si un commit disparaît du graphe Git. Leur retrait est manuel dans ce prototype. Git conserve ses propres règles pour l'historique de code, indépendamment du GC Syrnck.
 
+`syrnck git retention-scan` inventorie les pointeurs des références, reflogs et index de chaque worktree enregistré sans ouvrir le store. `syrnck git retention` vérifie leurs fichiers complets et prévisualise les pins manquants ; `--apply` les ajoute en une transaction. Les pins non observés sont signalés sans suppression automatique. Voir les [garanties et limites de la rétention Git](GIT_RETENTION.md).
+
 Le transfert des blocs est encore explicite, par référence de manifeste :
 
 ```text

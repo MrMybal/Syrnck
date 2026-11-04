@@ -503,10 +503,19 @@ Refs Store::refs() const {
   return refs;
 }
 void Store::write_refs(const Refs &refs, std::stop_token stop) const {
+  // Reference names cannot contain JSON escapes. Reject provably oversized
+  // documents early; check the exact encoded size again before publication.
+  std::size_t lower_bound = 2;
+  for (const auto &[name, key] : refs) {
+    const auto size = name.size() + key.id.size() + kind_name(key.kind).size() + 10;
+    require(size <= max_object_size - lower_bound, "reference document exceeds 16 MiB");
+    lower_bound += size;
+  }
   Json j = Json::object();
   for (const auto &[name, key] : refs)
-    j[name] = key_json(key);
+    j.get_ref<Json::object_t &>().emplace_back(name, key_json(key));
   auto value = j.dump();
+  require(value.size() <= max_object_size, "reference document exceeds 16 MiB");
   atomic_write(root() / "refs.json", bytes(value), true, stop);
 }
 void Store::set_ref(std::string_view name, const ObjectKey &key, std::stop_token stop) const {
@@ -530,6 +539,39 @@ bool Store::compare_set_ref(std::string_view name, const std::optional<ObjectKey
   (void)closure({key}, true, stop);
   all.insert_or_assign(std::string(name), key);
   write_refs(all, stop);
+  return true;
+}
+bool Store::compare_update_refs(const std::vector<RefUpdate> &updates, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  auto all = refs();
+  std::set<std::string> names;
+  std::set<ObjectKey> roots;
+  for (const auto &update : updates) {
+    throw_if_cancelled(options.stop);
+    validate_ref(update.name);
+    require(names.insert(update.name).second, "duplicate reference transaction entry");
+    if (update.expected)
+      (void)key_json(*update.expected);
+    if (update.value) {
+      (void)key_json(*update.value);
+      roots.insert(*update.value);
+    }
+  }
+  for (const auto &update : updates) {
+    auto found = all.find(update.name);
+    auto actual = found == all.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
+    if (actual != update.expected)
+      return false;
+    if (update.value)
+      all[update.name] = *update.value;
+    else
+      all.erase(update.name);
+  }
+  if (updates.empty())
+    return true;
+  (void)closure(std::vector<ObjectKey>(roots.begin(), roots.end()), true, options.stop, options.progress);
+  report_progress(options, {ProgressPhase::publishing, "refs"});
+  write_refs(all, options.stop);
   return true;
 }
 void Store::remove_ref(std::string_view name) const {

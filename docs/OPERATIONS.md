@@ -16,7 +16,7 @@ syrnck get MANIFEST restored.uasset --progress
 ```
 
 `put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process`,
-`git lfs-preview/migrate-lfs` and
+`git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
@@ -46,6 +46,10 @@ after the final commit command begins. See [LFS migration recovery](GIT_LFS_MIGR
 requested range. [Manifest comparisons](FILE_COMPARISON.md) use planning counters
 in block entries across both manifests, rather than bytes. Both support
 cancellation before output publication.
+
+[Git retention](GIT_RETENTION.md) scans metadata, verifies observed
+assets and publishes all added protections together. Cancellation before that
+publication changes no pin; unobserved pins are never removed automatically.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

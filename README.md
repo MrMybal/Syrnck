@@ -15,7 +15,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 | Component | Available functionality |
 | --- | --- |
 | `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, revisions, retention and GC |
-| `syrnck_git` | Single-file/resident Git filters, asset catalogs, retained bundles, offline LFS migration and opt-in pre-push hooks |
+| `syrnck_git` | Git filters, asset catalogs, retention inventory/protection, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
 | `syrnck` | Cross-platform CLI, loopback server, and push/pull agent |
@@ -95,6 +95,8 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 In an existing Git repository, run `syrnck git install`, then add the appropriate rules from [examples/unreal.gitattributes](examples/unreal.gitattributes). An opt-in [pre-push hook](docs/GIT_ASSETS.md#opt-in-pre-push-hook) can verify and upload assets throughout the history being pushed before Git proceeds. Install it explicitly and configure a separate block URL. [Checkout policies](docs/GIT_ASSETS.md#on-demand-checkout-and-pointer-only-clones) support verified local reconstruction, opt-in downloads of missing blocks, and pointer-only clones for code work. The [resident filter](docs/GIT_FILTER_PROCESS.md) keeps one Store and its bounded verified cache across files in a Git command. Deferred hydration and a watcher remain future work.
 
 Existing LFS projects can use `syrnck git lfs-preview HEAD` to audit cached objects, then `syrnck git migrate-lfs HEAD --branch converted-assets` to create a child commit with native pointers and retained blocks. This preserves HEAD, the index and working files. It converts one snapshot; earlier commits still require LFS storage. See [offline LFS migration and recovery](docs/GIT_LFS_MIGRATION.md).
+
+`syrnck git retention-scan` inventories pointers across references, reflogs and worktree indexes. `git retention` previews verified protections; `git retention --apply` adds them atomically. Existing pins remain intact; unobserved pins are reported for inspection. See [Git retention coverage and limits](docs/GIT_RETENTION.md).
 
 The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for chunked storage and [Syncthing](https://github.com/syncthing/syncthing) for differential synchronization. No implementation code from either project was copied into this engine. Syncthing interoperability is not currently implemented.
 

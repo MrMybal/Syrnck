@@ -49,6 +49,19 @@ Bytes bundle_bytes(const Catalog &);
 ObjectKey bundle_key(const Catalog &);
 void verify_assets(const Store &, const Catalog &, OperationOptions = {});
 ObjectKey prepare_bundle(const Store &, const Catalog &, OperationOptions = {});
+struct RetentionInventory {
+  std::string repository, fingerprint;
+  std::size_t objects = 0;
+  std::set<std::string> commits;
+  std::vector<Pointer> manifests;
+  Json json() const;
+};
+// Reads all refs, reflogs and indexes across worktrees. Pointer-shaped blobs
+// are retained conservatively regardless of their tree mode or attributes.
+RetentionInventory retention_inventory(const fs::path &directory, OperationOptions = {});
+// Preview by default. Apply adds verified per-repository manifest pins in one
+// transaction. Unobserved pins are reported, never removed automatically.
+Json reconcile_retention(const Store &, const fs::path &directory, bool apply = false, OperationOptions = {});
 void configure_remote(const fs::path &directory, std::string_view name, std::string_view block_url);
 std::string remote_url(const fs::path &directory, std::string_view name);
 void install_pre_push(const fs::path &directory, const fs::path &executable, const fs::path &store);

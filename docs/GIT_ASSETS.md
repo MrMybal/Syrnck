@@ -34,8 +34,9 @@ It contains no source-code files and does not replace a Git commit. Identical
 catalogs produce identical bundle IDs. Path validation, portable case collisions
 and the 16 MiB metadata limit apply. Bundle pins retain complete versions through
 GC independently of later changes to Git refs. They currently require explicit
-unpinning to release; automatic Git/ref/reflog retention reconciliation remains
-future work.
+unpinning to release. [Retention inventory and protection](GIT_RETENTION.md)
+can now observe refs, reflogs and worktree indexes, verify their assets and add
+per-repository pins atomically. Automatic retirement remains future work.
 
 ## Grouped transfers
 

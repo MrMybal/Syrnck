@@ -32,7 +32,8 @@ Critère de sortie : aucune perte des versions conservées après suppression de
 - [x] Migration hors ligne d'un snapshot Git LFS vers un commit enfant sur une nouvelle branche : audit SHA-256, import dédupliqué, attributs et rétention complète avant publication, sans modifier HEAD/index/workspace.
 - [ ] Réécriture de tout l'historique LFS, téléchargement depuis les serveurs LFS et prise en charge des extensions de pointeurs.
 - [ ] Compatibilité explicite GitHub/GitLab et documentation d'hébergement des blocs.
-- [ ] Réconciliation de rétention avec branches, tags, index, reflogs, stashes et worktrees.
+- [x] Inventaire des pointeurs par branches, tags, index, reflogs, stashes et worktrees ; aperçu vérifié, ajout atomique des protections manquantes et rapport des pins non observés.
+- [ ] Retrait automatique coordonné des anciennes protections Git, politique de récupération et inventaire incrémental ; prise en compte des fichiers de travail et pseudo-références opérationnelles.
 - [ ] Exécutable installable, configuration par dépôt, mises à jour et désinstallation.
 
 Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut pas publier de pointeur dont les blocs manquent sur le service associé. Une erreur réseau reste récupérable sans perte de données.
@@ -126,6 +127,7 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
 - [ ] Backups restaurables, réplication, scrubbing périodique et réparation des blocs manquants.
 - [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
+- [ ] Diagnostiquer les resets TCP intermittents sous Windows lors des refus HTTP 401 avec corps de requête, et garantir une réponse HTTP explicite.
 - [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.
 - [ ] Choix de licence, provenance des dépendances, paquets signés et stratégie de migration de format.
 

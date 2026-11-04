@@ -164,6 +164,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native detach-history -m MESSAGE [--branch main]
   git install [DOSSIER] [--encrypted]
   git catalog COMMIT [--directory CHEMIN]   Inspecter les pointeurs du commit
+  git retention-scan [--directory CHEMIN]   Inventorier les pointeurs de toutes les racines Git
+  git retention [--apply] [--directory CHEMIN]   Auditer ou ajouter les protections vérifiées
   git prepare-assets COMMIT [--directory CHEMIN]   Vérifier et conserver ses assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git configure-remote NOM URL | git install-hook [--directory CHEMIN]
@@ -189,7 +191,7 @@ Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
               fsck, native commit/export, git clean/smudge/filter-process,
-              git lfs-preview/migrate-lfs et agent push/pull/resume/prune.
+              git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
@@ -223,6 +225,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native detach-history -m MESSAGE [--branch main]
   git install [DIRECTORY] [--encrypted]
   git catalog COMMIT [--directory PATH]   Inspect committed asset pointers
+  git retention-scan [--directory PATH]   Inventory pointers from all Git roots
+  git retention [--apply] [--directory PATH]   Audit or add verified retention pins
   git prepare-assets COMMIT [--directory PATH]   Verify and retain its assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git configure-remote NAME URL | git install-hook [--directory PATH]
@@ -248,7 +252,7 @@ Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
               fsck, native commit/export, git clean/smudge/filter-process,
-              git lfs-preview/migrate-lfs and agent push/pull/resume/prune.
+              git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
@@ -387,16 +391,20 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize("\nAssign filter=syrnck -text to assets in .gitattributes.\n", language);
     return 0;
   }
-  if (command == "git" && (sub == "catalog" || sub == "lfs-preview")) {
+  if (command == "git" && (sub == "catalog" || sub == "lfs-preview" || sub == "retention-scan")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
     auto cache = sub == "lfs-preview" ? args.option("--lfs-objects") : std::optional<std::string>{};
     auto text = args.flag("--progress"), json = args.flag("--progress-json");
     require(!(text && json), "choose one progress output mode");
-    args.count(1);
+    args.count(sub == "retention-scan" ? 0 : 1);
     control = std::make_unique<cli::OperationControl>(language, json   ? cli::ProgressMode::json
                                                                 : text ? cli::ProgressMode::text
                                                                        : cli::ProgressMode::none);
     OperationOptions operation{control->token(), [&](const ProgressEvent &event) { control->report(event); }};
+    if (sub == "retention-scan") {
+      print(git::retention_inventory(directory, operation).json());
+      return 0;
+    }
     if (sub == "lfs-preview") {
       auto objects =
           git::lfs_objects(directory, cache ? std::optional{path_from_utf8(*cache)} : std::nullopt);
@@ -447,7 +455,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
   if (command == "git" &&
       (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
-       sub == "migrate-lfs") &&
+       sub == "migrate-lfs" || sub == "retention") &&
       !root_option)
     root = git::common_store(git_directory);
   Store store(root, read_key(), false, store_options);
@@ -459,7 +467,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
-        sub == "pull-assets" || sub == "pre-push" || sub == "migrate-lfs"));
+        sub == "pull-assets" || sub == "pre-push" || sub == "migrate-lfs" || sub == "retention"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -650,7 +658,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    if (sub == "migrate-lfs") {
+    if (sub == "retention") {
+      auto apply = args.flag("--apply");
+      args.count(0);
+      auto result = git::reconcile_retention(store, git_directory, apply, {control->token(), observe});
+      auto ready = result["ready"].get<bool>();
+      print(result);
+      return ready ? 0 : 1;
+    } else if (sub == "migrate-lfs") {
       auto branch = args.option("--branch");
       require(branch.has_value(), "--branch is required for Git LFS migration");
       auto cache = args.option("--lfs-objects");
