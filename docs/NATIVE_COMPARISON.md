@@ -9,6 +9,7 @@ French, using the ordinary `--lang`, `--progress` and `--progress-json` options.
 syrnck native status
 syrnck native status --branch feature --directory PROJECT
 syrnck native status --revision REVISION --progress-json
+syrnck native status --combined --branch main
 syrnck native diff SOURCE_REVISION TARGET_REVISION
 ```
 
@@ -18,6 +19,11 @@ The default baseline is `heads/main`. `--branch NAME` selects another native
 branch; a missing branch is an empty baseline, with every selected file reported
 as untracked. `--revision ID` selects an exact revision and cannot be combined
 with `--branch`. A missing or invalid explicit revision is an error.
+
+`--combined` selects the [combined workspace report](NATIVE_WORKSPACE.md):
+recorded base versus index, then index versus working files. It is a separate
+report schema and cannot be combined with `--revision`. Ordinary status keeps
+the branch-versus-workspace contract below.
 
 `status` reads every selected regular file in full and computes its BLAKE3 file
 hash. A matching size or modification time never substitutes for reading the

@@ -80,6 +80,8 @@ syrnck native commit --message "Import du projet"
 syrnck native commit --message "Modification de la carte"
 syrnck native status --progress
 syrnck native status --revision <identifiant-revision>
+syrnck native status --combined
+syrnck native checkout-plan <identifiant-revision> --verify
 syrnck native diff <ancienne-revision> <nouvelle-revision>
 syrnck native log
 syrnck native branch release <identifiant-revision>
@@ -101,6 +103,8 @@ syrnck native commit --staged --message "Cartes sélectionnées"
 `native add .` prépare tout le snapshot candidat, y compris les suppressions. `native reset CHEMIN...` restaure la sélection depuis la base dans le staging ; `native reset` sans chemin efface tout le staging, y compris si la branche a avancé. Ces commandes ne modifient pas les fichiers de travail. Le staging conserve ses blocs contre le GC et le commit publie la branche et consomme l'index atomiquement. Voir les [contrats du staging natif](NATIVE_STAGING.md).
 
 `native status` lit les fichiers sélectionnés et compare leur hash complet à `heads/main`, à une autre branche avec `--branch`, ou à un snapshot avec `--revision`. Il n'importe aucun fichier. `native diff` compare les métadonnées de deux snapshots ; il ne produit pas encore de patch textuel. Les deux renvoient un rapport JSON et acceptent progression/annulation. Voir les [contrats de comparaison native](NATIVE_COMPARISON.md).
+
+`native status --combined` renvoie séparément la base vers le staging et le staging vers le dossier de travail. `native checkout-plan RÉVISION` propose les créations/remplacements/suppressions et signale les obstacles sans modifier les fichiers. Sa première politique exige tous les fichiers suivis propres et refuse un staging existant ; les fichiers ignorés restent visibles pour détecter les collisions. `--verify` vérifie aussi toute la fermeture stockée de la cible. Un plan bloqué renvoie son JSON avec le code 1. Le checkout avec journal de récupération reste à implémenter. Voir les [contrats d'inspection du workspace](NATIVE_WORKSPACE.md).
 
 Pour raccourcir l'historique tout en gardant une archive :
 

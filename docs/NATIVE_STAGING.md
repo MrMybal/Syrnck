@@ -71,8 +71,9 @@ payload availability; publication and GC verify full retained closures.
 
 `native status` continues to compare the working directory with the branch (or
 an explicit revision). Use `native status --revision STAGING_ID` to compare
-working bytes with the prepared snapshot. There is no combined three-way status
-report yet.
+working bytes with the prepared snapshot. `native status --combined` returns
+both comparisons together, retaining stale-index information. See
+[combined native workspace status](NATIVE_WORKSPACE.md).
 
 `native reset PATH...` restores selected index entries from the recorded base,
 or removes newly added entries. It does not read or restore working files.

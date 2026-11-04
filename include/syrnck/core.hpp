@@ -276,6 +276,12 @@ public:
   std::string stage_directory(const fs::path &, std::string_view branch,
                               const std::vector<std::string> &paths, IngestOptions) const;
   Json staged_status(std::string_view branch, OperationOptions = {}) const;
+  // Read-only branch -> staging -> working-directory comparisons.
+  Json workspace_status(const fs::path &, std::string_view branch, OperationOptions = {}) const;
+  // Conservative read-only preflight, including ignored/untracked obstructions.
+  // This reports proposed actions and blockers; it never changes working files.
+  Json plan_checkout(const fs::path &, std::string_view branch, std::string_view target,
+                     bool verify_objects = false, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

@@ -90,6 +90,8 @@ Imports, native commit/add/staged/reset/status/diff/export commands, reconstruct
 
 `native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Text patches and merge remain future work.
 
+`native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. This is a read-only preflight; checkout execution and its recovery journal remain future work. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

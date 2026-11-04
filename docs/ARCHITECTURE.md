@@ -60,6 +60,8 @@ Le prototype offre la création de révisions, des branches nommées, un journal
 
 Les [comparaisons natives](NATIVE_COMPARISON.md) ajoutent un `status` du dossier par hash complet et un `diff` des métadonnées de snapshots, sans import ni publication. Le [staging natif](NATIVE_STAGING.md) conserve une sélection immuable sous `staging/BRANCHE`, protégée contre le GC avec sa base. Le commit préparé vérifie ses dépendances puis déplace la branche et consomme le staging en une transaction de références ; une base périmée est refusée. Les patches textuels, le checkout d'un workspace existant, les merges de texte à trois voies, les conflits, tags, rebase, cherry-pick, stash, blame, bisect, historique des renommages et signatures font partie de la feuille de route. Les parents multiples sont représentables dans le format, mais aucun algorithme de merge autonome n'est implémenté.
 
+L'[inspection du workspace](NATIVE_WORKSPACE.md) combine base/index/dossier et prépare un plan de checkout sans écriture. Ce plan distingue contenu, mode et représentation, impose les fichiers suivis propres, et inventorie aussi les chemins ignorés pour détecter les collisions. Les liens/jonctions, variantes de casse, transitions fichier/dossier et répertoires protégés sont explicitement bloqués. La vérification complète des objets cibles reste optionnelle ; le plan ne constitue pas un checkout exécuté et ne dispense pas le futur exécuteur de revalider ses attentes sous journal de récupération.
+
 Les fichiers source utilisent actuellement le même moteur de stockage en mode autonome. Leur future interface de diff et de merge sera textuelle. L'utilisation de blocs pour les stocker n'oblige pas à présenter des différences de blocs à l'utilisateur.
 
 ## Stockage physique et packs
@@ -124,7 +126,7 @@ Le [mode appareils non fiables de Syncthing](https://docs.syncthing.net/specs/un
 
 ## Intégrité et limites actuelles
 
-Les objets utilisent un fichier temporaire puis une publication atomique. Les références sont remplacées atomiquement après validation des dépendances. La reconstruction vérifie chaque bloc et le hash complet du fichier ; l'export d'un fichier ne remplace pas une destination existante. L'export d'une révision entière peut rester partiel en cas d'échec ; il ne constitue pas un checkout transactionnel.
+Les objets utilisent un fichier temporaire puis une publication atomique. Les références sont remplacées atomiquement après validation des dépendances. La reconstruction vérifie chaque bloc et le hash complet du fichier ; l'export d'un fichier ne remplace pas une destination existante. L'export d'une révision entière prépare une arborescence complète puis la publie par renommage exclusif dans un nouveau dossier. Un arrêt forcé peut laisser son dossier temporaire ; l'écriture transactionnelle dans un workspace existant reste à développer.
 
 Le scanner exclut `.git`, `.syrnck`, le store et les règles `.syrnckignore`. Il refuse actuellement symlinks et fichiers spéciaux. Les chemins doivent être UTF-8 et portables ; utf8proc détecte leurs collisions après normalisation et casefold Unicode. Le prototype n'enregistre pas les ACL, xattrs, liens matériels ou répertoires vides. Les droits exécutables sont conservés sur Unix seulement.
 

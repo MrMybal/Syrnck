@@ -201,6 +201,21 @@ std::optional<std::string> Store::reset_stage(std::string_view branch, const std
   stage.publish(*this, next, options);
   return next.id;
 }
+Json Store::workspace_status(const fs::path &directory, std::string_view branch,
+                             OperationOptions options) const {
+  auto staged = staged_status(branch, options);
+  const auto &effective = staged["snapshot"].is_null() ? staged["head"] : staged["snapshot"];
+  const auto index =
+      effective.is_null() ? std::optional<std::string>{} : std::optional{effective.get<std::string>()};
+  auto unstaged = status_directory(directory, index, options);
+  const auto clean =
+      !staged["stale"].get<bool>() && staged["clean"].get<bool>() && unstaged["clean"].get<bool>();
+  return Json{{"version", 1},
+              {"branch", branch},
+              {"clean", clean},
+              {"staged", std::move(staged)},
+              {"unstaged", std::move(unstaged)}};
+}
 std::string Store::commit_staged(std::string_view branch, std::string_view message,
                                  OperationOptions options) const {
   throw_if_cancelled(options.stop);

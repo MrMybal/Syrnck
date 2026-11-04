@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/diff/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/diff/export`, `git clean/smudge/filter-process`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -56,6 +56,13 @@ status hashes selected working files, while revision comparison reads only
 revision/manifest metadata. Planning events count entries rather than bytes;
 status verification events report bytes within the current file. Cancellation
 and callback failure produce no partial report or Store publication.
+
+[Combined status and checkout preflight](NATIVE_WORKSPACE.md) are also read-only.
+Combined status keeps the staged and unstaged comparisons separate. Checkout
+planning inventories ignored/untracked paths, hashes tracked files and optionally
+verifies the complete target closure with `--verify`. It ends with a complete
+planning event; blockers are a completed JSON result with CLI exit 1. Neither
+operation publishes files/references or emits a publishing callback.
 
 [Native staging](NATIVE_STAGING.md) freezes selected files during `native add`;
 `staged` reads metadata and `reset` changes only the index. Staged commit never

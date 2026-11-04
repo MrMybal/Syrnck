@@ -177,6 +177,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native staged [--branch main]      Inspecter les changements préparés
   native reset [CHEMIN...] [--branch main]
   native status [--branch main | --revision RÉVISION] [--directory .]
+  native status --combined [--branch main] [--directory .]
+  native checkout-plan RÉVISION [--branch main] [--directory .] [--verify]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
   native log [--branch main] [--limit 50]
@@ -210,7 +212,7 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/checkout-plan/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -244,6 +246,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native staged [--branch main]      Inspect staged changes
   native reset [PATH...] [--branch main]
   native status [--branch main | --revision REVISION] [--directory .]
+  native status --combined [--branch main] [--directory .]
+  native checkout-plan REVISION [--branch main] [--directory .] [--verify]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
   native log [--branch main] [--limit 50]
@@ -277,7 +281,7 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/checkout-plan/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -490,8 +494,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
-                               sub == "add" || sub == "staged" || sub == "reset")) ||
+      (command == "native" &&
+       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
+        sub == "staged" || sub == "reset" || sub == "checkout-plan")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -671,11 +676,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
       print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
     } else if (sub == "status") {
+      const auto combined = args.flag("--combined");
       const auto directory = path_from_utf8(args.option("--directory").value_or("."));
       const auto branch = args.option("--branch");
       auto revision = args.option("--revision");
       args.count(0);
       require(!(branch && revision), "choose either --branch or --revision");
+      require(!(combined && revision), "combined native status cannot select an explicit revision");
+      if (combined) {
+        print(store.workspace_status(directory, branch.value_or("main"), {control->token(), observe}));
+        return 0;
+      }
       if (!revision) {
         const auto name = "heads/" + branch.value_or("main");
         validate_ref(name);
@@ -686,6 +697,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         }
       }
       print(store.status_directory(directory, revision, {control->token(), observe}));
+    } else if (sub == "checkout-plan") {
+      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto branch = args.option("--branch").value_or("main");
+      const auto verify = args.flag("--verify");
+      args.count(1);
+      const auto plan =
+          store.plan_checkout(directory, branch, args.values[0], verify, {control->token(), observe});
+      print(plan);
+      return plan["ready"].get<bool>() ? 0 : 1;
     } else if (sub == "diff") {
       args.count(2);
       print(store.compare_revisions(args.values[0], args.values[1], {control->token(), observe}));

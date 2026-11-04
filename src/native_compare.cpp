@@ -4,22 +4,9 @@
 #include <fstream>
 namespace syrnck {
 namespace {
-struct Content {
-  std::uint64_t size;
-  std::string hash;
-};
-struct File {
-  std::string manifest;
-  Content content;
-  bool executable;
-  Json json() const {
-    return Json{{"manifest", manifest.empty() ? Json{} : Json(manifest)},
-                {"size", content.size},
-                {"file_hash", content.hash},
-                {"executable", executable}};
-  }
-};
-using Snapshot = std::map<std::string, File>;
+using Content = NativeContent;
+using File = NativeSnapshotFile;
+using Snapshot = NativeSnapshot;
 class ManifestSummaries {
   const Store &store_;
   std::map<std::string, Content> cache_;
@@ -108,7 +95,12 @@ Json changes(const Snapshot &source, const Snapshot &target, bool workspace,
                               {"unchanged", unchanged}}},
               {"changes", std::move(result)}};
 }
-Content hash_file(const NativeFile &file, Bytes &buffer, const OperationOptions &options) {
+} // namespace
+NativeSnapshot read_native_snapshot(const Store &store, std::string_view revision, OperationOptions options) {
+  ManifestSummaries summaries(store);
+  return snapshot(store, revision, summaries, options);
+}
+NativeContent hash_native_file(const NativeFile &file, Bytes &buffer, const OperationOptions &options) {
   std::ifstream input(file.path, std::ios::binary);
   require(input.is_open(), "cannot open source file");
   blake3_hasher hasher;
@@ -140,7 +132,6 @@ Content hash_file(const NativeFile &file, Bytes &buffer, const OperationOptions 
   blake3_hasher_finalize(&hasher, digest.data(), digest.size());
   return {read, hex(digest)};
 }
-} // namespace
 Json Store::status_directory(const fs::path &directory, const std::optional<std::string> &revision,
                              OperationOptions options) const {
   throw_if_cancelled(options.stop);
@@ -152,7 +143,7 @@ Json Store::status_directory(const fs::path &directory, const std::optional<std:
   visit_native_files(
       directory, root(),
       [&](const NativeFile &file) {
-        auto content = hash_file(file, buffer, options);
+        auto content = hash_native_file(file, buffer, options);
         require(content.size <= UINT64_MAX - hashed_bytes, "native comparison byte count overflow");
         hashed_bytes += content.size;
         current.emplace(file.relative, File{{}, std::move(content), file.executable});
