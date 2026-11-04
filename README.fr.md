@@ -13,7 +13,8 @@ Deux modes consomment la même bibliothèque : **Git**, pour conserver son écos
 | Composant | Disponible |
 | --- | --- |
 | `syrnck_core` | FastCDC 2020 ou blocs fixes, BLAKE3, Zstd, packs indexés, reconstruction vérifiée, révisions et GC |
-| `syrnck_git` | Filtres clean/smudge ; code conservé dans Git ; assets représentés par des pointeurs |
+| `syrnck_git` | Filtres, catalogues des assets des commits, racines conservées et hook pre-push optionnel |
+| `syrnck_git_net` | Push/pull groupés des assets Git avec publication de catalogues vérifiés et immuables |
 | `syrnck_net` | API HTTP v1 authentifiée, comparaison et transfert des objets absents, publication par compare-and-swap |
 | `syrnck` | CLI, serveur et agent push/pull |
 | `syrnck_ffi` / `syrnck_ffi_static` | Interface C dynamique/statique : blocs, dépendances, import vérifié et pins |
@@ -72,7 +73,7 @@ Le lecteur consulte les index de packs par pages vérifiées, avec **4 Mio de ca
 
 Le GC et `fsck` parcourent les inventaires en flux et marquent les objets empaquetés avec **un bit par entrée**. Le GC réécrit les seuls survivants sans liste complète d'IDs. L'empaquetage et la compaction fusionnent les index par pages et préparent les packs sans liste complète d'IDs empaquetés ; les clés isolées restent à trier. Les clés absentes des packs et les métadonnées gardent leurs propres coûts mémoire. Voir les [garanties des audits](docs/AUDIT.md), de la [compaction](docs/COMPACTION.md) et les [budgets du GC](docs/PACKS.md#mémoire-du-gc).
 
-Dans un dépôt Git existant, lancer `syrnck git install`, puis ajouter les règles de [examples/unreal.gitattributes](examples/unreal.gitattributes). **Un `git push` ne transfère pas encore les blocs Syrnck** : le transfert reste explicite via l'agent. Les parcours complets sont dans [docs/USAGE.md](docs/USAGE.md).
+Dans un dépôt Git existant, lancer `syrnck git install`, puis ajouter les règles de [examples/unreal.gitattributes](examples/unreal.gitattributes). Un [hook pre-push optionnel](docs/GIT_ASSETS.md#opt-in-pre-push-hook) peut vérifier et envoyer les assets de tout l'historique à publier. Il faut l'installer explicitement et configurer une URL de blocs distincte ; les filtres seuls ne transfèrent pas les blocs. Les parcours complets sont dans [docs/USAGE.md](docs/USAGE.md).
 
 L'agent accepte `--requests 4 --transfer-buffer-mib 64` pour chevaucher les requêtes d'objets, avec accès au Store coordonnés. Le défaut reste une requête ; le budget couvre les payloads et les réponses réservées, pas toute la mémoire du processus. Voir [limites et reprises des transferts parallèles](docs/PARALLEL_TRANSFERS.md). Le GC et l'empaquetage deviennent interruptibles pendant la préparation, puis terminent leur nettoyage après publication ; voir les [frontières de maintenance](docs/MAINTENANCE.md).
 

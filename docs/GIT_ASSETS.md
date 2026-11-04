@@ -72,6 +72,69 @@ separate roots, and the Git server and block server do not participate in one
 distributed transaction. A failed Git publication can leave retained block roots.
 Do not delete those roots while corresponding Git history must stay reconstructible.
 
+## Opt-in pre-push hook
+
+```text
+syrnck git install
+syrnck git configure-remote origin https://blocks.example.invalid
+syrnck git install-hook
+git push origin main
+```
+
+The hook is installed only by the explicit `install-hook` command. Ordinary
+filter installation does not install it. The block URL is stored locally as
+`remote.origin.syrnckUrl`, separately from Git's transport URL. CLI configuration
+rejects credentials/query/fragment URLs and non-loopback HTTP. The generated
+script contains only quoted executable/store paths, inherits token/key environment
+variables, and forwards Git's hook arguments/stdin. No token is written to Git
+config or the script. The automatic invocation uses system CAs; for private CAs,
+integrate the CLI invocation with `--ca PATH` into an existing hook manually.
+
+Git's [pre-push input](https://git-scm.com/docs/githooks#_pre_push) identifies each
+local tip and proposed remote update. The hook resolves non-deleted tips to
+commits and walks their **entire locally reachable ancestry**, including merge
+parents, using [`rev-list`](https://git-scm.com/docs/git-rev-list). It does not
+assume assets are present merely because Git advertises an old remote commit.
+Annotated commit tags and overlapping multi-ref pushes share this traversal.
+An asset removed from the newest tree still needs publishing for its historical
+commit. Each nonempty catalog is verified, uploaded and pinned before the hook
+allows Git to continue. Upload-lease support is required for this hook.
+
+The block client is created lazily. Deletion-only and entirely code-only histories
+need no block endpoint/token or block network request. A current tree with no
+assets does not bypass checks on older asset-bearing commits. Missing manifests,
+bad pointer sizes, unavailable blocks, wrong immutable roots, unsupported leases
+and network errors fail the hook and abort that Git push. Rerun the push after
+fixing the cause; verified uploads and publication receipts are reusable.
+
+Installation is atomic and idempotent for the exact generated script. An existing
+different hook, a symlinked hooks path or configured `core.hooksPath` is refused
+without overwriting user files. Existing hook workflows must call the equivalent
+`syrnck --store COMMON_STORE git pre-push "$@"` themselves, preserve stdin, and
+propagate its failure. Shared Git worktrees use the common hooks/store location.
+
+This is a **local client hook**, and Git's `--no-verify` bypasses it. It does not
+enforce a policy on GitHub/GitLab or make Git/block publication atomic across
+servers. Cancellation or a later Git push failure can leave complete block roots
+retained, and a multi-ref Git push uses Git's own atomicity rules. Server-side Git
+enforcement, automatic orphan-root expiry and distributed publication remain
+future work.
+
+The current hook rejects shallow/grafted histories and tags which cannot resolve
+to commits. Fetch a complete local Git history and its pointer blobs before use.
+Missing promisor data fails locally. It accepts at most 4,096 update lines,
+1 MiB stdin, 4 KiB per line and 100,000 unique reachable commits; history output
+is limited to 8 MiB. It rescans committed trees on each invocation and does not
+claim incremental production throughput. Presence/catalog indexing remains work
+for larger projects.
+
+The `git_pre_push` suite runs real pushes to isolated **local** bare Git repos
+and an encrypted loopback block server. It checks intermediate/deleted asset
+versions, annotated tags and multiple refs, old-version clone/checkout, missing
+historical blocks, unavailable endpoints, retry, existing-hook preservation,
+SHA-256 linked worktrees, code-only/deletion flows and invalid/shallow/grafted input. It does not push this
+source repository or contact GitHub.
+
 ## Bounds and local Git requirements
 
 Use Git **2.45 or newer**. Local plumbing uses `--no-replace-objects` and

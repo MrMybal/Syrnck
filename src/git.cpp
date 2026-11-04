@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "git_internal.hpp"
 #include <charconv>
 #include <sstream>
 #include <syrnck/git.hpp>
@@ -116,7 +117,7 @@ fs::path common_store(const fs::path &directory) {
   require(result.status == 0, "directory must already be a Git repository");
   return path_from_utf8(trim_newline(result.out)) / "syrnck";
 }
-static std::string shell_quote(const fs::path &p) {
+std::string detail::shell_quote(const fs::path &p) {
   auto value = utf8(p);
   require(value.find_first_of("\r\n\0", 0, 3) == value.npos, "invalid filter path");
   std::string out = "'";
@@ -129,7 +130,7 @@ static std::string shell_quote(const fs::path &p) {
   return out + "'";
 }
 void install(const fs::path &directory, const fs::path &executable, const fs::path &store) {
-  auto command = shell_quote(executable) + " --store " + shell_quote(store) + " git ";
+  auto command = detail::shell_quote(executable) + " --store " + detail::shell_quote(store) + " git ";
   std::vector<std::pair<std::string, std::string>> config = {{"filter.syrnck.clean", command + "clean"},
                                                              {"filter.syrnck.smudge", command + "smudge"},
                                                              {"filter.syrnck.required", "true"}};

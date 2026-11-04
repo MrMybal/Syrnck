@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <syrnck/git.hpp>
 #include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
@@ -163,6 +164,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git catalog COMMIT [--directory CHEMIN]   Inspecter les pointeurs du commit
   git prepare-assets COMMIT [--directory CHEMIN]   Vérifier et conserver ses assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
+  git configure-remote NOM URL | git install-hook [--directory CHEMIN]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -214,6 +216,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git catalog COMMIT [--directory PATH]   Inspect committed asset pointers
   git prepare-assets COMMIT [--directory PATH]   Verify and retain its assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
+  git configure-remote NAME URL | git install-hook [--directory PATH]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -313,9 +316,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               .json());
     return 0;
   }
+  if (command == "git" && (sub == "configure-remote" || sub == "install-hook")) {
+    auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    if (sub == "configure-remote") {
+      args.count(2);
+      const net::Remote validate(args.values[1], std::string(32, '_'));
+      (void)validate;
+      git::configure_remote(directory, args.values[0], args.values[1]);
+      print(Json{{"remote", args.values[0]}, {"configured", true}});
+    } else {
+      args.count(0);
+      auto location = root_option ? root : git::common_store(directory);
+      require(fs::is_regular_file(location / "config.json"),
+              "initialize Git filters before installing the hook");
+      git::install_pre_push(directory, executable_path(), location);
+      print(Json{{"installed", true}});
+    }
+    return 0;
+  }
   auto git_directory =
       command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
-  if (command == "git" && (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets") &&
+  if (command == "git" &&
+      (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets" || sub == "pre-push") &&
       !root_option)
     root = git::common_store(git_directory);
   Store store(root, key, false, store_options);
@@ -326,7 +348,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       (command == "native" && (sub == "commit" || sub == "export")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
-                            sub == "push-assets" || sub == "pull-assets"));
+                            sub == "push-assets" || sub == "pull-assets" || sub == "pre-push"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -502,7 +524,46 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    if (sub == "push-assets" || sub == "pull-assets") {
+    if (sub == "pre-push") {
+      auto limits = transfer_options(args);
+      require(!limits.require_read_lease, "read lease requirement is only available for pull");
+      limits.require_upload_lease = true;
+      args.count(2);
+      auto commits = git::push_commits(git_directory, std::cin, {control->token(), observe});
+      Json summary{{"commits_scanned", std::uint64_t{0}},
+                   {"catalogs_published", std::uint64_t{0}},
+                   {"assets", std::uint64_t{0}},
+                   {"transferred_objects", std::uint64_t{0}},
+                   {"transferred_bytes", std::uint64_t{0}},
+                   {"object_upload_bytes", std::uint64_t{0}},
+                   {"object_download_bytes", std::uint64_t{0}},
+                   {"object_retries", std::uint64_t{0}}};
+      auto add = [&](std::string_view field, std::uint64_t amount) {
+        auto &value = summary[std::string(field)];
+        require(amount <= std::numeric_limits<std::uint64_t>::max() - value.get<std::uint64_t>(),
+                "Git transfer counter overflow");
+        value = value.get<std::uint64_t>() + amount;
+      };
+      std::unique_ptr<net::Remote> remote;
+      for (const auto &commit : commits) {
+        auto catalog = git::catalog(git_directory, commit, {control->token(), observe});
+        add("commits_scanned", 1);
+        if (catalog.assets.empty())
+          continue;
+        if (!remote) {
+          require(token.has_value(), "set SYRNCK_TOKEN");
+          remote =
+              std::make_unique<net::Remote>(git::remote_url(git_directory, args.values[0]), *token, ca_path);
+        }
+        auto result = git::push_assets(store, catalog, *remote, {control->token(), observe}, limits);
+        add("catalogs_published", 1);
+        add("assets", catalog.assets.size());
+        for (const auto *field : {"transferred_objects", "transferred_bytes", "object_upload_bytes",
+                                  "object_download_bytes", "object_retries"})
+          add(field, result["transfer"][field].get<std::uint64_t>());
+      }
+      print(summary);
+    } else if (sub == "push-assets" || sub == "pull-assets") {
       auto limits = transfer_options(args);
       args.count(2);
       auto catalog = git::catalog(git_directory, args.values[1], {control->token(), observe});

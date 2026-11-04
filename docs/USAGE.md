@@ -147,7 +147,9 @@ syrnck git install
 syrnck --store <store-git-destinataire> agent pull https://blocs.exemple.test asset-release git/<manifeste>
 ```
 
-Le checkout ne télécharge pas encore les blocs manquants et un `git push` ne les envoie pas. Pour cloner l'historique avant d'avoir les blocs, utiliser `git clone --no-checkout`, installer Syrnck, récupérer les références d'assets nécessaires, puis effectuer le checkout. La publication groupée des assets d'un commit et les hooks sont à développer.
+Le checkout ne télécharge pas encore automatiquement les blocs manquants. Pour un clone sans assets, utiliser `git clone --no-checkout`, lancer `syrnck git install`, puis `syrnck git pull-assets URL COMMIT` avant le checkout. `git catalog COMMIT` inspecte les pointeurs sans store ; `git push-assets URL COMMIT` transfère leur fermeture vérifiée en groupe. Voir les [catalogues et transferts Git](GIT_ASSETS.md).
+
+Le hook d'envoi s'active explicitement avec `syrnck git configure-remote origin URL_BLOCS` puis `syrnck git install-hook`. Il vérifie et envoie les assets de tous les commits ancêtres avant de laisser Git publier ; une erreur réseau ou des blocs historiques manquants bloque ce push. Les jetons restent dans l'environnement. Les hooks existants ne sont pas remplacés et `core.hooksPath` demande une intégration manuelle. Ce hook local reste contournable avec `--no-verify` ; il ne remplace pas une politique de validation côté serveur Git.
 
 ## Serveur et agent
 

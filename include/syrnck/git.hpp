@@ -30,4 +30,9 @@ Bytes bundle_bytes(const Catalog &);
 ObjectKey bundle_key(const Catalog &);
 void verify_assets(const Store &, const Catalog &, OperationOptions = {});
 ObjectKey prepare_bundle(const Store &, const Catalog &, OperationOptions = {});
+void configure_remote(const fs::path &directory, std::string_view name, std::string_view block_url);
+std::string remote_url(const fs::path &directory, std::string_view name);
+void install_pre_push(const fs::path &directory, const fs::path &executable, const fs::path &store);
+// Parse Git's pre-push input, then enumerate every ancestor of non-deleted tips.
+std::vector<std::string> push_commits(const fs::path &directory, std::istream &, OperationOptions = {});
 } // namespace syrnck::git

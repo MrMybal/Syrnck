@@ -19,6 +19,7 @@ class GitCatalog(unittest.TestCase):
         self.repo.mkdir()
         self.env = {k: v for k, v in os.environ.items() if k.upper() not in
                     ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
+        self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
         self.initialize()
 
     def initialize(self, sha256=False):

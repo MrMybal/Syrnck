@@ -24,7 +24,8 @@ Critère de sortie : aucune perte des versions conservées après suppression de
 
 - [x] Catalogue déterministe des pointeurs d'un commit Git et racine locale vérifiée conservant ses assets.
 - [x] Push/pull groupés des catalogues, racines distantes immuables, validation en staging et publication par catalogue.
-- [ ] Hook pre-push avec envoi des blocs avant la publication Git.
+- [x] Hook pre-push opt-in : parcours de toute l'ascendance, blocs des versions intermédiaires, baux et refus de publication si les assets manquent.
+- [ ] Validation côté serveur Git et coordination distribuée de la publication ; le hook local reste contournable.
 - [ ] Téléchargement à la demande au checkout et stratégie de clone sans assets.
 - [ ] Protocole `filter-process`, hydratation différée, cache commun aux worktrees.
 - [ ] Migration depuis Git LFS sans conversion manuelle fichier par fichier.
