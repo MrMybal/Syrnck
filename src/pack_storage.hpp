@@ -37,6 +37,8 @@ public:
   };
   using KeyVisitor = std::function<void(const ObjectKey &)>;
   using KeySource = std::function<void(const KeyVisitor &)>;
+  using KeyNext = std::function<std::optional<ObjectKey>()>;
+  using KeySequence = std::function<KeyNext()>;
   explicit PackStorage(fs::path root, std::size_t index_cache_bytes = 4 * 1024 * 1024);
   void invalidate() {
     valid_ = false;
@@ -60,6 +62,9 @@ public:
   std::optional<Position> locate(const ObjectKey &) const;
   bool contains(const ObjectKey &) const;
   std::vector<ObjectKey> keys() const;
+  // Ordered, single-pass merge with one owned page per active pack. The catalog
+  // must outlive this cursor and remain unchanged until the cursor is destroyed.
+  KeyNext ordered_keys() const;
   Bytes read(const ObjectKey &) const;
   std::uint64_t stored_size(const ObjectKey &) const;
   // Reuse one handle only within a serialized operation. No handle survives
@@ -81,6 +86,13 @@ public:
                                 const PackOptions &, std::size_t available_packs = max_packs,
                                 std::size_t index_cache_bytes = 4 * 1024 * 1024);
   static void validate_options(const PackOptions &);
+  // The factory supplies two independent, identical ordered passes. Planning
+  // retains only per-output-pack counts, byte sizes and sequence digests.
+  static PackStorage build_many_stream(const fs::path &, std::size_t count, const KeySequence &,
+                                       const std::function<Bytes(const ObjectKey &)> &,
+                                       const std::function<std::uint64_t(const ObjectKey &)> &size,
+                                       const PackOptions &, std::size_t available_packs = max_packs,
+                                       std::size_t index_cache_bytes = 4 * 1024 * 1024);
   // Returns physical files/bytes removed. Only generated, inactive names qualify.
   std::pair<std::size_t, std::uint64_t> cleanup(bool remove = true) const;
 

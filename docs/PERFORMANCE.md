@@ -1,5 +1,22 @@
 # Mesures et stratégie de performance
 
+## Streaming compaction plans — 4 November 2026
+
+Packing and compaction now merge packed indexes by pages, plan output with counts,
+byte sizes and sequence digests, and read back new objects without full packed-ID
+lists. Loose-only IDs still require sorting. Publication and envelope verification
+remain mandatory.
+
+The same measurement harness was linked to engine commit `5bca803` and the updated
+engine. Over 131,137 valid objects, three alternating Windows x64 Release runs
+measured median peak working sets of **50.72 MiB before** and **16.30 MiB after**.
+Complete compaction medians were **20.764 s before** and **22.079 s after**; these
+variable timings establish no speed improvement. Every run produced the same
+counters and passed a separate full-file audit after publication.
+
+See [methodology, reproduction and remaining limits](COMPACTION.md) and the
+[six-run report](benchmarks/streaming-compaction-windows-x64-2026-11-04.json).
+
 ## Streaming integrity audit — 4 November 2026
 
 `fsck` now enumerates objects by kind without materializing a complete inventory,
@@ -47,7 +64,7 @@ Le [rapport complet](benchmarks/streaming-gc-windows-x64-2026-11-04.json) conser
 python scripts/benchmark_gc.py --exe build/Release/syrnck_gc_bench.exe --output rapport-gc.json
 ```
 
-Sur Unix, utiliser `build/syrnck_gc_bench` ; les compteurs mémoire y retournent actuellement `null`. Les tests fonctionnels couvrent séparément le chiffrement et le stockage mixte. Les objets vivants isolés, la pile et les métadonnées restent en RAM ; la compaction et l'API publique `closure()` conservent encore leurs inventaires complets. L'audit `fsck` a depuis reçu le parcours en flux décrit ci-dessus ; les résultats du GC restent ceux du binaire historique indiqué dans leur rapport. Aucune extrapolation à un projet réel, à un GC distribué ou à une RAM globalement constante n'est faite.
+Sur Unix, utiliser `build/syrnck_gc_bench` ; les compteurs mémoire y retournent actuellement `null`. Les tests fonctionnels couvrent séparément le chiffrement et le stockage mixte. Les objets vivants isolés, la pile et les métadonnées restent en RAM ; l'API publique `closure()` conserve encore son inventaire complet. La compaction utilise maintenant les [plans en flux](COMPACTION.md). L'audit `fsck` a depuis reçu le parcours en flux décrit ci-dessus ; les résultats du GC restent ceux du binaire historique indiqué dans leur rapport. Aucune extrapolation à un projet réel, à un GC distribué ou à une RAM globalement constante n'est faite.
 
 ## Index paginés et mémoire — 4 novembre 2026
 
@@ -253,4 +270,4 @@ Utiliser un corpus autorisé de vrais projets : code, cartes Unreal, World Parti
 
 Mesurer séparément scan froid/chaud, CDC, hash, compression, chiffrement, validation, publication, fsck, GC et transfert. Rapporter temps p50/p95, RAM maximale, CPU, lectures/écritures, taille de métadonnées, taille compressée et octets réseau effectifs. Tester latence élevée, bande passante réduite, reprise et plusieurs clients.
 
-Les optimisations suivantes sont l'index transactionnel d'objets vérifiés, les arbres de métadonnées, les inventaires de compaction en flux, le marquage borné des objets isolés, la fusion automatique des packs, la propagation des réglages du pipeline aux autres commandes, les transferts groupés et le suivi incrémental du disque. Les tests de reconstruction et de rétention doivent rester invariants pendant ces changements.
+Les optimisations suivantes sont l'index transactionnel d'objets vérifiés, les arbres de métadonnées, le tri et le marquage bornés des objets isolés, la fusion automatique des packs, la propagation des réglages du pipeline aux autres commandes, les transferts groupés et le suivi incrémental du disque. Les tests de reconstruction et de rétention doivent rester invariants pendant ces changements.

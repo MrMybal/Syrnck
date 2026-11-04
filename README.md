@@ -69,7 +69,7 @@ syrnck pack --compact
 syrnck --lang fr --help
 ```
 
-Parallel compression/encryption is optional and uses a bounded queue; sequential ingestion remains the default. Indexed immutable packs reduce file counts. Ordinary packing appends new packs; explicit compaction regroups the store. GC keeps unaffected packs and rewrites only partially reachable packs.
+Parallel compression/encryption is optional and uses a bounded queue; sequential ingestion remains the default. Indexed immutable packs reduce file counts. Ordinary packing appends new packs; explicit compaction regroups the store. Both use streaming pack plans and readback, without complete packed-ID lists; loose-only IDs still need sorting. See [compaction guarantees and memory limits](docs/COMPACTION.md). GC keeps unaffected packs and rewrites only partially reachable packs.
 
 The verified object cache defaults to 64 MiB and 8,192 fingerprints. Every hit still checks the freshly read envelope; `fsck` and `gc` bypass decoded validation caches. The independent index page cache defaults to 4 MiB (`--index-cache-mib`). Both operations enumerate objects in a stream, with one mark bit per packed object; GC also rewrites survivors in a stream. Loose-only keys and metadata still consume memory proportional to their size. See [integrity audit guarantees and memory limits](docs/AUDIT.md).
 

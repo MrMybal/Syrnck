@@ -693,21 +693,45 @@ Json Store::pack(PackOptions options) const {
   PackStorage::validate_options(options);
   CacheBypass audit(impl_->bypass_cache);
   (void)fsck(); // Includes orphan metadata dependencies and complete file hashes.
-  auto loose = loose_objects(root());
-  auto keys = options.compact ? objects() : loose;
-  if (!options.compact)
-    std::erase_if(keys, [&](const ObjectKey &key) { return impl_->packs.contains(key); });
+  // Filesystem enumeration is unordered. Only loose-only IDs need sorting;
+  // packed IDs already have immutable, ordered indexes that can be merged.
+  std::vector<IndexKey> loose;
+  {
+    auto session = impl_->packs.read_session();
+    visit_loose_objects(root(), [&](const ObjectKey &key) {
+      if (!impl_->packs.contains(key))
+        loose.push_back(IndexKey::from(key));
+    });
+  }
+  std::sort(loose.begin(), loose.end());
   auto catalog = options.compact ? Json::array() : impl_->packs.catalog();
   const auto old_count = catalog.size();
   std::uint64_t existing_objects = 0;
   for (const auto &metadata : catalog)
     existing_objects += metadata.at("objects").get<std::uint64_t>();
-  require(keys.size() <= PackStorage::max_catalog_entries - existing_objects,
+  std::size_t object_count = loose.size();
+  if (options.compact)
+    for (std::size_t i = 0; i < impl_->packs.pack_count(); ++i)
+      object_count += impl_->packs.entry_count(i);
+  require(object_count <= PackStorage::max_catalog_entries - existing_objects,
           "pack catalog object limit exceeded");
+  PackStorage::KeySequence source = [&]() -> PackStorage::KeyNext {
+    auto packed = options.compact ? impl_->packs.ordered_keys() : PackStorage::KeyNext{};
+    auto head = packed ? packed() : std::optional<ObjectKey>{};
+    return [&, packed = std::move(packed), head = std::move(head),
+            i = std::size_t{0}]() mutable -> std::optional<ObjectKey> {
+      if (head && (i == loose.size() || IndexKey::from(*head) < loose[i])) {
+        auto result = std::move(head);
+        head = packed();
+        return result;
+      }
+      return i < loose.size() ? std::optional(loose[i++].object()) : std::nullopt;
+    };
+  };
   auto next = [&] {
     auto session = impl_->packs.read_session();
-    return PackStorage::build_many(
-        root(), keys,
+    return PackStorage::build_many_stream(
+        root(), object_count, source,
         [&](const ObjectKey &key) {
           auto envelope = read_envelope(key);
           (void)decode_envelope(key, envelope);
@@ -721,8 +745,10 @@ Json Store::pack(PackOptions options) const {
   }();
   {
     auto session = next.read_session();
-    for (const auto &key : next.keys())
-      (void)decode_envelope(key, impl_->read_pack(next, key));
+    for (std::size_t i = 0; i < next.pack_count(); ++i)
+      next.visit(i, [&](const ObjectKey &key, PackStorage::Position) {
+        (void)decode_envelope(key, impl_->read_pack(next, key));
+      });
   }
   const auto created = next.pack_count();
   std::uint64_t written_bytes = 0, written_index_bytes = 0;
@@ -737,9 +763,14 @@ Json Store::pack(PackOptions options) const {
     impl_->publish_pack(std::move(combined));
   }
   std::size_t removed = 0;
-  for (const auto &key : loose)
-    if (fs::remove(object_path(key)))
-      ++removed;
+  {
+    auto session = impl_->packs.read_session();
+    visit_loose_objects(root(), [&](const ObjectKey &key) {
+      require(impl_->packs.contains(key), "pack source changed since planning");
+      if (fs::remove(object_path(key)))
+        ++removed;
+    });
+  }
   auto obsolete = impl_->packs.cleanup();
   std::uint64_t pack_bytes = 0, index_bytes = 0, objects = 0;
   for (const auto &metadata : impl_->packs.catalog()) {
@@ -753,7 +784,7 @@ Json Store::pack(PackOptions options) const {
               {"index_bytes", index_bytes},
               {"pack_count", impl_->packs.pack_count()},
               {"new_packs", created},
-              {"objects_written", keys.size()},
+              {"objects_written", object_count},
               {"pack_bytes_written", written_bytes},
               {"index_bytes_written", written_index_bytes},
               {"compacted", options.compact},

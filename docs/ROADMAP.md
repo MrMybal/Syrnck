@@ -46,7 +46,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Index de packs consultés par pages vérifiées, répertoire/filtre compacts, cache LRU borné et écriture en flux sans changer le format v2/v3.
 - [x] GC avec inventaires en flux, bitmap des objets empaquetés et réécriture/relecture des survivants sans liste complète d'IDs.
 - [x] Audit `fsck` avec inventaire en flux, énumération par type et bitmap ; validation des objets non référencés et des deux copies physiques.
-- [ ] Fusion automatique des petits packs, inventaires de compaction en flux et validation de charge du moteur complet ; borner les clés isolées, la pile de parcours et les autres métadonnées.
+- [x] Empaquetage/compaction avec fusion paginée des index, plan borné par pack, source vérifiée sur deux passes et relecture sans liste complète d'IDs empaquetés.
+- [ ] Fusion automatique des petits packs et validation de charge du moteur complet ; borner le tri et les marques des clés isolées, la pile de parcours et les autres métadonnées.
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [ ] Transferts parallèles bornés, compression réseau négociée et cache des présences.

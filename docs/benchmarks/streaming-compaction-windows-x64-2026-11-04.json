@@ -1,0 +1,320 @@
+{
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "before_revision": "5bca803b534e7c732c34af247a8d77f085e9c5ab",
+  "binary_sha256": {
+    "before": "4212d95ec2e28f56b70f004f6ab2880712f9c33b901d8ee76499bfb96c39926c",
+    "after": "9d82a57dc3d386c4905e68b2cd6dcbe38cdf5e0da09380fa8746b5a6bca66ebf"
+  },
+  "fixture_binary_sha256": "8ed1cd09510007df07137a67dfaf8446d51038af715a65fca0b4a7f55c2dc8b3",
+  "same_harness_linked_to_two_engine_revisions": true,
+  "fixture": {
+    "objects": 131137,
+    "live_objects": 65569,
+    "unreachable_objects": 65568,
+    "chunks": 131072,
+    "block_bytes": 64,
+    "files": 64,
+    "pack": {
+      "name": "320f052cec4f6459ca6dd47a5f1b86b3",
+      "objects": 131137,
+      "bytes": 15297700,
+      "index_hash": "6ab069cf4d123f6246bcee923ff2c6c3784c4c8c1afb1008069bded2e931adf0"
+    }
+  },
+  "fixture_generation_and_copy_outside_measurement": true,
+  "real_valid_objects_and_complete_file_hashes": true,
+  "encrypted": false,
+  "decoded_cache_bytes": 0,
+  "verified_cache_entries": 0,
+  "index_cache_bytes": 4194304,
+  "max_objects_per_pack": 65536,
+  "max_pack_bytes": 536870912,
+  "post_audit_excluded_from_time_and_memory": true,
+  "os_cache_controlled": false,
+  "repetitions": 3,
+  "summary_medians": [
+    {
+      "mode": "before",
+      "median_seconds": 20.7638112,
+      "median_peak_working_set_bytes": 53182464
+    },
+    {
+      "mode": "after",
+      "median_seconds": 22.0792936,
+      "median_peak_working_set_bytes": 17092608
+    }
+  ],
+  "runs": [
+    {
+      "seconds": 16.8066069,
+      "memory_before": {
+        "working_set_bytes": 4308992,
+        "peak_working_set_bytes": 4313088,
+        "private_bytes": 983040
+      },
+      "memory_after": {
+        "working_set_bytes": 5877760,
+        "peak_working_set_bytes": 53366784,
+        "private_bytes": 2363392
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "before",
+      "repetition": 1
+    },
+    {
+      "seconds": 22.9883625,
+      "memory_before": {
+        "working_set_bytes": 4304896,
+        "peak_working_set_bytes": 4308992,
+        "private_bytes": 970752
+      },
+      "memory_after": {
+        "working_set_bytes": 5697536,
+        "peak_working_set_bytes": 17362944,
+        "private_bytes": 2125824
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "after",
+      "repetition": 1
+    },
+    {
+      "seconds": 22.0792936,
+      "memory_before": {
+        "working_set_bytes": 3969024,
+        "peak_working_set_bytes": 3973120,
+        "private_bytes": 929792
+      },
+      "memory_after": {
+        "working_set_bytes": 5373952,
+        "peak_working_set_bytes": 17092608,
+        "private_bytes": 2088960
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "after",
+      "repetition": 2
+    },
+    {
+      "seconds": 21.3571963,
+      "memory_before": {
+        "working_set_bytes": 3964928,
+        "peak_working_set_bytes": 3969024,
+        "private_bytes": 933888
+      },
+      "memory_after": {
+        "working_set_bytes": 5472256,
+        "peak_working_set_bytes": 53092352,
+        "private_bytes": 2256896
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "before",
+      "repetition": 2
+    },
+    {
+      "seconds": 20.7638112,
+      "memory_before": {
+        "working_set_bytes": 3964928,
+        "peak_working_set_bytes": 3969024,
+        "private_bytes": 933888
+      },
+      "memory_after": {
+        "working_set_bytes": 5619712,
+        "peak_working_set_bytes": 53182464,
+        "private_bytes": 2412544
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "before",
+      "repetition": 3
+    },
+    {
+      "seconds": 16.1564521,
+      "memory_before": {
+        "working_set_bytes": 3960832,
+        "peak_working_set_bytes": 3964928,
+        "private_bytes": 929792
+      },
+      "memory_after": {
+        "working_set_bytes": 5464064,
+        "peak_working_set_bytes": 16863232,
+        "private_bytes": 2232320
+      },
+      "result": {
+        "objects": 131137,
+        "pack_bytes": 15297716,
+        "index_bytes": 5901213,
+        "pack_count": 3,
+        "new_packs": 3,
+        "objects_written": 131137,
+        "pack_bytes_written": 15297716,
+        "index_bytes_written": 5901213,
+        "compacted": true,
+        "loose_objects_removed": 0,
+        "obsolete_pack_files_removed": 2,
+        "obsolete_pack_bytes_removed": 21198881
+      },
+      "io_before_post_audit": {
+        "object_reads": 393411,
+        "envelope_bytes_read": 45893076,
+        "decoded_objects": 393411,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 0,
+        "index_cached_pages": 0
+      },
+      "all_file_hashes_verified_after_compaction": true,
+      "references_unchanged": true,
+      "mode": "after",
+      "repetition": 3
+    }
+  ]
+}

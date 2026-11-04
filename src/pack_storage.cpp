@@ -340,6 +340,64 @@ std::vector<ObjectKey> PackStorage::keys() const {
   std::sort(result.begin(), result.end());
   return result;
 }
+PackStorage::KeyNext PackStorage::ordered_keys() const {
+  struct Page {
+    std::size_t page = 0, ordinal = 0;
+    Bytes data;
+  };
+  struct Head {
+    IndexKey key;
+    std::size_t segment;
+    bool operator>(const Head &other) const {
+      return key > other.key;
+    }
+  };
+  struct Cursor {
+    std::unique_ptr<ReadSession> session;
+    std::vector<Page> pages;
+    std::priority_queue<Head, std::vector<Head>, std::greater<Head>> heap;
+    std::optional<IndexKey> previous;
+    bool failed = false;
+  };
+  auto cursor = std::make_shared<Cursor>();
+  cursor->session = std::make_unique<ReadSession>(*this);
+  cursor->pages.resize(segments_.size());
+  for (std::size_t i = 0; i < segments_.size(); ++i) {
+    cursor->pages[i].data = segments_[i].index.read_page(0, index_stream(i));
+    ++index_page_reads_;
+    cursor->heap.push(Head{PackIndex::record(cursor->pages[i].data, 0).key, i});
+  }
+  return [this, cursor]() -> std::optional<ObjectKey> {
+    require(!cursor->failed, "pack index unavailable");
+    if (cursor->heap.empty()) {
+      cursor->session.reset();
+      return {};
+    }
+    try {
+      auto head = cursor->heap.top();
+      cursor->heap.pop();
+      require(!cursor->previous || *cursor->previous < head.key, "object belongs to multiple active packs");
+      cursor->previous = head.key;
+      auto &page = cursor->pages[head.segment];
+      if (++page.ordinal == page.data.size() / record_size) {
+        ++page.page;
+        page.ordinal = 0;
+        page.data = page.page < segments_[head.segment].index.page_count()
+                        ? segments_[head.segment].index.read_page(page.page, index_stream(head.segment))
+                        : Bytes{};
+        if (!page.data.empty())
+          ++index_page_reads_;
+      }
+      if (!page.data.empty())
+        cursor->heap.push(Head{PackIndex::record(page.data, page.ordinal).key, head.segment});
+      return head.key.object();
+    } catch (...) {
+      cursor->failed = true;
+      cursor->session.reset();
+      throw;
+    }
+  };
+}
 std::unique_ptr<std::ifstream> PackStorage::open(std::size_t segment) const {
   auto file = path(segment, ".syp");
   check_file(file, segments_[segment].metadata.at("bytes").get<std::uint64_t>());
@@ -479,32 +537,98 @@ PackStorage PackStorage::build_many(const fs::path &root, const std::vector<Obje
                                     const std::function<std::uint64_t(const ObjectKey &)> &sizer,
                                     const PackOptions &options, std::size_t available_packs,
                                     std::size_t index_cache_bytes) {
+  return build_many_stream(
+      root, keys.size(),
+      [&]() -> KeyNext {
+        return [&, i = std::size_t{0}]() mutable -> std::optional<ObjectKey> {
+          return i < keys.size() ? std::optional(keys[i++]) : std::nullopt;
+        };
+      },
+      reader, sizer, options, available_packs, index_cache_bytes);
+}
+PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t count, const KeySequence &source,
+                                           const std::function<Bytes(const ObjectKey &)> &reader,
+                                           const std::function<std::uint64_t(const ObjectKey &)> &sizer,
+                                           const PackOptions &options, std::size_t available_packs,
+                                           std::size_t index_cache_bytes) {
   validate_options(options);
-  require(keys.size() <= max_catalog_entries, "pack catalog object limit exceeded");
-  std::vector<std::pair<std::size_t, std::size_t>> plan;
-  std::size_t start = 0;
-  std::uint64_t size = pack_magic.size();
-  for (std::size_t i = 0; i < keys.size(); ++i) {
-    require(i == 0 || keys[i - 1] < keys[i], "pack input must be strictly sorted");
-    auto length = sizer(keys[i]);
-    require(length >= 5 && length <= max_envelope_size, "invalid envelope length");
-    if (i > start && (i - start >= options.max_objects_per_pack || length > options.max_pack_bytes - size)) {
-      plan.emplace_back(start, i);
-      start = i;
-      size = pack_magic.size();
+  require(count <= max_catalog_entries, "pack catalog object limit exceeded");
+  struct Plan {
+    std::size_t count = 0;
+    std::uint64_t bytes = pack_magic.size();
+    Key digest{};
+  };
+  std::vector<Plan> plans;
+  // Bind both key identity and the chosen physical envelope length to the plan.
+  auto add = [](blake3_hasher &hash, const ObjectKey &key, std::uint64_t length) {
+    auto raw = IndexKey::from(key);
+    blake3_hasher_update(&hash, raw.value.data(), raw.value.size());
+    std::array<std::uint8_t, 8> size{};
+    for (std::size_t i = 0; i < size.size(); ++i)
+      size[i] = static_cast<std::uint8_t>(length >> (8 * i));
+    blake3_hasher_update(&hash, size.data(), size.size());
+  };
+  {
+    auto next = source();
+    Plan current;
+    blake3_hasher hash;
+    blake3_hasher_init(&hash);
+    auto finish = [&] {
+      blake3_hasher_finalize(&hash, current.digest.data(), current.digest.size());
+      plans.push_back(current);
+      current = Plan{};
+      blake3_hasher_init(&hash);
+    };
+    std::optional<ObjectKey> previous;
+    std::size_t emitted = 0;
+    while (auto key = next()) {
+      require(emitted++ < count, "pack source count mismatch");
+      (void)IndexKey::from(*key);
+      require(!previous || *previous < *key, "pack input must be strictly sorted");
+      auto length = sizer(*key);
+      require(length >= 5 && length <= max_envelope_size, "invalid envelope length");
+      if (current.count &&
+          (current.count >= options.max_objects_per_pack || length > options.max_pack_bytes - current.bytes))
+        finish();
+      require(plans.size() < std::min(max_packs, available_packs),
+              "too many active packs; use pack --compact or increase pack limits");
+      ++current.count;
+      current.bytes += length;
+      add(hash, *key, length);
+      previous = std::move(key);
     }
-    size += length;
+    require(emitted == count, "pack source count mismatch");
+    if (current.count)
+      finish();
   }
-  if (start < keys.size())
-    plan.emplace_back(start, keys.size());
-  require(plan.size() <= std::min(max_packs, available_packs),
-          "too many active packs; use pack --compact or increase pack limits");
   Json catalog = Json::array();
-  for (const auto &[begin, end] : plan) {
-    std::vector<ObjectKey> part(keys.begin() + static_cast<std::ptrdiff_t>(begin),
-                                keys.begin() + static_cast<std::ptrdiff_t>(end));
-    auto pack = build(root, part, reader, options.max_pack_bytes, index_cache_bytes);
-    catalog.push_back(pack.metadata());
+  {
+    auto next = source();
+    for (const auto &plan : plans) {
+      blake3_hasher hash;
+      blake3_hasher_init(&hash);
+      auto pack = build_stream(
+          root, plan.count,
+          [&](const KeyVisitor &emit) {
+            for (std::size_t i = 0; i < plan.count; ++i) {
+              auto key = next();
+              require(key.has_value(), "pack source count mismatch");
+              emit(*key);
+            }
+          },
+          [&](const ObjectKey &key) {
+            auto envelope = reader(key);
+            add(hash, key, envelope.size());
+            return envelope;
+          },
+          options.max_pack_bytes, index_cache_bytes);
+      Key digest{};
+      blake3_hasher_finalize(&hash, digest.data(), digest.size());
+      require(digest == plan.digest && pack.metadata().at("bytes") == plan.bytes,
+              "pack source changed since planning");
+      catalog.push_back(pack.metadata());
+    }
+    require(!next(), "pack source count mismatch");
   }
   PackStorage result(root, index_cache_bytes);
   result.load(catalog);

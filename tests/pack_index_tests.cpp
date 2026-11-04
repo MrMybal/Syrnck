@@ -50,6 +50,42 @@ int main() {
     std::cout << "PASS " << name << '\n';
   };
   try {
+    test("ordered cursors merge interleaved packs with bounded handles and independent pages", [&] {
+      auto directory = root / "ordered";
+      Json catalog = Json::array();
+      for (std::size_t i = 0; i < 12; ++i)
+        catalog.push_back(fixture::create(directory, 257, i, 12));
+      auto metadata = fixture::create(directory, 3, 0, 1, Kind::manifest);
+      catalog.push_back(metadata);
+      PackStorage packs(directory, 0);
+      packs.load(catalog);
+      auto expected = packs.keys();
+      {
+        auto next = packs.ordered_keys();
+        for (const auto &key : expected) {
+          check(next() == key);
+          check(packs.read(expected.front()).size() == 5 && packs.read(expected.back()).size() == 5);
+          check(packs.open_index_streams() <= 8 && packs.open_streams() <= 8);
+        }
+        check(!next() && !next());
+        check(packs.open_index_streams() == 0 && packs.open_streams() == 0);
+      }
+      {
+        auto next = packs.ordered_keys();
+        check(next() == expected.front()); // Early cancellation closes the session.
+      }
+      check(packs.open_index_streams() == 0);
+      PackStorage empty(root);
+      check(!empty.ordered_keys()());
+      auto next = packs.ordered_keys();
+      flip(fixture::path(directory, catalog[0]), PackIndex::header_size + PackIndex::page_bytes);
+      fails([&] {
+        while (next()) {
+        }
+      });
+      check(packs.open_index_streams() == 0 && packs.open_streams() == 0);
+      fails([&] { next(); }); // A failed cursor cannot continue from a damaged page.
+    });
     test("typed enumeration skips unrelated pages and preserves physical positions", [&] {
       for (std::size_t chunks : {0, 1, 255, 256, 257, 4097}) {
         auto directory = root / ("typed-" + std::to_string(chunks));

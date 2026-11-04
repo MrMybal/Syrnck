@@ -41,7 +41,8 @@ the index page cache is disabled. Nested read sessions share bounded file handle
 their outermost return or exception closes the handles. The ordinary decoded-cache
 policy is restored after success or failure. The store retains its exclusive lock
 throughout the operation. Public `objects()` and `closure()` still return complete
-collections, and packing/compaction still materialize their key plans.
+collections. Packing/compaction now use [streaming plans](COMPACTION.md), while
+their loose-only input keys still need sorting.
 
 No storage, network, C ABI or logical object format changes are needed.
 
