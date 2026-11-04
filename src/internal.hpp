@@ -3,8 +3,13 @@
 #include <syrnck/core.hpp>
 namespace syrnck {
 Bytes read_bytes(const fs::path &, std::size_t limit = max_object_size + 1024 * 1024);
-void atomic_write(const fs::path &, std::span<const std::uint8_t>, bool replace);
-void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &, bool replace = false);
+inline void throw_if_cancelled(std::stop_token stop) {
+  if (stop.stop_requested())
+    throw Cancelled("operation cancelled");
+}
+void atomic_write(const fs::path &, std::span<const std::uint8_t>, bool replace, std::stop_token = {});
+void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &, bool replace = false,
+                   std::stop_token = {});
 inline std::span<const std::uint8_t> bytes(std::string_view s) {
   return {reinterpret_cast<const std::uint8_t *>(s.data()), s.size()};
 }

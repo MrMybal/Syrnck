@@ -92,7 +92,8 @@ static void sync_file(const fs::path &p) {
 #endif
 }
 void atomic_stream(const fs::path &destination, const std::function<void(std::ostream &)> &writer,
-                   bool replace) {
+                   bool replace, std::stop_token stop) {
+  throw_if_cancelled(stop);
   auto parent = destination.parent_path();
   if (parent.empty())
     parent = ".";
@@ -119,11 +120,13 @@ void atomic_stream(const fs::path &destination, const std::function<void(std::os
     require(out.is_open(), "cannot write temporary file");
     SYRNCK_IO_CHECKPOINT("atomic.temporary_opened", destination);
     writer(out);
+    throw_if_cancelled(stop);
     SYRNCK_IO_CHECKPOINT("atomic.writer_finished", destination);
     out.flush();
     require(out.good(), "file write failed");
   }
   sync_file(temp);
+  throw_if_cancelled(stop);
   SYRNCK_IO_CHECKPOINT("atomic.file_synced", destination);
 #ifdef _WIN32
   DWORD flags = MOVEFILE_WRITE_THROUGH | (replace ? MOVEFILE_REPLACE_EXISTING : 0);
@@ -148,13 +151,13 @@ void atomic_stream(const fs::path &destination, const std::function<void(std::os
 #endif
   SYRNCK_IO_CHECKPOINT("atomic.durable", destination);
 }
-void atomic_write(const fs::path &p, std::span<const std::uint8_t> b, bool replace) {
+void atomic_write(const fs::path &p, std::span<const std::uint8_t> b, bool replace, std::stop_token stop) {
   atomic_stream(
       p,
       [&](std::ostream &out) {
         out.write(reinterpret_cast<const char *>(b.data()), static_cast<std::streamsize>(b.size()));
       },
-      replace);
+      replace, stop);
 }
 FileLock::FileLock(const fs::path &path) {
 #ifdef _WIN32

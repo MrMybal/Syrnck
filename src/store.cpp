@@ -273,6 +273,12 @@ std::pair<std::string, IngestStats> Store::ingest(std::istream &source, Chunking
   };
   check_cancelled();
   IngestStats stats;
+  auto notify = [&](ProgressPhase phase, bool complete = false, std::size_t buffered = 0) {
+    if (options.progress)
+      options.progress({phase, {}, stats.file_bytes, {}, complete, buffered});
+    check_cancelled();
+  };
+  notify(ProgressPhase::ingesting);
   Json blocks = Json::array();
   const auto manifest_base_size = Json{{"version", 1},
                                        {"size", 0},
@@ -366,10 +372,12 @@ std::pair<std::string, IngestStats> Store::ingest(std::istream &source, Chunking
     std::move(buffer.begin() + static_cast<std::ptrdiff_t>(cut),
               buffer.begin() + static_cast<std::ptrdiff_t>(length), buffer.begin());
     length -= cut;
+    notify(ProgressPhase::ingesting, false, pending.size());
   }
   while (!pending.empty())
     publish_first();
   check_cancelled();
+  notify(ProgressPhase::publishing);
   Key digest{};
   blake3_hasher_finalize(&whole, digest.data(), digest.size());
   auto manifest = Json{
@@ -379,29 +387,54 @@ std::pair<std::string, IngestStats> Store::ingest(std::istream &source, Chunking
       {"chunking", chunking.json()},
       {"blocks",
        blocks}}.dump();
-  return {put(Kind::manifest, bytes(manifest)).first.id, stats};
+  auto id = put(Kind::manifest, bytes(manifest)).first.id;
+  notify(ProgressPhase::ingesting, true);
+  return {std::move(id), stats};
 }
 template <class Reader>
-static void stream_manifest(const Json &manifest, std::ostream &output, Reader reader) {
+static void stream_manifest(const Json &manifest, std::ostream &output, Reader reader,
+                            const std::function<void(std::uint64_t)> &progress = {}) {
   blake3_hasher whole;
   blake3_hasher_init(&whole);
+  std::uint64_t processed = 0;
   for (const auto &block : manifest["blocks"]) {
     auto data = reader(ObjectKey{Kind::chunk, block["id"].get<std::string>()});
     require(data.size() == block["size"].get<std::size_t>(), "block length mismatch");
     blake3_hasher_update(&whole, data.data(), data.size());
     output.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
     require(output.good(), "output write failed");
+    processed += data.size();
+    if (progress)
+      progress(processed);
   }
   Key digest{};
   blake3_hasher_finalize(&whole, digest.data(), digest.size());
   require(hex(digest) == manifest["file_hash"].get<std::string>(), "reconstructed file hash mismatch");
 }
-void Store::reconstruct(std::string_view id, std::ostream &output) const {
+void Store::reconstruct(std::string_view id, std::ostream &output, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
   auto session = impl_->packs.read_session();
-  stream_manifest(metadata(Kind::manifest, id), output, [&](const ObjectKey &key) { return get(key); });
+  auto manifest = metadata(Kind::manifest, id);
+  auto total = manifest.at("size").get<std::uint64_t>();
+  auto notify = [&](std::uint64_t bytes, bool complete = false) {
+    if (options.progress)
+      options.progress({ProgressPhase::reconstructing, {}, bytes, total, complete});
+    throw_if_cancelled(options.stop);
+  };
+  notify(0);
+  stream_manifest(
+      manifest, output,
+      [&](const ObjectKey &key) {
+        throw_if_cancelled(options.stop);
+        auto data = get(key);
+        throw_if_cancelled(options.stop);
+        return data;
+      },
+      [&](std::uint64_t bytes) { notify(bytes); });
+  notify(total, true);
 }
-void Store::restore_file(std::string_view id, const fs::path &dest) const {
-  atomic_stream(dest, [&](std::ostream &out) { reconstruct(id, out); });
+void Store::restore_file(std::string_view id, const fs::path &dest, OperationOptions options) const {
+  atomic_stream(dest, [&](std::ostream &out) { reconstruct(id, out, options); }, false, options.stop);
 }
 Refs Store::refs() const {
   auto j = parse_json(read_bytes(root() / "refs.json"));
@@ -413,22 +446,23 @@ Refs Store::refs() const {
   }
   return refs;
 }
-void Store::write_refs(const Refs &refs) const {
+void Store::write_refs(const Refs &refs, std::stop_token stop) const {
   Json j = Json::object();
   for (const auto &[name, key] : refs)
     j[name] = key_json(key);
   auto value = j.dump();
-  atomic_write(root() / "refs.json", bytes(value), true);
+  atomic_write(root() / "refs.json", bytes(value), true, stop);
 }
-void Store::set_ref(std::string_view name, const ObjectKey &key) const {
+void Store::set_ref(std::string_view name, const ObjectKey &key, std::stop_token stop) const {
   validate_ref(name);
-  (void)closure({key}, true);
+  (void)closure({key}, true, stop);
   auto all = refs();
   all.insert_or_assign(std::string(name), key);
-  write_refs(all);
+  write_refs(all, stop);
 }
 bool Store::compare_set_ref(std::string_view name, const std::optional<ObjectKey> &expected,
-                            const ObjectKey &key) const {
+                            const ObjectKey &key, std::stop_token stop) const {
+  throw_if_cancelled(stop);
   validate_ref(name);
   auto all = refs();
   auto found = all.find(std::string(name));
@@ -437,9 +471,9 @@ bool Store::compare_set_ref(std::string_view name, const std::optional<ObjectKey
     actual = found->second;
   if (actual != expected)
     return false;
-  (void)closure({key}, true);
+  (void)closure({key}, true, stop);
   all.insert_or_assign(std::string(name), key);
-  write_refs(all);
+  write_refs(all, stop);
   return true;
 }
 void Store::remove_ref(std::string_view name) const {
@@ -457,12 +491,15 @@ struct NullBuffer : std::streambuf {
   }
 };
 template <class Marker, class Reader>
-static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify, Marker mark, Reader read) {
+static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify, Marker mark, Reader read,
+                                std::stop_token stop = {}) {
+  throw_if_cancelled(stop);
   auto pending = roots;
   std::size_t peak = pending.size();
   NullBuffer buffer;
   std::ostream sink(&buffer);
   while (!pending.empty()) {
+    throw_if_cancelled(stop);
     auto key = std::move(pending.back());
     pending.pop_back();
     if (!mark(key))
@@ -470,7 +507,9 @@ static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify
     auto data = read(key);
     if (verify && key.kind == Kind::manifest) {
       stream_manifest(parse_json(data), sink, [&](const ObjectKey &block) {
+        throw_if_cancelled(stop);
         auto bytes = read(block);
+        throw_if_cancelled(stop);
         mark(block);
         return bytes;
       });
@@ -480,14 +519,16 @@ static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify
       peak = std::max(peak, pending.size());
     }
   }
+  throw_if_cancelled(stop);
   return peak;
 }
-std::set<ObjectKey> Store::closure(const std::vector<ObjectKey> &roots, bool verify) const {
+std::set<ObjectKey> Store::closure(const std::vector<ObjectKey> &roots, bool verify,
+                                   std::stop_token stop) const {
   auto session = impl_->packs.read_session();
   std::set<ObjectKey> seen;
   (void)walk_objects(
       roots, verify, [&](const ObjectKey &key) { return seen.insert(key).second; },
-      [&](const ObjectKey &key) { return get(key); });
+      [&](const ObjectKey &key) { return get(key); }, stop);
   return seen;
 }
 template <class Visitor>

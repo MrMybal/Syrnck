@@ -8,7 +8,9 @@ struct Pointer {
 };
 std::optional<Pointer> parse_pointer(std::string_view);
 void clean(const Store &, std::istream &, std::ostream &);
+void clean(const Store &, std::istream &, std::ostream &, IngestOptions);
 void smudge(const Store &, std::istream &, std::ostream &);
+void smudge(const Store &, std::istream &, std::ostream &, OperationOptions);
 fs::path common_store(const fs::path &directory);
 void install(const fs::path &directory, const fs::path &executable, const fs::path &store);
 } // namespace syrnck::git

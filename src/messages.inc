@@ -86,6 +86,7 @@ SYRNCK_MESSAGE("in-flight budget must fit the maximum block and be at most 1 GiB
 SYRNCK_MESSAGE("index cache budget must be in 0..1024 MiB", "le budget du cache d'index doit être compris entre 0 et 1024 Mio")
 SYRNCK_MESSAGE("ingest workers must be in 1..64", "le nombre de workers d'ingestion doit être compris entre 1 et 64")
 SYRNCK_MESSAGE("ingestion cancelled", "ingestion annulée")
+SYRNCK_MESSAGE("operation cancelled", "opération annulée")
 SYRNCK_MESSAGE("initialization requires a new or empty directory", "l'initialisation nécessite un dossier nouveau ou vide")
 SYRNCK_MESSAGE("input read failed", "échec de lecture de l'entrée")
 SYRNCK_MESSAGE("insufficient output capacity", "capacité de sortie insuffisante")

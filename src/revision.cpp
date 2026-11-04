@@ -116,16 +116,26 @@ bool ignored(const std::string &relative, bool dir, const std::vector<Rule> &rul
 } // namespace
 std::string Store::commit_directory(const fs::path &directory, std::string_view branch,
                                     std::string_view message) const {
+  return commit_directory(directory, branch, message, settings().ingest_options());
+}
+std::string Store::commit_directory(const fs::path &directory, std::string_view branch,
+                                    std::string_view message, IngestOptions options) const {
+  throw_if_cancelled(options.stop);
   validate_ref(branch);
   auto base = fs::canonical(directory);
   require(inside(root(), base), "native store must be inside committed directory");
   std::map<std::string, Json> files;
   std::function<void(const fs::path &, std::vector<Rule>)> scan = [&](const fs::path &dir,
                                                                       std::vector<Rule> rules) {
+    throw_if_cancelled(options.stop);
     auto rel = dir.lexically_relative(base);
     std::string prefix = rel == "." ? "" : utf8(rel) + "/";
+    if (options.progress)
+      options.progress({ProgressPhase::scanning, prefix});
+    throw_if_cancelled(options.stop);
     add_rules(dir, prefix, rules);
     for (const auto &entry : fs::directory_iterator(dir)) {
+      throw_if_cancelled(options.stop);
       auto path = entry.path();
       auto name = utf8(path.filename());
       if (name == ".git" || name == ".syrnck" || inside(path, root()))
@@ -146,7 +156,15 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
       auto modified = entry.last_write_time();
       std::ifstream input(path, std::ios::binary);
       require(input.is_open(), "cannot open source file");
-      auto [id, stats] = ingest(input);
+      auto file_options = options;
+      if (options.progress)
+        file_options.progress = [&](const ProgressEvent &progress) {
+          auto event = progress;
+          event.path = relative;
+          event.total_bytes = size;
+          options.progress(event);
+        };
+      auto [id, stats] = ingest(input, {}, file_options);
       require(stats.file_bytes == size && fs::file_size(path) == size &&
                   fs::last_write_time(path) == modified,
               "file changed during ingestion; retry commit");
@@ -160,6 +178,7 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
     }
   };
   scan(base, {});
+  throw_if_cancelled(options.stop);
   Json entries = Json::object();
   for (auto &[name, value] : files)
     entries[name] = value;
@@ -177,8 +196,11 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
       {"timestamp", now()},
       {"files",
        entries}}.dump();
+  if (options.progress)
+    options.progress({ProgressPhase::publishing, branch});
+  throw_if_cancelled(options.stop);
   auto key = put(Kind::revision, bytes(value)).first;
-  set_ref(name, key);
+  set_ref(name, key, options.stop);
   return key.id;
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {

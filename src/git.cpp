@@ -62,31 +62,42 @@ public:
   }
 };
 void clean(const Store &store, std::istream &input, std::ostream &output) {
+  clean(store, input, output, store.settings().ingest_options());
+}
+void clean(const Store &store, std::istream &input, std::ostream &output, IngestOptions options) {
+  throw_if_cancelled(options.stop);
   auto first = prefix(input);
+  throw_if_cancelled(options.stop);
   if (auto p = parse_pointer(first)) {
     require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
             "pointer size mismatch");
-    store.set_ref("git/" + p->manifest, {Kind::manifest, p->manifest});
+    store.set_ref("git/" + p->manifest, {Kind::manifest, p->manifest}, options.stop);
     output << first;
     return;
   }
   PrefixBuffer buffer(first, input.rdbuf());
   std::istream source(&buffer);
-  auto [id, stats] = store.ingest(source);
-  store.set_ref("git/" + id, {Kind::manifest, id});
+  auto [id, stats] = store.ingest(source, {}, options);
+  store.set_ref("git/" + id, {Kind::manifest, id}, options.stop);
   output << Pointer{id, stats.file_bytes}.encode();
   require(output.good(), "filter output write failed");
 }
 void smudge(const Store &store, std::istream &input, std::ostream &output) {
+  smudge(store, input, output, {});
+}
+void smudge(const Store &store, std::istream &input, std::ostream &output, OperationOptions options) {
+  throw_if_cancelled(options.stop);
   auto first = prefix(input);
+  throw_if_cancelled(options.stop);
   if (auto p = parse_pointer(first)) {
     require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
             "pointer size mismatch");
-    store.reconstruct(p->manifest, output);
+    store.reconstruct(p->manifest, output, options);
   } else {
     output << first;
     std::array<char, 8192> buffer{};
     while (input) {
+      throw_if_cancelled(options.stop);
       input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
       output.write(buffer.data(), input.gcount());
     }

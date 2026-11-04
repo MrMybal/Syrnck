@@ -79,6 +79,20 @@ std::uint64_t integer(const std::string &s) {
           "invalid unsigned integer");
   return std::stoull(s);
 }
+IngestOptions ingestion_options(Args &args, const Store &store) {
+  auto options = store.settings().ingest_options();
+  if (auto workers = args.option("--workers")) {
+    auto n = integer(*workers);
+    require(n >= 1 && n <= 64, "ingest workers must be in 1..64");
+    options.workers = static_cast<std::size_t>(n);
+  }
+  if (auto budget = args.option("--buffer-mib")) {
+    auto n = integer(*budget);
+    require(n >= 1 && n <= 1024, "buffer budget must be in 1..1024 MiB");
+    options.max_in_flight_bytes = static_cast<std::size_t>(n * 1024 * 1024);
+  }
+  return options;
+}
 void help(Language language) {
   if (language == Language::french) {
     std::cout << R"(Syrnck 0.1.0 — Stockage de blocs C++20, assets Git et révisions natives
@@ -101,11 +115,13 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   config show | reset                Afficher ou réinitialiser les réglages du dépôt
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
+                [--workers N] [--buffer-mib N]
   native branch NOM RÉVISION
   native log [--branch main] [--limit 50]
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch main]
   git install [DOSSIER] [--encrypted]
+  git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
   agent push URL RÉF_LOCALE RÉF_DISTANTE
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
@@ -133,11 +149,13 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   config show | reset               Show or reset repository settings
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
+                [--workers N] [--buffer-mib N]
   native branch NAME REVISION
   native log [--branch main] [--limit 50]
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch main]
   git install [DIRECTORY] [--encrypted]
+  git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
   agent push URL LOCAL_REF REMOTE_REF
   agent pull URL REMOTE_REF LOCAL_REF
@@ -248,8 +266,7 @@ int run(Args args, Language language) {
       throw Error("unknown config command");
   } else if (command == "put") {
     auto size = args.option("--fixed-size");
-    auto workers = args.option("--workers");
-    auto budget = args.option("--buffer-mib");
+    auto options = ingestion_options(args, store);
     args.count(1);
     std::ifstream in(path_from_utf8(args.values[0]), std::ios::binary);
     require(in.is_open(), "cannot open source file");
@@ -258,17 +275,6 @@ int run(Args args, Language language) {
       auto n = integer(*size);
       require(n <= UINT32_MAX, "chunk size overflow");
       chunking = Chunking::fixed_size(static_cast<std::uint32_t>(n));
-    }
-    auto options = store.settings().ingest_options();
-    if (workers) {
-      auto n = integer(*workers);
-      require(n >= 1 && n <= 64, "ingest workers must be in 1..64");
-      options.workers = static_cast<std::size_t>(n);
-    }
-    if (budget) {
-      auto n = integer(*budget);
-      require(n >= 1 && n <= 1024, "buffer budget must be in 1..1024 MiB");
-      options.max_in_flight_bytes = static_cast<std::size_t>(n * 1024 * 1024);
     }
     auto [id, stats] = store.ingest(in, chunking, options);
     store.set_ref("files/" + id, {Kind::manifest, id});
@@ -329,12 +335,13 @@ int run(Args args, Language language) {
               << localize(" objects and every file hash\n", language);
   } else if (command == "native") {
     if (sub == "commit") {
+      auto options = ingestion_options(args, store);
       auto directory = path_from_utf8(args.option("--directory").value_or("."));
       auto branch = args.option("--branch").value_or("main");
       auto message = args.option("--message", "-m");
       args.count(0);
       require(message.has_value(), "--message is required");
-      std::cout << store.commit_directory(directory, branch, *message) << '\n';
+      std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
     } else if (sub == "branch") {
       args.count(2);
       auto name = "heads/" + args.values[0];
@@ -369,12 +376,14 @@ int run(Args args, Language language) {
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    args.count(0);
-    if (sub == "clean")
-      git::clean(store, std::cin, std::cout);
-    else if (sub == "smudge")
+    if (sub == "clean") {
+      auto options = ingestion_options(args, store);
+      args.count(0);
+      git::clean(store, std::cin, std::cout, options);
+    } else if (sub == "smudge") {
+      args.count(0);
       git::smudge(store, std::cin, std::cout);
-    else
+    } else
       throw Error("unknown Git command");
   } else if (command == "serve") {
     auto listen = args.option("--listen").value_or("127.0.0.1:7437");

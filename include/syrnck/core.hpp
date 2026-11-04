@@ -70,6 +70,21 @@ struct IngestStats {
   std::size_t peak_in_flight_blocks = 0;
   Json json() const;
 };
+enum class ProgressPhase { scanning, ingesting, reconstructing, publishing };
+struct ProgressEvent {
+  ProgressPhase phase = ProgressPhase::ingesting;
+  // Borrowed context, valid only during the callback. Never reenter the Store.
+  std::string_view path{};
+  std::uint64_t bytes = 0;
+  std::optional<std::uint64_t> total_bytes{};
+  bool complete = false;
+  std::size_t buffered_blocks = 0;
+};
+using ProgressCallback = std::function<void(const ProgressEvent &)>;
+struct OperationOptions {
+  std::stop_token stop{};
+  ProgressCallback progress{};
+};
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
   // At most 2 * workers distinct blocks may await publication, independently
@@ -78,7 +93,9 @@ struct IngestOptions {
   std::size_t max_in_flight_bytes = 32 * 1024 * 1024;
   // Cooperative cancellation between reads, blocks and publications.
   // A native read/codec call already in progress is allowed to finish.
-  std::stop_token stop;
+  std::stop_token stop{};
+  // Synchronous coordinator-thread observer; exceptions stop the operation.
+  ProgressCallback progress{};
 };
 struct StoreOptions {
   std::size_t decoded_cache_bytes = 64 * 1024 * 1024;
@@ -141,13 +158,15 @@ public:
   Json metadata(Kind, std::string_view id) const;
   std::pair<std::string, IngestStats> ingest(std::istream &, Chunking = {}) const;
   std::pair<std::string, IngestStats> ingest(std::istream &, Chunking, IngestOptions) const;
-  void reconstruct(std::string_view id, std::ostream &) const;
-  void restore_file(std::string_view id, const fs::path &destination) const;
+  void reconstruct(std::string_view id, std::ostream &, OperationOptions = {}) const;
+  void restore_file(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
   Refs refs() const;
-  void set_ref(std::string_view, const ObjectKey &) const;
-  bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &) const;
+  void set_ref(std::string_view, const ObjectKey &, std::stop_token = {}) const;
+  bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
+                       std::stop_token = {}) const;
   void remove_ref(std::string_view) const;
-  std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false) const;
+  std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false,
+                              std::stop_token = {}) const;
   std::vector<ObjectKey> objects() const;
   std::size_t fsck() const;
   Json gc(bool remove = false) const;
@@ -156,6 +175,8 @@ public:
   Json pack() const;
   Json pack(PackOptions) const;
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message) const;
+  std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message,
+                               IngestOptions) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
   void export_revision(std::string_view id, const fs::path &destination) const;
 
@@ -166,6 +187,6 @@ private:
   Bytes read_envelope(const ObjectKey &) const;
   Bytes decode_envelope(const ObjectKey &, std::span<const std::uint8_t>) const;
   Bytes load_object(const ObjectKey &, bool presence_only) const;
-  void write_refs(const Refs &) const;
+  void write_refs(const Refs &, std::stop_token = {}) const;
 };
 } // namespace syrnck
