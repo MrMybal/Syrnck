@@ -78,6 +78,8 @@ L'agent accepte `--requests 4 --transfer-buffer-mib 64` pour chevaucher les requ
 
 Les requêtes en erreur temporaire sont relancées jusqu'à trois fois par défaut (`--retries 0..8`). Les options `--upload-kib-s` et `--download-kib-s` fixent des cibles de débit moyen partagées entre les requêtes d'objets ; zéro signifie illimité. Ces attentes sont annulables. La publication finale d'une référence n'est jamais relancée automatiquement. Voir la [politique de reprise et de débit](docs/TRANSFER_POLICY.md).
 
+Les transferts enregistrent un journal local persistant. Les commandes `agent sessions`, `agent resume URL SESSION_ID` et `agent forget SESSION_ID` permettent de le consulter, de reprendre ou de l'abandonner explicitement. Les sessions inachevées bloquent le GC local et conservent la référence attendue avant l'interruption. Voir les [sessions et la récupération des publications](docs/TRANSFER_SESSIONS.md).
+
 ## Validation et migration
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.

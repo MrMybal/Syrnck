@@ -19,6 +19,7 @@ void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &
 void atomic_directory(const fs::path &, const std::function<void(const fs::path &)> &,
                       const std::function<void()> &before_publish = {}, std::stop_token = {});
 void make_executable(const fs::path &);
+void sync_directory(const fs::path &);
 inline std::span<const std::uint8_t> bytes(std::string_view s) {
   return {reinterpret_cast<const std::uint8_t *>(s.data()), s.size()};
 }

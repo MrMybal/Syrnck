@@ -647,6 +647,10 @@ std::size_t Store::fsck(OperationOptions options) const {
   return verified.size();
 }
 Json Store::gc(bool remove, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  // A pull may have imported metadata without its complete closure. Holding
+  // the whole local store avoids trusting incomplete reachability information.
+  check_transfer_gc(options.stop);
   std::uint64_t verified_bytes = 0, planned_bytes = 0, packed_bytes = 0;
   auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
                     std::optional<std::uint64_t> total = {}) {

@@ -27,6 +27,7 @@ public:
             TransferOptions = {}) const;
   Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {},
             TransferOptions = {}) const;
+  Json resume(const Store &, std::string_view session, OperationOptions = {}, TransferOptions = {}) const;
 
 private:
   std::string base_, token_;

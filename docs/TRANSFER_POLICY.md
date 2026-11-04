@@ -53,7 +53,9 @@ The [publication boundary](TRANSFERS.md#publication-boundary) is unchanged:
 after the final remote CAS is dispatched it completes without observer calls or
 cooperative cancellation. Ambiguous publication exits **3** and requires checking
 the remote reference. A retry of the whole command obtains a fresh expected
-reference; it does not replay the old compare-and-set blindly.
+reference when starting a fresh session. An unfinished session preserves its
+original expectation and uses [journal reconciliation](TRANSFER_SESSIONS.md)
+instead of replaying an ambiguous compare-and-set.
 
 ## Traffic targets
 
@@ -95,10 +97,10 @@ independent `refs` call supports retries but has no object traffic to limit.
 ## Recovery and validation
 
 Restarting the command still negotiates remote presence or checks local verified
-objects and reuses completed imports. There is **no persistent session journal**,
-saved retry budget, automatic background resume or protection of unreferenced
-interrupted objects against a later GC. Keep the original root and avoid GC if
-those objects should be reused.
+objects and reuses completed imports. [Persistent sessions](TRANSFER_SESSIONS.md)
+save the requested root and reference expectation and block local GC until
+completion or deliberate discard. Retry budgets and pacing credit are not
+persisted. Background resume and remote transfer leases remain future work.
 
 `resilient_transfers` runs a real HTTP peer that returns transient statuses,
 loses acknowledgements and truncates downloads. It exercises control/object

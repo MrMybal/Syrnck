@@ -174,6 +174,8 @@ syrnck fsck
 
 L'agent est une commande ponctuelle. Il ne surveille pas le disque et ne résout pas de conflits. Une interruption laisse des objets réutilisables mais aucune nouvelle référence incomplète. Relancer reprend à partir des objets présents. Une interruption peut laisser des objets non épinglés ; le serveur conserve son verrou pendant son exécution et n'effectue pas de GC en ligne.
 
+`agent sessions` affiche les journaux locaux persistants. `agent resume URL SESSION_ID` reprend la racine et la référence attendue enregistrées, même si la référence source a disparu. Une session inachevée bloque le GC local ; `agent forget SESSION_ID` abandonne son journal et libère cette protection. Une publication distante incertaine est vérifiée sans renvoyer aveuglément le CAS. Voir les [garanties des sessions](TRANSFER_SESSIONS.md).
+
 Les transferts acceptent `--requests 4 --transfer-buffer-mib 64`, `--retries 0..8` (3 par défaut), `--upload-kib-s` et `--download-kib-s` (Kio/s partagés, 0 pour illimité). Les attentes sont annulables ; la publication finale de référence n'est jamais relancée automatiquement. Voir la [politique de reprise et de débit](TRANSFER_POLICY.md).
 
 Pour un accès distant, publier le serveur derrière un proxy HTTPS. Le client refuse HTTP hors loopback et les redirections. Un certificat d'autorité privé peut être fourni avec `--ca racine.pem`. Le prototype ne fournit pas encore de configuration de déploiement ou de gestion de certificats.

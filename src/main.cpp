@@ -126,12 +126,15 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
   agent push URL RÉF_LOCALE RÉF_DISTANTE
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
-             [--requests 1..32] [--transfer-buffer-mib 64] (push ou pull)
+  agent resume URL SESSION           Reprendre une session interrompue
+             [--requests 1..32] [--transfer-buffer-mib 64] (push, pull ou resume)
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
+  agent sessions                     Lister les sessions persistantes locales
+  agent forget SESSION              Supprimer le journal et libérer sa protection GC
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge et agent push/pull.
+              fsck, native commit/export, git clean/smudge et agent push/pull/resume.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 )";
@@ -166,12 +169,15 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
   agent push URL LOCAL_REF REMOTE_REF
   agent pull URL REMOTE_REF LOCAL_REF
-             [--requests 1..32] [--transfer-buffer-mib 64] (push or pull)
+  agent resume URL SESSION           Resume an interrupted session
+             [--requests 1..32] [--transfer-buffer-mib 64] (push, pull or resume)
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
+  agent sessions                     List persistent local sessions
+  agent forget SESSION              Discard the journal and release its GC hold
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
-          fsck, native commit/export, git clean/smudge and agent push/pull.
+          fsck, native commit/export, git clean/smudge and agent push/pull/resume.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 )";
@@ -243,7 +249,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable = command == "put" || command == "get" || command == "fsck" || command == "pack" ||
                      command == "gc" || (command == "native" && (sub == "commit" || sub == "export")) ||
-                     (command == "agent" && (sub == "push" || sub == "pull")) ||
+                     (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume")) ||
                      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
@@ -437,6 +443,22 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::serve(store, *token, listen, language);
   } else if (command == "agent") {
+    if (sub == "sessions") {
+      args.count(0);
+      auto result = Json::array();
+      for (const auto &session : store.transfer_sessions())
+        result.push_back(session.json());
+      print(result);
+      require(std::cout.good(), "output write failed");
+      return 0;
+    }
+    if (sub == "forget") {
+      args.count(1);
+      store.remove_transfer_session(args.values[0]);
+      print(Json{{"discarded", args.values[0]}});
+      require(std::cout.good(), "output write failed");
+      return 0;
+    }
     net::TransferOptions limits;
     if (auto requests = args.option("--requests")) {
       auto count = integer(*requests);
@@ -462,10 +484,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     limits.upload_bytes_per_second = rate("--upload-kib-s");
     limits.download_bytes_per_second = rate("--download-kib-s");
     limits.validate();
-    args.count(3);
+    args.count(sub == "resume" ? 2 : 3);
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::Remote remote(args.values[0], *token, ca_path);
-    if (sub == "push") {
+    if (sub == "resume") {
+      print(remote.resume(store, args.values[1], {control->token(), observe}, limits));
+    } else if (sub == "push") {
       auto refs = store.refs();
       require(refs.contains(args.values[1]), "unknown local reference");
       print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));

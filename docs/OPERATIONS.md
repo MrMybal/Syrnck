@@ -122,6 +122,9 @@ See [export guarantees, progress and recovery](EXPORT.md).
 Network requests also support these options, with a separate final remote
 publication commit point and exit 3 for uncertain publication. See
 [transfer cancellation, progress and recovery](TRANSFERS.md).
+Persistent transfer sessions block local GC until completed or deliberately
+discarded; their records are checked before GC planning. See
+[journal recovery and retention](TRANSFER_SESSIONS.md).
 
 GC and packing allow cancellation during verification, planning, construction
 and readback. After their publication/deletion commit point, cleanup finishes

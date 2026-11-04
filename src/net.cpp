@@ -73,6 +73,54 @@ Refs decode_refs(const Json &j) {
   }
   return refs;
 }
+std::optional<ObjectKey> reference(const Refs &refs, std::string_view name) {
+  auto found = refs.find(std::string(name));
+  return found == refs.end() ? std::nullopt : std::optional(found->second);
+}
+std::pair<TransferSession, bool> session_for(const Store &store, std::string_view direction,
+                                             std::string_view endpoint, const ObjectKey &root,
+                                             std::string_view name, std::optional<ObjectKey> expected) {
+  auto id = TransferSession::identity(direction, endpoint, root, name);
+  auto previous = store.transfer_session(id);
+  if (previous && previous->state != "complete")
+    return {std::move(*previous), false};
+  TransferSession session;
+  session.id = std::move(id);
+  session.direction = direction;
+  session.endpoint = endpoint;
+  session.reference = name;
+  session.root = root;
+  session.expected = std::move(expected);
+  session.validate();
+  return {std::move(session), true};
+}
+Json transfer_result(const TransferSession &session, std::size_t sent = 0, std::uint64_t total = 0,
+                     std::size_t reused = 0, const detail::TransferStats &stats = {},
+                     bool reconciled = false) {
+  return Json{{"transferred_objects", sent},
+              {"transferred_bytes", total},
+              {"reused_objects", reused},
+              {"peak_object_requests", stats.peak_requests},
+              {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
+              {"object_retries", stats.retries},
+              {"session", session.id},
+              {"reconciled", reconciled}};
+}
+void save_failure(const Store &store, TransferSession &session, std::string_view state) noexcept {
+  // The durable 'publishing' record already protects an unknown outcome.
+  // A secondary journal error must not hide the original request failure.
+  try {
+    session.state = state;
+    store.write_transfer_session(session);
+  } catch (...) {
+  }
+}
+Json reconciled(const Store &store, TransferSession &session, const OperationOptions &options) {
+  report_progress(options, {ProgressPhase::publishing, session.reference});
+  session.state = "complete";
+  store.write_transfer_session(session, options.stop);
+  return transfer_result(session, 0, 0, 0, {}, true);
+}
 } // namespace
 Remote::Remote(std::string url, std::string token, std::optional<fs::path> ca)
     : token_(std::move(token)), ca_(std::move(ca)) {
@@ -132,9 +180,27 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   validate_ref(name);
   require(name.find('/') == name.npos, "remote reference must be a single component");
   auto remote = refs(options, limits);
-  Json expected = remote.contains(std::string(name)) ? key_json(remote.at(std::string(name))) : Json(nullptr);
+  auto actual = reference(remote, name);
+  auto [session, fresh] = session_for(store, "push", hash(bytes(base_)), root, name, actual);
+  if (!fresh) {
+    if (session.state == "publishing" || session.state == "uncertain" || session.state == "conflict") {
+      if (actual == root)
+        return reconciled(store, session, options);
+      if (session.state != "conflict") {
+        save_failure(store, session, "uncertain");
+        throw PublicationUncertain(
+            "remote reference publication outcome is unknown; inspect the remote reference before retrying");
+      }
+    }
+    if (session.state == "conflict" || actual != session.expected) {
+      save_failure(store, session, "conflict");
+      throw Error("transfer reference changed; discard the session before restarting");
+    }
+  }
   auto closure = store.closure({root}, true, options.stop, options.progress);
   std::vector<ObjectKey> objects(closure.begin(), closure.end());
+  if (fresh)
+    store.write_transfer_session(session, options.stop);
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
   detail::TransferStats stats;
@@ -170,33 +236,57 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
           total += uploaded;
         });
   }
-  auto body = Json{{"root", key_json(root)}, {"expected", expected}}.dump();
+  auto body = Json{{"root", key_json(root)},
+                   {"expected", session.expected ? key_json(*session.expected) : Json(nullptr)}}
+                  .dump();
   report_progress(options, {ProgressPhase::publishing, name});
-  // The final CAS is a commit point. Once dispatched, finish receiving its
-  // result instead of aborting a request the server may already have applied.
+  session.state = "publishing";
+  store.write_transfer_session(session, options.stop);
+  // Committing the publishing marker ends cancellation. Finish dispatch and
+  // receipt even if a stop arrives; a crash in this gap must reconcile the CAS.
   try {
     (void)request("PUT", "v1/refs/" + std::string(name), bytes(body));
   } catch (const detail::HttpStatusError &error) {
-    if (error.status != 401 && error.status != 403 && error.status != 404 && error.status != 409)
+    if (error.status != 401 && error.status != 403 && error.status != 404 && error.status != 409) {
+      save_failure(store, session, "uncertain");
       throw PublicationUncertain(
           "remote reference publication outcome is unknown; inspect the remote reference before retrying");
+    }
+    save_failure(store, session, error.status == 409 ? "conflict" : "transferring");
     throw;
   } catch (...) {
+    save_failure(store, session, "uncertain");
     throw PublicationUncertain(
         "remote reference publication outcome is unknown; inspect the remote reference before retrying");
   }
-  return Json{{"transferred_objects", sent},
-              {"transferred_bytes", total},
-              {"reused_objects", reused},
-              {"peak_object_requests", stats.peak_requests},
-              {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
-              {"object_retries", stats.retries}};
+  session.state = "complete";
+  try {
+    store.write_transfer_session(session);
+  } catch (...) {
+    throw PublicationUncertain(
+        "transfer published but session completion could not be saved; resume the session");
+  }
+  return transfer_result(session, sent, total, reused, stats);
 }
 Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
   limits.validate();
   throw_if_cancelled(options.stop);
   validate_ref(name);
+  auto actual = reference(store.refs(), name);
+  auto [session, fresh] = session_for(store, "pull", hash(bytes(base_)), root, name, actual);
+  if (!fresh) {
+    if ((session.state != "transferring" || actual != session.expected) && actual == root) {
+      (void)store.closure({root}, true, options.stop, options.progress);
+      return reconciled(store, session, options);
+    }
+    if (session.state == "conflict" || actual != session.expected) {
+      save_failure(store, session, "conflict");
+      throw Error("transfer reference changed; discard the session before restarting");
+    }
+  }
+  session.state = "transferring";
+  store.write_transfer_session(session, options.stop);
   std::vector<ObjectKey> pending{root};
   std::set<ObjectKey> seen;
   std::size_t sent = 0, reused = 0;
@@ -234,13 +324,32 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
         pending.insert(pending.end(), children.begin(), children.end());
       });
   report_progress(options, {ProgressPhase::publishing, name});
-  store.set_ref(name, root, options.stop);
-  return Json{{"transferred_objects", sent},
-              {"transferred_bytes", total},
-              {"reused_objects", reused},
-              {"peak_object_requests", stats.peak_requests},
-              {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
-              {"object_retries", stats.retries}};
+  session.state = "publishing";
+  store.write_transfer_session(session, options.stop);
+  if (!store.compare_set_ref(name, session.expected, root, options.stop)) {
+    save_failure(store, session, "conflict");
+    throw Error("transfer reference changed; discard the session before restarting");
+  }
+  session.state = "complete";
+  try {
+    store.write_transfer_session(session);
+  } catch (...) {
+    throw Error("transfer published but session completion could not be saved; resume the session");
+  }
+  return transfer_result(session, sent, total, reused, stats);
+}
+Json Remote::resume(const Store &store, std::string_view id, OperationOptions options,
+                    TransferOptions limits) const {
+  limits.validate();
+  throw_if_cancelled(options.stop);
+  auto session = store.transfer_session(id);
+  require(session.has_value(), "unknown transfer session");
+  require(session->endpoint == hash(bytes(base_)), "transfer session belongs to a different endpoint");
+  if (session->state == "complete")
+    return transfer_result(*session, 0, 0, 0, {}, true);
+  if (session->direction == "push")
+    return push(store, session->root, session->reference, std::move(options), limits);
+  return pull(store, session->root, session->reference, std::move(options), limits);
 }
 void serve(Store &store, std::string_view token, std::string_view listen, Language language) {
   validate_token(token);

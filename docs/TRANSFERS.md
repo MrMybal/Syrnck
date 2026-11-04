@@ -40,19 +40,22 @@ interrupted transfer can leave reusable unreferenced objects. Retrying negotiate
 or checks their presence again; incomplete responses are not imported. A pulled
 manifest may temporarily lack some dependencies until retry finishes, so a full
 audit of unreachable objects can fail during this incomplete state. Previously
-retained roots remain reconstructible. Do not run GC between interrupted work
-and retry if those unreferenced objects should be reused.
+retained roots remain reconstructible. An unfinished local session blocks GC
+until resumed or deliberately discarded. See [persistent sessions](TRANSFER_SESSIONS.md).
 
 ## Publication boundary
 
 Pull checks cancellation throughout the final local closure validation and
 atomic reference write. Before that write starts, cancellation preserves the old
 reference. Push emits a `publishing` event and checks cancellation immediately
-before dispatching its final remote compare-and-set request. A stop from that
-callback prevents dispatch and leaves the remote reference unchanged.
+before preparing its final remote compare-and-set request. A stop from that
+callback prevents dispatch and leaves the remote reference unchanged. The
+publishing journal write also checks cancellation before atomic replacement.
 
-Once the remote CAS is dispatched, the client finishes that request even if a
-stop arrives. Aborting it cannot undo a server-side publication. There are no
+Once the publishing marker commits, the client dispatches and finishes the CAS
+even if a stop arrives. A crash between marker and dispatch is conservatively
+treated as an uncertain publication. Aborting a dispatched CAS cannot undo a
+server-side publication. There are no
 observer callbacks after this commit point. A successful response completes the
 push normally; a late Ctrl+C can therefore finish with exit 0. This final request
 retains its existing 120-second timeout. The server publishes only after checking
@@ -64,7 +67,8 @@ diagnostic, leaves stdout empty and exits **3**, even if an interrupt was also
 requested. The server may already have updated the reference. Inspect that
 reference before deciding whether to retry. Transport failures, server errors
 and unexpected responses are treated conservatively; 401/403/404/409 remain
-ordinary request failures. The client does not automatically repeat the CAS.
+ordinary request failures. Resume uses the persistent journal to confirm a
+matching remote root; it does not automatically repeat an ambiguous CAS.
 
 Ordinary cooperative cancellation exits **130**. It does not remove already
 verified objects and does not delete existing references. Object formats,
@@ -84,6 +88,8 @@ Object requests default to sequential execution and can run concurrently with
 `--requests` and a buffer budget. See [parallel transfers and resource limits](PARALLEL_TRANSFERS.md).
 Transient idempotent requests now support bounded retries with backoff, and
 object traffic can use shared average targets. See the [retry and traffic policy](TRANSFER_POLICY.md).
+Persistent sessions support explicit resume, saved reference expectations and
+local GC holds; see [journal guarantees and limits](TRANSFER_SESSIONS.md).
 Push still materializes its closure and sorted object list; pull retains a seen
-set and pending traversal. There is no persistent session journal, background
-watcher or automatic Git push/checkout integration yet.
+set and pending traversal. Background watching, distributed transfer leases and
+automatic Git push/checkout integration remain future work.

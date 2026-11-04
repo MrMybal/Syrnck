@@ -54,6 +54,17 @@ struct ObjectKey {
 Json key_json(const ObjectKey &key);
 ObjectKey parse_key(const Json &value);
 using Refs = std::map<std::string, ObjectKey>;
+// Local recovery metadata. Endpoint is a hash of the canonical URL, never a credential.
+struct TransferSession {
+  std::string id, direction, endpoint, reference, state = "transferring";
+  ObjectKey root{Kind::manifest, {}};
+  std::optional<ObjectKey> expected;
+  static std::string identity(std::string_view direction, std::string_view endpoint, const ObjectKey &,
+                              std::string_view reference);
+  void validate() const;
+  Json json() const;
+  static TransferSession parse(const Json &);
+};
 struct Chunking {
   bool fixed = false;
   std::uint32_t min = 256 * 1024, avg = 1024 * 1024, max = 4 * 1024 * 1024;
@@ -175,6 +186,10 @@ public:
   bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
                        std::stop_token = {}) const;
   void remove_ref(std::string_view) const;
+  std::vector<TransferSession> transfer_sessions(std::stop_token = {}) const;
+  std::optional<TransferSession> transfer_session(std::string_view id) const;
+  void write_transfer_session(const TransferSession &, std::stop_token = {}) const;
+  void remove_transfer_session(std::string_view id) const;
   std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false, std::stop_token = {},
                               ProgressCallback = {}) const;
   std::vector<ObjectKey> objects() const;
@@ -198,5 +213,6 @@ private:
   Bytes decode_envelope(const ObjectKey &, std::span<const std::uint8_t>) const;
   Bytes load_object(const ObjectKey &, bool presence_only) const;
   void write_refs(const Refs &, std::stop_token = {}) const;
+  void check_transfer_gc(std::stop_token) const;
 };
 } // namespace syrnck

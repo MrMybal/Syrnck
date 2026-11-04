@@ -94,7 +94,7 @@ static void sync_file(const fs::path &p) {
   require(result == 0, "file flush failed");
 #endif
 }
-static void sync_directory(const fs::path &path) {
+void sync_directory(const fs::path &path) {
 #ifdef _WIN32
   (void)path; // Published with MoveFileExW; file contents were flushed separately.
 #else
