@@ -98,3 +98,11 @@ records every run, memory counters, object counters, fixture descriptor and the
 SHA-256 of the measured binary. The Windows peak includes process/runtime,
 opening, temporary allocations, metadata and caches; it is not just the mark
 bitmap or the OS-wide file cache. See the existing [memory counter definitions](PERFORMANCE.md#index-paginés-et-mémoire--4-novembre-2026).
+
+## Progress and cancellation
+
+`fsck` accepts `OperationOptions` and the CLI supports `--progress` or
+`--progress-json`. Counters track decoded payload reads without materializing
+the inventory. Interrupted audits close their read sessions and restore normal
+cache use; store contents and retention roots are unchanged. See the
+[operation contract and limits](OPERATIONS.md).

@@ -128,7 +128,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get,
-              native commit et git clean/smudge. Ctrl+C annule (code 130).
+              fsck, native commit et git clean/smudge. Ctrl+C annule (code 130).
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 )";
     return;
@@ -164,7 +164,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   agent pull URL REMOTE_REF LOCAL_REF
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get,
-          native commit and git clean/smudge. Ctrl+C cancels (exit 130).
+          fsck, native commit and git clean/smudge. Ctrl+C cancels (exit 130).
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 )";
 }
@@ -233,7 +233,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   Store store(root, key, false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
-  bool cancellable = command == "put" || command == "get" || (command == "native" && sub == "commit") ||
+  bool cancellable = command == "put" || command == "get" || command == "fsck" ||
+                     (command == "native" && sub == "commit") ||
                      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
@@ -362,7 +363,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     print(store.pack(options));
   } else if (command == "fsck") {
     args.count(0);
-    std::cout << localize("Verified ", language) << store.fsck()
+    auto checked = store.fsck({control->token(), observe});
+    std::cout << localize("Verified ", language) << checked
               << localize(" objects and every file hash\n", language);
   } else if (command == "native") {
     if (sub == "commit") {

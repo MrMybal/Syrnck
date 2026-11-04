@@ -7,6 +7,12 @@ inline void throw_if_cancelled(std::stop_token stop) {
   if (stop.stop_requested())
     throw Cancelled("operation cancelled");
 }
+inline void report_progress(const OperationOptions &options, const ProgressEvent &event) {
+  throw_if_cancelled(options.stop);
+  if (options.progress)
+    options.progress(event);
+  throw_if_cancelled(options.stop);
+}
 void atomic_write(const fs::path &, std::span<const std::uint8_t>, bool replace, std::stop_token = {});
 void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &, bool replace = false,
                    std::stop_token = {});

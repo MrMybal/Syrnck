@@ -70,7 +70,15 @@ struct IngestStats {
   std::size_t peak_in_flight_blocks = 0;
   Json json() const;
 };
-enum class ProgressPhase { scanning, ingesting, reconstructing, publishing };
+enum class ProgressPhase {
+  scanning,
+  ingesting,
+  reconstructing,
+  publishing,
+  verifying,
+  exporting,
+  transferring
+};
 struct ProgressEvent {
   ProgressPhase phase = ProgressPhase::ingesting;
   // Borrowed context, valid only during the callback. Never reenter the Store.
@@ -165,10 +173,10 @@ public:
   bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
                        std::stop_token = {}) const;
   void remove_ref(std::string_view) const;
-  std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false,
-                              std::stop_token = {}) const;
+  std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false, std::stop_token = {},
+                              ProgressCallback = {}) const;
   std::vector<ObjectKey> objects() const;
-  std::size_t fsck() const;
+  std::size_t fsck(OperationOptions = {}) const;
   Json gc(bool remove = false) const;
   // Physical v2 for a single pack, v3 for multiple packs; logical objects stay v1.
   // Validates all objects before publication and removal of loose copies.

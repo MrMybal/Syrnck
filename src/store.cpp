@@ -522,17 +522,32 @@ static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify
   throw_if_cancelled(stop);
   return peak;
 }
-std::set<ObjectKey> Store::closure(const std::vector<ObjectKey> &roots, bool verify,
-                                   std::stop_token stop) const {
+std::set<ObjectKey> Store::closure(const std::vector<ObjectKey> &roots, bool verify, std::stop_token stop,
+                                   ProgressCallback progress) const {
+  OperationOptions options{stop, std::move(progress)};
+  std::uint64_t scanned = 0;
+  auto notify = [&](bool complete = false) {
+    report_progress(options, {ProgressPhase::verifying, {}, scanned, {}, complete});
+  };
+  notify();
   auto session = impl_->packs.read_session();
   std::set<ObjectKey> seen;
   (void)walk_objects(
       roots, verify, [&](const ObjectKey &key) { return seen.insert(key).second; },
-      [&](const ObjectKey &key) { return get(key); }, stop);
+      [&](const ObjectKey &key) {
+        auto data = get(key);
+        scanned += data.size();
+        notify();
+        return data;
+      },
+      stop);
+  notify(true);
   return seen;
 }
 template <class Visitor>
-static void visit_loose_objects(const fs::path &root, Visitor visitor, std::optional<Kind> only = {}) {
+static void visit_loose_objects(const fs::path &root, Visitor visitor, std::optional<Kind> only = {},
+                                std::stop_token stop = {}) {
+  throw_if_cancelled(stop);
   auto directory = root / "objects";
   if (fs::exists(directory))
     require(fs::is_directory(directory) && !fs::is_symlink(directory), "invalid object directory");
@@ -544,8 +559,10 @@ static void visit_loose_objects(const fs::path &root, Visitor visitor, std::opti
       continue;
     require(fs::is_directory(base) && !fs::is_symlink(base), "invalid object kind directory");
     for (const auto &shard : fs::directory_iterator(base)) {
+      throw_if_cancelled(stop);
       require(shard.is_directory() && !shard.is_symlink(), "invalid object shard");
       for (const auto &file : fs::directory_iterator(shard)) {
+        throw_if_cancelled(stop);
         require(file.is_regular_file() && !file.is_symlink(), "invalid object entry");
         auto id = utf8(file.path().filename());
         if (id.starts_with(".tmp"))
@@ -581,15 +598,28 @@ struct CacheBypass {
     flag = before;
   }
 };
-std::size_t Store::fsck() const {
+std::size_t Store::fsck(OperationOptions options) const {
+  std::uint64_t scanned = 0;
+  auto notify = [&](bool complete = false) {
+    report_progress(options, {ProgressPhase::verifying, {}, scanned, {}, complete});
+  };
+  notify();
   CacheBypass audit(impl_->bypass_cache);
   impl_->load_config();
+  throw_if_cancelled(options.stop);
   auto session = impl_->packs.read_session();
   ObjectMarks verified(impl_->packs);
   auto check = [&](const ObjectKey &key) {
+    throw_if_cancelled(options.stop);
     (void)walk_objects(
         {key}, true, [&](const ObjectKey &object) { return verified.insert(object); },
-        [&](const ObjectKey &object) { return get(object); });
+        [&](const ObjectKey &object) {
+          auto data = get(object);
+          scanned += data.size();
+          notify();
+          return data;
+        },
+        options.stop);
   };
   for (const auto &[name, key] : refs()) {
     (void)name;
@@ -600,15 +630,20 @@ std::size_t Store::fsck() const {
   for (auto kind : {Kind::revision, Kind::manifest, Kind::chunk}) {
     for (std::size_t segment = 0; segment < impl_->packs.pack_count(); ++segment)
       impl_->packs.visit_kind(segment, kind, [&](const ObjectKey &key, PackStorage::Position position) {
+        throw_if_cancelled(options.stop);
         // Ordinary reads prefer loose objects. Check the secondary packed copy
         // even when the logical object was already visited through a reference.
-        if (fs::exists(object_path(key)))
-          (void)decode_envelope(key, impl_->read_pack(impl_->packs, key));
+        if (fs::exists(object_path(key))) {
+          auto data = decode_envelope(key, impl_->read_pack(impl_->packs, key));
+          scanned += data.size();
+          notify();
+        }
         if (!verified.contains(position))
           check(key);
       });
-    visit_loose_objects(root(), check, kind);
+    visit_loose_objects(root(), check, kind, options.stop);
   }
+  notify(true);
   return verified.size();
 }
 Json Store::gc(bool remove) const {

@@ -60,7 +60,7 @@ class CliOperations(unittest.TestCase):
             self.assertIn(expected, result.stderr.decode("utf-8"))
             self.assertEqual(json.loads(result.stdout)["manifest"], manifest)
         for args in (("put", source, "--progress", "--progress-json"),
-                     ("put", source, "--progress", "--progress"), ("fsck", "--progress-json"),
+                     ("put", source, "--progress", "--progress"), ("gc", "--progress-json"),
                      ("pack", "--progress"), ("native", "export", "--progress")):
             self.run_cli(*args, ok=False)
 
@@ -85,6 +85,25 @@ class CliOperations(unittest.TestCase):
         passthrough = b"ordinary source\x00\r\n" * 1000
         self.assertEqual(self.run_cli("git", "smudge", "--progress-json", data=passthrough).stdout, passthrough)
         self.run_cli("fsck")
+
+    def test_audit_progress_and_failure_output(self):
+        pointer = self.run_cli("git", "clean", data=b"audit bytes" * 1000).stdout
+        ordinary = self.run_cli("fsck")
+        progress = self.run_cli("fsck", "--progress-json")
+        self.assertEqual(ordinary.stdout, progress.stdout)
+        events = self.events(progress)
+        self.assertTrue(all(e["phase"] == "verifying" and e["path"] == "" and
+                            e["total_bytes"] is None for e in events))
+        self.assertTrue(events[-1]["complete"])
+        self.assertGreater(events[-1]["bytes"], 10000)
+        self.assertIn("Vérification", self.run_cli("fsck", "--progress", lang="fr").stderr.decode("utf-8"))
+        chunk = next((self.root / ".syrnck/objects/chunk").glob("*/*"))
+        damaged = bytearray(chunk.read_bytes())
+        damaged[-1] ^= 1
+        chunk.write_bytes(damaged)
+        failed = self.run_cli("fsck", "--progress-json", ok=False)
+        self.assertEqual(failed.stdout, b"")
+        self.assertNotEqual(pointer, b"")
 
     def test_real_signal_cancels_without_publishing_a_pin(self):
         previous = self.run_cli("git", "clean", data=b"retained previous version").stdout

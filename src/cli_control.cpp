@@ -39,6 +39,12 @@ std::string_view phase_name(ProgressPhase phase) {
     return "reconstructing";
   case ProgressPhase::publishing:
     return "publishing";
+  case ProgressPhase::verifying:
+    return "verifying";
+  case ProgressPhase::exporting:
+    return "exporting";
+  case ProgressPhase::transferring:
+    return "transferring";
   }
   return "unknown";
 }
@@ -52,6 +58,12 @@ std::string_view phase_label(ProgressPhase phase) {
     return "Reconstructing";
   case ProgressPhase::publishing:
     return "Publishing";
+  case ProgressPhase::verifying:
+    return "Verifying";
+  case ProgressPhase::exporting:
+    return "Exporting";
+  case ProgressPhase::transferring:
+    return "Transferring";
   }
   return "unknown";
 }

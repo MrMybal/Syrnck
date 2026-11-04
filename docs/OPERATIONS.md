@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `native commit`, `git clean` and `git smudge` accept mutually
+`put`, `get`, `fsck`, `native commit`, `git clean` and `git smudge` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
 flag, successful commands stay quiet on stderr. Other commands reject these
@@ -36,13 +36,13 @@ phase/path changes and file completion are always emitted. Scanning and branch
 publication events are not aggregate project-byte totals. A nonzero exit code
 is authoritative even if an earlier file event had `complete: true`.
 
-These five commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
+These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and
 exits with code **130**. The handler only records an atomic flag; an ordinary
 monitor thread requests the C++ stop token. A read blocked on a pipe or device
 must return before cancellation can finish. Repeated interrupts request the
 same stop; forced process termination still uses the separate crash-recovery
-path. Network, packing, GC, fsck and export do not yet use this controller.
+path. Network, packing, GC and export do not yet use this controller.
 
 The implementation follows the C++ requirements for
 [signal-safe operations](https://eel.is/c++draft/support.signal) and
@@ -100,6 +100,19 @@ before publication and removes its temporary file on cooperative cancellation.
 An existing destination is never overwritten. Git's required filters report
 failure rather than presenting a cancelled conversion as successful; clean emits
 its pointer only after the manifest has been retained.
+
+`fsck(OperationOptions)` reports aggregate `verifying` progress without building
+a complete object list. Bytes count decoded payload reads, including repeated
+blocks needed for complete file hashes and secondary packed copies; the total
+is unknown. Completion is emitted only after all checks pass. Stop checks run
+between objects, blocks and loose-tree entries. Format/index validation already
+in progress must finish first. Cancellation or an observer exception closes read
+sessions and restores normal cache use without modifying objects or references.
+CLI audit failures emit no partial success message on stdout.
+
+`closure(roots, verify_files, stop, progress)` offers the same verification
+progress while retaining its existing materialized return value. Callers that
+only need to audit the entire store should use streaming `fsck`.
 
 These options do not yet extend to GC, packing, network transfers or multi-file
 export. Process-kill recovery remains a separate mechanism described in
