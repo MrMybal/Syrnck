@@ -79,10 +79,21 @@ a remote lease; abandoned leases expire or require explicit administration.
 
 ## Validation
 
+Loose-object inventories also handle an observed Windows filesystem race: an
+unknown uppercase-hash `.tmp` entry can briefly appear while deleted data is
+being cleaned up. As with lease/journal inventories, an unknown `.tmp` path is
+ignored only after its disappearance is observed within a bounded 50 ms wait.
+Canonical object names never take this exception. Persistent unknown files,
+symlinks and malformed object names still fail the inventory before GC deletion.
+The creating process was not identified; this is a bounded filesystem tolerance,
+not a general rule to accept extra Store files.
+
 `transfer_retention` covers partial files with gaps, mixed packed/loose objects,
 plain/encrypted Stores, GC cancellation, reopening and byte-exact reconstruction,
 missing versus corrupt data, complete-file hash failures, full source/read roots,
 and two-pass pruning with malformed journals and cancellation after a removal.
+It also checks refusal of a persistent foreign temporary entry without deleting
+live/unrelated payloads, and successful GC after the temporary entry disappears.
 Production process-kill transfer tests resume after selective local/server GC.
 CLI tests exercise token-free pruning with progress and unfinished records.
 Validation runs on Windows x64; other platforms and sanitizer runs await CI.

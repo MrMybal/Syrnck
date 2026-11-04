@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <source_location>
+#include <thread>
+#include <chrono>
 using namespace syrnck;
 namespace {
 void check(bool value, std::source_location location = std::source_location::current()) {
@@ -44,6 +46,7 @@ int main() {
       fs::remove_all(path, ec);
     }
   } cleanup{root};
+  std::string context = "source setup";
   try {
     Store source(root / "source", {}, true);
     auto manifest = file(source, "aaaabbbbccccdddd");
@@ -58,6 +61,7 @@ int main() {
         }
         auto name = std::string(encrypted ? "encrypted-" : "plain-") + (packed ? "packed" : "loose");
         auto directory = root / name;
+        context = name + " partial transfer";
         auto partial = session(manifest, "pull");
         auto orphan = ObjectKey{};
         {
@@ -87,6 +91,7 @@ int main() {
           check(read_bytes(directory / "transfers" / (partial.id + ".json")) == before);
         }
         {
+          context = name + " complete transfer";
           Store target(directory, secret);
           check(target.get(dependencies[0]) == source.get(dependencies[0]));
           check(target.get(dependencies[2]) == source.get(dependencies[2]));
@@ -114,6 +119,7 @@ int main() {
         }
         // Full push and read roots retain their closure while unrelated objects are collectable.
         {
+          context = name + " push/read retention";
           Store target(root / (name + "-complete"), secret, true);
           for (const auto &key : source.closure({manifest}, true))
             target.import(key, source.get(key));
@@ -123,14 +129,18 @@ int main() {
           auto garbage = target.put(Kind::chunk, bytes("unrelated complete-root garbage")).first;
           if (packed)
             target.pack();
+          context = name + " push/read retention initial GC";
           check(target.gc(true)["unreachable_objects"] == 1 && !target.contains(garbage));
           target.remove_transfer_session(push.id);
+          context = name + " read-only retention GC";
           check(target.gc(true)["live_objects"] == 5);
           target.release_read_lease(lease.id, lease.fence);
+          context = name + " released read retention GC";
           check(target.gc(true)["unreachable_objects"] == 5);
         }
       }
     {
+      context = "revision retention";
       Json revision{{"version", 1},
                     {"parents", Json::array()},
                     {"message", "parent"},
@@ -157,6 +167,7 @@ int main() {
       check(text(read_bytes(root / "revision-output" / "asset.bin")) == "aaaabbbbccccdddd");
     }
     {
+      context = "missing/corrupt roots";
       Store target(root / "missing", {}, true);
       ObjectKey missing{Kind::manifest, std::string(64, '0')};
       auto push = session(missing, "push");
@@ -179,6 +190,7 @@ int main() {
       check(target.contains(garbage));
     }
     {
+      context = "receipt pruning";
       Store target(root / "prune", {}, true);
       auto payload = target.put(Kind::chunk, bytes("payload untouched by receipt pruning")).first;
       target.set_ref("retained", payload);
@@ -216,9 +228,32 @@ int main() {
             text(target.get(payload)) == "payload untouched by receipt pruning");
       check(target.prune_transfer_sessions(true)["removed"] == 0);
     }
+    {
+      context = "foreign temporary object inventory";
+      Store target(root / "foreign-inventory", {}, true);
+      auto retained = target.put(Kind::chunk, bytes("retained during foreign temporary cleanup")).first;
+      target.set_ref("retained", retained);
+      auto garbage = target.put(Kind::chunk, bytes("collect unrelated temporary inventory garbage")).first;
+      auto foreign = loose(target, retained).parent_path() / (std::string(64, 'A') + ".tmp");
+      atomic_write(foreign, bytes("persistent foreign temporary entry"), false);
+      fails([&] { target.gc(true); });
+      check(target.contains(retained) && target.contains(garbage) && fs::exists(foreign));
+      std::jthread disappearance([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::error_code error;
+        fs::remove(foreign, error);
+      });
+      check(target.gc(true)["unreachable_objects"] == 1);
+      disappearance.join();
+      check(target.contains(retained) && !target.contains(garbage) && !fs::exists(foreign));
+      check(target.fsck() == 1);
+    }
     std::cout << "Selective transfer retention and receipt pruning passed\n";
   } catch (const std::exception &e) {
-    std::cerr << e.what() << '\n';
+    std::cerr << context << ": " << e.what() << '\n';
+    std::error_code error;
+    for (fs::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error))
+      std::cerr << utf8(it->path().lexically_relative(root)) << '\n';
     return 1;
   }
 }

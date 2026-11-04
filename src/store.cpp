@@ -613,11 +613,21 @@ static void visit_loose_objects(const fs::path &root, Visitor visitor, std::opti
       require(shard.is_directory() && !shard.is_symlink(), "invalid object shard");
       for (const auto &file : fs::directory_iterator(shard)) {
         throw_if_cancelled(stop);
-        require(file.is_regular_file() && !file.is_symlink(), "invalid object entry");
         auto id = utf8(file.path().filename());
-        if (id.starts_with(".tmp"))
+        if (id.starts_with(".tmp")) {
+          require(file.is_regular_file() && !file.is_symlink(), "invalid object entry");
           continue;
-        validate_id(id);
+        }
+        const bool canonical = id.size() == 64 && std::all_of(id.begin(), id.end(), [](char c) {
+                                 return (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9');
+                               });
+        // Never skip a canonical object path. Unknown *.tmp entries can be
+        // foreign deletion backups; tolerate only an observed disappearance.
+        if (!canonical && transient_metadata_disappeared(file.path(), stop))
+          continue;
+        require(file.is_regular_file() && !file.is_symlink(), "invalid object entry");
+        if (!canonical)
+          throw Error("invalid loose object filename: " + id);
         require(utf8(shard.path().filename()) == id.substr(0, 2), "wrong object shard");
         visitor(ObjectKey{kind, id});
       }

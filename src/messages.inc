@@ -411,3 +411,4 @@ SYRNCK_MESSAGE("pre-push commit limit exceeded", "limite de commits pre-push dé
 SYRNCK_MESSAGE("invalid Git history response", "réponse d'historique Git invalide")
 SYRNCK_MESSAGE("initialize Git filters before installing the hook", "initialisez les filtres Git avant d'installer le hook")
 SYRNCK_MESSAGE("Git transfer counter overflow", "débordement du compteur de transfert Git")
+SYRNCK_PREFIX("invalid loose object filename: ", "nom de fichier d'objet isolé invalide : ")
