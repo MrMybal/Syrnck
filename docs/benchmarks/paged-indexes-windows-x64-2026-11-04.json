@@ -1,0 +1,1208 @@
+{
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "binary_sha256": "c8a01a20c6d7db1c42ba4426228e4a8b5fc099b19232214b576b7b324c55f098",
+  "objects": 1048576,
+  "queries": 20000,
+  "repetitions": 3,
+  "two_passes_of_identical_queries_per_run": true,
+  "synthetic_index_only_no_codec_or_reconstruction": true,
+  "map_is_comparison_implementation_in_same_binary": true,
+  "fixture_generation_in_separate_process": true,
+  "os_cache_controlled": false,
+  "all_lookup_results_verified": true,
+  "fixture_descriptor": {
+    "name": "acc16d1487ffd4269e60f48b5e15464d",
+    "objects": 1048576,
+    "bytes": 5242888,
+    "index_hash": "672546dd487c553c0f91d346f878777756361dc043a12df4d6bcd7780bddf427"
+  },
+  "summary_medians": [
+    {
+      "pattern": "random",
+      "mode": "map",
+      "cache_mib": 0,
+      "median_load_seconds": 0.5700791,
+      "median_queries_per_second": 471364.600518501,
+      "median_warm_queries_per_second": 472152.44858259836,
+      "median_index_page_reads": 0,
+      "median_warm_index_page_reads": 0,
+      "median_working_set_bytes": 223199232,
+      "median_peak_working_set_bytes": 270393344,
+      "median_private_bytes": 227676160
+    },
+    {
+      "pattern": "random",
+      "mode": "paged",
+      "cache_mib": 0,
+      "median_load_seconds": 0.1809388,
+      "median_queries_per_second": 98505.32938458302,
+      "median_warm_queries_per_second": 96808.65430646038,
+      "median_index_page_reads": 10087,
+      "median_warm_index_page_reads": 10087,
+      "median_working_set_bytes": 6008832,
+      "median_peak_working_set_bytes": 6012928,
+      "median_private_bytes": 2560000
+    },
+    {
+      "pattern": "random",
+      "mode": "paged",
+      "cache_mib": 4,
+      "median_load_seconds": 0.1829284,
+      "median_queries_per_second": 89165.34107526268,
+      "median_warm_queries_per_second": 93136.27560141587,
+      "median_index_page_reads": 10087,
+      "median_warm_index_page_reads": 10087,
+      "median_working_set_bytes": 10735616,
+      "median_peak_working_set_bytes": 10739712,
+      "median_private_bytes": 7430144
+    },
+    {
+      "pattern": "random",
+      "mode": "paged",
+      "cache_mib": 64,
+      "median_load_seconds": 0.1763302,
+      "median_queries_per_second": 171806.84100479513,
+      "median_warm_queries_per_second": 808035.1010447894,
+      "median_index_page_reads": 4096,
+      "median_warm_index_page_reads": 0,
+      "median_working_set_bytes": 55357440,
+      "median_peak_working_set_bytes": 55361536,
+      "median_private_bytes": 53710848
+    },
+    {
+      "pattern": "sequential",
+      "mode": "map",
+      "cache_mib": 0,
+      "median_load_seconds": 0.5787962,
+      "median_queries_per_second": 4874363.286295728,
+      "median_warm_queries_per_second": 5173439.561292325,
+      "median_index_page_reads": 0,
+      "median_warm_index_page_reads": 0,
+      "median_working_set_bytes": 223191040,
+      "median_peak_working_set_bytes": 270385152,
+      "median_private_bytes": 227667968
+    },
+    {
+      "pattern": "sequential",
+      "mode": "paged",
+      "cache_mib": 0,
+      "median_load_seconds": 0.1802205,
+      "median_queries_per_second": 163914.94453528064,
+      "median_warm_queries_per_second": 160918.78187700495,
+      "median_index_page_reads": 10079,
+      "median_warm_index_page_reads": 10079,
+      "median_working_set_bytes": 6017024,
+      "median_peak_working_set_bytes": 6021120,
+      "median_private_bytes": 2555904
+    },
+    {
+      "pattern": "sequential",
+      "mode": "paged",
+      "cache_mib": 4,
+      "median_load_seconds": 0.1771672,
+      "median_queries_per_second": 1517680.9834572773,
+      "median_warm_queries_per_second": 1574009.9477428698,
+      "median_index_page_reads": 40,
+      "median_warm_index_page_reads": 0,
+      "median_working_set_bytes": 6410240,
+      "median_peak_working_set_bytes": 6414336,
+      "median_private_bytes": 3026944
+    },
+    {
+      "pattern": "sequential",
+      "mode": "paged",
+      "cache_mib": 64,
+      "median_load_seconds": 0.178625,
+      "median_queries_per_second": 1502878.0113918153,
+      "median_warm_queries_per_second": 1515140.036817903,
+      "median_index_page_reads": 40,
+      "median_warm_index_page_reads": 0,
+      "median_working_set_bytes": 6418432,
+      "median_peak_working_set_bytes": 6422528,
+      "median_private_bytes": 3031040
+    }
+  ],
+  "runs": [
+    {
+      "mode": "map",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.5700791,
+      "query_seconds": 0.046116,
+      "queries_per_second": 433688.95827912225,
+      "warm_query_seconds": 0.0476417,
+      "warm_queries_per_second": 419800.3009968158,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 675840
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227680256
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227680256
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227680256
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1987175,
+      "query_seconds": 0.2171063,
+      "queries_per_second": 92120.77217473653,
+      "warm_query_seconds": 0.2198563,
+      "warm_queries_per_second": 90968.50988577539,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4063232,
+        "peak_working_set_bytes": 4067328,
+        "private_bytes": 667648
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5877760,
+        "peak_working_set_bytes": 5881856,
+        "private_bytes": 2408448
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6004736,
+        "peak_working_set_bytes": 6008832,
+        "private_bytes": 2555904
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6004736,
+        "peak_working_set_bytes": 6008832,
+        "private_bytes": 2555904
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1829284,
+      "query_seconds": 0.2312176,
+      "queries_per_second": 86498.60564247705,
+      "warm_query_seconds": 0.2315844,
+      "warm_queries_per_second": 86361.60294043986,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 667648
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5885952,
+        "peak_working_set_bytes": 5890048,
+        "private_bytes": 2408448
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 10739712,
+        "peak_working_set_bytes": 10743808,
+        "private_bytes": 7430144
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 10743808,
+        "peak_working_set_bytes": 10747904,
+        "private_bytes": 7430144
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 4193280,
+      "index_cached_pages": 364,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1927496,
+      "query_seconds": 0.1183238,
+      "queries_per_second": 169027.7019500726,
+      "warm_query_seconds": 0.0247514,
+      "warm_queries_per_second": 808035.1010447894,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 675840
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5877760,
+        "peak_working_set_bytes": 5881856,
+        "private_bytes": 2404352
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 55349248,
+        "peak_working_set_bytes": 55353344,
+        "private_bytes": 53657600
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 55349248,
+        "peak_working_set_bytes": 55353344,
+        "private_bytes": 53657600
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 47185920,
+      "index_cached_pages": 4096,
+      "index_page_reads": 4096,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 16078,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "map",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.5962948,
+      "query_seconds": 0.0041031,
+      "queries_per_second": 4874363.286295728,
+      "warm_query_seconds": 0.0038659,
+      "warm_queries_per_second": 5173439.561292325,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4063232,
+        "peak_working_set_bytes": 4067328,
+        "private_bytes": 659456
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227663872
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227663872
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227663872
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1802205,
+      "query_seconds": 0.1239337,
+      "queries_per_second": 161376.60700842467,
+      "warm_query_seconds": 0.1184183,
+      "warm_queries_per_second": 168892.81470853745,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4079616,
+        "peak_working_set_bytes": 4083712,
+        "private_bytes": 679936
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5894144,
+        "peak_working_set_bytes": 5898240,
+        "private_bytes": 2420736
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6021120,
+        "peak_working_set_bytes": 6025216,
+        "private_bytes": 2568192
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6021120,
+        "peak_working_set_bytes": 6025216,
+        "private_bytes": 2568192
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10079,
+      "warm_index_page_reads": 10079,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1657947,
+      "query_seconds": 0.013178,
+      "queries_per_second": 1517680.9834572773,
+      "warm_query_seconds": 0.0130556,
+      "warm_queries_per_second": 1531909.6786053493,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4075520,
+        "peak_working_set_bytes": 4079616,
+        "private_bytes": 684032
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5890048,
+        "peak_working_set_bytes": 5894144,
+        "private_bytes": 2424832
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6414336,
+        "peak_working_set_bytes": 6418432,
+        "private_bytes": 3035136
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6414336,
+        "peak_working_set_bytes": 6418432,
+        "private_bytes": 3035136
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1727245,
+      "query_seconds": 0.0131526,
+      "queries_per_second": 1520611.8942262365,
+      "warm_query_seconds": 0.0127075,
+      "warm_queries_per_second": 1573873.696635845,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4075520,
+        "peak_working_set_bytes": 4079616,
+        "private_bytes": 679936
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5890048,
+        "peak_working_set_bytes": 5894144,
+        "private_bytes": 2420736
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6406144,
+        "peak_working_set_bytes": 6410240,
+        "private_bytes": 3031040
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6406144,
+        "peak_working_set_bytes": 6410240,
+        "private_bytes": 3031040
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 1
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1609835,
+      "query_seconds": 0.1088379,
+      "queries_per_second": 183759.51759451441,
+      "warm_query_seconds": 0.0235987,
+      "warm_queries_per_second": 847504.3116781857,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4079616,
+        "peak_working_set_bytes": 4083712,
+        "private_bytes": 675840
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5894144,
+        "peak_working_set_bytes": 5898240,
+        "private_bytes": 2416640
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 55361536,
+        "peak_working_set_bytes": 55365632,
+        "private_bytes": 53719040
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 55361536,
+        "peak_working_set_bytes": 55365632,
+        "private_bytes": 53719040
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 47185920,
+      "index_cached_pages": 4096,
+      "index_page_reads": 4096,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 16078,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1804289,
+      "query_seconds": 0.2038355,
+      "queries_per_second": 98118.33561867289,
+      "warm_query_seconds": 0.202701,
+      "warm_queries_per_second": 98667.49547362865,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4067328,
+        "peak_working_set_bytes": 4071424,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5881856,
+        "peak_working_set_bytes": 5885952,
+        "private_bytes": 2412544
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 10735616,
+        "peak_working_set_bytes": 10739712,
+        "private_bytes": 7434240
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 10735616,
+        "peak_working_set_bytes": 10739712,
+        "private_bytes": 7434240
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 4193280,
+      "index_cached_pages": 364,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1809388,
+      "query_seconds": 0.2030347,
+      "queries_per_second": 98505.32938458302,
+      "warm_query_seconds": 0.2065931,
+      "warm_queries_per_second": 96808.65430646038,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5885952,
+        "peak_working_set_bytes": 5890048,
+        "private_bytes": 2412544
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6008832,
+        "peak_working_set_bytes": 6012928,
+        "private_bytes": 2560000
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6008832,
+        "peak_working_set_bytes": 6012928,
+        "private_bytes": 2560000
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "map",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.5750466,
+      "query_seconds": 0.0378202,
+      "queries_per_second": 528817.9332737532,
+      "warm_query_seconds": 0.0392527,
+      "warm_queries_per_second": 509519.09040651977,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 675840
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227676160
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227676160
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227676160
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.184648,
+      "query_seconds": 0.0133078,
+      "queries_per_second": 1502878.0113918153,
+      "warm_query_seconds": 0.0132001,
+      "warm_queries_per_second": 1515140.036817903,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4079616,
+        "peak_working_set_bytes": 4083712,
+        "private_bytes": 675840
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5894144,
+        "peak_working_set_bytes": 5898240,
+        "private_bytes": 2420736
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6418432,
+        "peak_working_set_bytes": 6422528,
+        "private_bytes": 3031040
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6418432,
+        "peak_working_set_bytes": 6422528,
+        "private_bytes": 3031040
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1891988,
+      "query_seconds": 0.0140047,
+      "queries_per_second": 1428091.9976864909,
+      "warm_query_seconds": 0.0127064,
+      "warm_queries_per_second": 1574009.9477428698,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4079616,
+        "peak_working_set_bytes": 4083712,
+        "private_bytes": 679936
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5881856,
+        "peak_working_set_bytes": 5885952,
+        "private_bytes": 2408448
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6406144,
+        "peak_working_set_bytes": 6410240,
+        "private_bytes": 3022848
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6406144,
+        "peak_working_set_bytes": 6410240,
+        "private_bytes": 3022848
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1806409,
+      "query_seconds": 0.1220145,
+      "queries_per_second": 163914.94453528064,
+      "warm_query_seconds": 0.1287137,
+      "warm_queries_per_second": 155383.61495318683,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4067328,
+        "peak_working_set_bytes": 4071424,
+        "private_bytes": 659456
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5881856,
+        "peak_working_set_bytes": 5885952,
+        "private_bytes": 2400256
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6004736,
+        "peak_working_set_bytes": 6008832,
+        "private_bytes": 2547712
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6004736,
+        "peak_working_set_bytes": 6008832,
+        "private_bytes": 2547712
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10079,
+      "warm_index_page_reads": 10079,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "map",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.5288319,
+      "query_seconds": 0.0043938,
+      "queries_per_second": 4551868.542036506,
+      "warm_query_seconds": 0.003851,
+      "warm_queries_per_second": 5193456.245131135,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4067328,
+        "peak_working_set_bytes": 4071424,
+        "private_bytes": 663552
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227667968
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227667968
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223195136,
+        "peak_working_set_bytes": 270389248,
+        "private_bytes": 227667968
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 2
+    },
+    {
+      "mode": "map",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.512681,
+      "query_seconds": 0.04243,
+      "queries_per_second": 471364.600518501,
+      "warm_query_seconds": 0.0423592,
+      "warm_queries_per_second": 472152.44858259836,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 667648
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227676160
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227676160
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223199232,
+        "peak_working_set_bytes": 270393344,
+        "private_bytes": 227676160
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1777137,
+      "query_seconds": 0.1974602,
+      "queries_per_second": 101286.23388409411,
+      "warm_query_seconds": 0.2054258,
+      "warm_queries_per_second": 97358.7543531533,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5885952,
+        "peak_working_set_bytes": 5890048,
+        "private_bytes": 2412544
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6008832,
+        "peak_working_set_bytes": 6012928,
+        "private_bytes": 2560000
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6008832,
+        "peak_working_set_bytes": 6012928,
+        "private_bytes": 2560000
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.183219,
+      "query_seconds": 0.2243024,
+      "queries_per_second": 89165.34107526268,
+      "warm_query_seconds": 0.2147391,
+      "warm_queries_per_second": 93136.27560141587,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4075520,
+        "peak_working_set_bytes": 4079616,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5877760,
+        "peak_working_set_bytes": 5881856,
+        "private_bytes": 2400256
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 10735616,
+        "peak_working_set_bytes": 10739712,
+        "private_bytes": 7421952
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 10735616,
+        "peak_working_set_bytes": 10739712,
+        "private_bytes": 7421952
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 4193280,
+      "index_cached_pages": 364,
+      "index_page_reads": 10087,
+      "warm_index_page_reads": 10087,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "random",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1763302,
+      "query_seconds": 0.1164098,
+      "queries_per_second": 171806.84100479513,
+      "warm_query_seconds": 0.0257961,
+      "warm_queries_per_second": 775310.9966235206,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4079616,
+        "peak_working_set_bytes": 4083712,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5894144,
+        "peak_working_set_bytes": 5898240,
+        "private_bytes": 2412544
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 55357440,
+        "peak_working_set_bytes": 55361536,
+        "private_bytes": 53710848
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 55357440,
+        "peak_working_set_bytes": 55361536,
+        "private_bytes": 53710848
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 47185920,
+      "index_cached_pages": 4096,
+      "index_page_reads": 4096,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 16078,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "map",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.5787962,
+      "query_seconds": 0.0040025,
+      "queries_per_second": 4996876.95190506,
+      "warm_query_seconds": 0.0040784,
+      "warm_queries_per_second": 4903883.8760298155,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4071424,
+        "peak_working_set_bytes": 4075520,
+        "private_bytes": 671744
+      },
+      "memory_after_load": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227680256
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227680256
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 223191040,
+        "peak_working_set_bytes": 270385152,
+        "private_bytes": 227680256
+      },
+      "index_directory_bytes": 0,
+      "index_filter_bytes": 0,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 0,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 0,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1798504,
+      "query_seconds": 0.1176374,
+      "queries_per_second": 170013.95814596378,
+      "warm_query_seconds": 0.1242863,
+      "warm_queries_per_second": 160918.78187700495,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4075520,
+        "peak_working_set_bytes": 4079616,
+        "private_bytes": 667648
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5890048,
+        "peak_working_set_bytes": 5894144,
+        "private_bytes": 2408448
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6017024,
+        "peak_working_set_bytes": 6021120,
+        "private_bytes": 2555904
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6017024,
+        "peak_working_set_bytes": 6021120,
+        "private_bytes": 2555904
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 0,
+      "index_cached_pages": 0,
+      "index_page_reads": 10079,
+      "warm_index_page_reads": 10079,
+      "index_cache_hits": 0,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 4,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.1771672,
+      "query_seconds": 0.0117533,
+      "queries_per_second": 1701649.7494320744,
+      "warm_query_seconds": 0.0120402,
+      "warm_queries_per_second": 1661101.9750502484,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4075520,
+        "peak_working_set_bytes": 4079616,
+        "private_bytes": 679936
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5890048,
+        "peak_working_set_bytes": 5894144,
+        "private_bytes": 2420736
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6410240,
+        "peak_working_set_bytes": 6414336,
+        "private_bytes": 3026944
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6410240,
+        "peak_working_set_bytes": 6414336,
+        "private_bytes": 3026944
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    },
+    {
+      "mode": "paged",
+      "pattern": "sequential",
+      "objects": 1048576,
+      "queries": 20000,
+      "cache_mib": 64,
+      "hits": 10000,
+      "all_results_verified": true,
+      "load_seconds": 0.178625,
+      "query_seconds": 0.0141879,
+      "queries_per_second": 1409651.886466637,
+      "warm_query_seconds": 0.0134154,
+      "warm_queries_per_second": 1490823.978412869,
+      "warm_hits": 10000,
+      "memory_before": {
+        "working_set_bytes": 4083712,
+        "peak_working_set_bytes": 4087808,
+        "private_bytes": 688128
+      },
+      "memory_after_load": {
+        "working_set_bytes": 5898240,
+        "peak_working_set_bytes": 5902336,
+        "private_bytes": 2428928
+      },
+      "memory_after_first_queries": {
+        "working_set_bytes": 6418432,
+        "peak_working_set_bytes": 6422528,
+        "private_bytes": 3039232
+      },
+      "memory_after_queries": {
+        "working_set_bytes": 6418432,
+        "peak_working_set_bytes": 6422528,
+        "private_bytes": 3039232
+      },
+      "index_directory_bytes": 401408,
+      "index_filter_bytes": 1310720,
+      "index_cached_bytes": 460800,
+      "index_cached_pages": 40,
+      "index_page_reads": 40,
+      "warm_index_page_reads": 0,
+      "index_cache_hits": 20118,
+      "queries_use_bounded_read_session": true,
+      "serialized_index_bytes": 47185936,
+      "repetition": 3
+    }
+  ]
+}

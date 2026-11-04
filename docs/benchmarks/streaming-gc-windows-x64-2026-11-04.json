@@ -1,0 +1,359 @@
+{
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "binary_sha256": "14f5f474c7fa3fc7f55f04cc7ac28815f5a65bed7529f008cca3f5f775a3a93b",
+  "repetitions": 3,
+  "fixture": {
+    "objects": 131137,
+    "live_objects": 65569,
+    "unreachable_objects": 65568,
+    "chunks": 131072,
+    "block_bytes": 64,
+    "files": 64,
+    "pack": {
+      "name": "3ee4ad5d32465dd291adcef1540d70c8",
+      "objects": 131137,
+      "bytes": 15297700,
+      "index_hash": "6ab069cf4d123f6246bcee923ff2c6c3784c4c8c1afb1008069bded2e931adf0"
+    }
+  },
+  "fixture_generation_in_separate_process": true,
+  "materialized_is_comparison_implementation_in_same_binary": true,
+  "real_valid_objects_and_complete_file_hashes": true,
+  "encrypted": false,
+  "decoded_cache_bytes": 0,
+  "verified_cache_entries": 0,
+  "index_cache_bytes": 4194304,
+  "comparison_helper_index_cache_bytes": 0,
+  "os_cache_controlled": false,
+  "all_plans_equal": true,
+  "summary_medians": [
+    {
+      "mode": "materialized",
+      "median_seconds": 5.865693,
+      "median_peak_working_set_bytes": 57999360
+    },
+    {
+      "mode": "stream",
+      "median_seconds": 4.4483054,
+      "median_peak_working_set_bytes": 12705792
+    }
+  ],
+  "runs": [
+    {
+      "mode": "materialized",
+      "seconds": 5.8278688,
+      "memory_before": {
+        "working_set_bytes": 4452352,
+        "peak_working_set_bytes": 4456448,
+        "private_bytes": 913408
+      },
+      "memory_after": {
+        "working_set_bytes": 20389888,
+        "peak_working_set_bytes": 57929728,
+        "private_bytes": 18845696
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "memory_with_inventories": {
+          "working_set_bytes": 48566272,
+          "peak_working_set_bytes": 57929728,
+          "private_bytes": 47398912
+        }
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4184685,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 1
+    },
+    {
+      "mode": "stream",
+      "seconds": 4.4483054,
+      "memory_before": {
+        "working_set_bytes": 4452352,
+        "peak_working_set_bytes": 4456448,
+        "private_bytes": 913408
+      },
+      "memory_after": {
+        "working_set_bytes": 10035200,
+        "peak_working_set_bytes": 12656640,
+        "private_bytes": 6602752
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "repack_required": true,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "obsolete_pack_files": 0,
+        "obsolete_pack_bytes": 0,
+        "packed_mark_bytes": 16393,
+        "loose_live_objects": 0,
+        "peak_pending_objects": 32,
+        "deleted": false
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4193280,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 1
+    },
+    {
+      "mode": "stream",
+      "seconds": 4.0234537,
+      "memory_before": {
+        "working_set_bytes": 4456448,
+        "peak_working_set_bytes": 4460544,
+        "private_bytes": 921600
+      },
+      "memory_after": {
+        "working_set_bytes": 10035200,
+        "peak_working_set_bytes": 12705792,
+        "private_bytes": 6807552
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "repack_required": true,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "obsolete_pack_files": 0,
+        "obsolete_pack_bytes": 0,
+        "packed_mark_bytes": 16393,
+        "loose_live_objects": 0,
+        "peak_pending_objects": 32,
+        "deleted": false
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4193280,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 2
+    },
+    {
+      "mode": "materialized",
+      "seconds": 5.865693,
+      "memory_before": {
+        "working_set_bytes": 4456448,
+        "peak_working_set_bytes": 4460544,
+        "private_bytes": 921600
+      },
+      "memory_after": {
+        "working_set_bytes": 20525056,
+        "peak_working_set_bytes": 57999360,
+        "private_bytes": 18350080
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "memory_with_inventories": {
+          "working_set_bytes": 48570368,
+          "peak_working_set_bytes": 57999360,
+          "private_bytes": 47353856
+        }
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4184685,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 2
+    },
+    {
+      "mode": "materialized",
+      "seconds": 5.9573097,
+      "memory_before": {
+        "working_set_bytes": 4476928,
+        "peak_working_set_bytes": 4481024,
+        "private_bytes": 937984
+      },
+      "memory_after": {
+        "working_set_bytes": 20598784,
+        "peak_working_set_bytes": 58105856,
+        "private_bytes": 19329024
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "memory_with_inventories": {
+          "working_set_bytes": 48631808,
+          "peak_working_set_bytes": 58105856,
+          "private_bytes": 47456256
+        }
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4184685,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 3
+    },
+    {
+      "mode": "stream",
+      "seconds": 4.6189845,
+      "memory_before": {
+        "working_set_bytes": 4460544,
+        "peak_working_set_bytes": 4464640,
+        "private_bytes": 917504
+      },
+      "memory_after": {
+        "working_set_bytes": 9990144,
+        "peak_working_set_bytes": 12709888,
+        "private_bytes": 6684672
+      },
+      "result": {
+        "live_objects": 65569,
+        "unreachable_objects": 65568,
+        "reclaimable_bytes": 7648168,
+        "repack_required": true,
+        "packs_to_rewrite": 1,
+        "packs_to_drop": 0,
+        "pack_bytes_to_write": 7649532,
+        "obsolete_pack_files": 0,
+        "obsolete_pack_bytes": 0,
+        "packed_mark_bytes": 16393,
+        "loose_live_objects": 0,
+        "peak_pending_objects": 32,
+        "deleted": false
+      },
+      "io": {
+        "object_reads": 65569,
+        "envelope_bytes_read": 7649524,
+        "decoded_objects": 65569,
+        "cache_presence_hits": 0,
+        "cache_data_hits": 0,
+        "cached_objects": 0,
+        "cached_payloads": 0,
+        "cached_bytes": 0,
+        "index_directory_bytes": 50274,
+        "index_filter_bytes": 163922,
+        "index_cached_bytes": 4193280,
+        "index_cached_pages": 364
+      },
+      "all_live_files_verified": true,
+      "post_delete_audit": false,
+      "repetition": 3
+    }
+  ],
+  "delete_run": {
+    "mode": "delete",
+    "seconds": 5.858727,
+    "memory_before": {
+      "working_set_bytes": 4452352,
+      "peak_working_set_bytes": 4456448,
+      "private_bytes": 909312
+    },
+    "memory_after": {
+      "working_set_bytes": 5758976,
+      "peak_working_set_bytes": 15921152,
+      "private_bytes": 2801664
+    },
+    "result": {
+      "live_objects": 65569,
+      "unreachable_objects": 65568,
+      "reclaimable_bytes": 7648168,
+      "repack_required": true,
+      "packs_to_rewrite": 1,
+      "packs_to_drop": 0,
+      "pack_bytes_to_write": 7649532,
+      "obsolete_pack_files": 0,
+      "obsolete_pack_bytes": 0,
+      "packed_mark_bytes": 16393,
+      "loose_live_objects": 0,
+      "peak_pending_objects": 32,
+      "deleted": true
+    },
+    "io": {
+      "object_reads": 327845,
+      "envelope_bytes_read": 38247620,
+      "decoded_objects": 327845,
+      "cache_presence_hits": 0,
+      "cache_data_hits": 0,
+      "cached_objects": 0,
+      "cached_payloads": 0,
+      "cached_bytes": 0,
+      "index_directory_bytes": 25186,
+      "index_filter_bytes": 81962,
+      "index_cached_bytes": 2950605,
+      "index_cached_pages": 257
+    },
+    "all_live_files_verified": true,
+    "post_delete_audit": true
+  }
+}

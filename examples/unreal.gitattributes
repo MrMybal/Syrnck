@@ -1,0 +1,12 @@
+# Apply inside an existing Git repository after `syrnck git install`.
+# Do not assign both lfs and syrnck to the same paths.
+*.uasset filter=syrnck -diff -merge -text
+*.umap filter=syrnck -diff -merge -text
+*.ubulk filter=syrnck -diff -merge -text
+*.uexp filter=syrnck -diff -merge -text
+*.uptnl filter=syrnck -diff -merge -text
+*.fbx filter=syrnck -diff -merge -text
+*.exr filter=syrnck -diff -merge -text
+*.wav filter=syrnck -diff -merge -text
+*.psd filter=syrnck -diff -merge -text
+*.blend filter=syrnck -diff -merge -text

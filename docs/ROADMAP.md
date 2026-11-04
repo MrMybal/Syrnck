@@ -1,0 +1,108 @@
+# Feuille de route
+
+La priorité produit est de conserver toutes les capacités Git pour le code tout en remplaçant le stockage des assets. Le mode autonome progresse sur le même socle, avec des critères de validation explicites. Les cases cochées décrivent le prototype présent dans ce dossier.
+
+## 0 — Socle vérifiable
+
+- [x] Bibliothèque de blocs indépendante, découpage CDC et fixe, BLAKE3.
+- [x] Manifestes complets, compression, reconstruction et vérification d'intégrité.
+- [x] Révisions autonomes complètes, branches, journal, export et détachement avec archive.
+- [x] Pins, fermeture des dépendances, GC simulé puis explicite sous verrou exclusif.
+- [x] Filtres Git clean/smudge et démonstration sur un vrai dépôt.
+- [x] Serveur authentifié, agent ponctuel, comparaison des objets et reprise.
+- [x] Chiffrement des objets au repos et interface C initiale.
+- [x] ABI C de blocs, import vérifié, dépendances, pins et paramètres de découpage.
+- [x] Migration C++20/CMake, compilation Windows x64 et tests locaux ; CI Windows/Linux/macOS.
+- [x] Compatibilité croisée avec les stores Rust v1, dont le chiffrement, et fixtures indépendantes de Rust.
+- [ ] Exécution réelle des matrices Linux/macOS et validation ARM64.
+- [ ] Validation de corpus Unreal et tests de crash/processus interrompus.
+
+Critère de sortie : aucune perte des versions conservées après suppression de racines, reprise de transfert ou panne contrôlée ; reconstruction identique octet par octet sur les plateformes cibles.
+
+## 1 — Usage Git quotidien
+
+- [ ] Catalogue des assets nécessaires à un commit, push/pull groupés et transaction de publication.
+- [ ] Hook pre-push avec envoi des blocs avant la publication Git.
+- [ ] Téléchargement à la demande au checkout et stratégie de clone sans assets.
+- [ ] Protocole `filter-process`, hydratation différée, cache commun aux worktrees.
+- [ ] Migration depuis Git LFS sans conversion manuelle fichier par fichier.
+- [ ] Compatibilité explicite GitHub/GitLab et documentation d'hébergement des blocs.
+- [ ] Réconciliation de rétention avec branches, tags, index, reflogs, stashes et worktrees.
+- [ ] Exécutable installable, configuration par dépôt, mises à jour et désinstallation.
+
+Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut pas publier de pointeur dont les blocs manquent sur le service associé. Une erreur réseau reste récupérable sans perte de données.
+
+## 2 — Performances de production
+
+- [ ] Corpus : assets Unreal réels, sources, textures, audio, données compressées et fichiers dépassant la RAM.
+- [x] Pipeline d'ingestion avec compression/chiffrement parallèles, plafond d'octets et de tâches ; écriture coordonnée et annulation coopérative C++.
+- [ ] Parallélisme configuré par dépôt et propagation aux commits/filtres ; annulation du CLI et progression.
+- [x] Cache borné de lectures vérifiées, contrôle de l'enveloppe à chaque accès et validation des fichiers dans la traversée des dépendances.
+- [ ] Index transactionnel des objets vérifiés ; validation incrémentale des dépendances.
+- [x] Pack immuable indexé, activation physique v2 explicite, compaction GC et reprise aux frontières de publication simulées.
+- [x] Handle de lecture de pack partagé pendant une opération, fermé avant publication/suppression et après les exceptions.
+- [x] Catalogue v3 de packs multiples, ajout incrémental, limites de taille/objets, regroupement explicite et GC sélectif par pack.
+- [x] Sessions de lecture avec au plus 8 handles de packs ouverts et éviction LRU.
+- [x] Index de packs consultés par pages vérifiées, répertoire/filtre compacts, cache LRU borné et écriture en flux sans changer le format v2/v3.
+- [x] GC avec inventaires en flux, bitmap des objets empaquetés et réécriture/relecture des survivants sans liste complète d'IDs.
+- [ ] Fusion automatique des petits packs, inventaires de `fsck`/compaction en flux et validation de charge du moteur complet ; borner les clés vivantes isolées, la pile de parcours et les autres métadonnées.
+- [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
+- [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
+- [ ] Transferts parallèles bornés, compression réseau négociée et cache des présences.
+- [ ] Reprise persistante, débits limités, annulation et progression.
+- [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
+
+Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets transférés mesurés ; aucun réglage de vitesse ne dégrade les garanties de reconstruction. Les cibles chiffrées doivent être fixées à partir des machines et des corpus de référence.
+
+## 3 — Équipes et Unreal Engine
+
+- [ ] Verrous d'assets exclusifs avec propriétaire, lease, expiration et fencing token.
+- [ ] Validation serveur des verrous à la publication ; gestion des branches et mode hors ligne.
+- [ ] Rôles et ACL par dépôt/chemin, audit et identité des appareils/utilisateurs.
+- [ ] Plugin Unreal : état, historique, locks, submit, revert et résolution des conflits.
+- [ ] Workspaces partiels, sélection de Content/Plugins et téléchargement à la demande.
+- [ ] Prise en charge des ensembles `.uasset/.uexp/.ubulk`, World Partition et external actors.
+- [ ] Diff visuel d'assets et intégration aux outils de merge Unreal quand le type le permet.
+- [ ] Renommages cohérents, respect de la casse, fichiers en cours de sauvegarde et limites de chemins.
+
+Critère de sortie : deux artistes ne peuvent pas publier silencieusement des modifications incompatibles d'un asset verrouillé ; un workspace partiel conserve une vue cohérente de ses dépendances.
+
+## 4 — Synchronisation continue et Syncthing
+
+- [ ] Agent résident avec watcher, rescans de récupération, exclusions et journal persistant.
+- [ ] Modèle causal des versions, tombstones, détection de modifications concurrentes et copies de conflit.
+- [ ] Publication cohérente de plusieurs fichiers, suppressions et renommages.
+- [ ] Planificateur multi-source, découverte et identité des appareils, gestion hors ligne.
+- [x] ABI C étendue et binding Go ; banc de copie différentielle, reprise et reconstruction sous Windows x64.
+- [ ] Exécution réelle du backend cgo Linux/macOS, validation ARM64 et mesure des coûts d'interface.
+- [ ] Adaptateur BEP à blocs fixes, ou extension CDC négociée entre pairs adaptés.
+- [ ] Tests d'interopérabilité avec Syncthing ; mesurer le coût du passage Go/C++ via l'interface C.
+
+Critère de sortie : après partitions réseau et modifications concurrentes, convergence sans écrasement silencieux. La compatibilité Syncthing ne sera annoncée qu'après des tests contre sa propre implémentation.
+
+## 5 — Contrôle de versions autonome complet
+
+- [ ] Index de staging, sélection de changements, status et diff textuel.
+- [ ] HEAD/branches/tags, checkout transactionnel, protection des modifications et journal de récupération.
+- [ ] Merge à trois voies, base commune, conflits de texte, conflits binaires et renommages.
+- [ ] Rebase, cherry-pick, revert, reset, stash, squash et amend.
+- [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
+- [ ] Auteurs, dates, signatures et politiques de validation des commits.
+- [ ] Push/pull des références avec validation d'ascendance et politiques serveur.
+- [ ] Import/export Git préservant l'information représentable dans les deux modèles.
+
+Critère de sortie : scénarios de travail complets comparés à Git, avec historique et résolution des conflits vérifiables. La représentation actuelle des révisions ne suffit pas à annoncer ces fonctions comme disponibles.
+
+## 6 — Sécurité, rétention et exploitation
+
+- [ ] Chiffrement de bout en bout, manifestes opaques et racines authentifiées.
+- [ ] Dérivation de clés, coffre système, rotation, révocation et récupération.
+- [ ] Modèle explicite de fuite d'égalité ; déduplication bornée au domaine autorisé.
+- [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.
+- [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
+- [ ] Backups restaurables, réplication, scrubbing périodique et réparation des blocs manquants.
+- [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
+- [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.
+- [ ] Choix de licence, provenance des dépendances, paquets signés et stratégie de migration de format.
+
+Critère de sortie : restauration complète après perte d'un nœud et après rotation de clés ; aucune suppression ne précède la validation de toutes les racines protégées et des transferts en cours.

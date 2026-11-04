@@ -1,0 +1,58 @@
+name: C++20
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
+      - name: macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja openssl@3
+      - name: Configure
+        run: python scripts/build.py configure
+      - name: Build
+        run: python scripts/build.py build
+      - name: Test
+        run: python scripts/build.py test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: syrnck-${{ matrix.os }}
+          path: |
+            build/syrnck
+            build/Release/syrnck.exe
+            build/Release/syrnck_ffi.dll
+            build/Release/syrnck_ffi*.lib
+            build/*syrnck_ffi*.so
+            build/*syrnck_ffi*.dylib
+            include/syrnck.h
+            THIRD_PARTY.md
+          if-no-files-found: error
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
+      - run: cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSYRNCK_SANITIZE=ON
+      - run: cmake --build build-asan --parallel 4
+      - run: ctest --test-dir build-asan --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1

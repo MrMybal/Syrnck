@@ -1,0 +1,15 @@
+title = "Syrnck secret scanning"
+
+[extend]
+useDefault = true
+
+# Reviewed false positive: a deterministic key-check HASH, not a key, from
+# the Rust compatibility fixture. Both exact file and exact value must match.
+# Do not exclude fixture directories or disable the generic API-key rule.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Public compatibility fixture key-check verifier"
+condition = "AND"
+paths = ['''(?:^|/)tests/fixtures/v1/encrypted/config\.json$''']
+regexes = ['''^bfb57500cdd64fae794f2af915bcb6ab7c6c32cec7686768913e2fb5fa235c43$''']

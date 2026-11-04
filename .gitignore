@@ -1,0 +1,16 @@
+/target/
+/build*/
+/dist/
+__pycache__/
+CMakeUserPresets.json
+/.tools/
+/.scratch/
+/.syrnck/
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.sarif

@@ -1,0 +1,7 @@
+/.tools/
+/target/
+/build*/
+/dist/
+/.scratch/
+*.key
+*.pem

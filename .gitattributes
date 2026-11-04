@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.bin binary
+*.syp binary
+*.syi binary
+*.png binary
+*.zip binary
+tests/fixtures/**/objects/** binary

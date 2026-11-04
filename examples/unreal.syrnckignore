@@ -1,0 +1,15 @@
+# Review for your project; copy to .syrnckignore for native commits.
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+/.vs/
+/.idea/
+/.tools/
+/target/
+*.sln
+*.suo
+*.key
+*.pem
+# Retain Content, Config, Source, Plugins and the .uproject file.
+# Some plugins need prebuilt Binaries: adjust the exclusions in that case.

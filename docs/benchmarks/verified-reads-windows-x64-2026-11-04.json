@@ -1,0 +1,3736 @@
+{
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "binary_sha256": "5c6279e7a974905369b84b5c42da7a8d70f0f15da85240ae951d379e9165025c",
+  "mib": 32,
+  "cache_mib": 64,
+  "repetitions": 5,
+  "cache_warmed_in_same_store_handle": true,
+  "network_measured": false,
+  "matching_object_ids": true,
+  "byte_exact_restore": true,
+  "summary_medians": [
+    {
+      "pattern": "random",
+      "encrypted": false,
+      "stage": "presence",
+      "0": {
+        "mib_per_second": 486.98012968889583,
+        "decoded_objects": 32,
+        "object_reads": 32,
+        "envelope_bytes_read": 33555648
+      },
+      "64": {
+        "mib_per_second": 714.0434495439048,
+        "decoded_objects": 0,
+        "object_reads": 32,
+        "envelope_bytes_read": 33555648
+      },
+      "speedup": 1.46626814116639
+    },
+    {
+      "pattern": "random",
+      "encrypted": false,
+      "stage": "reingest",
+      "0": {
+        "mib_per_second": 341.5679677559839,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "64": {
+        "mib_per_second": 488.93479443347735,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "speedup": 1.4314421742930306
+    },
+    {
+      "pattern": "random",
+      "encrypted": false,
+      "stage": "publication",
+      "0": {
+        "mib_per_second": 428.5477053948799,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "64": {
+        "mib_per_second": 509.54764907453404,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "speedup": 1.189010331078585
+    },
+    {
+      "pattern": "random",
+      "encrypted": false,
+      "stage": "reconstruction",
+      "0": {
+        "mib_per_second": 298.6230676987826,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "64": {
+        "mib_per_second": 361.52963187245234,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "speedup": 1.210655408031381
+    },
+    {
+      "pattern": "random",
+      "encrypted": false,
+      "stage": "fsck",
+      "0": {
+        "mib_per_second": 436.94417628512787,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "64": {
+        "mib_per_second": 449.7704765037092,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33556977
+      },
+      "speedup": 1.0293545512555624
+    },
+    {
+      "pattern": "random",
+      "encrypted": true,
+      "stage": "presence",
+      "0": {
+        "mib_per_second": 183.58360942587095,
+        "decoded_objects": 32,
+        "object_reads": 32,
+        "envelope_bytes_read": 33556928
+      },
+      "64": {
+        "mib_per_second": 706.6466744545019,
+        "decoded_objects": 0,
+        "object_reads": 32,
+        "envelope_bytes_read": 33556928
+      },
+      "speedup": 3.84918172523369
+    },
+    {
+      "pattern": "random",
+      "encrypted": true,
+      "stage": "reingest",
+      "0": {
+        "mib_per_second": 161.8459337979323,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "64": {
+        "mib_per_second": 490.66810595977745,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "speedup": 3.031698692982833
+    },
+    {
+      "pattern": "random",
+      "encrypted": true,
+      "stage": "publication",
+      "0": {
+        "mib_per_second": 180.52170773535516,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "64": {
+        "mib_per_second": 536.0762568475366,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "speedup": 2.969594424806929
+    },
+    {
+      "pattern": "random",
+      "encrypted": true,
+      "stage": "reconstruction",
+      "0": {
+        "mib_per_second": 146.3510119257781,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "64": {
+        "mib_per_second": 333.00587755373886,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "speedup": 2.2753916981634728
+    },
+    {
+      "pattern": "random",
+      "encrypted": true,
+      "stage": "fsck",
+      "0": {
+        "mib_per_second": 177.3691389892287,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "64": {
+        "mib_per_second": 171.64877228215627,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33558297
+      },
+      "speedup": 0.9677488048954231
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": false,
+      "stage": "presence",
+      "0": {
+        "mib_per_second": 504.2618001200773,
+        "decoded_objects": 32,
+        "object_reads": 32,
+        "envelope_bytes_read": 33555648
+      },
+      "64": {
+        "mib_per_second": 849.4372478233171,
+        "decoded_objects": 0,
+        "object_reads": 32,
+        "envelope_bytes_read": 33555648
+      },
+      "speedup": 1.6845163516670207
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": false,
+      "stage": "reingest",
+      "0": {
+        "mib_per_second": 339.36879525138215,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "64": {
+        "mib_per_second": 520.2355366392134,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "speedup": 1.532950418301886
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": false,
+      "stage": "publication",
+      "0": {
+        "mib_per_second": 399.32912706652826,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "64": {
+        "mib_per_second": 522.8331018707622,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "speedup": 1.3092786537047627
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": false,
+      "stage": "reconstruction",
+      "0": {
+        "mib_per_second": 301.36054870221903,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "64": {
+        "mib_per_second": 351.2816290685548,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "speedup": 1.1656523409627313
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": false,
+      "stage": "fsck",
+      "0": {
+        "mib_per_second": 487.97671131145273,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "64": {
+        "mib_per_second": 457.46242732423076,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33555851
+      },
+      "speedup": 0.9374677453249483
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": true,
+      "stage": "presence",
+      "0": {
+        "mib_per_second": 188.1333700977294,
+        "decoded_objects": 32,
+        "object_reads": 32,
+        "envelope_bytes_read": 33556928
+      },
+      "64": {
+        "mib_per_second": 822.2902324768667,
+        "decoded_objects": 0,
+        "object_reads": 32,
+        "envelope_bytes_read": 33556928
+      },
+      "speedup": 4.370783514108702
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": true,
+      "stage": "reingest",
+      "0": {
+        "mib_per_second": 166.84193759798706,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "64": {
+        "mib_per_second": 504.8369692112554,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "speedup": 3.0258397647459727
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": true,
+      "stage": "publication",
+      "0": {
+        "mib_per_second": 179.92275691142348,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "64": {
+        "mib_per_second": 519.3835566412115,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "speedup": 2.886702969413178
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": true,
+      "stage": "reconstruction",
+      "0": {
+        "mib_per_second": 150.8115783704149,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "64": {
+        "mib_per_second": 363.56984688028666,
+        "decoded_objects": 0,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "speedup": 2.4107555322264904
+    },
+    {
+      "pattern": "repeated",
+      "encrypted": true,
+      "stage": "fsck",
+      "0": {
+        "mib_per_second": 181.52217690470653,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "64": {
+        "mib_per_second": 175.8269774628277,
+        "decoded_objects": 33,
+        "object_reads": 33,
+        "envelope_bytes_read": 33557171
+      },
+      "speedup": 0.9686253242496721
+    }
+  ],
+  "runs": [
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0602167,
+          "mib_per_second": 531.4140429482187,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0873178,
+          "mib_per_second": 366.4773963613375,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0746708,
+          "mib_per_second": 428.5477053948799,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1003794,
+          "mib_per_second": 318.79050880957647,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0652867,
+          "mib_per_second": 490.1457724161276,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0416197,
+          "mib_per_second": 768.866666506486,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0654484,
+          "mib_per_second": 488.93479443347735,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0636976,
+          "mib_per_second": 502.373715807189,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0885128,
+          "mib_per_second": 361.52963187245234,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.0711474,
+          "mib_per_second": 449.7704765037092,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.2189204,
+          "mib_per_second": 146.17185059044292,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1916881,
+          "mib_per_second": 166.93785373218265,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.172895,
+          "mib_per_second": 185.08343214089476,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1911934,
+          "mib_per_second": 167.3697941456138,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1679737,
+          "mib_per_second": 190.50601373905556,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0463475,
+          "mib_per_second": 690.4363773666325,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0610518,
+          "mib_per_second": 524.1450702518189,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0595502,
+          "mib_per_second": 537.3617552921737,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0854772,
+          "mib_per_second": 374.3688375379633,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.1618427,
+          "mib_per_second": 197.7228506444838,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0743475,
+          "mib_per_second": 430.4112444937624,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0979196,
+          "mib_per_second": 326.79872058300896,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0731017,
+          "mib_per_second": 437.74631780109075,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1091633,
+          "mib_per_second": 293.138811303799,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.065423,
+          "mib_per_second": 489.1246197820339,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0403656,
+          "mib_per_second": 792.7542263709693,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0615106,
+          "mib_per_second": 520.2355366392134,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0589362,
+          "mib_per_second": 542.9600143884404,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.091095,
+          "mib_per_second": 351.2816290685548,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.0709954,
+          "mib_per_second": 450.7334277995476,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1700921,
+          "mib_per_second": 188.1333700977294,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1911499,
+          "mib_per_second": 167.40788250477766,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1762734,
+          "mib_per_second": 181.536181862947,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1989186,
+          "mib_per_second": 160.86982313368384,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.176287,
+          "mib_per_second": 181.52217690470653,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0401651,
+          "mib_per_second": 796.7115729825147,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0663542,
+          "mib_per_second": 482.26035428051273,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0636684,
+          "mib_per_second": 502.60411758423334,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1032994,
+          "mib_per_second": 309.7791468295072,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.1898242,
+          "mib_per_second": 168.5770307473968,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0466666,
+          "mib_per_second": 685.7152653075218,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0834747,
+          "mib_per_second": 383.3496855933594,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0674517,
+          "mib_per_second": 474.4135433206279,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1024479,
+          "mib_per_second": 312.35388914755697,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.116324,
+          "mib_per_second": 275.09370379285446,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0740819,
+          "mib_per_second": 431.9543640214411,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1559874,
+          "mib_per_second": 205.14477451383894,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0776321,
+          "mib_per_second": 412.20062319581723,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.114147,
+          "mib_per_second": 280.34026299420924,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0732359,
+          "mib_per_second": 436.94417628512787,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0452843,
+          "mib_per_second": 706.6466744545019,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0709897,
+          "mib_per_second": 450.76961869116224,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.1203271,
+          "mib_per_second": 265.9417537695166,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1792984,
+          "mib_per_second": 178.4734275375575,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.2014737,
+          "mib_per_second": 158.82966362358957,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1843343,
+          "mib_per_second": 173.59764297800245,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.2235161,
+          "mib_per_second": 143.166420673947,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1996016,
+          "mib_per_second": 160.31935615746568,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2249956,
+          "mib_per_second": 142.22500351117978,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1841097,
+          "mib_per_second": 173.80941905831145,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0417399,
+          "mib_per_second": 766.6525315106169,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0704204,
+          "mib_per_second": 454.4137778257437,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0665528,
+          "mib_per_second": 480.82124268250175,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0892522,
+          "mib_per_second": 358.534579539776,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.0679132,
+          "mib_per_second": 471.18969508136854,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0634591,
+          "mib_per_second": 504.2618001200773,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0926103,
+          "mib_per_second": 345.53392009312137,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0802932,
+          "mib_per_second": 398.5393532702645,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1035778,
+          "mib_per_second": 308.9465117042455,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0648462,
+          "mib_per_second": 493.4753308597882,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.037996,
+          "mib_per_second": 842.193915148963,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0633868,
+          "mib_per_second": 504.8369692112554,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0598295,
+          "mib_per_second": 534.853207865685,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0931235,
+          "mib_per_second": 343.62969604879544,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.1852887,
+          "mib_per_second": 172.703462218689,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1694891,
+          "mib_per_second": 188.80270176666227,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.187632,
+          "mib_per_second": 170.54660185895796,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.176053,
+          "mib_per_second": 181.76344623494063,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2121853,
+          "mib_per_second": 150.8115783704149,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1801756,
+          "mib_per_second": 177.60451470676387,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0605907,
+          "mib_per_second": 528.133855525683,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0885862,
+          "mib_per_second": 361.23007872558026,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0689679,
+          "mib_per_second": 463.9839693538588,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.105651,
+          "mib_per_second": 302.8840238142564,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.068809,
+          "mib_per_second": 465.0554433286344,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0448152,
+          "mib_per_second": 714.0434495439048,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0716978,
+          "mib_per_second": 446.3177391774922,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0610797,
+          "mib_per_second": 523.9056511410502,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1035607,
+          "mib_per_second": 308.9975251229472,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.0703623,
+          "mib_per_second": 454.788999222595,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1743075,
+          "mib_per_second": 183.58360942587095,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1989287,
+          "mib_per_second": 160.86165545745786,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1761998,
+          "mib_per_second": 181.61201091034155,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2232149,
+          "mib_per_second": 143.35960547436574,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1834172,
+          "mib_per_second": 174.46564444337827,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0496518,
+          "mib_per_second": 644.4882159357767,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0694284,
+          "mib_per_second": 460.90648783494936,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0655269,
+          "mib_per_second": 488.34905969914644,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0998539,
+          "mib_per_second": 320.4682040461114,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.1864272,
+          "mib_per_second": 171.64877228215627,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0623449,
+          "mib_per_second": 513.2737401134656,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0910689,
+          "mib_per_second": 351.38230504595975,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0819546,
+          "mib_per_second": 390.4600839977256,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1061851,
+          "mib_per_second": 301.36054870221903,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0684415,
+          "mib_per_second": 467.55258140163494,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0375933,
+          "mib_per_second": 851.2155091465766,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0608996,
+          "mib_per_second": 525.45501119876,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.061205,
+          "mib_per_second": 522.8331018707622,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0992857,
+          "mib_per_second": 322.3022046477992,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.0699511,
+          "mib_per_second": 457.46242732423076,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1756601,
+          "mib_per_second": 182.1699976260972,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.2061788,
+          "mib_per_second": 155.20509383117954,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1953263,
+          "mib_per_second": 163.82842453883578,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2434568,
+          "mib_per_second": 131.4401569395474,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1785202,
+          "mib_per_second": 179.25142364841628,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0389157,
+          "mib_per_second": 822.2902324768667,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0628381,
+          "mib_per_second": 509.24518723513285,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0579015,
+          "mib_per_second": 552.6627116741363,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0845475,
+          "mib_per_second": 378.4854667494604,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.1776264,
+          "mib_per_second": 180.15340062062847,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0452772,
+          "mib_per_second": 706.7574850034897,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0639658,
+          "mib_per_second": 500.26733035465827,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.057607,
+          "mib_per_second": 555.4880483274602,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0869423,
+          "mib_per_second": 368.0601962450959,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.0721508,
+          "mib_per_second": 443.51552581537555,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0825044,
+          "mib_per_second": 387.85810211334183,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1058764,
+          "mib_per_second": 302.23921478252,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0831008,
+          "mib_per_second": 385.07451191805615,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1088732,
+          "mib_per_second": 293.91989947939436,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.074197,
+          "mib_per_second": 431.28428373114815,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0423319,
+          "mib_per_second": 755.931106328797,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0652172,
+          "mib_per_second": 490.66810595977745,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.059693,
+          "mib_per_second": 536.0762568475366,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0960944,
+          "mib_per_second": 333.00587755373886,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.1878247,
+          "mib_per_second": 170.37162843864516,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1692627,
+          "mib_per_second": 189.05523780490327,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1940655,
+          "mib_per_second": 164.89278104557482,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1870882,
+          "mib_per_second": 171.04232121534122,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2186524,
+          "mib_per_second": 146.3510119257781,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1804147,
+          "mib_per_second": 177.3691389892287,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.037672,
+          "mib_per_second": 849.4372478233171,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0688545,
+          "mib_per_second": 464.74812829953015,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0617933,
+          "mib_per_second": 517.8554956605327,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.096418,
+          "mib_per_second": 331.8882366363127,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.0733949,
+          "mib_per_second": 435.997596563249,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0636185,
+          "mib_per_second": 502.99834167734235,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0999013,
+          "mib_per_second": 320.31615204206554,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0801344,
+          "mib_per_second": 399.32912706652826,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1149542,
+          "mib_per_second": 278.371734134116,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0753194,
+          "mib_per_second": 424.8573408710107,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0372585,
+          "mib_per_second": 858.8644201994176,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0610085,
+          "mib_per_second": 524.5170754894809,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0616115,
+          "mib_per_second": 519.3835566412115,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0880161,
+          "mib_per_second": 363.56984688028666,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.1770263,
+          "mib_per_second": 180.76410115333147,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1631092,
+          "mib_per_second": 196.18758475916746,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1917983,
+          "mib_per_second": 166.84193759798706,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1842733,
+          "mib_per_second": 173.65510901470805,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2057356,
+          "mib_per_second": 155.53943994136165,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.165934,
+          "mib_per_second": 192.8477587474538,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0657111,
+          "mib_per_second": 486.98012968889583,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0936856,
+          "mib_per_second": 341.5679677559839,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0731226,
+          "mib_per_second": 437.6212005590611,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1071585,
+          "mib_per_second": 298.6230676987826,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0775652,
+          "mib_per_second": 412.5561463130373,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0400437,
+          "mib_per_second": 799.1269538029702,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0631393,
+          "mib_per_second": 506.81588170917325,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0628008,
+          "mib_per_second": 509.54764907453404,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0865779,
+          "mib_per_second": 369.6093344837424,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.0699507,
+          "mib_per_second": 457.46504323759444,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33556977,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1736515,
+          "mib_per_second": 184.27712976853067,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.1977189,
+          "mib_per_second": 161.8459337979323,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.177264,
+          "mib_per_second": 180.52170773535516,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2054845,
+          "mib_per_second": 155.7295075784305,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1737829,
+          "mib_per_second": 184.13779491538006,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "random",
+      "manifest": "0a272b3e2226a61026b0b786c5ee7f4c8d5aed650211eadf22c16dce978694fd",
+      "physical_objects": 33,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0356548,
+          "mib_per_second": 897.4948674512268,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reingest": {
+          "seconds": 0.0584282,
+          "mib_per_second": 547.6807432027686,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "publication": {
+          "seconds": 0.0517809,
+          "mib_per_second": 617.9884861020183,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0813748,
+          "mib_per_second": 393.2421339284398,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        },
+        "fsck": {
+          "seconds": 0.1664355,
+          "mib_per_second": 192.26667387666694,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33558297,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 33,
+            "cached_payloads": 33,
+            "cached_bytes": 33557447
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0629593,
+          "mib_per_second": 508.26486317351055,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.0942927,
+          "mib_per_second": 339.36879525138215,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.0718057,
+          "mib_per_second": 445.6470725861596,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.1029413,
+          "mib_per_second": 310.8567698290191,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.0655769,
+          "mib_per_second": 487.97671131145273,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": false,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0349139,
+          "mib_per_second": 916.540403678764,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33555648,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.0541912,
+          "mib_per_second": 590.5017788866089,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0497165,
+          "mib_per_second": 643.6494926231734,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0823703,
+          "mib_per_second": 388.4895405261363,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.0663836,
+          "mib_per_second": 482.0467705879163,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33555851,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 0,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.1741915,
+          "mib_per_second": 183.70586394858532,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 32,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reingest": {
+          "seconds": 0.2025137,
+          "mib_per_second": 158.0140010280786,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "publication": {
+          "seconds": 0.1778541,
+          "mib_per_second": 179.92275691142348,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.2157733,
+          "mib_per_second": 148.30379847738345,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        },
+        "fsck": {
+          "seconds": 0.1705708,
+          "mib_per_second": 187.6053814603672,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 0,
+            "cached_payloads": 0,
+            "cached_bytes": 0
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "implementation": "cpp20",
+      "scenario": "warm-verified-reads",
+      "mib": 32,
+      "cache_mib": 64,
+      "encrypted": true,
+      "pattern": "repeated",
+      "manifest": "e080ecda941013e242a180b9b528a816a559fc58a3fa035887c07a829c62ba67",
+      "physical_objects": 2,
+      "byte_exact_restore": true,
+      "stages": {
+        "presence": {
+          "seconds": 0.0431188,
+          "mib_per_second": 742.1356809558707,
+          "io": {
+            "object_reads": 32,
+            "envelope_bytes_read": 33556928,
+            "decoded_objects": 0,
+            "cache_presence_hits": 32,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reingest": {
+          "seconds": 0.066576,
+          "mib_per_second": 480.65368901706324,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 33,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "publication": {
+          "seconds": 0.0646948,
+          "mib_per_second": 494.63017120386803,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "reconstruction": {
+          "seconds": 0.0875965,
+          "mib_per_second": 365.31139942805936,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 0,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 33,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        },
+        "fsck": {
+          "seconds": 0.1819971,
+          "mib_per_second": 175.8269774628277,
+          "io": {
+            "object_reads": 33,
+            "envelope_bytes_read": 33557171,
+            "decoded_objects": 33,
+            "cache_presence_hits": 0,
+            "cache_data_hits": 0,
+            "cached_objects": 2,
+            "cached_payloads": 2,
+            "cached_bytes": 1051591
+          }
+        }
+      },
+      "repetition": 5
+    }
+  ]
+}

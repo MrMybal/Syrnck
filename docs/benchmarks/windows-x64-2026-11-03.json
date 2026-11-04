@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-03",
+  "platform": "windows-x64",
+  "rust": "1.99.1",
+  "profile": "release",
+  "encrypted": false,
+  "network": false,
+  "runs": [
+    {
+      "byte_exact_restore": true,
+      "delta": { "blocks": 56, "file_bytes": 67108898, "new_bytes": 1885318, "reused_bytes": 65223580 },
+      "edited_mib_per_second": 297.39528200972296,
+      "initial": { "blocks": 56, "file_bytes": 67108864, "new_bytes": 67108864, "reused_bytes": 0 },
+      "initial_mib_per_second": 254.03710608867405,
+      "mib": 64,
+      "policy": "fastcdc2020",
+      "restore_mib_per_second": 339.3844520558478,
+      "scenario": "insertion-in-synthetic-pseudorandom-data"
+    },
+    {
+      "byte_exact_restore": true,
+      "delta": { "blocks": 65, "file_bytes": 67108898, "new_bytes": 66060322, "reused_bytes": 1048576 },
+      "edited_mib_per_second": 282.70411789468477,
+      "initial": { "blocks": 64, "file_bytes": 67108864, "new_bytes": 67108864, "reused_bytes": 0 },
+      "initial_mib_per_second": 273.67011291457817,
+      "mib": 64,
+      "policy": "fixed-1mib",
+      "restore_mib_per_second": 347.61525075008853,
+      "scenario": "insertion-in-synthetic-pseudorandom-data"
+    }
+  ]
+}

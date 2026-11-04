@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-03",
+  "platform": "windows-x64",
+  "language": "C++20",
+  "compiler": "MSVC 19.40.33821",
+  "profile": "CMake Release /O2",
+  "encrypted": false,
+  "network": false,
+  "runs": [
+    {
+      "scenario": "insertion-in-synthetic-pseudorandom-data",
+      "implementation": "cpp20",
+      "policy": "fastcdc2020",
+      "mib": 64,
+      "initial": {
+        "file_bytes": 67108864,
+        "new_bytes": 67108864,
+        "reused_bytes": 0,
+        "blocks": 56
+      },
+      "delta": {
+        "file_bytes": 67108898,
+        "new_bytes": 1885318,
+        "reused_bytes": 65223580,
+        "blocks": 56
+      },
+      "initial_mib_per_second": 238.01696168373195,
+      "edited_mib_per_second": 373.4321683805647,
+      "restore_mib_per_second": 564.1520178131,
+      "byte_exact_restore": true
+    },
+    {
+      "scenario": "insertion-in-synthetic-pseudorandom-data",
+      "implementation": "cpp20",
+      "policy": "fixed-1mib",
+      "mib": 64,
+      "initial": {
+        "file_bytes": 67108864,
+        "new_bytes": 67108864,
+        "reused_bytes": 0,
+        "blocks": 64
+      },
+      "delta": {
+        "file_bytes": 67108898,
+        "new_bytes": 66060322,
+        "reused_bytes": 1048576,
+        "blocks": 65
+      },
+      "initial_mib_per_second": 276.491563983172,
+      "edited_mib_per_second": 252.3803608644816,
+      "restore_mib_per_second": 428.70099579203173,
+      "byte_exact_restore": true
+    }
+  ]
+}

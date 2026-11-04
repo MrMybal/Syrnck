@@ -1,0 +1,9 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {"name":"windows","generator":"Ninja Multi-Config","binaryDir":"${sourceDir}/build","cacheVariables":{"SYRNCK_BUILD_TESTS":"ON"}},
+    {"name":"unix","generator":"Ninja","binaryDir":"${sourceDir}/build","cacheVariables":{"CMAKE_BUILD_TYPE":"Release","SYRNCK_BUILD_TESTS":"ON"}}
+  ],
+  "buildPresets":[{"name":"windows","configurePreset":"windows","configuration":"Release"},{"name":"unix","configurePreset":"unix"}],
+  "testPresets":[{"name":"windows","configurePreset":"windows","configuration":"Release","output":{"outputOnFailure":true}},{"name":"unix","configurePreset":"unix","output":{"outputOnFailure":true}}]
+}

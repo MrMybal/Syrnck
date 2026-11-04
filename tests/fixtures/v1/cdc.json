@@ -1,0 +1,34 @@
+{
+  "producer": "Rust prototype, fastcdc 5.0.0, format v1",
+  "input": "SHA256(LE64(counter)) concatenated, 5 MiB",
+  "manifest_id": "68daecdde500fe89e2fdf6ac50d1f336435040358d3c29a8683e80a76eac754e",
+  "manifest": {
+    "blocks": [
+      {
+        "id": "1ad1d5b233f6e3f4ade08fe61c2f3fc2ae4c01e8fed26b8b409dbdd65dc42f32",
+        "size": 1197658
+      },
+      {
+        "id": "8aa643c3fa4b1d9f78a2c9198e3e3b30ce763d156126b033a279e6ae0144b0cc",
+        "size": 1030097
+      },
+      {
+        "id": "cc8443878f58303a0721d99d738a0ab6c40a09e440d3f119ca17d0d498525746",
+        "size": 2259670
+      },
+      {
+        "id": "95c9abe4376d2ab14e77de55ef155b4b91cde63d325682c472a965faa8d7e23c",
+        "size": 755455
+      }
+    ],
+    "chunking": {
+      "algorithm": "fast-cdc2020",
+      "avg": 1048576,
+      "max": 4194304,
+      "min": 262144
+    },
+    "file_hash": "4028bceca77b7f7c4338cac2af4b1ba333491144f98fe4ab54862ebc20d4d869",
+    "size": 5242880,
+    "version": 1
+  }
+}
