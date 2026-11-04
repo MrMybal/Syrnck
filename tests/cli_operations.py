@@ -75,6 +75,11 @@ class CliOperations(unittest.TestCase):
         self.assertTrue(any(e["path"] == "asset.bin" and e["total_bytes"] == len(data) and e["complete"]
                             for e in events))
         self.assertEqual(events[-1]["phase"], "publishing")
+        exported = self.root / "exported"
+        export = self.run_cli("native", "export", result.stdout.strip().decode("ascii"), exported, "--progress-json")
+        self.assertEqual(export.stdout, b"")
+        self.assertEqual((exported / "asset.bin").read_bytes(), data)
+        self.assertEqual(self.events(export)[-1]["phase"], "publishing")
         pointer = self.run_cli("git", "clean", data=data).stdout
         result = self.run_cli("git", "clean", "--progress-json", data=data, lang="fr")
         self.assertEqual(result.stdout, pointer)

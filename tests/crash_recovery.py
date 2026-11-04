@@ -49,6 +49,10 @@ def cases():
                    ("gc", "gc.loose_removed", "manifest", 1)))
     result.extend(("gc", "pack.obsolete_removed", kind, 1) for kind in ("pack", "index"))
     atomic("restore", ("restore",))
+    atomic("export", ("export-file",))
+    result.extend(("export", phase, "export", 1) for phase in
+                  ("directory.created", "directory.writer_finished", "directory.synced",
+                   "directory.published", "directory.durable"))
     return result
 
 
@@ -107,17 +111,26 @@ class CrashRecovery(unittest.TestCase):
             raise
 
     def assert_state(self, root, info, operation, phase, kind, occurrence, event, checked):
-        published = phase in ("atomic.published", "atomic.durable", "atomic.linked")
+        published = phase in ("atomic.published", "atomic.durable", "atomic.linked",
+                              "directory.published", "directory.durable")
         target = Path(event["target"]).resolve()
         root = root.resolve()
-        self.assertTrue(target.is_relative_to(root) or target == root.parent / "restored.bin",
+        sibling = target.relative_to(root.parent).parts[0] if target.is_relative_to(root.parent) else ""
+        staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
+            c in "0123456789abcdef" for c in sibling[15:])
+        self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
+                        (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")
         if kind == "config":
             document = json.loads((root / "config.json").read_text())
             self.assertEqual(document["packs"] != info["initial_catalog"], published)
         elif phase in PHASES or phase == "atomic.linked":
-            if kind in ("chunk", "manifest", "revision", "pack", "index", "restore"):
+            if kind in ("chunk", "manifest", "revision", "pack", "index", "restore", "export-file"):
                 self.assertEqual(target.exists(), published)
+        elif phase.startswith("directory."):
+            self.assertEqual(target.exists(), published)
+        if operation == "export":
+            self.assertEqual((root.parent / "exported").exists(), kind == "export" and published)
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
@@ -146,7 +159,7 @@ class CrashRecovery(unittest.TestCase):
         probe = PROBE.read_bytes()
         production = PRODUCTION.read_bytes()
         reader = READER.read_bytes()
-        for label in (b"atomic.temporary_opened", b"pack.envelope_written", b"gc.loose_removed"):
+        for label in (b"atomic.temporary_opened", b"pack.envelope_written", b"gc.loose_removed", b"directory.created"):
             self.assertIn(label, probe)
             self.assertNotIn(label, production)
             self.assertNotIn(label, reader)

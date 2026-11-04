@@ -234,7 +234,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable = command == "put" || command == "get" || command == "fsck" ||
-                     (command == "native" && sub == "commit") ||
+                     (command == "native" && (sub == "commit" || sub == "export")) ||
                      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
@@ -401,7 +401,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
     } else if (sub == "export") {
       args.count(2);
-      store.export_revision(args.values[0], path_from_utf8(args.values[1]));
+      store.export_revision(args.values[0], path_from_utf8(args.values[1]), {control->token(), observe});
     } else if (sub == "detach-history") {
       auto branch = args.option("--branch").value_or("main");
       auto message = args.option("--message", "-m");

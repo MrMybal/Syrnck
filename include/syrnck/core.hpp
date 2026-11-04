@@ -186,7 +186,7 @@ public:
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message,
                                IngestOptions) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
-  void export_revision(std::string_view id, const fs::path &destination) const;
+  void export_revision(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
 
 private:
   struct Impl;

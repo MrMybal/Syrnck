@@ -16,6 +16,9 @@ inline void report_progress(const OperationOptions &options, const ProgressEvent
 void atomic_write(const fs::path &, std::span<const std::uint8_t>, bool replace, std::stop_token = {});
 void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &, bool replace = false,
                    std::stop_token = {});
+void atomic_directory(const fs::path &, const std::function<void(const fs::path &)> &,
+                      const std::function<void()> &before_publish = {}, std::stop_token = {});
+void make_executable(const fs::path &);
 inline std::span<const std::uint8_t> bytes(std::string_view s) {
   return {reinterpret_cast<const std::uint8_t *>(s.data()), s.size()};
 }

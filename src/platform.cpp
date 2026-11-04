@@ -14,10 +14,13 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #ifdef __linux__
+#include <linux/fs.h>
 #include <sys/random.h>
+#include <sys/syscall.h>
 #endif
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
+#include <sys/stdio.h>
 #endif
 #endif
 namespace syrnck {
@@ -90,6 +93,84 @@ static void sync_file(const fs::path &p) {
   ::close(fd);
   require(result == 0, "file flush failed");
 #endif
+}
+static void sync_directory(const fs::path &path) {
+#ifdef _WIN32
+  (void)path; // Published with MoveFileExW; file contents were flushed separately.
+#else
+  int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  require(fd >= 0, "cannot open directory for flush");
+  int result = ::fsync(fd);
+  ::close(fd);
+  require(result == 0, "directory flush failed");
+#endif
+}
+void make_executable(const fs::path &path) {
+#ifdef _WIN32
+  (void)path;
+#else
+  fs::permissions(path, fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec |
+                            fs::perms::others_read | fs::perms::others_exec);
+  sync_file(path);
+#endif
+}
+void atomic_directory(const fs::path &destination, const std::function<void(const fs::path &)> &writer,
+                      const std::function<void()> &before_publish, std::stop_token stop) {
+  throw_if_cancelled(stop);
+  auto target = fs::absolute(destination).lexically_normal();
+  if (target.filename().empty())
+    target = target.parent_path();
+  require(!target.filename().empty() && target.filename() != "." && target.filename() != "..",
+          "invalid export destination");
+  auto parent = fs::canonical(target.parent_path());
+  target = parent / target.filename();
+  require(fs::symlink_status(target).type() == fs::file_type::not_found,
+          "export destination must be a new directory");
+  auto temporary = parent / path_from_utf8(".syrnck-export-" + hex(random_bytes(16)));
+  require(fs::create_directory(temporary), "cannot create export staging directory");
+  struct Cleanup {
+    fs::path path;
+    bool owned = true;
+    ~Cleanup() {
+      // Only this invocation's newly created sibling is owned by the operation.
+      std::error_code error;
+      if (owned)
+        fs::remove_all(path, error);
+    }
+  } cleanup{temporary};
+#ifndef _WIN32
+  fs::permissions(temporary, fs::perms::owner_all);
+#endif
+  SYRNCK_IO_CHECKPOINT("directory.created", target);
+  writer(temporary);
+  throw_if_cancelled(stop);
+  SYRNCK_IO_CHECKPOINT("directory.writer_finished", target);
+  for (const auto &entry : fs::recursive_directory_iterator(temporary)) {
+    throw_if_cancelled(stop);
+    if (entry.is_directory())
+      sync_directory(entry.path());
+  }
+  sync_directory(temporary);
+  SYRNCK_IO_CHECKPOINT("directory.synced", target);
+  if (before_publish)
+    before_publish();
+  throw_if_cancelled(stop);
+#ifdef _WIN32
+  auto result = MoveFileExW(temporary.c_str(), target.c_str(), MOVEFILE_WRITE_THROUGH) != 0;
+#elif defined(__linux__)
+  auto result =
+      ::syscall(SYS_renameat2, AT_FDCWD, temporary.c_str(), AT_FDCWD, target.c_str(), RENAME_NOREPLACE) == 0;
+#elif defined(__APPLE__)
+  auto result = ::renamex_np(temporary.c_str(), target.c_str(), RENAME_EXCL) == 0;
+#else
+  bool result = false; // Fail closed rather than replacing an existing directory.
+#endif
+  require(result,
+          "cannot publish export directory (destination may exist or exclusive rename is unsupported)");
+  cleanup.owned = false;
+  SYRNCK_IO_CHECKPOINT("directory.published", target);
+  sync_directory(parent);
+  SYRNCK_IO_CHECKPOINT("directory.durable", target);
 }
 void atomic_stream(const fs::path &destination, const std::function<void(std::ostream &)> &writer,
                    bool replace, std::stop_token stop) {

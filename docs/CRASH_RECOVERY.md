@@ -20,6 +20,7 @@ crash by throwing an exception or unwinding the stack.
 | Compaction | Staging, catalog replacement, loose and obsolete-file cleanup; every logical object survives |
 | Garbage collection | Partial pack rewrite, wholly dead pack removal, retained pack preservation, loose cleanup and restart |
 | File reconstruction | Staging and destination publication; destination is absent or byte-complete |
+| Native directory export | File staging, directory creation, completed tree, directory synchronization and exclusive publication; destination is absent or complete |
 
 Atomic writes are interrupted after temporary-file opening, writer completion,
 file synchronization, publication and completion of existing durability calls.
@@ -40,11 +41,16 @@ audit. Packing and GC must clean inactive generated pack/index files. A positive
 control releases the checkpoint normally and confirms that another process
 cannot open the locked store while the writer is paused.
 
-The local Windows x64 Release run on 4 November 2026 passed **202 process-kill
+The local Windows x64 Release run on 4 November 2026 passed **222 process-kill
 combinations**, plus checkpoint/lock and production-isolation checks. Unix adds
 hard-link-boundary cases. This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
 automatically in those configured builds.
+
+Exports may leave `.syrnck-export-<32 hex>` sibling directories after a hard
+kill. Recovery verifies the published tree if present; a retry prepares a fresh
+tree if the destination is absent. It does not remove old staging directories
+automatically. See [export recovery and publication guarantees](EXPORT.md).
 
 ## Interrupted garbage collection
 

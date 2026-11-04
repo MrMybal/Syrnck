@@ -219,19 +219,41 @@ std::string Store::detach_history(std::string_view branch, std::string_view mess
   set_ref(name, key);
   return key.id;
 }
-void Store::export_revision(std::string_view id, const fs::path &dest) const {
+void Store::export_revision(std::string_view id, const fs::path &dest, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
   auto revision = metadata(Kind::revision, id);
-  (void)closure({{Kind::revision, std::string(id)}}, true);
-  require(fs::create_directory(dest), "export destination must be a new directory");
-  auto base = fs::canonical(dest);
+  (void)closure({{Kind::revision, std::string(id)}}, true, options.stop, options.progress);
+  std::uint64_t total = 0, completed = 0;
   for (const auto &[name, entry] : revision["files"].items()) {
-    auto path = base / path_from_utf8(name);
-    restore_file(entry["manifest"].get<std::string>(), path);
-#ifndef _WIN32
-    if (entry["executable"].get<bool>())
-      fs::permissions(path, fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec |
-                                fs::perms::others_read | fs::perms::others_exec);
-#endif
+    (void)name;
+    throw_if_cancelled(options.stop);
+    auto size = metadata(Kind::manifest, entry["manifest"].get<std::string>())["size"].get<std::uint64_t>();
+    require(size <= UINT64_MAX - total, "export byte count overflow");
+    total += size;
   }
+  auto destination = utf8(dest);
+  auto notify = [&](ProgressPhase phase, std::string_view path, std::uint64_t count, bool complete = false) {
+    report_progress(options, {phase, path, count, total, complete});
+  };
+  notify(ProgressPhase::exporting, {}, 0);
+  atomic_directory(
+      dest,
+      [&](const fs::path &base) {
+        for (const auto &[name, entry] : revision["files"].items()) {
+          throw_if_cancelled(options.stop);
+          std::uint64_t file_bytes = 0;
+          auto path = base / path_from_utf8(name);
+          restore_file(entry["manifest"].get<std::string>(), path,
+                       {options.stop, [&](const ProgressEvent &event) {
+                          file_bytes = event.bytes;
+                          notify(ProgressPhase::exporting, name, completed + file_bytes);
+                        }});
+          if (entry["executable"].get<bool>())
+            make_executable(path);
+          completed += file_bytes;
+        }
+        notify(ProgressPhase::exporting, {}, completed, true);
+      },
+      [&] { notify(ProgressPhase::publishing, destination, completed); }, options.stop);
 }
 } // namespace syrnck

@@ -18,6 +18,10 @@ std::string target_kind(const fs::path &path) {
     return "refs";
   if (name == "restored.bin")
     return "restore";
+  if (name == "exported")
+    return "export";
+  if (name == "asset.bin" || name == "second.bin" || name == "empty")
+    return "export-file";
   if (path.extension() == ".syp")
     return "pack";
   if (path.extension() == ".syi")
@@ -77,6 +81,15 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
   auto tip = put_revision(store, old);
+  if (operation == "export") {
+    auto value = revision(old);
+    std::istringstream empty;
+    auto empty_manifest = store.ingest(empty, Chunking::fixed_size(1024)).first;
+    value["files"] = Json{{"asset.bin", Json{{"manifest", old.id}, {"executable", false}}},
+                          {"empty", Json{{"manifest", empty_manifest}, {"executable", false}}},
+                          {"nested/second.bin", Json{{"manifest", old.id}, {"executable", true}}}};
+    tip = store.put(Kind::revision, bytes(value.dump())).first;
+  }
   store.set_ref("heads/main", tip);
   store.set_ref("archive/baseline", tip);
   auto garbage = ingest(store, 2);
@@ -132,6 +145,11 @@ void perform(Store &store, const Json &info) {
     if (!fs::exists(destination))
       store.restore_file(parse_key(info.at("old_manifest")).id, destination);
     check(text(read_bytes(destination)) == content(0), "restored bytes differ");
+  } else if (op == "export") {
+    auto destination = store.root().parent_path() / "exported";
+    if (!fs::exists(destination))
+      store.export_revision(parse_key(info.at("old_revision")).id, destination);
+    check(text(read_bytes(destination / "asset.bin")) == content(0), "exported bytes differ");
   } else {
     throw Error("unknown crash fixture operation");
   }
@@ -184,6 +202,21 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       check(text(read_bytes(destination)) == content(0), "partial output published");
     if (resumed)
       check(fs::exists(destination), "restoration did not resume");
+  }
+  if (op == "export") {
+    auto destination = root.parent_path() / "exported";
+    if (fs::exists(destination)) {
+      check(fs::is_directory(destination) && text(read_bytes(destination / "asset.bin")) == content(0) &&
+                text(read_bytes(destination / "nested/second.bin")) == content(0) &&
+                fs::file_size(destination / "empty") == 0,
+            "incomplete export directory published");
+      std::size_t files = 0;
+      for (const auto &entry : fs::recursive_directory_iterator(destination))
+        files += entry.is_regular_file();
+      check(files == 3, "unexpected export content");
+    }
+    if (resumed)
+      check(fs::exists(destination), "export did not resume");
   }
   return Json{{"retained_files_verified", true},
               {"audit_ok", audit_ok},

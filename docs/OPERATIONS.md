@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `native commit`, `git clean` and `git smudge` accept mutually
+`put`, `get`, `fsck`, `native commit`, `native export`, `git clean` and `git smudge` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
 flag, successful commands stay quiet on stderr. Other commands reject these
@@ -42,7 +42,7 @@ exits with code **130**. The handler only records an atomic flag; an ordinary
 monitor thread requests the C++ stop token. A read blocked on a pipe or device
 must return before cancellation can finish. Repeated interrupts request the
 same stop; forced process termination still uses the separate crash-recovery
-path. Network, packing, GC and export do not yet use this controller.
+path. Network, packing and GC do not yet use this controller.
 
 The implementation follows the C++ requirements for
 [signal-safe operations](https://eel.is/c++draft/support.signal) and
@@ -114,7 +114,10 @@ CLI audit failures emit no partial success message on stdout.
 progress while retaining its existing materialized return value. Callers that
 only need to audit the entire store should use streaming `fsck`.
 
-These options do not yet extend to GC, packing, network transfers or multi-file
-export. Process-kill recovery remains a separate mechanism described in
+Multi-file native exports stage a complete tree before exclusive publication.
+See [export guarantees, progress and recovery](EXPORT.md).
+
+These options do not yet extend to GC, packing or network transfers.
+Process-kill recovery remains a separate mechanism described in
 [crash recovery](CRASH_RECOVERY.md). No object, pointer, network or C ABI format
 changes are needed; C++ callers should rebuild against the updated headers.
