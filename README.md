@@ -77,6 +77,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 ## Languages
 
+Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence. See [repository settings](docs/SETTINGS.md).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

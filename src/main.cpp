@@ -98,6 +98,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   pack [--compact] [--max-mib 512] [--max-objects 65536]
                                      Regrouper les objets ; plusieurs packs exigent le format v3
   fsck                               Vérifier les objets et les hashes des fichiers
+  config show | reset                Afficher ou réinitialiser les réglages du dépôt
+  config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
   native branch NOM RÉVISION
   native log [--branch main] [--limit 50]
@@ -128,6 +130,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   pack [--compact] [--max-mib 512] [--max-objects 65536]
                                     Pack loose objects; multiple packs require storage v3
   fsck                              Verify all objects and full file hashes
+  config show | reset               Show or reset repository settings
+  config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
   native branch NAME REVISION
   native log [--branch main] [--limit 50]
@@ -189,7 +193,7 @@ int run(Args args, Language language) {
     return 0;
   }
   std::string sub;
-  if (command == "git" || command == "native" || command == "agent")
+  if (command == "git" || command == "native" || command == "agent" || command == "config")
     sub = args.pop();
   if (command == "git" && sub == "install") {
     auto encrypted = args.flag("--encrypted");
@@ -204,7 +208,45 @@ int run(Args args, Language language) {
     return 0;
   }
   Store store(root, key, false, store_options);
-  if (command == "put") {
+  if (command == "config") {
+    if (sub == "show") {
+      args.count(0);
+      print(store.settings().json());
+    } else if (sub == "reset") {
+      args.count(0);
+      store.set_settings({});
+      print(store.settings().json());
+    } else if (sub == "set") {
+      auto workers = args.option("--workers"), buffer = args.option("--buffer-mib"),
+           max_mib = args.option("--pack-max-mib"), max_objects = args.option("--pack-max-objects");
+      args.count(0);
+      require(workers || buffer || max_mib || max_objects, "no repository settings supplied");
+      auto settings = store.settings();
+      if (workers) {
+        auto n = integer(*workers);
+        require(n >= 1 && n <= 64, "ingest workers must be in 1..64");
+        settings.ingest_workers = static_cast<std::size_t>(n);
+      }
+      if (buffer) {
+        auto n = integer(*buffer);
+        require(n >= 1 && n <= 1024, "buffer budget must be in 1..1024 MiB");
+        settings.ingest_buffer_bytes = static_cast<std::size_t>(n * 1024 * 1024);
+      }
+      if (max_mib) {
+        auto n = integer(*max_mib);
+        require(n >= 18 && n <= 4096, "pack size limit must be in 18..4096 MiB");
+        settings.pack_max_bytes = n * 1024 * 1024;
+      }
+      if (max_objects) {
+        auto n = integer(*max_objects);
+        require(n >= 1 && n <= 1048576, "pack object limit must be in 1..1048576");
+        settings.pack_max_objects = static_cast<std::size_t>(n);
+      }
+      store.set_settings(settings);
+      print(settings.json());
+    } else
+      throw Error("unknown config command");
+  } else if (command == "put") {
     auto size = args.option("--fixed-size");
     auto workers = args.option("--workers");
     auto budget = args.option("--buffer-mib");
@@ -217,7 +259,7 @@ int run(Args args, Language language) {
       require(n <= UINT32_MAX, "chunk size overflow");
       chunking = Chunking::fixed_size(static_cast<std::uint32_t>(n));
     }
-    IngestOptions options;
+    auto options = store.settings().ingest_options();
     if (workers) {
       auto n = integer(*workers);
       require(n >= 1 && n <= 64, "ingest workers must be in 1..64");
@@ -267,7 +309,7 @@ int run(Args args, Language language) {
     args.count(0);
     print(store.gc(remove));
   } else if (command == "pack") {
-    PackOptions options;
+    auto options = store.settings().pack_options();
     options.compact = args.flag("--compact");
     if (auto size = args.option("--max-mib")) {
       auto n = integer(*size);

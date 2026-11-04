@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <istream>
 #include <map>
 #include <memory>
@@ -91,6 +92,19 @@ struct PackOptions {
   // Default maintenance appends only new loose objects. Compact rewrites all.
   bool compact = false;
 };
+// Local preferences, separate from physical config.json and logical objects.
+// Secrets and destructive actions are never persisted here.
+struct RepositorySettings {
+  std::size_t ingest_workers = 1;
+  std::size_t ingest_buffer_bytes = 32 * 1024 * 1024;
+  std::uint64_t pack_max_bytes = 512ULL * 1024 * 1024;
+  std::size_t pack_max_objects = 65536;
+  void validate() const;
+  Json json() const;
+  static RepositorySettings parse(const Json &);
+  IngestOptions ingest_options() const;
+  PackOptions pack_options() const;
+};
 struct StoreIoStats {
   std::uint64_t object_reads = 0, envelope_bytes_read = 0, decoded_objects = 0;
   std::uint64_t cache_presence_hits = 0, cache_data_hits = 0;
@@ -115,6 +129,8 @@ public:
   Store &operator=(const Store &) = delete;
   const fs::path &root() const;
   bool encrypted() const;
+  RepositorySettings settings() const;
+  void set_settings(const RepositorySettings &) const;
   StoreIoStats io_stats() const;
   void reset_io_stats() const;
   void clear_cache() const;
@@ -123,7 +139,8 @@ public:
   std::pair<ObjectKey, bool> put(Kind, std::span<const std::uint8_t>) const;
   bool import(const ObjectKey &, std::span<const std::uint8_t>) const;
   Json metadata(Kind, std::string_view id) const;
-  std::pair<std::string, IngestStats> ingest(std::istream &, Chunking = {}, IngestOptions = {}) const;
+  std::pair<std::string, IngestStats> ingest(std::istream &, Chunking = {}) const;
+  std::pair<std::string, IngestStats> ingest(std::istream &, Chunking, IngestOptions) const;
   void reconstruct(std::string_view id, std::ostream &) const;
   void restore_file(std::string_view id, const fs::path &destination) const;
   Refs refs() const;
@@ -136,7 +153,8 @@ public:
   Json gc(bool remove = false) const;
   // Physical v2 for a single pack, v3 for multiple packs; logical objects stay v1.
   // Validates all objects before publication and removal of loose copies.
-  Json pack(PackOptions = {}) const;
+  Json pack() const;
+  Json pack(PackOptions) const;
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
   void export_revision(std::string_view id, const fs::path &destination) const;
