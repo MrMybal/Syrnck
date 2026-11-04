@@ -66,7 +66,7 @@ No working file or Git index is modified by grouped transfer. For a fresh clone,
 use `git clone --no-checkout`, run `syrnck git install`, pull the desired commit's
 assets, then explicitly check out that commit. This is an explicit hydration
 workflow. On-demand smudging is available through the opt-in policy below;
-`filter-process` remains future work.
+the [resident filter](GIT_FILTER_PROCESS.md) reuses one Store per Git command.
 
 The transaction covers one catalog's publication. Multiple Git commits use
 separate roots, and the Git server and block server do not participate in one
@@ -144,8 +144,10 @@ The policy is one local Git config value, `syrnck.checkout`, containing `local`,
 manual `git smudge` remains local unless given that flag. `git install` upgrades
 the exact earlier Syrnck-generated smudge command, preserving custom commands by
 refusing to overwrite them. Common worktree storage/policy and the Store's
-exclusive process lock still apply. Each smudge is a separate process: these
-changes do not add parallel checkouts, deferred hydration, or a resident filter.
+exclusive process lock still apply. New installations use the
+[resident filter](GIT_FILTER_PROCESS.md) for sequential requests in one Git command;
+the single-file commands remain available. Deferred hydration and parallel
+checkouts remain future work.
 Preflight verification adds a full read before output; memory remains bounded by
 existing object/metadata budgets and the closure's visited keys, not file size.
 

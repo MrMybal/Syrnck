@@ -16,6 +16,13 @@ using AssetResolver = std::function<void(const Pointer &)>;
 void smudge(const Store &, std::istream &, std::ostream &, OperationOptions, const AssetResolver &);
 // Preserve canonical pointers and stream ordinary content without opening a Store.
 void skip_smudge(std::istream &, std::ostream &, OperationOptions = {});
+// Borrowed command/pathname values are valid only during the callback. The
+// handler consumes decoded stdin and writes unframed content. Recoverable file
+// errors are reported to Git and diagnostics; protocol errors terminate.
+using FilterHandler =
+    std::function<void(std::string_view command, std::string_view pathname, std::istream &, std::ostream &)>;
+void filter_process(std::istream &, std::ostream &, const FilterHandler &, OperationOptions = {},
+                    const std::function<void(std::string_view)> &diagnostic = {});
 enum class CheckoutMode { local, download, skip };
 struct CheckoutPolicy {
   CheckoutMode mode = CheckoutMode::local;

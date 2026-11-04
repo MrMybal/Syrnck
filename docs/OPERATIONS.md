@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge` and
+`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither

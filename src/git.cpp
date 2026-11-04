@@ -183,6 +183,7 @@ void install(const fs::path &directory, const fs::path &executable, const fs::pa
   std::vector<std::pair<std::string, std::string>> config = {
       {"filter.syrnck.clean", command + "clean"},
       {"filter.syrnck.smudge", command + "smudge --checkout-policy"},
+      {"filter.syrnck.process", command + "filter-process --checkout-policy"},
       {"filter.syrnck.required", "true"}};
   for (const auto &[name, value] : config) {
     auto current = process({"git", "config", "--get", name}, directory);

@@ -151,6 +151,8 @@ Le checkout reste local par défaut. Après `git clone --no-checkout` et `syrnck
 
 Le hook d'envoi s'active explicitement avec `syrnck git configure-remote origin URL_BLOCS` puis `syrnck git install-hook`. Il vérifie et envoie les assets de tous les commits ancêtres avant de laisser Git publier ; une erreur réseau ou des blocs historiques manquants bloque ce push. Les jetons restent dans l'environnement. Les hooks existants ne sont pas remplacés et `core.hooksPath` demande une intégration manuelle. Ce hook local reste contournable avec `--no-verify` ; il ne remplace pas une politique de validation côté serveur Git.
 
+L'installation active aussi le [filtre résident Git](GIT_FILTER_PROCESS.md) : une commande Git réutilise le même Store et son cache vérifié pour plusieurs fichiers. Le verrou exclusif reste détenu jusqu'à la fermeture du processus par Git ; les autres commandes visant ce store échouent rapidement pendant ce temps. Les commandes simples `git clean` et `git smudge` restent disponibles.
+
 ## Serveur et agent
 
 Créer un store serveur séparé, puis définir un jeton d'au moins 32 caractères dans `SYRNCK_TOKEN`, identique sur les clients autorisés. Ne pas placer le jeton dans l'URL. Le CLI accepte `--token`, mais l'environnement évite sa présence dans la ligne de commande.

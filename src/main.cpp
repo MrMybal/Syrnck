@@ -167,6 +167,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git configure-remote NOM URL | git install-hook [--directory CHEMIN]
   git configure-checkout local|download|skip [--remote NOM] [--directory CHEMIN]
   git clean [--workers N] [--buffer-mib N] | git smudge
+  git filter-process [--checkout-policy]   Protocole Git v2, plusieurs fichiers par processus
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Gérer les baux du store serveur
@@ -183,7 +184,7 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge et agent push/pull/resume/prune.
+              fsck, native commit/export, git clean/smudge/filter-process et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
@@ -221,6 +222,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git configure-remote NAME URL | git install-hook [--directory PATH]
   git configure-checkout local|download|skip [--remote NAME] [--directory PATH]
   git clean [--workers N] [--buffer-mib N] | git smudge
+  git filter-process [--checkout-policy]   Git protocol v2, multiple files per process
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Manage server store leases
@@ -237,7 +239,7 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge and agent push/pull/resume/prune.
+              fsck, native commit/export, git clean/smudge/filter-process and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
@@ -284,7 +286,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "git" || command == "native" || command == "agent" || command == "config" ||
       command == "leases")
     sub = args.pop();
-  if (command == "git" && sub == "smudge") {
+  if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
     auto configured = args.flag("--checkout-policy");
     auto skip = environment("SYRNCK_SKIP_SMUDGE").value_or("0");
@@ -294,8 +296,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       policy.mode = git::CheckoutMode::skip;
     else if (configured)
       policy = git::checkout_policy(directory);
-    if (configured && !root_option && policy.mode != git::CheckoutMode::skip)
-      root = git::common_store(directory);
+    Args ingest_arguments;
+    if (sub == "filter-process") {
+      for (const auto *name : {"--workers", "--buffer-mib"})
+        if (auto value = args.option(name))
+          ingest_arguments.values.insert(ingest_arguments.values.end(), {name, *value});
+    }
     auto limits = transfer_options(args);
     require(!limits.require_upload_lease, "upload lease requirement is only available for push");
     auto text = args.flag("--progress"), json = args.flag("--progress-json");
@@ -305,21 +311,46 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                                                 : text ? cli::ProgressMode::text
                                                                        : cli::ProgressMode::none);
     OperationOptions operation{control->token(), [&](const ProgressEvent &event) { control->report(event); }};
-    if (policy.mode == git::CheckoutMode::skip) {
-      git::skip_smudge(std::cin, std::cout, operation);
-    } else {
-      Store store(root, read_key(), false, store_options);
-      git::AssetResolver resolve;
-      if (policy.mode == git::CheckoutMode::download) {
-        limits.require_read_lease = true;
-        resolve = [&](const git::Pointer &pointer) {
-          require(token.has_value(), "set SYRNCK_TOKEN");
-          net::Remote remote(git::remote_url(directory, policy.remote), *token, ca_path);
-          (void)git::hydrate_asset(store, pointer, remote, operation, limits);
-        };
+    std::unique_ptr<Store> store;
+    auto storage = [&]() -> const Store & {
+      if (!store) {
+        if (configured && !root_option)
+          root = git::common_store(directory);
+        store = std::make_unique<Store>(root, read_key(), false, store_options);
       }
-      git::smudge(store, std::cin, std::cout, operation, resolve);
+      return *store;
+    };
+    std::unique_ptr<net::Remote> remote;
+    git::AssetResolver resolve;
+    if (policy.mode == git::CheckoutMode::download) {
+      limits.require_read_lease = true;
+      resolve = [&](const git::Pointer &pointer) {
+        if (!remote) {
+          require(token.has_value(), "set SYRNCK_TOKEN");
+          remote = std::make_unique<net::Remote>(git::remote_url(directory, policy.remote), *token, ca_path);
+        }
+        (void)git::hydrate_asset(storage(), pointer, *remote, operation, limits);
+      };
     }
+    auto handler = [&](std::string_view action, std::string_view, std::istream &input, std::ostream &output) {
+      if (action == "clean") {
+        auto arguments = ingest_arguments;
+        auto options = ingestion_options(arguments, storage());
+        options.stop = operation.stop;
+        options.progress = operation.progress;
+        git::clean(storage(), input, output, options);
+      } else if (policy.mode == git::CheckoutMode::skip) {
+        git::skip_smudge(input, output, operation);
+      } else {
+        git::smudge(storage(), input, output, operation, resolve);
+      }
+    };
+    if (sub == "filter-process")
+      git::filter_process(std::cin, std::cout, handler, operation, [&](std::string_view error) {
+        std::cerr << localize("Error: ", language) << localize(error, language) << '\n';
+      });
+    else
+      handler("smudge", {}, std::cin, std::cout);
     require(std::cout.good(), "output write failed");
     return 0;
   }
