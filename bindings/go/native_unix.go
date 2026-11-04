@@ -36,6 +36,46 @@ func nativeIngest(h nativeHandle, path []byte, config *[4]uint32) (string, error
 func nativeRestore(h nativeHandle, id, path []byte) error {
 	return status(int(C.syrnck_restore_file(h, ctext(id), ctext(path))))
 }
+func nativeRestoreRange(h nativeHandle, id, path []byte, offset, length uint64) error {
+	return status(int(C.syrnck_restore_file_range(h, ctext(id), ctext(path), C.uint64_t(offset), C.uint64_t(length))))
+}
+func nativeRange(h nativeHandle, id []byte, offset, length uint64) ([]byte, error) {
+	size := int(length)
+	if size == 0 {
+		size = 1
+	}
+	data := make([]byte, size)
+	var count C.size_t
+	err := status(int(C.syrnck_file_read_range(h, ctext(id), C.uint64_t(offset), C.uint64_t(length), (*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), &count)))
+	if err != nil {
+		return nil, err
+	}
+	if uint64(count) != length {
+		return nil, errors.New("invalid native range length")
+	}
+	return data[:int(length)], nil
+}
+func nativeCompare(h nativeHandle, source, target []byte) ([]byte, error) {
+	var length C.size_t
+	call := func(data []byte) error {
+		return status(int(C.syrnck_file_compare_json(h, ctext(source), ctext(target), (*C.char)(unsafe.Pointer(unsafe.SliceData(data))), C.size_t(len(data)), &length)))
+	}
+	if err := call(nil); err != nil {
+		return nil, err
+	}
+	if length == 0 || length > 128*1024*1024 {
+		return nil, errors.New("invalid native comparison size")
+	}
+	data := make([]byte, int(length))
+	if err := call(data); err != nil {
+		return nil, err
+	}
+	if int(length) != len(data) || data[len(data)-1] != 0 {
+		return nil, errors.New("invalid native comparison length")
+	}
+	return data, nil
+}
+
 func nativeHas(h nativeHandle, kind, id []byte) (bool, error) {
 	var present C.int
 	err := status(int(C.syrnck_object_has(h, ctext(kind), ctext(id), &present)))

@@ -143,7 +143,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   keygen                             Afficher une clé aléatoire de 256 bits
   put FICHIER [--fixed-size OCTETS] [--workers 1..64] [--buffer-mib 32]
                                      Importer et conserver un fichier complet
-  get MANIFESTE NOUVEAU_FICHIER       Reconstruire sans écraser de fichier
+  get MANIFESTE NOUVEAU_FICHIER [--offset N --length N]   Reconstruire un fichier ou une plage
+  compare SOURCE CIBLE [--summary]   Plan de réutilisation de blocs entre manifestes
   inspect manifest|revision ID       Inspecter les métadonnées vérifiées
   diff ANCIEN_MANIFESTE NOUVEAU_MANIFESTE
                                      Comparer les blocs réutilisables
@@ -186,7 +187,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
 Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
-Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
+Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
               fsck, native commit/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
@@ -202,7 +203,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   keygen                             Print a random 256-bit key
   put FILE [--fixed-size BYTES] [--workers 1..64] [--buffer-mib 32]
                                      Ingest and retain a complete file
-  get MANIFEST NEW_FILE              Reconstruct without overwriting
+  get MANIFEST NEW_FILE [--offset N --length N]   Reconstruct a file or byte range
+  compare SOURCE TARGET [--summary]  Chunk reuse plan between manifests
   inspect manifest|revision ID       Inspect verified metadata
   diff OLD_MANIFEST NEW_MANIFEST      Compare reusable file blocks
   refs                              List retention roots
@@ -244,7 +246,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
 Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
-Progress: --progress or --progress-json on stderr for put, get, pack, gc,
+Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
               fsck, native commit/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
@@ -452,8 +454,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
-      command == "put" || command == "get" || command == "fsck" || command == "pack" || command == "gc" ||
-      (command == "native" && (sub == "commit" || sub == "export")) ||
+      command == "put" || command == "get" || command == "compare" || command == "fsck" ||
+      command == "pack" || command == "gc" || (command == "native" && (sub == "commit" || sub == "export")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -529,13 +531,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     store.set_ref("files/" + id, {Kind::manifest, id}, options.stop);
     print(Json{{"manifest", id}, {"stats", stats.json()}});
   } else if (command == "get") {
+    auto offset = args.option("--offset"), length = args.option("--length");
+    require(offset.has_value() == length.has_value(), "--offset and --length must be supplied together");
     args.count(2);
-    store.restore_file(args.values[0], path_from_utf8(args.values[1]),
-                       {control->token(), [&](const ProgressEvent &event) {
-                          auto contextual = event;
-                          contextual.path = args.values[1];
-                          control->report(contextual);
-                        }});
+    OperationOptions operation{control->token(), [&](const ProgressEvent &event) {
+                                 auto contextual = event;
+                                 contextual.path = args.values[1];
+                                 control->report(contextual);
+                               }};
+    auto destination = path_from_utf8(args.values[1]);
+    if (offset)
+      store.restore_file_range(args.values[0], destination, integer(*offset), integer(*length), operation);
+    else
+      store.restore_file(args.values[0], destination, operation);
+  } else if (command == "compare") {
+    auto summary = args.flag("--summary");
+    args.count(2);
+    auto result = store.compare_files(args.values[0], args.values[1], {control->token(), observe});
+    if (summary) {
+      result.erase("blocks");
+      result.erase("needed_chunks");
+    }
+    print(result);
   } else if (command == "inspect") {
     args.count(2);
     print(store.metadata(parse_kind(args.values[0]), args.values[1]));

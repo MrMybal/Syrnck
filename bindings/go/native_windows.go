@@ -34,7 +34,7 @@ func loadLibrary() error {
 			return
 		}
 		library.functions = make(map[string]*syscall.Proc)
-		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify"} {
+		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify"} {
 			p, err := library.dll.FindProc("syrnck_" + name)
 			if err != nil {
 				library.err = err
@@ -95,6 +95,55 @@ func nativeRestore(h nativeHandle, id, path []byte) error {
 	runtime.KeepAlive(id)
 	runtime.KeepAlive(path)
 	return status(int(r))
+}
+
+func nativeRestoreRange(h nativeHandle, id, path []byte, offset, length uint64) error {
+	r, _, _ := library.functions["restore_file_range"].Call(uintptr(h), uintptr(unsafe.Pointer(&id[0])), uintptr(unsafe.Pointer(&path[0])), uintptr(offset), uintptr(length))
+	runtime.KeepAlive(id)
+	runtime.KeepAlive(path)
+	return status(int(r))
+}
+func nativeRange(h nativeHandle, id []byte, offset, length uint64) ([]byte, error) {
+	size := int(length)
+	if size == 0 {
+		size = 1
+	}
+	data := make([]byte, size)
+	var count uintptr
+	r, _, _ := library.functions["file_read_range"].Call(uintptr(h), uintptr(unsafe.Pointer(&id[0])), uintptr(offset), uintptr(length), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)), uintptr(unsafe.Pointer(&count)))
+	runtime.KeepAlive(id)
+	runtime.KeepAlive(data)
+	if err := status(int(r)); err != nil {
+		return nil, err
+	}
+	if uint64(count) != length {
+		return nil, errors.New("invalid native range length")
+	}
+	return data[:int(length)], nil
+}
+func nativeCompare(h nativeHandle, source, target []byte) ([]byte, error) {
+	defer runtime.KeepAlive(source)
+	defer runtime.KeepAlive(target)
+	var length uintptr
+	call := func(data []byte) error {
+		r, _, _ := library.functions["file_compare_json"].Call(uintptr(h), uintptr(unsafe.Pointer(&source[0])), uintptr(unsafe.Pointer(&target[0])), uintptr(unsafe.Pointer(unsafe.SliceData(data))), uintptr(len(data)), uintptr(unsafe.Pointer(&length)))
+		runtime.KeepAlive(data)
+		return status(int(r))
+	}
+	if err := call(nil); err != nil {
+		return nil, err
+	}
+	if length == 0 || length > 128*1024*1024 {
+		return nil, errors.New("invalid native comparison size")
+	}
+	data := make([]byte, length)
+	if err := call(data); err != nil {
+		return nil, err
+	}
+	if length != uintptr(len(data)) || data[len(data)-1] != 0 {
+		return nil, errors.New("invalid native comparison length")
+	}
+	return data, nil
 }
 
 func nativeHas(h nativeHandle, kind, id []byte) (bool, error) {

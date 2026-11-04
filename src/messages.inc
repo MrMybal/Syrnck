@@ -483,3 +483,5 @@ SYRNCK_MESSAGE("invalid Git worktree response", "réponse de worktree Git invali
 SYRNCK_MESSAGE("file range exceeds manifest size", "la plage de fichier dépasse la taille du manifeste")
 SYRNCK_MESSAGE("file range reconstruction is incomplete", "la reconstruction de la plage de fichier est incomplète")
 SYRNCK_MESSAGE("inconsistent file comparison block size", "taille de bloc incohérente dans la comparaison des fichiers")
+SYRNCK_MESSAGE("--offset and --length must be supplied together", "--offset et --length doivent être fournis ensemble")
+SYRNCK_MESSAGE("buffered file range exceeds 16 MiB", "la plage de fichier en mémoire dépasse 16 Mio")

@@ -59,6 +59,8 @@ syrnck gc
 
 `put` affiche le manifeste et les octets réutilisés. `get <manifeste> <nouveau-fichier>` reconstruit un fichier. Le GC est simulé par défaut ; `gc --delete` supprime les objets inaccessibles. Révisions, branches, archives et pins protègent leurs blocs.
 
+`get MANIFESTE NOUVEAU_FICHIER --offset 1048576 --length 65536` exporte une [plage vérifiée](docs/FILE_RANGES.md) en lisant seulement les blocs concernés. `compare ANCIEN_MANIFESTE NOUVEAU_MANIFESTE` produit un [plan de réutilisation](docs/FILE_COMPARISON.md), avec `--summary` pour les seuls compteurs. Ces fonctions existent aussi en C et Go. Une lecture partielle vérifie les blocs sélectionnés ; le hash complet exige une reconstruction complète. Le plan de comparaison ne vérifie pas les données des fichiers.
+
 Pour les gros fichiers, `syrnck put fichier.bin --workers 4 --buffer-mib 32` active la compression et le chiffrement parallèles avec une file bornée. Le mode séquentiel reste le défaut ; les formats et identifiants v1 sont conservés. Voir les [limites et réglages](docs/USAGE.md) et les [mesures](docs/PERFORMANCE.md).
 
 Les réglages du pipeline et les limites des packs sont persistants par dépôt via `config set`. Les options explicites les remplacent pour l'opération, y compris pour `native commit` et `git clean`. Voir les [réglages du dépôt](docs/SETTINGS.md).

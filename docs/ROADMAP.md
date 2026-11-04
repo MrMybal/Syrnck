@@ -59,7 +59,9 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Audit `fsck` avec inventaire en flux, énumération par type et bitmap ; validation des objets non référencés et des deux copies physiques.
 - [x] Empaquetage/compaction avec fusion paginée des index, plan borné par pack, source vérifiée sur deux passes et relecture sans liste complète d'IDs empaquetés.
 - [ ] Fusion automatique des petits packs et validation de charge du moteur complet ; borner le tri et les marques des clés isolées, la pile de parcours et les autres métadonnées.
-- [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
+- [x] Lecture de plages exactes à partir des manifestes v1, vérification des seuls blocs concernés et export exclusif ; API C++/C/Go et CLI, en clair/chiffré et sur les trois stockages physiques.
+- [x] Plans de réutilisation entre manifestes, blocs déplacés/répétés, déduplication des besoins et compteurs logiques ; comparaison de métadonnées C++/C/Go et CLI sans lire les payloads.
+- [ ] Arbres Merkle paginés, manifestes hiérarchiques et index de plages persistant.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
 - [x] Compression réseau Zstandard négociée, repli brut, décodage borné, budgets de préparation et compteurs logiques/réseau distincts.

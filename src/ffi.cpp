@@ -1,6 +1,7 @@
 #include <cstring>
 #include <fstream>
 #include <algorithm>
+#include <streambuf>
 #include <syrnck.h>
 #include <syrnck/core.hpp>
 struct SyrnckStore {
@@ -51,6 +52,15 @@ void copy_bytes(std::span<const std::uint8_t> bytes, void *out, std::size_t capa
   if (!bytes.empty())
     std::memcpy(out, bytes.data(), bytes.size());
 }
+class BufferOutput : public std::streambuf {
+public:
+  explicit BufferOutput(syrnck::Bytes &data) {
+    if (!data.empty()) {
+      auto first = reinterpret_cast<char *>(data.data());
+      setp(first, first + data.size());
+    }
+  }
+};
 } // namespace
 extern "C" {
 uint32_t syrnck_abi_version(void) {
@@ -118,6 +128,47 @@ int syrnck_ingest_file_ex(SyrnckStore *p, const char *path, const SyrnckChunking
 int syrnck_restore_file(SyrnckStore *p, const char *id, const char *destination) {
   return boundary(
       [&] { checked(p).restore_file(checked(id), syrnck::path_from_utf8(checked(destination))); });
+}
+int syrnck_restore_file_range(SyrnckStore *p, const char *id, const char *destination, std::uint64_t offset,
+                              std::uint64_t length) {
+  return boundary([&] {
+    checked(p).restore_file_range(checked(id), syrnck::path_from_utf8(checked(destination)), offset, length);
+  });
+}
+int syrnck_file_read_range(SyrnckStore *p, const char *id, std::uint64_t offset, std::uint64_t requested,
+                           unsigned char *out, std::size_t capacity, std::size_t *length) {
+  return boundary([&] {
+    syrnck::require(length != nullptr, "null size output");
+    *length = 0;
+    syrnck::require(requested <= syrnck::max_object_size, "buffered file range exceeds 16 MiB");
+    auto &store = checked(p);
+    const auto identifier = checked(id);
+    const auto total = store.metadata(syrnck::Kind::manifest, identifier)["size"].get<std::uint64_t>();
+    syrnck::require(offset <= total && requested <= total - offset, "file range exceeds manifest size");
+    if (!out && capacity == 0) {
+      *length = static_cast<std::size_t>(requested);
+      return;
+    }
+    if (!out || capacity < requested) {
+      *length = static_cast<std::size_t>(requested);
+      throw syrnck::Error("insufficient output capacity");
+    }
+    syrnck::Bytes data(static_cast<std::size_t>(requested));
+    BufferOutput buffer(data);
+    std::ostream stream(&buffer);
+    store.reconstruct_range(identifier, stream, offset, requested);
+    copy_bytes(data, out, capacity, length);
+  });
+}
+int syrnck_file_compare_json(SyrnckStore *p, const char *source, const char *target, char *out,
+                             std::size_t capacity, std::size_t *length) {
+  return boundary([&] {
+    syrnck::require(length != nullptr, "null size output");
+    *length = 0;
+    auto value = checked(p).compare_files(checked(source), checked(target)).dump();
+    copy_bytes({reinterpret_cast<const std::uint8_t *>(value.c_str()), value.size() + 1}, out, capacity,
+               length);
+  });
 }
 int syrnck_manifest_json(SyrnckStore *p, const char *id, char **out) {
   return boundary([&] {

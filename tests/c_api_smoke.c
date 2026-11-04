@@ -23,6 +23,11 @@ int main(void) {
     return 1;
   if (syrnck_store_close(NULL) != 0 || syrnck_string_free(NULL) != 0)
     return 1;
+  required = 123;
+  if (syrnck_file_read_range(NULL, "bad", 0, 1, NULL, 0, &required) != 1 || required != 0 ||
+      syrnck_file_compare_json(NULL, "bad", "bad", NULL, 0, &required) != 1 || required != 0 ||
+      syrnck_restore_file_range(NULL, "bad", "destination", 0, 1) != 1)
+    return 1;
   puts("C ABI declarations, linking and null/error handling verified");
   return 0;
 }

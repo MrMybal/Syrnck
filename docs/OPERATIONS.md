@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process`,
 `git lfs-preview/migrate-lfs` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -41,6 +41,11 @@ is authoritative even if an earlier file event had `complete: true`.
 LFS preview reports verification progress; migration adds ingestion and branch
 publication events. Its prepared Git transaction finishes without cancellation
 after the final commit command begins. See [LFS migration recovery](GIT_LFS_MIGRATION.md#cancellation-and-recovery).
+
+[File range reads](FILE_RANGES.md) report bytes relative to the
+requested range. [Manifest comparisons](FILE_COMPARISON.md) use planning counters
+in block entries across both manifests, rather than bytes. Both support
+cancellation before output publication.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

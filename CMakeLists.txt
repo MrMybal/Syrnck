@@ -307,6 +307,11 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME git_lfs_migration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/git_lfs_migration.py $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_lfs_migration_probe>)
     set_tests_properties(git_lfs_migration PROPERTIES TIMEOUT 120)
     add_test(NAME localization COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization.py $<TARGET_FILE:syrnck>)
+    add_test(NAME file_operations COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/file_operations.py
+      $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_ffi> FileOperations.test_cli_range_export_comparison_summary_and_language_boundaries)
+    add_test(NAME file_range_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/file_operations.py
+      $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_ffi> FileOperations.test_c_buffers_queries_integrity_and_comparison)
+    set_tests_properties(file_operations file_range_abi PROPERTIES TIMEOUT 60)
   endif()
   add_test(NAME c_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/examples/ffi_smoke.py $<TARGET_FILE:syrnck_ffi>)
   if(SYRNCK_TEST_GO AND NOT SYRNCK_SANITIZE)
@@ -329,5 +334,8 @@ if(SYRNCK_BUILD_TESTS)
     # Python is not ASan-linked; native C ABI executables exercise the ABI here.
     # The ctypes round trip runs in the normal platform jobs.
     set_tests_properties(c_abi PROPERTIES DISABLED TRUE)
+    if(SYRNCK_BUILD_CLI)
+      set_tests_properties(file_range_abi PROPERTIES DISABLED TRUE)
+    endif()
   endif()
 endif()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -31,6 +32,97 @@ func writeTest(t *testing.T, path string, content []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, content, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFileRangeAndComparison(t *testing.T) {
+	for _, encrypted := range []bool{false, true} {
+		t.Run(fmt.Sprint(encrypted), func(t *testing.T) {
+			dir := t.TempDir()
+			var key []byte
+			if encrypted {
+				key = bytes.Repeat([]byte{91}, 32)
+			}
+			s := openTest(t, filepath.Join(dir, "store"), key)
+			original := append(append(bytes.Repeat([]byte{'a'}, 1024), bytes.Repeat([]byte{'b'}, 1024)...), bytes.Repeat([]byte{'a'}, 1024)...)
+			changed := append(append(append(bytes.Repeat([]byte{'c'}, 1024), original[:1024]...), bytes.Repeat([]byte{'d'}, 2048)...), original[1024:2048]...)
+			path := filepath.Join(dir, "input")
+			config := Chunking{Fixed: true, Min: 1024, Average: 1024, Max: 1024}
+			writeTest(t, path, original)
+			a, err := s.Ingest(path, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeTest(t, path, changed)
+			b, err := s.Ingest(path, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			part, err := s.ReadRange(b, 1000, 99)
+			if err != nil || !bytes.Equal(part, changed[1000:1099]) {
+				t.Fatalf("range differs: %v", err)
+			}
+			part, err = s.ReadRange(b, uint64(len(changed)), 0)
+			if err != nil || len(part) != 0 {
+				t.Fatalf("EOF range differs: %v", err)
+			}
+			for _, request := range [][2]uint64{{^uint64(0), 2}, {0, MaxObjectSize + 1}, {uint64(len(changed)), 1}} {
+				if _, err = s.ReadRange(b, request[0], request[1]); err == nil {
+					t.Fatal("invalid range accepted")
+				}
+			}
+			out := filepath.Join(dir, "slice-échantillon")
+			if err = s.RestoreRange(b, out, 1000, 99); err != nil {
+				t.Fatal(err)
+			}
+			actual, err := os.ReadFile(out)
+			if err != nil || !bytes.Equal(actual, changed[1000:1099]) {
+				t.Fatal("exported range differs", err)
+			}
+			if err = s.RestoreRange(b, out, 0, 1); err == nil {
+				t.Fatal("existing output overwritten")
+			}
+			plan, err := s.CompareFiles(a, b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.ReusedBytes != 2048 || plan.NewBytes != 3072 || plan.UniqueNewBytes != 2048 || len(plan.NeededChunks) != 2 {
+				t.Fatalf("plan differs: %+v", plan)
+			}
+			var reconstructed []byte
+			for _, block := range plan.Blocks {
+				if block.SourceOffset != nil {
+					start := *block.SourceOffset
+					reconstructed = append(reconstructed, original[start:start+block.Size]...)
+				} else {
+					data, e := s.Get(ObjectKey{Kind: "chunk", ID: block.ID})
+					if e != nil {
+						t.Fatal(e)
+					}
+					reconstructed = append(reconstructed, data...)
+				}
+			}
+			if !bytes.Equal(reconstructed, changed) {
+				t.Fatal("plan reconstruction differs")
+			}
+			writeTest(t, path, nil)
+			empty, err := s.Ingest(path, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if part, err = s.ReadRange(empty, 0, 0); err != nil || len(part) != 0 {
+				t.Fatal("empty range differs", err)
+			}
+			if err = s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.ReadRange(b, 0, 1); !errors.Is(err, ErrClosed) {
+				t.Fatal(err)
+			}
+			if _, err = s.CompareFiles(a, b); !errors.Is(err, ErrClosed) {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

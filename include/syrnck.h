@@ -38,6 +38,21 @@ typedef struct SyrnckChunking {
 SYRNCK_API int syrnck_ingest_file_ex(SyrnckStore *store, const char *path, const SyrnckChunking *chunking,
                                      char *out_id);
 SYRNCK_API int syrnck_restore_file(SyrnckStore *store, const char *id, const char *destination);
+/* Exact ranges within manifest size, without truncation. Partial reads verify
+ * selected chunks; whole-file ranges also verify file_hash. File output is
+ * atomic and exclusive, with no 16 MiB streaming export limit. */
+SYRNCK_API int syrnck_restore_file_range(SyrnckStore *store, const char *id, const char *destination,
+                                         uint64_t offset, uint64_t length);
+/* Buffered ranges are capped at 16 MiB. Query with (NULL,0) validates metadata
+ * and bounds, not payloads. Non-NULL output requests verification even for an
+ * empty range. Caller bytes stay unchanged on failure. out_length resets to 0
+ * on errors except insufficient capacity, which reports required range length. */
+SYRNCK_API int syrnck_file_read_range(SyrnckStore *store, const char *id, uint64_t offset, uint64_t length,
+                                      unsigned char *out, size_t capacity, size_t *out_length);
+/* Metadata-only reuse plan JSON, including NUL. Same query/capacity convention
+ * as closure_json. No payload verification or reference changes. */
+SYRNCK_API int syrnck_file_compare_json(SyrnckStore *store, const char *source, const char *target, char *out,
+                                        size_t capacity, size_t *length);
 SYRNCK_API int syrnck_manifest_json(SyrnckStore *store, const char *id, char **out);
 /* Free only strings returned by syrnck_manifest_json, exactly once. */
 SYRNCK_API int syrnck_string_free(char *value);

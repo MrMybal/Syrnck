@@ -139,6 +139,78 @@ func (s *Store) Restore(id, destination string) error {
 	return s.with(func() error { return nativeRestore(s.handle, i, p) })
 }
 
+// ReadRange verifies selected chunks and returns exactly length bytes, capped at
+// MaxObjectSize per call. Whole-file ranges also verify the complete file hash.
+func (s *Store) ReadRange(id string, offset, length uint64) (data []byte, err error) {
+	i, err := text(id)
+	if err != nil {
+		return nil, err
+	}
+	if length > MaxObjectSize {
+		return nil, errors.New("syrnck: buffered file range exceeds 16 MiB")
+	}
+	err = s.with(func() error { data, err = nativeRange(s.handle, i, offset, length); return err })
+	return
+}
+
+// RestoreRange streams an exact range to a new file, preserving existing paths.
+func (s *Store) RestoreRange(id, destination string, offset, length uint64) error {
+	i, err := text(id)
+	if err != nil {
+		return err
+	}
+	p, err := text(destination)
+	if err != nil {
+		return err
+	}
+	return s.with(func() error { return nativeRestoreRange(s.handle, i, p, offset, length) })
+}
+
+type FileBlock struct {
+	ID           string  `json:"id"`
+	Offset       uint64  `json:"offset"`
+	Size         uint64  `json:"size"`
+	SourceOffset *uint64 `json:"source_offset"`
+}
+type NeededChunk struct {
+	ID   string `json:"id"`
+	Size uint64 `json:"size"`
+}
+type FileComparison struct {
+	Version        uint32        `json:"version"`
+	Source         string        `json:"source"`
+	Target         string        `json:"target"`
+	SourceSize     uint64        `json:"source_size"`
+	TargetSize     uint64        `json:"target_size"`
+	SameContent    bool          `json:"same_content"`
+	ReusedBytes    uint64        `json:"reused_bytes"`
+	NewBytes       uint64        `json:"new_bytes"`
+	UniqueNewBytes uint64        `json:"unique_new_bytes"`
+	Blocks         []FileBlock   `json:"blocks"`
+	NeededChunks   []NeededChunk `json:"needed_chunks"`
+}
+
+// CompareFiles creates a metadata-only recipe; it does not verify source bytes
+// or imply chunk availability. Verify imported chunks and the finished file.
+func (s *Store) CompareFiles(source, target string) (result FileComparison, err error) {
+	a, err := text(source)
+	if err != nil {
+		return result, err
+	}
+	b, err := text(target)
+	if err != nil {
+		return result, err
+	}
+	err = s.with(func() error {
+		data, e := nativeCompare(s.handle, a, b)
+		if e != nil {
+			return e
+		}
+		return json.Unmarshal(data[:len(data)-1], &result)
+	})
+	return
+}
+
 func (s *Store) Has(k ObjectKey) (present bool, err error) {
 	kind, id, err := keyText(k)
 	if err != nil {

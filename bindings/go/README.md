@@ -47,6 +47,27 @@ Ne pas copier un `Store`. Les méthodes et `Close` partagent un mutex. Chaque s�
 
 Le corps d'un objet est limité à 16 Mio. La liste complète des dépendances est chargée en mémoire, limitée à 128 Mio côté Go. Les lectures par buffers font actuellement une requête de taille puis une lecture, donc deux vérifications natives. La pagination, les leases persistants, les buffers réutilisables et le coût du passage Go/C++ restent des travaux de performance.
 
+## Plages et comparaison de fichiers
+
+`ReadRange(id, offset, length)` retourne les octets d'une plage exacte, dans la
+limite de 16 Mio par appel. Les blocs sélectionnés sont vérifiés ; une plage
+couvrant tout le fichier vérifie aussi son hash complet. `RestoreRange` exporte
+en flux vers un fichier neuf, sans cette limite de longueur, avec publication
+exclusive. Une plage hors limites renvoie une erreur sans troncature.
+
+`CompareFiles(source, target)` retourne un `FileComparison` typé : compteurs
+d'octets réutilisables/nouveaux, blocs cibles avec offset source éventuel et liste
+dédupliquée des blocs absents du manifeste source. Ce plan repose uniquement sur
+les métadonnées. Vérifier les blocs copiés et le fichier terminé avant publication.
+Il ne prouve pas qu'un fichier de travail contient toujours les octets attendus.
+
+Ces méthodes partagent le mutex et le thread OS des autres appels. Elles ne
+changent aucun pin et ne sont pas annulables pendant un appel natif. Le JSON de
+comparaison est plafonné à 128 Mio puis décodé en structures Go. La bibliothèque
+et les headers doivent provenir de cette version ; le numéro ABI 1 est conservé
+avec des symboles supplémentaires. Voir les contrats anglais des [plages](../../docs/FILE_RANGES.md)
+et [comparaisons](../../docs/FILE_COMPARISON.md).
+
 ## Syncthing
 
 Ce binding prépare l'utilisation du moteur depuis Go. Il ne modifie pas Syncthing et n'implémente pas BEP : les hashes BLAKE3 avec domaine, les manifestes et le CDC Syrnck ne correspondent pas à son protocole. Même le mode fixe conserve le format Syrnck. Une future intégration devra adapter explicitement les index et échanges, ou négocier une extension entre pairs modifiés. Voir la [spécification BEP](https://docs.syncthing.net/specs/bep-v1.html) et les [règles cgo](https://pkg.go.dev/cmd/cgo#hdr-Passing_pointers).

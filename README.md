@@ -14,13 +14,13 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 
 | Component | Available functionality |
 | --- | --- |
-| `syrnck_core` | FastCDC 2020 or fixed blocks, BLAKE3, Zstd, verified reconstruction, indexed packs, revisions, retention, and GC |
+| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, revisions, retention and GC |
 | `syrnck_git` | Single-file/resident Git filters, asset catalogs, retained bundles, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
 | `syrnck` | Cross-platform CLI, loopback server, and push/pull agent |
-| `syrnck_ffi` / `syrnck_ffi_static` | Shared/static C ABI for blocks, verified import, dependencies, reconstruction, and pins |
-| `bindings/go` | Go binding and resumable differential copying; Windows DLL / Unix cgo backends |
+| `syrnck_ffi` / `syrnck_ffi_static` | Shared/static C ABI for blocks, verified import, dependencies, file/range reads, reuse plans and pins |
+| `bindings/go` | Go binding, verified ranges, file comparison and resumable differential copying; Windows DLL / Unix cgo backends |
 
 XChaCha20-Poly1305 protects objects **at rest**. An authorized server can read their contents. The HTTP server binds to loopback and is intended to sit behind an HTTPS proxy.
 
@@ -62,6 +62,8 @@ syrnck gc
 ```
 
 `put` retains a file and prints its manifest ID and reuse statistics. `get MANIFEST NEW_FILE` reconstructs a file without overwriting an existing destination. `gc` is a dry run; `gc --delete` removes unreachable objects. Branches, revisions, archives, and pins retain their complete block dependencies, including shared blocks.
+
+Use `get MANIFEST NEW_FILE --offset 1048576 --length 65536` to export a [verified byte range](docs/FILE_RANGES.md), reading only intersecting chunks. `compare OLD_MANIFEST NEW_MANIFEST` produces a [chunk reuse plan](docs/FILE_COMPARISON.md); `--summary` omits its per-block lists. Partial reads verify selected chunks; whole-file reconstruction also verifies the complete file hash. Comparison is a metadata operation, separate from payload verification and transfer.
 
 ```text
 syrnck put large-file.bin --workers 4 --buffer-mib 32

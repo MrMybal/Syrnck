@@ -5,6 +5,21 @@ two verified v1 manifests without reading their file payloads. Its ordered
 English JSON has version 1, the source/target IDs and sizes, `same_content`,
 `reused_bytes`, `new_bytes`, `unique_new_bytes`, `blocks` and `needed_chunks`.
 
+```text
+syrnck compare SOURCE_MANIFEST TARGET_MANIFEST --progress-json
+syrnck compare SOURCE_MANIFEST TARGET_MANIFEST --summary
+```
+
+`--summary` removes the two block lists from stdout after planning; it reduces
+output size, not planning memory. Progress stays on stderr, with English/French
+text or stable JSON. No reference is changed.
+
+The C ABI function `syrnck_file_compare_json` uses caller-owned output and size
+queries, including the final NUL byte. Go's `CompareFiles` returns typed
+`FileComparison`, `FileBlock` and `NeededChunk` values. Go caps comparison JSON
+at 128 MiB before decoding. Query/read requires planning twice; no native output
+pointer is retained. Rebuild consumers against this release's header/library.
+
 Each target block has its `id`, target `offset`, `size` and `source_offset`.
 The latter is the first matching chunk's byte offset in the source, or null
 when the source manifest has no matching chunk. Moved and repeated chunks are
