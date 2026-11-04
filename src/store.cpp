@@ -447,6 +447,51 @@ void Store::reconstruct(std::string_view id, std::ostream &output, OperationOpti
 void Store::restore_file(std::string_view id, const fs::path &dest, OperationOptions options) const {
   atomic_stream(dest, [&](std::ostream &out) { reconstruct(id, out, options); }, false, options.stop);
 }
+void Store::reconstruct_range(std::string_view id, std::ostream &output, std::uint64_t offset,
+                              std::uint64_t length, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  auto session = impl_->packs.read_session();
+  auto manifest = metadata(Kind::manifest, id);
+  auto total = manifest.at("size").get<std::uint64_t>();
+  require(offset <= total && length <= total - offset, "file range exceeds manifest size");
+  if (offset == 0 && length == total) {
+    reconstruct(id, output, options);
+    return;
+  }
+  auto notify = [&](std::uint64_t count, bool complete = false) {
+    report_progress(options, {ProgressPhase::reconstructing, {}, count, length, complete});
+  };
+  notify(0);
+  const auto end = offset + length;
+  std::uint64_t position = 0, written = 0;
+  for (const auto &block : manifest["blocks"]) {
+    throw_if_cancelled(options.stop);
+    if (length == 0 || position >= end)
+      break;
+    auto size = block["size"].get<std::uint64_t>();
+    auto next = position + size; // The canonical manifest already checks the sum.
+    if (next > offset) {
+      auto data = get({Kind::chunk, block["id"].get<std::string>()});
+      throw_if_cancelled(options.stop);
+      require(data.size() == size, "block length mismatch");
+      auto first = std::max(position, offset) - position;
+      auto count = std::min(next, end) - position - first;
+      output.write(reinterpret_cast<const char *>(data.data() + first), static_cast<std::streamsize>(count));
+      require(output.good(), "output write failed");
+      written += count;
+      notify(written);
+    }
+    position = next;
+  }
+  require(written == length, "file range reconstruction is incomplete");
+  notify(written, true);
+}
+void Store::restore_file_range(std::string_view id, const fs::path &dest, std::uint64_t offset,
+                               std::uint64_t length, OperationOptions options) const {
+  atomic_stream(
+      dest, [&](std::ostream &out) { reconstruct_range(id, out, offset, length, options); }, false,
+      options.stop);
+}
 Refs Store::refs() const {
   auto j = parse_json(read_bytes(root() / "refs.json"));
   require(j.is_object(), "invalid refs document");

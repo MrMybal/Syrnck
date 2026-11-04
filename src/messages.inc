@@ -480,3 +480,5 @@ SYRNCK_MESSAGE("cannot configure Git reference transaction streams", "impossible
 SYRNCK_MESSAGE("cannot inspect Git worktrees for migration", "impossible d'inspecter les worktrees Git pour la migration")
 SYRNCK_MESSAGE("cannot start Git reference transaction", "impossible de démarrer la transaction de référence Git")
 SYRNCK_MESSAGE("invalid Git worktree response", "réponse de worktree Git invalide")
+SYRNCK_MESSAGE("file range exceeds manifest size", "la plage de fichier dépasse la taille du manifeste")
+SYRNCK_MESSAGE("file range reconstruction is incomplete", "la reconstruction de la plage de fichier est incomplète")

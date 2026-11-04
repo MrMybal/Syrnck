@@ -206,6 +206,12 @@ public:
   std::pair<std::string, IngestStats> ingest(std::istream &, Chunking, IngestOptions) const;
   void reconstruct(std::string_view id, std::ostream &, OperationOptions = {}) const;
   void restore_file(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
+  // Partial reads verify the manifest and intersecting chunks. Only a whole-file
+  // range also verifies file_hash; unrelated chunks need not be present.
+  void reconstruct_range(std::string_view id, std::ostream &, std::uint64_t offset, std::uint64_t length,
+                         OperationOptions = {}) const;
+  void restore_file_range(std::string_view id, const fs::path &destination, std::uint64_t offset,
+                          std::uint64_t length, OperationOptions = {}) const;
   Refs refs() const;
   void set_ref(std::string_view, const ObjectKey &, std::stop_token = {}) const;
   bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
