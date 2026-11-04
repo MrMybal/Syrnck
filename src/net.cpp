@@ -62,21 +62,6 @@ void validate_token(std::string_view token) {
   for (unsigned char c : token)
     require(c >= 33 && c <= 126, "token contains invalid characters");
 }
-Json refs_json(const Refs &refs) {
-  Json j = Json::object();
-  for (const auto &[name, key] : refs)
-    j[name] = key_json(key);
-  return j;
-}
-Refs decode_refs(const Json &j) {
-  require(j.is_object(), "invalid references response");
-  Refs refs;
-  for (const auto &[name, key] : j.items()) {
-    validate_ref(name);
-    refs.emplace(name, parse_key(key));
-  }
-  return refs;
-}
 std::optional<ObjectKey> reference(const Refs &refs, std::string_view name) {
   auto found = refs.find(std::string(name));
   return found == refs.end() ? std::nullopt : std::optional(found->second);
@@ -209,7 +194,8 @@ bool Remote::negotiate_compression(std::optional<bool> &cached, OperationOptions
 }
 Refs Remote::refs(OperationOptions options, TransferOptions limits) const {
   limits.validate();
-  return decode_refs(parse_json(request("GET", "v1/refs", {}, std::move(options), &limits)));
+  return parse_refs(request("GET", "v1/refs", {}, std::move(options), &limits),
+                    "invalid references response");
 }
 void ServeOptions::validate() const {
   require(upload_lease_seconds >= 1 && upload_lease_seconds <= 86400,
@@ -461,14 +447,26 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   server.set_payload_max_length(max_object_size);
   server.set_read_timeout(30, 0);
   server.set_write_timeout(120, 0);
-  server.set_pre_routing_handler([&](const httplib::Request &request, httplib::Response &response) {
+  // Authenticate after httplib consumes the bounded HTTP body, before any
+  // application decoding or Store access. Closing with unread request data
+  // can reset the TCP connection and hide the 401 response on Windows.
+  auto authenticate = [&](const httplib::Request &request, httplib::Response &response) {
     auto auth = request.get_header_value("Authorization");
-    if (!auth.starts_with("Bearer ") ||
+    if (request.get_header_value_count("Authorization") != 1 || !auth.starts_with("Bearer ") ||
         crypto_verify32(unhex(hash(bytes(std::string_view(auth).substr(7)))).data(), expected.data()) != 0) {
       response.status = 401;
+      response.set_header("WWW-Authenticate", "Bearer realm=\"Syrnck\"");
       return httplib::Server::HandlerResponse::Handled;
     }
     return httplib::Server::HandlerResponse::Unhandled;
+  };
+  server.set_pre_request_handler(authenticate);
+  // The per-route hook does not run for an unknown path or unsupported route
+  // method. Preserve authentication for those 404 responses too. HTTP framing
+  // and size errors retain their transport status (400/413/415).
+  server.set_error_handler([authenticate](const httplib::Request &request, httplib::Response &response) {
+    return response.status == 404 ? authenticate(request, response)
+                                  : httplib::Server::HandlerResponse::Unhandled;
   });
   auto guarded = [&](auto handler) {
     return [&, handler](const httplib::Request &request, httplib::Response &response) {
@@ -646,7 +644,7 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                }
              }));
   server.Get("/v1/refs", guarded([&](const auto &, auto &response) {
-               response.set_content(refs_json(store.refs()).dump(), "application/json");
+               response.set_content(encode_refs(store.refs()).dump(), "application/json");
              }));
   server.Put(R"(/v1/refs/([A-Za-z0-9._-]+))", guarded([&](const auto &request, auto &response) {
                auto name = request.matches[1].str();

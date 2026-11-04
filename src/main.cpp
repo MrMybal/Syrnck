@@ -579,10 +579,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     print(Json{{"size", size}, {"reusable_bytes", reused}, {"changed_bytes", size - reused}});
   } else if (command == "refs") {
     args.count(0);
-    Json j = Json::object();
-    for (const auto &[name, value] : store.refs())
-      j[name] = key_json(value);
-    print(j);
+    print(encode_refs(store.refs()));
   } else if (command == "pin") {
     args.count(3);
     store.set_ref(args.values[0], {parse_kind(args.values[1]), args.values[2]});

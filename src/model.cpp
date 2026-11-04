@@ -145,11 +145,97 @@ std::string object_id(Kind kind, std::span<const std::uint8_t> data) {
   blake3_hasher_finalize(&h, out.data(), out.size());
   return hex(out);
 }
-Json parse_json(std::span<const std::uint8_t> data) {
-  return Json::parse(data.begin(), data.end(), [](int depth, Json::parse_event_t, Json &) {
-    require(depth <= 128, "JSON nesting exceeds 128 levels");
+namespace {
+class JsonDepth : public nlohmann::json_sax<Json> {
+  unsigned depth_ = 0;
+  bool check() const {
+    require(depth_ <= 128, "JSON nesting exceeds 128 levels");
     return true;
-  });
+  }
+
+public:
+  bool null() override {
+    return check();
+  }
+  bool boolean(bool) override {
+    return check();
+  }
+  bool number_integer(number_integer_t) override {
+    return check();
+  }
+  bool number_unsigned(number_unsigned_t) override {
+    return check();
+  }
+  bool number_float(number_float_t, const string_t &) override {
+    return check();
+  }
+  bool string(string_t &) override {
+    return check();
+  }
+  bool binary(binary_t &) override {
+    return check();
+  }
+  bool key(string_t &) override {
+    return check();
+  }
+  bool start_object(std::size_t) override {
+    check();
+    ++depth_;
+    return true;
+  }
+  bool end_object() override {
+    --depth_;
+    return true;
+  }
+  bool start_array(std::size_t size) override {
+    return start_object(size);
+  }
+  bool end_array() override {
+    return end_object();
+  }
+  bool parse_error(std::size_t, const std::string &, const nlohmann::detail::exception &) override {
+    return false;
+  }
+};
+template <class Value> Value parse_document(std::span<const std::uint8_t> data) {
+  // The DOM callback parser scans the parent for discarded elements after
+  // every completed container, even when the callback always returns true.
+  // Guard depth in a SAX pass, then use the ordinary DOM parser. Both passes
+  // use the same JSON grammar; DOM parsing still throws syntax diagnostics if
+  // SAX validation stopped at malformed input. No filtering is performed.
+  JsonDepth depth;
+  (void)Value::sax_parse(data.begin(), data.end(), &depth);
+  return Value::parse(data.begin(), data.end());
+}
+} // namespace
+Json parse_json(std::span<const std::uint8_t> data) {
+  return parse_document<Json>(data);
+}
+Refs parse_refs(std::span<const std::uint8_t> data, std::string_view invalid_document) {
+  require(data.size() <= max_object_size, "reference document exceeds 16 MiB");
+  // Reference tables do not use canonical field order. An ordered_json object
+  // searches a vector for every key, making large tables quadratic to parse.
+  // Use the tree-backed DOM here; immutable metadata retains ordered_json.
+  auto document = parse_document<nlohmann::json>(data);
+  require(document.is_object(), invalid_document);
+  Refs refs;
+  for (const auto &[name, value] : document.items()) {
+    validate_ref(name);
+    refs.emplace_hint(refs.end(), name, parse_key(Json(value)));
+  }
+  return refs;
+}
+Json encode_refs(const Refs &refs) {
+  Json result = Json::object();
+  auto &object = result.get_ref<Json::object_t &>();
+  object.reserve(refs.size());
+  // Refs already provides sorted unique names: avoid ordered_json's linear
+  // duplicate-key search on each insertion while preserving identical bytes.
+  for (const auto &[name, key] : refs) {
+    validate_ref(name);
+    object.emplace_back(name, key_json(key));
+  }
+  return result;
 }
 Json key_json(const ObjectKey &key) {
   validate_id(key.id);

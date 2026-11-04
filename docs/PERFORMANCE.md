@@ -1,5 +1,19 @@
 # Mesures et stratégie de performance
 
+## Reference tables and JSON depth validation — 4 November 2026
+
+Reference tables use a tree-backed parser and direct sorted serialization. A
+separate SAX depth guard also removes the DOM callback parser's repeated parent
+scans. On Windows x64 Release, three alternating measurements of the complete
+CLI `refs` command gave medians of **8.941 s before** and **0.296 s after** for
+32,768 references. At 8,192 references, the medians were 0.599 s and 0.064 s.
+Output was byte-identical and full-file audits passed after the runs.
+
+See [methodology, validation and remaining limits](REFERENCE_TABLES.md), the
+[raw report](benchmarks/reference-tables-windows-x64-2026-11-04.json), and
+`scripts/benchmark_refs.py`. These synthetic reference-listing measurements do
+not establish asset throughput, network performance or memory savings.
+
 ## Streaming compaction plans — 4 November 2026
 
 Packing and compaction now merge packed indexes by pages, plan output with counts,

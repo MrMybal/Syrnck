@@ -62,6 +62,7 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [ ] Fusion automatique des petits packs et validation de charge du moteur complet ; borner le tri et les marques des clés isolées, la pile de parcours et les autres métadonnées.
 - [x] Lecture de plages exactes à partir des manifestes v1, vérification des seuls blocs concernés et export exclusif ; API C++/C/Go et CLI, en clair/chiffré et sur les trois stockages physiques.
 - [x] Plans de réutilisation entre manifestes, blocs déplacés/répétés, déduplication des besoins et compteurs logiques ; comparaison de métadonnées C++/C/Go et CLI sans lire les payloads.
+- [x] Tables de références sans parcours quadratique de la table, sérialisation triée locale/HTTP et garde de profondeur JSON en SAX ; validation de 32 768 pins en clair/chiffré et mesure CLI reproductible.
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et index de plages persistant.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
@@ -127,7 +128,7 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
 - [ ] Backups restaurables, réplication, scrubbing périodique et réparation des blocs manquants.
 - [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
-- [ ] Diagnostiquer les resets TCP intermittents sous Windows lors des refus HTTP 401 avec corps de requête, et garantir une réponse HTTP explicite.
+- [x] Refus HTTP 401 après réception du corps borné, avant accès au stockage ; régression Windows avec corps différés, framing chunked, authentification dupliquée et requêtes concurrentes.
 - [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.
 - [ ] Choix de licence, provenance des dépendances, paquets signés et stratégie de migration de format.
 

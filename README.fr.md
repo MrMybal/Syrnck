@@ -111,6 +111,7 @@ La compilation et les tests locaux sont validés sous Windows x64 avec MSVC. La 
 - [Formats et protocole](docs/PROTOCOL.md)
 - [Feuille de route](docs/ROADMAP.md)
 - [Mesures reproductibles](docs/PERFORMANCE.md)
+- [Grandes tables de références et mesures CLI](docs/REFERENCE_TABLES.md) — anglais
 - [Détails de migration C++20](docs/MIGRATION_CPP.md)
 - [Binding Go et préparation Syncthing](bindings/go/README.md)
 

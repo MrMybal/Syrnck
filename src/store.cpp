@@ -493,14 +493,7 @@ void Store::restore_file_range(std::string_view id, const fs::path &dest, std::u
       options.stop);
 }
 Refs Store::refs() const {
-  auto j = parse_json(read_bytes(root() / "refs.json"));
-  require(j.is_object(), "invalid refs document");
-  Refs refs;
-  for (auto &[name, value] : j.items()) {
-    validate_ref(name);
-    refs.emplace(name, parse_key(value));
-  }
-  return refs;
+  return parse_refs(read_bytes(root() / "refs.json", max_object_size), "invalid refs document");
 }
 void Store::write_refs(const Refs &refs, std::stop_token stop) const {
   // Reference names cannot contain JSON escapes. Reject provably oversized
@@ -511,10 +504,7 @@ void Store::write_refs(const Refs &refs, std::stop_token stop) const {
     require(size <= max_object_size - lower_bound, "reference document exceeds 16 MiB");
     lower_bound += size;
   }
-  Json j = Json::object();
-  for (const auto &[name, key] : refs)
-    j.get_ref<Json::object_t &>().emplace_back(name, key_json(key));
-  auto value = j.dump();
+  auto value = encode_refs(refs).dump();
   require(value.size() <= max_object_size, "reference document exceeds 16 MiB");
   atomic_write(root() / "refs.json", bytes(value), true, stop);
 }

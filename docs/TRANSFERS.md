@@ -48,6 +48,24 @@ Negotiated [read leases](SERVER_READ_LEASES.md) protect the exact source root wh
 missing objects are downloaded. They are released before local publication,
 when the verified objects and unfinished local journal protect reconstruction.
 
+## Server authentication and request bodies
+
+The server consumes the HTTP request body before checking credentials, with the
+existing **16 MiB** payload limit and 30-second read timeout. It then requires
+exactly one `Authorization: Bearer <token>` header before application JSON parsing,
+object decompression, Store access or publication. Missing, incorrect and duplicate
+credentials receive `401` with `WWW-Authenticate: Bearer realm="Syrnck"`, including
+requests to unknown routes. Fully receiving the body avoids a Windows TCP reset
+that could otherwise hide the rejection response when the server closes the
+connection with unread data.
+
+This applies to well-formed, fully received bodies with either `Content-Length`
+or chunked framing. HTTP framing, unsupported transport encoding and payload-size
+errors can precede authentication and keep their transport error status. A
+provisional `100 Continue` permits sending the body; it does not authorize access.
+The server closes connections after HTTP errors. Body reception still occupies
+a server worker; deployment quotas and admission controls remain future work.
+
 ## Publication boundary
 
 Pull checks cancellation throughout the final local closure validation and

@@ -134,6 +134,7 @@ The script scans a snapshot of the publishable working tree, including vendored 
 ## Further reading
 
 - [Localization and contribution rules](docs/LOCALIZATION.md) — English
+- [Large reference tables and measured listing performance](docs/REFERENCE_TABLES.md) — English
 - [GitHub publishing and repository description](docs/PUBLISHING.md) — English
 - [Usage](docs/USAGE.md), [architecture](docs/ARCHITECTURE.md), [formats](docs/PROTOCOL.md), [roadmap](docs/ROADMAP.md), [performance](docs/PERFORMANCE.md), and [migration](docs/MIGRATION_CPP.md) — French
 - [Go binding](bindings/go/README.md) — French

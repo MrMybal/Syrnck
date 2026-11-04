@@ -1,0 +1,150 @@
+{
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "before_revision": "c3e8d94 with HTTP authentication fix; reference paths unchanged",
+  "binary_sha256": {
+    "before": "d78abcc702040fc72fec5923218cf9078fc844a0c7f45a93d02e7939e840735a",
+    "after": "35329b51c226282b03ad6a1c9ac6cf157e1017eaeb48ecf37ff283dbed5e6ce9"
+  },
+  "operation": "CLI refs: process startup, Store open validation, second refs read, JSON output",
+  "fixture": [
+    {
+      "references": 8192,
+      "refs_json_bytes": 1007617
+    },
+    {
+      "references": 32768,
+      "refs_json_bytes": 4030465
+    }
+  ],
+  "unique_complete_files": 1,
+  "encrypted": false,
+  "fixture_generation_and_audit_outside_measurement": true,
+  "python_output_validation_outside_measurement": true,
+  "stdout_byte_identical": true,
+  "store_unchanged": true,
+  "full_file_audit_after_runs": true,
+  "os_cache_controlled": false,
+  "fresh_process_per_run": true,
+  "repetitions": 3,
+  "summary_medians": [
+    {
+      "references": 8192,
+      "mode": "before",
+      "median_seconds": 0.5991738000011537
+    },
+    {
+      "references": 8192,
+      "mode": "after",
+      "median_seconds": 0.06393369999932474
+    },
+    {
+      "references": 32768,
+      "mode": "before",
+      "median_seconds": 8.941020900001604
+    },
+    {
+      "references": 32768,
+      "mode": "after",
+      "median_seconds": 0.2955173999980616
+    }
+  ],
+  "runs": [
+    {
+      "mode": "before",
+      "references": 8192,
+      "repetition": 1,
+      "seconds": 0.5991738000011537,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "after",
+      "references": 8192,
+      "repetition": 1,
+      "seconds": 0.057302000001072884,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "after",
+      "references": 8192,
+      "repetition": 2,
+      "seconds": 0.06393369999932474,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "before",
+      "references": 8192,
+      "repetition": 2,
+      "seconds": 0.6109785000007832,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "before",
+      "references": 8192,
+      "repetition": 3,
+      "seconds": 0.5979966999984754,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "after",
+      "references": 8192,
+      "repetition": 3,
+      "seconds": 0.06582830000115791,
+      "stdout_bytes": 1163267,
+      "stdout_sha256": "493c3c99eb776a7408e20c3a766694cea9ee73e513ecd8fcd864992726d702d6"
+    },
+    {
+      "mode": "before",
+      "references": 32768,
+      "repetition": 1,
+      "seconds": 9.06875239999863,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    },
+    {
+      "mode": "after",
+      "references": 32768,
+      "repetition": 1,
+      "seconds": 0.3002511000013328,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    },
+    {
+      "mode": "after",
+      "references": 32768,
+      "repetition": 2,
+      "seconds": 0.2955173999980616,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    },
+    {
+      "mode": "before",
+      "references": 32768,
+      "repetition": 2,
+      "seconds": 8.941020900001604,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    },
+    {
+      "mode": "before",
+      "references": 32768,
+      "repetition": 3,
+      "seconds": 8.434797699999763,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    },
+    {
+      "mode": "after",
+      "references": 32768,
+      "repetition": 3,
+      "seconds": 0.2607349999998405,
+      "stdout_bytes": 4653059,
+      "stdout_sha256": "96f5f039e7742a80f7b957a37731a0864230ba421bd357f97dddd155dcac5bc6"
+    }
+  ]
+}
