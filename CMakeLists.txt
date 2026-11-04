@@ -109,6 +109,25 @@ endif()
 if(SYRNCK_BUILD_TESTS)
   enable_testing()
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  # Reuse the production core and compile only the three IO translation units
+  # again for the private process-kill probe. Their object symbols satisfy the
+  # static library references, so normal IO objects are not linked into the probe.
+  add_library(syrnck_crash_io OBJECT src/platform.cpp src/store.cpp src/pack_storage.cpp)
+  target_include_directories(syrnck_crash_io PRIVATE $<TARGET_PROPERTY:syrnck_core,INCLUDE_DIRECTORIES>)
+  target_compile_options(syrnck_crash_io PRIVATE $<TARGET_PROPERTY:syrnck_core,COMPILE_OPTIONS>)
+  target_compile_definitions(syrnck_crash_io PRIVATE SYRNCK_TEST_IO_CHECKPOINTS
+    $<TARGET_PROPERTY:syrnck_core,COMPILE_DEFINITIONS>)
+  get_target_property(SYRNCK_CORE_LINKS syrnck_core LINK_LIBRARIES)
+  target_link_libraries(syrnck_crash_io PRIVATE syrnck_core ${SYRNCK_CORE_LINKS})
+  add_executable(syrnck_crash_probe tests/crash_probe.cpp $<TARGET_OBJECTS:syrnck_crash_io>)
+  target_include_directories(syrnck_crash_probe PRIVATE src)
+  target_link_libraries(syrnck_crash_probe PRIVATE syrnck_core)
+  add_executable(syrnck_recovery_reader tests/crash_probe.cpp)
+  target_include_directories(syrnck_recovery_reader PRIVATE src)
+  target_link_libraries(syrnck_recovery_reader PRIVATE syrnck_core)
+  add_test(NAME crash_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
+    $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>)
+  set_tests_properties(crash_recovery PROPERTIES TIMEOUT 240)
   add_executable(syrnck_core_tests tests/core_tests.cpp)
   target_link_libraries(syrnck_core_tests PRIVATE syrnck_core)
   add_test(NAME core COMMAND syrnck_core_tests)

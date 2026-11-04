@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "io_checkpoint.hpp"
 #include "encode_pool.hpp"
 #include "object_cache.hpp"
 #include "pack_storage.hpp"
@@ -671,6 +672,7 @@ Json Store::gc(bool remove) const {
       if (!live.loose_contains(key) && !impl_->packs.contains(key)) {
         require(fs::remove(object_path(key)), "cannot remove unreachable object");
         impl_->cache.erase(key);
+        SYRNCK_IO_CHECKPOINT("gc.loose_removed", object_path(key));
       }
     });
     (void)impl_->packs.cleanup();
@@ -767,8 +769,10 @@ Json Store::pack(PackOptions options) const {
     auto session = impl_->packs.read_session();
     visit_loose_objects(root(), [&](const ObjectKey &key) {
       require(impl_->packs.contains(key), "pack source changed since planning");
-      if (fs::remove(object_path(key)))
+      if (fs::remove(object_path(key))) {
         ++removed;
+        SYRNCK_IO_CHECKPOINT("pack.loose_removed", object_path(key));
+      }
     });
   }
   auto obsolete = impl_->packs.cleanup();

@@ -1,0 +1,223 @@
+"""Kill native writers at deterministic IO boundaries and reopen in fresh processes."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import queue
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+
+PROBE = Path(sys.argv.pop(1)).resolve(strict=True)
+READER = Path(sys.argv.pop(1)).resolve(strict=True)
+PRODUCTION = Path(sys.argv.pop(1)).resolve(strict=True)
+ENV = {key: value for key, value in os.environ.items()
+       if key.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
+PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced",
+          "atomic.published", "atomic.durable")
+
+
+def cases():
+    result = []
+
+    def atomic(operation, kinds, occurrence=1):
+        for kind in kinds:
+            result.extend((operation, phase, kind, occurrence) for phase in PHASES)
+            if os.name != "nt" and kind not in ("refs", "config"):
+                result.append((operation, "atomic.linked", kind, occurrence))
+
+    atomic("commit", ("chunk", "manifest", "revision", "refs"))
+    result.extend(("commit", phase, "chunk", 2) for phase in ("atomic.file_synced", "atomic.published"))
+    for occurrence in (1, 2):
+        atomic("detach", ("refs",), occurrence)
+    result.extend(("detach", phase, "revision", 1) for phase in ("atomic.file_synced", "atomic.published"))
+    for operation in ("append", "compact"):
+        atomic(operation, ("pack", "index", "config"))
+        result.extend(((operation, "pack.envelope_written", "pack", 2),
+                       (operation, "atomic.file_synced", "pack", 2),
+                       (operation, "atomic.published", "index", 2),
+                       (operation, "pack.loose_removed", "manifest", 1),
+                       (operation, "pack.loose_removed", "chunk", 2)))
+        if operation == "compact":
+            result.extend((operation, "pack.obsolete_removed", kind, 1) for kind in ("pack", "index"))
+    atomic("gc", ("pack", "index", "config"))
+    result.extend((("gc", "pack.envelope_written", "pack", 2),
+                   ("gc", "gc.loose_removed", "chunk", 2),
+                   ("gc", "gc.loose_removed", "manifest", 1)))
+    result.extend(("gc", "pack.obsolete_removed", kind, 1) for kind in ("pack", "index"))
+    atomic("restore", ("restore",))
+    return result
+
+
+def command(mode, root, *args, ok=True):
+    result = subprocess.run([str(READER), mode, str(root), *map(str, args)],
+                            capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=30)
+    if (result.returncode == 0) != ok:
+        raise AssertionError(f"{mode} returned {result.returncode}: {result.stderr}")
+    return json.loads(result.stdout) if ok else result
+
+
+def snapshot(root):
+    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in root.rglob("*") if path.is_file()}
+
+
+class CrashRecovery(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory(prefix="syrnck-crash-")
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.base = Path(cls.temporary.name)
+        cls.seeds = {}
+        for encrypted in (False, True):
+            for operation in sorted({row[0] for row in cases()}):
+                directory = cls.base / f"seed-{encrypted}-{operation}"
+                root = directory / "store"
+                info = command("prepare", root, "encrypted" if encrypted else "plain", operation)
+                (directory / "fixture.json").write_text(json.dumps(info), encoding="utf-8")
+                cls.seeds[encrypted, operation] = directory
+
+    def launch(self, root, phase, kind, occurrence):
+        process = subprocess.Popen([str(PROBE), "run", str(root), phase, kind, str(occurrence)],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, encoding="utf-8", env=ENV)
+        lines = queue.Queue()
+        reader = threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = lines.get(timeout=25)
+            reader.join(timeout=5)
+            self.assertTrue(line, "Probe exited without reaching the requested checkpoint")
+            event = json.loads(line)
+            self.assertEqual(event.get("protocol"), "syrnck-test-io-checkpoint-v1", event)
+            self.assertEqual((event["phase"], event["kind"], event["occurrence"]),
+                             (phase, kind, occurrence))
+            self.assertIsNone(process.poll(), "Probe did not wait at its checkpoint")
+            return process, event
+        except BaseException:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=10)
+            reader.join(timeout=5)
+            _, error = process.communicate(timeout=10)
+            print(f"Checkpoint failure: {error}", file=sys.stderr)
+            raise
+
+    def assert_state(self, root, info, operation, phase, kind, occurrence, event, checked):
+        published = phase in ("atomic.published", "atomic.durable", "atomic.linked")
+        target = Path(event["target"]).resolve()
+        root = root.resolve()
+        self.assertTrue(target.is_relative_to(root) or target == root.parent / "restored.bin",
+                        f"Checkpoint target {target} is outside fixture {root}")
+        if kind == "config":
+            document = json.loads((root / "config.json").read_text())
+            self.assertEqual(document["packs"] != info["initial_catalog"], published)
+        elif phase in PHASES or phase == "atomic.linked":
+            if kind in ("chunk", "manifest", "revision", "pack", "index", "restore"):
+                self.assertEqual(target.exists(), published)
+        if operation == "commit":
+            changed = checked["refs"]["heads/main"] != info["old_revision"]
+            self.assertEqual(changed, kind == "refs" and published)
+        elif operation == "detach":
+            archive = "archive/" + info["old_revision"]["id"]
+            archived = archive in checked["refs"]
+            changed = checked["refs"]["heads/main"] != info["old_revision"]
+            self.assertEqual(changed, kind == "refs" and occurrence == 2 and published)
+            if kind == "refs":
+                self.assertEqual(archived, occurrence == 2 or published)
+            else:
+                self.assertTrue(archived)
+        else:
+            self.assertEqual(checked["refs"], info["refs"])
+        if operation == "gc" and kind == "config" and published:
+            # The published GC catalog no longer retains dead packed chunks.
+            # Their dead loose manifest duplicate is still awaiting cleanup.
+            self.assertFalse(checked["audit_ok"])
+        elif operation == "gc" and (phase in PHASES or phase.startswith("pack.")):
+            self.assertTrue(checked["audit_ok"])
+        if phase in PHASES[:3]:
+            self.assertTrue(any(path.name.startswith(".tmp") for path in target.parent.iterdir()),
+                            "The killed writer did not leave its unpublished temporary file")
+
+    def test_production_has_no_checkpoint_controls(self):
+        probe = PROBE.read_bytes()
+        production = PRODUCTION.read_bytes()
+        reader = READER.read_bytes()
+        for label in (b"atomic.temporary_opened", b"pack.envelope_written", b"gc.loose_removed"):
+            self.assertIn(label, probe)
+            self.assertNotIn(label, production)
+            self.assertNotIn(label, reader)
+
+    def test_release_control_and_exclusive_lock(self):
+        directory = self.base / "release-control"
+        shutil.copytree(self.seeds[False, "commit"], directory)
+        root = directory / "store"
+        process, _ = self.launch(root, "atomic.file_synced", "refs", 1)
+        try:
+            locked = command("verify", root, ok=False)
+            self.assertIn("store busy", locked.stderr)
+            output, error = process.communicate("continue\n", timeout=30)
+            self.assertEqual(process.returncode, 0, error)
+            self.assertTrue(json.loads(output)["completed"])
+            self.assertTrue((directory / "unwound.txt").is_file())
+            self.assertTrue(command("verify", root)["audit_ok"])
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=10)
+
+    def test_hard_kill_reopen_and_resume(self):
+        completed = 0
+        verified = 0
+        for encrypted in (False, True):
+            for operation, phase, kind, occurrence in cases():
+                with self.subTest(encrypted=encrypted, operation=operation, phase=phase,
+                                  kind=kind, occurrence=occurrence):
+                    directory = self.base / f"case-{completed}-données"
+                    # A failing subtest must not reuse the next subtest's path.
+                    completed += 1
+                    shutil.copytree(self.seeds[encrypted, operation], directory)
+                    root = directory / "store"
+                    info = json.loads((directory / "fixture.json").read_text())
+                    untouched = snapshot(root)
+                    process, event = self.launch(root, phase, kind, occurrence)
+                    try:
+                        process.kill()  # SIGKILL on Unix, TerminateProcess on Windows.
+                        process.communicate(timeout=10)
+                        self.assertNotEqual(process.returncode, 0)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.communicate(timeout=10)
+                    self.assertFalse((directory / "unwound.txt").exists(), "Stack destructors ran")
+                    after_kill = snapshot(root)
+                    checked = command("verify", root)
+                    self.assertEqual(snapshot(root), after_kill, "Reopening/auditing changed stored bytes")
+                    self.assertTrue(checked["retained_files_verified"])
+                    self.assert_state(root, info, operation, phase, kind, occurrence, event, checked)
+                    recovered = command("resume", root)
+                    self.assertTrue(recovered["audit_ok"] and recovered["retained_files_verified"])
+                    if operation in ("append", "gc"):
+                        # Append preserves every old pack. GC preserves the fully live one.
+                        catalog = info["initial_catalog"] if operation == "append" else [info["initial_catalog"][1]]
+                        for pack in catalog:
+                            for extension in ("syp", "syi"):
+                                relative = f"packs/pack-{pack['name']}.{extension}"
+                                self.assertEqual(hashlib.sha256((root / relative).read_bytes()).hexdigest(),
+                                                 untouched[relative])
+                    if operation in ("append", "compact", "gc"):
+                        document = json.loads((root / "config.json").read_text())
+                        active = {f"pack-{pack['name']}.{extension}" for pack in document["packs"]
+                                  for extension in ("syp", "syi")}
+                        present = {path.name for path in (root / "packs").iterdir()
+                                   if path.name.startswith("pack-")}
+                        self.assertEqual(present, active, "Inactive generated packs were not cleaned")
+                    verified += 1
+        print(f"{verified}/{completed} process-kill checkpoints verified", flush=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

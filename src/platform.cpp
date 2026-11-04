@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "io_checkpoint.hpp"
 #include <cerrno>
 #include <cstdio>
 #include <fstream>
@@ -116,29 +117,36 @@ void atomic_stream(const fs::path &destination, const std::function<void(std::os
   {
     std::ofstream out(temp, std::ios::binary | std::ios::trunc);
     require(out.is_open(), "cannot write temporary file");
+    SYRNCK_IO_CHECKPOINT("atomic.temporary_opened", destination);
     writer(out);
+    SYRNCK_IO_CHECKPOINT("atomic.writer_finished", destination);
     out.flush();
     require(out.good(), "file write failed");
   }
   sync_file(temp);
+  SYRNCK_IO_CHECKPOINT("atomic.file_synced", destination);
 #ifdef _WIN32
   DWORD flags = MOVEFILE_WRITE_THROUGH | (replace ? MOVEFILE_REPLACE_EXISTING : 0);
   require(MoveFileExW(temp.c_str(), destination.c_str(), flags) != 0,
           "cannot publish file (destination may already exist)");
+  SYRNCK_IO_CHECKPOINT("atomic.published", destination);
 #else
   if (replace)
     require(::rename(temp.c_str(), destination.c_str()) == 0, "cannot replace file");
   else {
     require(::link(temp.c_str(), destination.c_str()) == 0,
             "cannot publish file (destination may already exist)");
+    SYRNCK_IO_CHECKPOINT("atomic.linked", destination);
     require(::unlink(temp.c_str()) == 0, "cannot unlink temporary file");
   }
+  SYRNCK_IO_CHECKPOINT("atomic.published", destination);
   int dir = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   require(dir >= 0, "cannot open directory for flush");
   int ok = ::fsync(dir);
   ::close(dir);
   require(ok == 0, "directory flush failed");
 #endif
+  SYRNCK_IO_CHECKPOINT("atomic.durable", destination);
 }
 void atomic_write(const fs::path &p, std::span<const std::uint8_t> b, bool replace) {
   atomic_stream(

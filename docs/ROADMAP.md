@@ -15,7 +15,8 @@ La priorité produit est de conserver toutes les capacités Git pour le code tou
 - [x] Migration C++20/CMake, compilation Windows x64 et tests locaux ; CI Windows/Linux/macOS.
 - [x] Compatibilité croisée avec les stores Rust v1, dont le chiffrement, et fixtures indépendantes de Rust.
 - [ ] Exécution réelle des matrices Linux/macOS et validation ARM64.
-- [ ] Validation de corpus Unreal et tests de crash/processus interrompus.
+- [x] Arrêts forcés aux frontières d'écriture/publication, reprise avec le moteur de production et reconstruction des versions conservées, en clair/chiffré ; campagne locale Windows x64.
+- [ ] Validation de corpus Unreal, exécution multiplateforme de la campagne de crash, injections d'erreurs système et coupures d'alimentation.
 
 Critère de sortie : aucune perte des versions conservées après suppression de racines, reprise de transfert ou panne contrôlée ; reconstruction identique octet par octet sur les plateformes cibles.
 

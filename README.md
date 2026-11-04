@@ -91,6 +91,8 @@ The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for
 
 Local builds and tests have been run on Windows x64 with MSVC. CI is configured for Windows, Linux, macOS, and Linux sanitizers; configuration alone does not establish that those remote runs have passed. The C++ implementation needs no Rust compiler or runtime. Compatibility fixtures exercise the original v1 Rust format, including encrypted stores.
 
+The [process interruption suite](docs/CRASH_RECOVERY.md) kills native writers at publication and cleanup boundaries, then reopens and resumes with the production core. It covers retained-file reconstruction in plaintext and encrypted stores. An interrupted GC may require completing its loose-object cleanup before a full `fsck` succeeds; the recovery guide explains this state. These tests exercise process termination with the OS running, rather than power-loss durability.
+
 Run [Gitleaks](https://github.com/gitleaks/gitleaks) before committing or uploading:
 
 ```text

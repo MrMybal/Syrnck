@@ -4,6 +4,10 @@
 including unreachable revisions, manifests and chunks. This is a read-only audit;
 retention and deletion remain the responsibility of `gc`.
 
+After a known interrupted GC, dead loose metadata can temporarily outlive its
+dead dependencies and fail this complete audit. Retained versions remain
+reconstructible; see [resuming interrupted cleanup](CRASH_RECOVERY.md#interrupted-garbage-collection).
+
 The audit reloads the configuration and validates the complete active pack
 indexes. It bypasses decoded data and validation caches, checks references, then
 enumerates revisions, manifests and chunks without constructing a complete

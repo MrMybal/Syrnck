@@ -1,4 +1,5 @@
 #include "pack_storage.hpp"
+#include "io_checkpoint.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -512,6 +513,7 @@ PackStorage PackStorage::build_stream(const fs::path &root, std::size_t count, c
         out.write(reinterpret_cast<const char *>(envelope.data()),
                   static_cast<std::streamsize>(envelope.size()));
         require(out.good(), "pack write failed");
+        SYRNCK_IO_CHECKPOINT("pack.envelope_written", pack_path);
         offset += envelope.size();
         previous = key;
         ++emitted;
@@ -656,8 +658,10 @@ std::pair<std::size_t, std::uint64_t> PackStorage::cleanup(bool remove) const {
     size += file.file_size();
   }
   if (remove)
-    for (const auto &file : obsolete)
+    for (const auto &file : obsolete) {
       require(fs::remove(file), "cannot remove obsolete pack file");
+      SYRNCK_IO_CHECKPOINT("pack.obsolete_removed", file);
+    }
   return {obsolete.size(), size};
 }
 } // namespace syrnck
