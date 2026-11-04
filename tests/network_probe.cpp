@@ -36,6 +36,11 @@ int entry(int argc, char **argv) {
                                  completed += event.complete;
                                  bytes_seen |= event.bytes > 0;
                                  if (event.path.starts_with("v1/objects/chunk/") && event.bytes > 0) {
+                                   if ((mode == "backoff" || mode == "pace") && !late.joinable())
+                                     late = std::jthread([&] {
+                                       std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                                       stop.request_stop();
+                                     });
                                    if (mode == "transfer")
                                      stop.request_stop();
                                    if (mode == "throw")
@@ -56,6 +61,12 @@ int entry(int argc, char **argv) {
       stop.request_stop();
     net::TransferOptions limits{static_cast<std::size_t>(std::stoull(argv[9])),
                                 static_cast<std::size_t>(std::stoull(argv[10]) * 1024 * 1024)};
+    if (mode == "backoff")
+      limits.retry_delay_ms = 2000;
+    if (mode == "pace") {
+      limits.upload_bytes_per_second = 1024;
+      limits.download_bytes_per_second = 1024;
+    }
     try {
       Json result;
       if (operation == "push")
@@ -78,7 +89,8 @@ int entry(int argc, char **argv) {
       require(mode == "uncertain", "unexpected uncertain publication");
       std::cout << "{\"uncertain\":true}\n";
     } catch (const Cancelled &) {
-      require(mode == "pre" || mode == "transfer" || mode == "publish", "unexpected cancellation");
+      require(mode == "pre" || mode == "transfer" || mode == "publish" || mode == "backoff" || mode == "pace",
+              "unexpected cancellation");
       std::cout << Json{{"cancelled", true}, {"events", events}}.dump() << '\n';
     } catch (const Error &error) {
       if (mode == "overlong" && std::string_view(error.what()).starts_with("HTTP transfer failed: ")) {

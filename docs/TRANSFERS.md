@@ -15,7 +15,7 @@ key material are never included in progress events. Events identify the relative
 protocol path, such as `v1/objects/chunk/ID`.
 
 `transferring` bytes are HTTP request-body plus response-body bytes for one
-request. They reset between requests. The total may initially be unknown; it
+attempt. They reset between requests and retry attempts. The total may initially be unknown; it
 becomes known when libcurl learns a content length, and is exact at successful
 request completion. Control requests also produce events. A completed request
 does not mean an imported object has passed validation or a reference has been
@@ -82,7 +82,8 @@ packed/encrypted stores. Local validation is Windows x64.
 
 Object requests default to sequential execution and can run concurrently with
 `--requests` and a buffer budget. See [parallel transfers and resource limits](PARALLEL_TRANSFERS.md).
+Transient idempotent requests now support bounded retries with backoff, and
+object traffic can use shared average targets. See the [retry and traffic policy](TRANSFER_POLICY.md).
 Push still materializes its closure and sorted object list; pull retains a seen
-set and pending traversal. There is no persistent session journal, automatic
-retry/backoff, bandwidth limit, background watcher or automatic Git
-push/checkout integration yet.
+set and pending traversal. There is no persistent session journal, background
+watcher or automatic Git push/checkout integration yet.

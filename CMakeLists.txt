@@ -226,6 +226,9 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME parallel_transfers COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/parallel_transfers.py
       $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
     set_tests_properties(parallel_transfers PROPERTIES TIMEOUT 90)
+    add_test(NAME resilient_transfers COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/resilient_transfers.py
+      $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
+    set_tests_properties(resilient_transfers PROPERTIES TIMEOUT 90)
     add_test(NAME repository_settings_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/repository_settings.py $<TARGET_FILE:syrnck>)
     add_test(NAME workflows COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/workflows.py $<TARGET_FILE:syrnck>)
     add_test(NAME localization COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization.py $<TARGET_FILE:syrnck>)

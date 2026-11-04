@@ -93,21 +93,37 @@ Remote::Remote(std::string url, std::string token, std::optional<fs::path> ca)
     base_ += '/';
 }
 Bytes Remote::request(std::string_view method, std::string_view path, std::span<const std::uint8_t> body,
-                      OperationOptions options) const {
+                      OperationOptions options, const TransferOptions *retry) const {
   Bytes payload;
   if (!body.empty())
     payload.assign(body.begin(), body.end());
   detail::HttpRequest request(base_, token_, ca_, std::string(method), std::string(path), std::move(payload),
-                              std::move(options));
-  return request.perform();
+                              options);
+  for (std::size_t retries = 0;; ++retries) {
+    try {
+      return request.perform();
+    } catch (...) {
+      auto delay = retry ? detail::retry_delay(std::current_exception(), retries, *retry) : std::nullopt;
+      if (!delay)
+        throw;
+      detail::wait_until(std::chrono::steady_clock::now() + *delay, options.stop);
+      request.restart();
+    }
+  }
 }
 void TransferOptions::validate() const {
   require(max_requests >= 1 && max_requests <= 32, "transfer requests must be in 1..32");
   require(max_in_flight_bytes >= max_object_size + 4096 && max_in_flight_bytes <= 1024ULL * 1024 * 1024,
           "transfer buffer must fit a maximum object and response and be at most 1 GiB");
+  require(max_retries <= 8, "transfer retries must be in 0..8");
+  require(retry_delay_ms >= 1 && retry_delay_ms <= 30000, "transfer retry delay must be in 1..30000 ms");
+  for (auto rate : {upload_bytes_per_second, download_bytes_per_second})
+    require(rate == 0 || (rate >= max_requests && rate <= (1ULL << 40)),
+            "transfer rate must be zero or between the request count and 1 TiB/s");
 }
-Refs Remote::refs(OperationOptions options) const {
-  return decode_refs(parse_json(request("GET", "v1/refs", {}, std::move(options))));
+Refs Remote::refs(OperationOptions options, TransferOptions limits) const {
+  limits.validate();
+  return decode_refs(parse_json(request("GET", "v1/refs", {}, std::move(options), &limits)));
 }
 Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
@@ -115,13 +131,14 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   throw_if_cancelled(options.stop);
   validate_ref(name);
   require(name.find('/') == name.npos, "remote reference must be a single component");
-  auto remote = refs(options);
+  auto remote = refs(options, limits);
   Json expected = remote.contains(std::string(name)) ? key_json(remote.at(std::string(name))) : Json(nullptr);
   auto closure = store.closure({root}, true, options.stop, options.progress);
   std::vector<ObjectKey> objects(closure.begin(), closure.end());
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
   detail::TransferStats stats;
+  detail::TrafficBudget traffic(limits);
   for (std::size_t start = 0; start < objects.size(); start += 4096) {
     throw_if_cancelled(options.stop);
     auto end = std::min(objects.size(), start + 4096);
@@ -132,7 +149,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
       allowed.insert(objects[i]);
     }
     auto body = batch.dump();
-    auto missing = parse_json(request("POST", "v1/missing", bytes(body), options));
+    auto missing = parse_json(request("POST", "v1/missing", bytes(body), options, &limits));
     require(missing.is_array(), "invalid missing response");
     std::set<ObjectKey> unique;
     for (const auto &value : missing) {
@@ -143,7 +160,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
     reused += end - start - unique.size();
     auto current = unique.begin();
     detail::transfer_objects(
-        base_, token_, ca_, true, limits, options, stats,
+        base_, token_, ca_, true, limits, options, stats, traffic,
         [&]() -> std::optional<ObjectKey> {
           return current == unique.end() ? std::nullopt : std::optional(*current++);
         },
@@ -172,7 +189,8 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
               {"transferred_bytes", total},
               {"reused_objects", reused},
               {"peak_object_requests", stats.peak_requests},
-              {"peak_object_buffer_bytes", stats.peak_buffered_bytes}};
+              {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
+              {"object_retries", stats.retries}};
 }
 Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
@@ -184,8 +202,9 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
   detail::TransferStats stats;
+  detail::TrafficBudget traffic(limits);
   detail::transfer_objects(
-      base_, token_, ca_, false, limits, options, stats,
+      base_, token_, ca_, false, limits, options, stats, traffic,
       [&]() -> std::optional<ObjectKey> {
         while (!pending.empty()) {
           throw_if_cancelled(options.stop);
@@ -220,7 +239,8 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
               {"transferred_bytes", total},
               {"reused_objects", reused},
               {"peak_object_requests", stats.peak_requests},
-              {"peak_object_buffer_bytes", stats.peak_buffered_bytes}};
+              {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
+              {"object_retries", stats.retries}};
 }
 void serve(Store &store, std::string_view token, std::string_view listen, Language language) {
   validate_token(token);

@@ -127,6 +127,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   agent push URL RÉF_LOCALE RÉF_DISTANTE
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
              [--requests 1..32] [--transfer-buffer-mib 64] (push ou pull)
+             [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
+Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
               fsck, native commit/export, git clean/smudge et agent push/pull.
@@ -165,6 +167,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   agent push URL LOCAL_REF REMOTE_REF
   agent pull URL REMOTE_REF LOCAL_REF
              [--requests 1..32] [--transfer-buffer-mib 64] (push or pull)
+             [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
+Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
           fsck, native commit/export, git clean/smudge and agent push/pull.
@@ -444,6 +448,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(size >= 17 && size <= 1024, "transfer buffer must be in 17..1024 MiB");
       limits.max_in_flight_bytes = static_cast<std::size_t>(size * 1024 * 1024);
     }
+    if (auto retries = args.option("--retries")) {
+      auto count = integer(*retries);
+      require(count <= 8, "transfer retries must be in 0..8");
+      limits.max_retries = static_cast<std::size_t>(count);
+    }
+    auto rate = [&](std::string_view option) {
+      auto value = args.option(option);
+      auto kib = value ? integer(*value) : 0;
+      require(kib <= (1ULL << 30), "transfer rate must be in 0..1073741824 KiB/s");
+      return kib * 1024;
+    };
+    limits.upload_bytes_per_second = rate("--upload-kib-s");
+    limits.download_bytes_per_second = rate("--download-kib-s");
     limits.validate();
     args.count(3);
     require(token.has_value(), "set SYRNCK_TOKEN");
@@ -453,7 +470,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(refs.contains(args.values[1]), "unknown local reference");
       print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
     } else if (sub == "pull") {
-      auto refs = remote.refs({control->token(), observe});
+      auto refs = remote.refs({control->token(), observe}, limits);
       require(refs.contains(args.values[1]), "unknown remote reference");
       print(remote.pull(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
     } else

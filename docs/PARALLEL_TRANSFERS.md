@@ -50,6 +50,7 @@ The final statistics retain `transferred_objects`, `transferred_bytes` and
 | --- | --- |
 | `peak_object_requests` | Maximum simultaneous scheduled object requests |
 | `peak_object_buffer_bytes` | Maximum charged upload/response-buffer credits |
+| `object_retries` | Additional object attempts scheduled after transient failures |
 
 The buffer counter includes reserved response capacity, even when a response is
 small. It is **not process RSS**. It excludes allocator overhead, libcurl/TLS
@@ -60,11 +61,17 @@ The options do not bound all metadata or total process memory.
 
 ## Failure and publication
 
-Any request failure, corrupt response, observer exception or cooperative stop
+An exhausted/non-retriable request failure, corrupt response, observer exception or cooperative stop
 removes remaining easy handles and releases their payloads. Removal happens
 outside libcurl callbacks. C callbacks capture exceptions and return an error;
 the coordinator rethrows the original exception. Previously retained roots stay
 complete; already verified unreferenced objects can be reused on retry.
+
+Transient failures retry with bounded backoff; waiting requests retain their
+slot and buffer credits while other active requests can continue. Optional
+upload/download targets are shared across parallel requests. See the
+[retry and traffic policy](TRANSFER_POLICY.md) for the allowlist, counters,
+units, pacing limits and cancellation rules.
 
 Progress events from different protocol paths can interleave. Each request's
 byte counter remains scoped to its own path. Completion of a request does not
@@ -84,5 +91,5 @@ Local validation is Windows x64; other platform/sanitizer runs await CI.
 
 The production server still serializes Store operations under its mutex while
 HTTP IO can overlap. Metadata traversal and imports remain coordinated rather
-than parallel. Persistent transfer journals, automatic retry/backoff, bandwidth
-limits, network compression and multi-source scheduling remain future work.
+than parallel. Persistent transfer journals, network compression and multi-source
+scheduling remain future work.

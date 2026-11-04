@@ -95,6 +95,8 @@ The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for
 
 Agent transfers accept `--requests 4 --transfer-buffer-mib 64` to overlap object requests while keeping Store access coordinated. The default remains one request; the buffer budget covers object payloads and reserved responses, rather than total process memory. See [parallel transfer limits and recovery](docs/PARALLEL_TRANSFERS.md). Packing and GC support progress/cancellation during preparation, then finish committed cleanup; see [maintenance boundaries](docs/MAINTENANCE.md).
 
+Transient requests retry up to three times by default (`--retries 0..8`). Optional `--upload-kib-s` and `--download-kib-s` targets share object bandwidth across parallel requests; zero means unlimited. Retry and pacing waits are cancellable. The final reference publication is never retried automatically. See [retry and traffic policy](docs/TRANSFER_POLICY.md).
+
 ## Validation and repository publishing
 
 Local builds and tests have been run on Windows x64 with MSVC. CI is configured for Windows, Linux, macOS, and Linux sanitizers; configuration alone does not establish that those remote runs have passed. The C++ implementation needs no Rust compiler or runtime. Compatibility fixtures exercise the original v1 Rust format, including encrypted stores.

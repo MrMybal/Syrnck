@@ -211,7 +211,7 @@ class NetworkOperations(unittest.TestCase):
             remote.server_error = False
             result = self.cmd("agent", "push", remote.url, self.source_ref, "cli", "--progress-json")
             self.assertEqual(set(json.loads(result.stdout)), {"transferred_objects", "transferred_bytes", "reused_objects",
-                                                              "peak_object_requests", "peak_object_buffer_bytes"})
+                                                              "peak_object_requests", "peak_object_buffer_bytes", "object_retries"})
             events = [json.loads(line) for line in result.stderr.splitlines()]
             self.assertTrue(any(e["phase"] == "transferring" for e in events))
             self.assertEqual(events[-1]["phase"], "publishing")

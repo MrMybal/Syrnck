@@ -59,7 +59,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
 - [ ] Compression réseau négociée et cache des présences.
-- [ ] Journal persistant des sessions de transfert, retry/backoff et débits limités.
+- [x] Retry/backoff bornés des requêtes idempotentes, attente annulable et cibles de débit partagées entre les requêtes ; publication finale jamais relancée automatiquement.
+- [ ] Journal persistant des sessions de transfert et protection des objets en cours contre le GC.
 - [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
 
 Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets transférés mesurés ; aucun réglage de vitesse ne dégrade les garanties de reconstruction. Les cibles chiffrées doivent être fixées à partir des machines et des corpus de référence.
