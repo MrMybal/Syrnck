@@ -15,7 +15,8 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `native commit`, `native export`, `git clean` and `git smudge` accept mutually
+`put`, `get`, `fsck`, `native commit/export`, `git clean/smudge` and
+`agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
 flag, successful commands stay quiet on stderr. Other commands reject these
@@ -42,7 +43,7 @@ exits with code **130**. The handler only records an atomic flag; an ordinary
 monitor thread requests the C++ stop token. A read blocked on a pipe or device
 must return before cancellation can finish. Repeated interrupts request the
 same stop; forced process termination still uses the separate crash-recovery
-path. Network, packing and GC do not yet use this controller.
+path. Packing and GC do not yet use this controller.
 
 The implementation follows the C++ requirements for
 [signal-safe operations](https://eel.is/c++draft/support.signal) and
@@ -56,12 +57,13 @@ the Unix SIGINT/SIGTERM cases are included for the next platform CI run.
 
 ## C++ operations
 
-`IngestOptions::progress` receives a `ProgressEvent` synchronously on the calling
-coordinator thread. Phases are scanning, ingesting, reconstructing and publishing.
-Events contain processed bytes, an optional total, optional path context, a
-per-file completion flag and the current buffered-block count. Native commits
-provide each relative file path and its observed size. An ordinary stream import
-has no known total. Empty files still report progress and completion.
+C++ observers receive a `ProgressEvent` synchronously on the calling coordinator
+thread. Phases are scanning, ingesting, reconstructing, verifying, exporting,
+transferring and publishing. Events contain processed bytes, an optional total,
+optional path context, a completion flag for the reported scope and the current
+buffered-block count. Native commits provide each relative file path and its
+observed size. An ordinary stream import has no known total. Empty files still
+report progress and completion.
 
 Paths are borrowed for the duration of the callback. Copy them if retaining an
 event. Callbacks must not reenter or mutate the same Store. An exception stops
@@ -82,9 +84,9 @@ Cancellation is checked between reads, blocks, directory entries and publication
 Current native IO/codec work may finish before control returns. Worker threads
 only encode data; the coordinator performs writes and callbacks. A stopped import
 can leave reusable unreferenced blocks. If cancellation arrives after manifest
-publication, that complete unreferenced manifest can also remain. A completion
-event describes the current file's processing, rather than final branch/pin or
-destination publication.
+publication, that complete unreferenced manifest can also remain. A completed
+ingestion event describes the current file's processing, rather than final
+branch/pin or destination publication.
 
 Native commits validate their complete closure before publishing a branch and
 check cancellation through this traversal and the final atomic reference write.
@@ -117,7 +119,11 @@ only need to audit the entire store should use streaming `fsck`.
 Multi-file native exports stage a complete tree before exclusive publication.
 See [export guarantees, progress and recovery](EXPORT.md).
 
-These options do not yet extend to GC, packing or network transfers.
+Network requests also support these options, with a separate final remote
+publication commit point and exit 3 for uncertain publication. See
+[transfer cancellation, progress and recovery](TRANSFERS.md).
+
+These options do not yet extend to GC or packing.
 Process-kill recovery remains a separate mechanism described in
 [crash recovery](CRASH_RECOVERY.md). No object, pointer, network or C ABI format
 changes are needed; C++ callers should rebuild against the updated headers.

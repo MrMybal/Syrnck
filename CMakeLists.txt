@@ -213,6 +213,11 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME cli_operations COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_operations.py
       $<TARGET_FILE:syrnck> ${SYRNCK_CONSOLE_RUNNER})
     set_tests_properties(cli_operations PROPERTIES TIMEOUT 90)
+    add_executable(syrnck_network_probe tests/network_probe.cpp)
+    target_link_libraries(syrnck_network_probe PRIVATE syrnck_net)
+    add_test(NAME network_operations COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/network_operations.py
+      $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
+    set_tests_properties(network_operations PROPERTIES TIMEOUT 90)
     add_test(NAME repository_settings_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/repository_settings.py $<TARGET_FILE:syrnck>)
     add_test(NAME workflows COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/workflows.py $<TARGET_FILE:syrnck>)
     add_test(NAME localization COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization.py $<TARGET_FILE:syrnck>)

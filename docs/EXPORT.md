@@ -22,8 +22,9 @@ publication result. References and source objects are unchanged.
 
 The staging directory is named `.syrnck-export-<32 lowercase hex digits>` in the
 destination's existing parent. This keeps staging and publication on the same
-filesystem. Unix staging roots start with owner-only permissions. Files contain
-their ordinary decoded bytes; executable metadata is restored on Unix.
+filesystem. Unix staging roots use owner-only permissions, retained by the
+published root. Files contain their ordinary decoded bytes; executable metadata
+is restored on Unix.
 Cancellation, callback exceptions and ordinary write/publication failures clean
 up only this invocation's staging directory. Output paths remain validated
 revision paths, reconstructed from complete manifests.

@@ -62,7 +62,7 @@ Pour les gros fichiers, `syrnck put fichier.bin --workers 4 --buffer-mib 32` act
 
 Les réglages du pipeline et les limites des packs sont persistants par dépôt via `config set`. Les options explicites les remplacent pour l'opération, y compris pour `native commit` et `git clean`. Voir les [réglages du dépôt](docs/SETTINGS.md).
 
-Les imports, commits natifs, reconstructions et filtres Git acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative et renvoie le code 130 avant publication d'une destination ou référence incomplète. Une opération native en cours peut finir ; une publication atomique déjà engagée peut aboutir. Voir [progression, annulation et limites](docs/OPERATIONS.md).
+Les imports, commits/exports natifs, reconstructions, audits `fsck`, filtres Git et transferts de l'agent acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative (code 130). Les exports préparent une arborescence complète avant publication exclusive et préservent les destinations existantes. Une publication déjà engagée peut aboutir. Si la réponse de publication distante est perdue ou ambiguë, le code 3 invite à inspecter la référence. Voir les [contrats des opérations](docs/OPERATIONS.md), [exports transactionnels](docs/EXPORT.md) et [reprises réseau](docs/TRANSFERS.md).
 
 Le cache du moteur évite de répéter le déchiffrement et la décompression d'objets déjà vérifiés, après contrôle de leur enveloppe actuelle. Il est borné à 64 Mio de données et 8 192 empreintes par défaut, configurable avec `--cache-mib` et désactivable avec `--cache-mib 0`. `fsck` et `gc` effectuent leur validation complète sans ce cache.
 

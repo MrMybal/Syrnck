@@ -81,7 +81,7 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).
 
-Imports, native commits, reconstruction and Git filters accept `--progress` (English/French) or `--progress-json`, both on stderr. Ctrl+C requests cooperative cancellation and exits with code 130 before publishing an incomplete destination or reference. Current native IO may finish first, and an atomic publication already started can complete. See [progress, cancellation and limits](docs/OPERATIONS.md).
+Imports, native commits/exports, reconstruction, `fsck`, Git filters and agent transfers accept `--progress` (English/French) or `--progress-json` on stderr. Ctrl+C requests cooperative cancellation (exit 130). Native exports prepare a complete tree before exclusive publication; existing destinations are preserved. A publication already started can complete. Remote publication with a lost/ambiguous response exits 3 so the caller can inspect the reference. See [operation contracts](docs/OPERATIONS.md), [transactional exports](docs/EXPORT.md) and [transfer recovery](docs/TRANSFERS.md).
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

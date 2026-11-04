@@ -128,7 +128,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get,
-              fsck, native commit et git clean/smudge. Ctrl+C annule (code 130).
+              fsck, native commit/export, git clean/smudge et agent push/pull.
+              Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 )";
     return;
@@ -164,7 +165,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   agent pull URL REMOTE_REF LOCAL_REF
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get,
-          fsck, native commit and git clean/smudge. Ctrl+C cancels (exit 130).
+          fsck, native commit/export, git clean/smudge and agent push/pull.
+          Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 )";
 }
@@ -235,6 +237,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable = command == "put" || command == "get" || command == "fsck" ||
                      (command == "native" && (sub == "commit" || sub == "export")) ||
+                     (command == "agent" && (sub == "push" || sub == "pull")) ||
                      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
@@ -434,11 +437,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     if (sub == "push") {
       auto refs = store.refs();
       require(refs.contains(args.values[1]), "unknown local reference");
-      print(remote.push(store, refs.at(args.values[1]), args.values[2]));
+      print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}));
     } else if (sub == "pull") {
-      auto refs = remote.refs();
+      auto refs = remote.refs({control->token(), observe});
       require(refs.contains(args.values[1]), "unknown remote reference");
-      print(remote.pull(store, refs.at(args.values[1]), args.values[2]));
+      print(remote.pull(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}));
     } else
       throw Error("unknown agent command");
   } else
@@ -456,6 +459,9 @@ int entry(Args args) {
     if (code)
       language = parse_language(*code);
     return run(std::move(args), language, control);
+  } catch (const net::PublicationUncertain &error) {
+    std::cerr << localize("Error: ", language) << localize(error.what(), language) << '\n';
+    return 3;
   } catch (const Cancelled &) {
     std::cerr << localize("Error: ", language) << localize("operation cancelled", language) << '\n';
     return 130;

@@ -39,7 +39,10 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Pipeline d'ingestion avec compression/chiffrement parallèles, plafond d'octets et de tâches ; écriture coordonnée et annulation coopérative C++.
 - [x] Réglages persistants par dépôt, surcharges explicites et propagation du pipeline aux commits natifs et filtres Git.
 - [x] Progression C++ et CLI (texte anglais/français ou JSON sur stderr), annulation coopérative des imports, commits, reconstructions et filtres ; protection des références et destinations avant publication.
-- [ ] Étendre l'annulation et la progression à la maintenance, aux audits, à l'export et aux transferts ; validation des signaux sur les autres plateformes.
+- [x] Audits `fsck` interruptibles, progression des vérifications et restauration des sessions/caches après annulation.
+- [x] Exports natifs préparés puis publiés par renommage exclusif ; annulation, collisions et arrêts forcés vérifiés.
+- [x] Progression et annulation de l'agent HTTP, reprise des objets vérifiés et résultat explicite si la réponse de publication distante est perdue.
+- [ ] Étendre l'annulation et la progression au GC et à l'empaquetage ; validation des signaux et du renommage exclusif sur les autres plateformes.
 - [x] Cache borné de lectures vérifiées, contrôle de l'enveloppe à chaque accès et validation des fichiers dans la traversée des dépendances.
 - [ ] Index transactionnel des objets vérifiés ; validation incrémentale des dépendances.
 - [x] Pack immuable indexé, activation physique v2 explicite, compaction GC et reprise aux frontières de publication simulées.
@@ -54,7 +57,7 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [ ] Transferts parallèles bornés, compression réseau négociée et cache des présences.
-- [ ] Reprise persistante, débits limités, annulation et progression.
+- [ ] Journal persistant des sessions de transfert, retry/backoff et débits limités.
 - [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
 
 Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets transférés mesurés ; aucun réglage de vitesse ne dégrade les garanties de reconstruction. Les cibles chiffrées doivent être fixées à partir des machines et des corpus de référence.

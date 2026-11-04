@@ -1,0 +1,113 @@
+#include <syrnck/net.hpp>
+#include <chrono>
+#include <iostream>
+#include <thread>
+using namespace syrnck;
+int entry(int argc, char **argv) {
+  try {
+    require(argc == 9, "network probe expects mode operation store URL kind ID ref encryption");
+    std::string mode = argv[1], operation = argv[2];
+    std::optional<Key> key;
+    if (std::string_view(argv[8]) == "encrypted") {
+      key.emplace();
+      key->fill(0x39);
+    }
+    Store store(path_from_utf8(argv[3]), key);
+    net::Remote remote(argv[4], "syrnck-test-token-0123456789-0123456789");
+    ObjectKey root{parse_kind(argv[5]), argv[6]};
+    if (mode == "invalid") {
+      auto manifest = store.metadata(Kind::manifest, root.id);
+      manifest["file_hash"] = std::string(64, '0');
+      auto value = manifest.dump();
+      root = store.put(Kind::manifest, {reinterpret_cast<const std::uint8_t *>(value.data()), value.size()})
+                 .first;
+    }
+    std::stop_source stop;
+    std::jthread late;
+    auto caller = std::this_thread::get_id();
+    std::size_t events = 0, completed = 0;
+    bool bytes_seen = false;
+    OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
+                               require(caller == std::this_thread::get_id(),
+                                       "network observer changed thread");
+                               ++events;
+                               if (event.phase == ProgressPhase::transferring) {
+                                 completed += event.complete;
+                                 bytes_seen |= event.bytes > 0;
+                                 if (event.path.starts_with("v1/objects/") && event.bytes > 0) {
+                                   if (mode == "transfer")
+                                     stop.request_stop();
+                                   if (mode == "throw")
+                                     throw Error("network observer sentinel");
+                                 }
+                               }
+                               if (event.phase == ProgressPhase::publishing) {
+                                 if (mode == "publish")
+                                   stop.request_stop();
+                                 if (mode == "late")
+                                   late = std::jthread([&] {
+                                     std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                                     stop.request_stop();
+                                   });
+                               }
+                             }};
+    if (mode == "pre")
+      stop.request_stop();
+    try {
+      Json result;
+      if (operation == "push")
+        result = remote.push(store, root, argv[7], options);
+      else if (operation == "pull")
+        result = remote.pull(store, root, argv[7], options);
+      else {
+        (void)remote.refs(options);
+        result = Json::object();
+      }
+      require(mode == "ok" || mode == "late", "network probe expected failure");
+      std::cout << Json{{"result", result},
+                        {"events", events},
+                        {"completed", completed},
+                        {"bytes_seen", bytes_seen},
+                        {"stopped", stop.stop_requested()}}
+                       .dump()
+                << '\n';
+    } catch (const net::PublicationUncertain &) {
+      require(mode == "uncertain", "unexpected uncertain publication");
+      std::cout << "{\"uncertain\":true}\n";
+    } catch (const Cancelled &) {
+      require(mode == "pre" || mode == "transfer" || mode == "publish", "unexpected cancellation");
+      std::cout << Json{{"cancelled", true}, {"events", events}}.dump() << '\n';
+    } catch (const Error &error) {
+      if (mode == "corrupt" && std::string_view(error.what()) == "object hash mismatch") {
+        std::cout << "{\"corrupt_response\":true}\n";
+        return 0;
+      }
+      if (mode == "invalid" && std::string_view(error.what()) == "reconstructed file hash mismatch") {
+        std::cout << "{\"invalid_source\":true}\n";
+        return 0;
+      }
+      require(mode == "throw" && std::string_view(error.what()) == "network observer sentinel",
+              "network observer error was lost");
+      std::cout << "{\"observer_error\":true}\n";
+    }
+    return 0;
+  } catch (const std::exception &error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
+}
+#ifdef _WIN32
+int wmain(int argc, wchar_t **argv) {
+  std::vector<std::string> values;
+  for (int i = 0; i < argc; ++i)
+    values.push_back(utf8(argv[i]));
+  std::vector<char *> pointers;
+  for (auto &value : values)
+    pointers.push_back(value.data());
+  return entry(argc, pointers.data());
+}
+#else
+int main(int argc, char **argv) {
+  return entry(argc, argv);
+}
+#endif
