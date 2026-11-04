@@ -16,6 +16,7 @@ crash by throwing an exception or unwinding the stack.
 | --- | --- |
 | Revision publication | Parallel ingestion, chunk/manifest/revision writes and reference replacement; previous revision and archive remain reconstructible |
 | Native staging | Selected chunk/manifest/snapshot writes, atomic branch/index commit and index reset; prepared bytes survive, with either the old head plus index or the new head without index |
+| Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
 | Incremental packing | Pack/index staging, second-pack construction, catalog replacement and loose cleanup; existing packs remain byte-identical |
 | Compaction | Staging, catalog replacement, loose and obsolete-file cleanup; every logical object survives |
@@ -42,7 +43,7 @@ audit. Packing and GC must clean inactive generated pack/index files. A positive
 control releases the checkpoint normally and confirms that another process
 cannot open the locked store while the writer is paused.
 
-The local Windows x64 Release run on 4 November 2026 passed **292 process-kill
+The local Windows x64 Release run on 4 November 2026 passed **406 process-kill
 combinations**, plus checkpoint/lock and production-isolation checks. Unix adds
 hard-link-boundary cases. This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
@@ -52,6 +53,12 @@ Exports may leave `.syrnck-export-<32 hex>` sibling directories after a hard
 kill. Recovery verifies the published tree if present; a retry prepares a fresh
 tree if the destination is absent. It does not remove old staging directories
 automatically. See [export recovery and publication guarantees](EXPORT.md).
+
+Native checkout persists an active journal and source/target pins before working
+file moves. Opening the Store leaves working files untouched; use
+`native checkout-status` and `native checkout-recover` (or `--abort` before
+publication). Completed branch publication can only finish cleanup. See
+[checkout recovery, retention and private-data limits](NATIVE_CHECKOUT.md).
 
 ## Interrupted garbage collection
 
@@ -96,7 +103,7 @@ implemented; generated inactive `.syp/.syi` cleanup is a separate mechanism.
 ## Test isolation and reproduction
 
 Only the private `syrnck_crash_io` object target defines
-`SYRNCK_TEST_IO_CHECKPOINTS`. It recompiles the three IO translation units with
+`SYRNCK_TEST_IO_CHECKPOINTS`. It recompiles the four IO translation units with
 the production target's compiler options, definitions and dependencies. The probe
 links these objects; the recovery reader links only the normal core. The CLI,
 C libraries, installed targets and production core have no checkpoint calls,

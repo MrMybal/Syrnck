@@ -785,6 +785,7 @@ std::size_t Store::fsck(OperationOptions options) const {
 }
 Json Store::gc(bool remove, OperationOptions options) const {
   throw_if_cancelled(options.stop);
+  require_no_native_checkout(*this);
   std::vector<ObjectKey> roots, partial;
   transfer_gc_roots(roots, partial, options.stop);
   auto uploads = prepare_upload_gc(options.stop, remove);

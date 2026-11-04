@@ -14,7 +14,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 
 | Component | Available functionality |
 | --- | --- |
-| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/snapshot diff, revisions, retention and GC |
+| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/recoverable checkout/snapshot diff, revisions, retention and GC |
 | `syrnck_git` | Git filters, asset catalogs, retention inventory/protection, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
@@ -84,13 +84,15 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).
 
-Imports, native commit/add/staged/reset/status/diff/export commands, reconstruction, `fsck`, Git filters and agent transfers accept `--progress` (English/French) or `--progress-json` on stderr. Ctrl+C requests cooperative cancellation (exit 130). Native exports prepare a complete tree before exclusive publication; existing destinations are preserved. A publication already started can complete. Remote publication with a lost/ambiguous response exits 3 so the caller can inspect the reference. See [operation contracts](docs/OPERATIONS.md), [transactional exports](docs/EXPORT.md) and [transfer recovery](docs/TRANSFERS.md).
+Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export commands, reconstruction, `fsck`, Git filters and agent transfers accept `--progress` (English/French) or `--progress-json` on stderr. Ctrl+C requests cooperative cancellation (exit 130). Native exports prepare a complete tree before exclusive publication; existing destinations are preserved. A publication already started can complete. Remote publication with a lost/ambiguous response exits 3 so the caller can inspect the reference. See [operation contracts](docs/OPERATIONS.md), [transactional exports](docs/EXPORT.md) and [transfer recovery](docs/TRANSFERS.md).
 
 `native status` hashes working files against a native branch or exact revision without ingesting them. `native diff SOURCE TARGET` compares snapshot metadata, including content, mode and manifest changes. See [native comparison contracts and limits](docs/NATIVE_COMPARISON.md).
 
 `native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Text patches and merge remain future work.
 
-`native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. This is a read-only preflight; checkout execution and its recovery journal remain future work. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).
+`native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).
+
+`native checkout REVISION` restores a clean tracked workspace and moves the selected branch, archiving its previous head and retaining the target. `native checkout-status` inspects an interrupted operation; `native checkout-recover` resumes it and `--abort` restores the originals before publication. File moves are sequential; the journal makes them recoverable. Prepared outputs and backups are plaintext even with encrypted objects. There is no current-branch/HEAD state, force option or automatic checkout-history pruning yet. See [checkout guarantees, retention and recovery](docs/NATIVE_CHECKOUT.md).
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

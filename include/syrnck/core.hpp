@@ -282,6 +282,12 @@ public:
   // This reports proposed actions and blockers; it never changes working files.
   Json plan_checkout(const fs::path &, std::string_view branch, std::string_view target,
                      bool verify_objects = false, OperationOptions = {}) const;
+  // Apply the clean-workspace policy, preserving the previous head in an
+  // archive. Interrupted operations require explicit recovery; no force mode.
+  Json checkout_directory(const fs::path &, std::string_view branch, std::string_view target,
+                          OperationOptions = {}) const;
+  Json checkout_status(const std::optional<std::string> &transaction = {}) const;
+  Json recover_checkout(bool abort = false, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

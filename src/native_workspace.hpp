@@ -27,6 +27,10 @@ struct NativeSnapshotFile {
 using NativeSnapshot = std::map<std::string, NativeSnapshotFile>;
 NativeSnapshot read_native_snapshot(const Store &, std::string_view, OperationOptions);
 NativeContent hash_native_file(const NativeFile &, Bytes &buffer, const OperationOptions &);
+bool native_link_like(const fs::path &, const fs::file_status &);
+void verify_native_checkout_namespace(const Store &, const fs::path &, const std::vector<std::string> &target,
+                                      const std::vector<std::string> &removed, OperationOptions,
+                                      bool final = true);
 // Shared snapshot selection for native commit and working-directory status.
 void visit_native_files(const fs::path &directory, const fs::path &store,
                         const std::function<void(const NativeFile &)> &, OperationOptions);

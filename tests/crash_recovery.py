@@ -33,6 +33,18 @@ def cases():
     atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
     atomic("stage-commit", ("revision", "refs"))
     atomic("stage-reset", ("refs",))
+    for occurrence in (1, 2, 3, 4):
+        atomic("checkout", ("refs",), occurrence)
+    atomic("checkout", ("checkout-prepared",))
+    for kind in ("checkout-backup", "export-file"):
+        result.extend(("checkout", phase, kind, 1) for phase in ("move.before", "move.published", "move.durable"))
+    result.extend(("checkout", phase, "checkout", 1) for phase in
+                  ("checkout.prepared", "checkout.applied", "checkout.committed", "checkout.cleaned"))
+    for occurrence in (1, 2, 3):
+        atomic("checkout-abort", ("refs",), occurrence)
+    for kind in ("checkout-prepared", "export-file"):
+        result.extend(("checkout-abort", phase, kind, 1) for phase in ("move.before", "move.published", "move.durable"))
+    result.append(("checkout-abort", "checkout.cleaned", "checkout", 1))
     result.extend(("commit", phase, "chunk", 2) for phase in ("atomic.file_synced", "atomic.published"))
     for occurrence in (1, 2):
         atomic("detach", ("refs",), occurrence)
@@ -122,13 +134,14 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
+                        (operation in ("checkout", "checkout-abort") and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")
         if kind == "config":
             document = json.loads((root / "config.json").read_text())
             self.assertEqual(document["packs"] != info["initial_catalog"], published)
         elif phase in PHASES or phase == "atomic.linked":
-            if kind in ("chunk", "manifest", "revision", "pack", "index", "restore", "export-file"):
+            if kind in ("chunk", "manifest", "revision", "pack", "index", "restore", "export-file", "checkout-prepared"):
                 self.assertEqual(target.exists(), published)
         elif phase.startswith("directory."):
             self.assertEqual(target.exists(), published)
@@ -137,6 +150,11 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation in ("checkout", "checkout-abort"):
+            changed = operation == "checkout" and (
+                (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
+                phase in ("checkout.committed", "checkout.cleaned"))
+            self.assertEqual(checked["refs"]["heads/main"] != info["old_revision"], changed)
         elif operation in ("stage-add", "stage-commit", "stage-reset"):
             changed = kind == "refs" and published
             refs = checked["refs"]

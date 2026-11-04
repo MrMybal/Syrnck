@@ -208,6 +208,7 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
                                     std::string_view message, IngestOptions options) const {
   throw_if_cancelled(options.stop);
   validate_ref(branch);
+  require_no_native_checkout(*this);
   require(!refs().contains("staging/" + std::string(branch)),
           "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
@@ -245,6 +246,7 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
   return key.id;
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {
+  require_no_native_checkout(*this);
   validate_ref(branch);
   auto name = "heads/" + std::string(branch);
   auto all = refs();

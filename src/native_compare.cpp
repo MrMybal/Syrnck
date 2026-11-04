@@ -62,7 +62,11 @@ Json changes(const Snapshot &source, const Snapshot &target, bool workspace,
     const File *before = have_left ? &left->second : nullptr, *after = have_right ? &right->second : nullptr;
     const bool content_changed = !before || !after || before->content.size != after->content.size ||
                                  before->content.hash != after->content.hash;
-    const bool executable_changed = before && after && before->executable != after->executable;
+    bool executable_changed = before && after && before->executable != after->executable;
+#ifdef _WIN32
+    if (workspace)
+      executable_changed = false;
+#endif
     const bool manifest_changed = !before || !after || before->manifest != after->manifest;
     if (content_changed || executable_changed || (!workspace && manifest_changed)) {
       const auto status = !before ? (workspace ? "untracked" : "added") : !after ? "removed" : "modified";

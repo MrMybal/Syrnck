@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/diff/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export`, `git clean/smudge/filter-process`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -63,6 +63,16 @@ planning inventories ignored/untracked paths, hashes tracked files and optionall
 verifies the complete target closure with `--verify`. It ends with a complete
 planning event; blockers are a completed JSON result with CLI exit 1. Neither
 operation publishes files/references or emits a publishing callback.
+
+[Native checkout](NATIVE_CHECKOUT.md) journals preparation and sequential file
+moves, with explicit resume/abort. Cancellation after journal creation can leave
+a partial workspace while the original branch remains unchanged. The last
+observer before atomic branch/journal publication is `publishing` with path
+`checkout`; afterwards cleanup has no callbacks or cancellation. A cleanup error
+can leave a committed journal: inspect `native checkout-status` and resume,
+as abort is refused after publication. GC and native workspace writes remain
+blocked until the active journal has been cleaned. Prepared targets and original
+backups contain plaintext even when Store objects are encrypted.
 
 [Native staging](NATIVE_STAGING.md) freezes selected files during `native add`;
 `staged` reads metadata and `reset` changes only the index. Staged commit never

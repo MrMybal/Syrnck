@@ -16,6 +16,12 @@ std::string target_kind(const fs::path &path) {
     return "config";
   if (name == "refs.json")
     return "refs";
+  if (name == "checkout.state")
+    return "checkout";
+  if (path.parent_path().filename() == "old")
+    return "checkout-backup";
+  if (path.parent_path().filename() == "new")
+    return "checkout-prepared";
   if (name == "restored.bin")
     return "restore";
   if (name == "exported")
@@ -103,6 +109,12 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (operation == "checkout" || operation == "checkout-abort") {
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
+    const auto next = put_revision(store, ingest(store, 1), tip);
+    store.set_ref("pins/checkout-target", next);
+    info["new_revision"] = key_json(next);
+  }
   if (operation == "stage-add" || operation == "stage-commit" || operation == "stage-reset") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(1)), false);
     if (operation != "stage-add")
@@ -146,6 +158,13 @@ void perform(Store &store, const Json &info) {
       store.commit_staged("main", "Staged crash fixture");
   } else if (op == "stage-reset") {
     store.reset_stage("main");
+  } else if (op == "checkout") {
+    if (store.checkout_status()["pending"].get<bool>())
+      store.recover_checkout();
+    else if (store.refs().at("heads/main") != parse_key(info.at("new_revision")))
+      store.checkout_directory(store.root().parent_path(), "main", parse_key(info.at("new_revision")).id);
+  } else if (op == "checkout-abort") {
+    store.recover_checkout(true);
   } else if (op == "detach") {
     store.detach_history("main", "Detached crash fixture");
   } else if (op == "append" || op == "compact") {
@@ -186,6 +205,24 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op == "checkout" || op == "checkout-abort") {
+    const auto status = store.checkout_status();
+    const auto working = root.parent_path() / "asset.bin";
+    if (fs::exists(working))
+      check(text(read_bytes(working)) == content(0) || text(read_bytes(working)) == content(1),
+            "checkout published incomplete working bytes");
+    else {
+      check(status["pending"].get<bool>(), "checkout lost a working file without a journal");
+      const auto backup = path_from_utf8(status["data_directory"].get<std::string>()) / "old/0.bin";
+      check(fs::exists(backup) && text(read_bytes(backup)) == content(0), "checkout lost its source backup");
+    }
+    if (resumed) {
+      check(!status["pending"].get<bool>() && fs::exists(working) &&
+                text(read_bytes(working)) == content(op == "checkout" ? 1 : 0),
+            "checkout recovery did not finish");
+      check(current.str() == content(op == "checkout" ? 1 : 0), "checkout recovery moved the wrong branch");
+    }
+  }
   if (op == "stage-add" || op == "stage-commit" || op == "stage-reset") {
     const bool indexed = refs.contains("staging/main");
     if (indexed) {
@@ -292,6 +329,18 @@ int entry(int argc, char **argv) {
             std::ofstream(path, std::ios::binary) << "destructor ran";
           }
         } sentinel{root.parent_path() / "unwound.txt"};
+        if (info["operation"] == "checkout-abort") {
+          std::stop_source stop;
+          try {
+            store.checkout_directory(root.parent_path(), "main", parse_key(info.at("new_revision")).id,
+                                     {stop.get_token(), [&](const ProgressEvent &event) {
+                                        if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                          stop.request_stop();
+                                      }});
+          } catch (const Cancelled &) {
+          }
+          check(store.checkout_status()["state"] == "applying", "missing abort fixture journal");
+        }
         control = Control{argv[3], argv[4], static_cast<std::size_t>(std::stoull(argv[5])), 0, true};
         perform(store, info);
         std::cout << Json{{"completed", true}}.dump() << '\n';

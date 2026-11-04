@@ -59,8 +59,10 @@ Adding a tracked file to `.syrnckignore` therefore reports it as `removed`, even
 if it still exists on disk. The next ordinary native commit also excludes it.
 This follows the current native commit contract. [Native staging](NATIVE_STAGING.md)
 can freeze selected entries independently of subsequent workspace changes.
-Executable bits are inspected on Unix; native Windows scans record false, as
-native commits already do.
+Executable bits are inspected on Unix. Native Windows scans record false, as
+native commits already do, and working-directory comparison ignores executable
+differences against stored Unix metadata. Snapshot-to-snapshot comparison still
+reports those differences on every platform.
 
 ## Revision snapshot comparison
 
@@ -80,9 +82,9 @@ file bytes with different chunking: that entry is modified with
 are also distinguished. Revision messages, timestamps and parents do not affect
 file-entry equality. Renames are reported as removal plus addition.
 
-This command compares snapshot metadata. Text patches, rename inference,
-checkout into an existing directory and merge/conflict resolution
-remain future work.
+This command compares snapshot metadata. [Recoverable native checkout](NATIVE_CHECKOUT.md)
+restores an exact revision separately. Text patches, rename inference and
+merge/conflict resolution remain future work.
 
 ## C++ and operation boundaries
 

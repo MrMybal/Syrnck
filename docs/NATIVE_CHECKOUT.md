@@ -1,0 +1,168 @@
+# Recoverable native checkout
+
+`native checkout` restores an exact stored revision into an existing workspace
+and moves the explicitly selected native branch to it. The previous branch head
+is archived before any of its retention roots are released. This is the first,
+restricted executor of the [checkout preflight](NATIVE_WORKSPACE.md).
+
+```text
+syrnck native checkout-plan REVISION --branch main --verify
+syrnck native checkout REVISION --branch main --directory . --progress
+syrnck native checkout-status
+syrnck native checkout-recover --progress
+syrnck native checkout-recover --abort --progress
+syrnck native checkout-status --id TRANSACTION_ID
+```
+
+The default branch is `main`, and the default directory is `.`. There is no
+current-branch/HEAD state yet: selecting `--branch feature` moves that branch,
+using its current snapshot as the workspace baseline. This command does not
+switch between two independent branches as `git switch` does. The Store must
+be strictly inside the canonical workspace directory.
+
+## Starting and publishing
+
+The initial policy requires every tracked file to match its baseline by complete
+content hash and supported executable metadata. An existing staging index blocks
+checkout, even if it has no staged changes. Ignored and untracked collisions,
+links/junctions, protected paths, portable aliases, case-only renames and
+file/directory transitions are refused. There is no `--force` option.
+
+For a revision change, execution repeats preflight and verifies the complete
+source and target closures, including historical parents and file hashes,
+before publishing its journal.
+Thus a metadata-only plan is insufficient to execute checkout. A clean checkout
+whose target already equals the branch head returns `state: "unchanged"` without
+creating a transaction. Unrelated untracked and ignored files remain untouched.
+
+For each changed file the engine first reconstructs and verifies the complete
+target into a private slot. After rechecking the workspace, it moves the original
+to a backup slot and installs the prepared target with exclusive, no-overwrite
+moves. Deletions retain their original file in a backup. Representation-only
+changes need no file move; mode-only changes currently prepare a complete file.
+Executable bits are applied on Unix. Windows preserves their snapshot metadata
+without applying it to the filesystem or treating it as a local modification.
+
+All desired tracked files are verified again after the last public progress
+callback. One compare-and-swap reference transaction then moves the branch,
+marks checkout committed, archives the source and retains the target and receipt.
+Only after that publication does the engine remove verified private data and
+release the active journal/pending roots. Success returns `state: "committed"`,
+`pending: false`, the transaction `id`, and its `archive` reference or null for
+an unborn branch.
+
+Publication is atomic for the branch/journal references. **Workspace file moves
+are sequential**, so readers can see intermediate contents. Stop external
+writers while checking out; this is not an atomic filesystem snapshot, workspace
+lock or defense against hostile concurrent namespace replacement. An IO error
+or cancellation after journal creation requires explicit recovery.
+
+## Inspecting, resuming and aborting
+
+`checkout-status` returns `pending: false` when no operation is active. Otherwise
+it reports the immutable transaction identity, branch, source, target, canonical
+workspace, state, private `data_directory`, and affected paths with their numeric
+slot names. `--id` can inspect the active transaction or a completed receipt.
+JSON fields and state names remain English with either interface language.
+
+| State | Resume | Abort |
+| --- | --- | --- |
+| `preparing` | Finish reconstruction, recheck the clean baseline, then apply | Discard prepared outputs without touching working files |
+| `applying` | Validate backups/installed files and finish application | Restore originals in reverse action order |
+| `aborting` | Continue the requested rollback | Continue rollback |
+| `discarding` | Finish discarding preparation | Finish discarding preparation |
+| `aborted` | Finish cleanup without replaying file moves | Finish cleanup |
+| `committed` | Finish cleanup without changing the published branch | Refused; branch publication already succeeded |
+
+Recovery always uses the recorded workspace/branch; it accepts no override.
+Opening a Store does not automatically change its working files. The journal
+is bound to the canonical workspace location, so copying or relocating it is
+not a supported recovery procedure. A completed recovery is idempotent.
+
+If a working file or private output has changed, recovery preserves those bytes
+and refuses the unsafe step. Inspect `checkout-status` and preserve such edits
+before retrying. A source edited immediately before its backup move is restored
+verbatim during abort. Rollback persists its `aborted` marker before removing
+prepared outputs, so interrupted cleanup cannot mistake a later working file
+for an installed target. Newly created empty parent directories may remain
+after abort. The executor does not recursively remove working directories.
+
+While checkout is pending, GC (including preview) and native commit, add, reset,
+staged commit and history detachment are blocked. Packing and read-only
+inspection remain available. Generic reference/admin operations are not a
+checkout override: changing a branch or internal retention root can make
+recovery refuse to proceed. Do not edit or replicate the active checkout roots.
+
+## Journal, retention and private data
+
+The immutable journal is an ordinary chunk object, so existing compression,
+encryption and pack support apply without changing logical/physical formats.
+Its identity hashes the version, nonce, canonical directory, branch and source/
+target revisions. Each phase publishes a new journal object.
+
+| Reference | Retained value |
+| --- | --- |
+| `checkouts/active` | Current journal object; at most one checkout per Store |
+| `checkouts/pending/ID/target` | Complete target closure until cleanup |
+| `checkouts/pending/ID/source` | Complete original closure when a source exists |
+| `archive/checkout/ID` | Previous head after successful publication |
+| `checkouts/completed/ID` | Published target after successful publication |
+| `checkouts/receipts/ID` | Committed journal for later inspection |
+
+The active/pending roots are released only after cleanup. Archives, completed
+targets and receipts remain retained; automatic pruning is not implemented.
+Deleting a branch therefore does not alone discard checkout history. Removing
+all roots and running destructive GC intentionally makes those versions
+unrecoverable. An aborted transaction leaves no permanent receipt.
+
+Private files live at `STORE/checkouts/ID/{new,old}/N.bin`. **They contain decoded
+plaintext even in an encrypted Store**, just as the workspace does. Existing
+object encryption does not encrypt these temporary targets or original-file
+backups. Unix private directories use owner-only permissions; Windows relies on
+the Store's inherited ACLs. Filesystem encryption is needed to protect these
+working bytes at rest. Prepared targets require extra disk space; backups are
+moved original files. Source, private slots and destinations must support
+exclusive moves on the same filesystem. Cross-filesystem moves fail with the
+journal retained for recovery.
+
+Cleanup validates known slot names, types and expected hashes before removing
+files, and removes only empty directories. Unexpected or changed private data
+is retained with an error. Windows may briefly defer deletion of a file; cleanup
+retries only nonrecursive empty-directory removal for up to about 500 ms.
+Other IO failures leave the journal available for another recovery attempt.
+
+## C++, progress and limits
+
+```cpp
+auto result = store.checkout_directory(project, "main", target_id, operation);
+auto pending = store.checkout_status();
+auto resumed = store.recover_checkout(false, operation);
+auto aborted = store.recover_checkout(true, operation);
+auto receipt = store.checkout_status(transaction_id);
+```
+
+Callbacks are synchronous and must not reenter the Store. Preflight/comparison
+use their existing scanning, planning and verification events. Preparation adds
+per-file reconstruction; application/rollback report `exporting` with logical
+changed-file byte totals, interspersed with per-file verification. Counters can
+restart between these phases and on recovery. The last observer before branch
+publication is `publishing` with path `checkout`. Cancellation or observer failure
+before that commit point keeps the original branch, but may leave a partial
+workspace and pending journal. After publication, cleanup finishes without
+further observers or cancellation. An error after publication can therefore
+report failure with a committed branch; inspect status and resume cleanup.
+
+The shared 1 MiB content buffer, snapshot tables, manifest-summary caches,
+16 MiB object limits and bounded workspace inventory still apply. This version
+performs complete preflight/final hashes and closure verification, reconstructs
+whole changed files, and hashes backups before cleanup. It does not yet use
+in-place block patching, a persistent work index or parallel materialization.
+The C ABI and Go binding do not expose native checkout yet.
+
+Local Windows x64 tests cover cancellation, reopen/resume/abort, equal-size
+edits, edits at backup/rollback move boundaries, untracked collisions, late
+observer mutations, executable metadata, committed cleanup, GC retention,
+missing target chunks and CLI localization. Plain/encrypted objects run with
+loose, single-pack and multi-pack storage. The process-kill suite covers journal
+publication, preparation, both move directions, branch publication and cleanup.
+Unix-specific behavior awaits execution in the existing CI matrix.

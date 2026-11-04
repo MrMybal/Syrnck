@@ -19,17 +19,19 @@ bool inside(const fs::path &path, const fs::path &root) {
       return false;
   return true;
 }
-bool link_like(const fs::directory_entry &entry, const fs::file_status &status) {
+} // namespace
+bool native_link_like(const fs::path &path, const fs::file_status &status) {
 #ifdef _WIN32
-  const auto attributes = GetFileAttributesW(entry.path().c_str());
+  const auto attributes = GetFileAttributesW(path.c_str());
   require(attributes != INVALID_FILE_ATTRIBUTES, "cannot inspect native checkout entry");
   if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
     return true;
 #else
-  (void)entry;
+  (void)path;
 #endif
   return fs::is_symlink(status);
 }
+namespace {
 using Conflicts = std::set<std::tuple<std::string, std::string, std::string>>;
 class Inventory {
   using Nodes = std::map<std::string, Node>;
@@ -61,7 +63,7 @@ public:
         Node node{Type::special};
         if (name == ".git" || name == ".syrnck" || inside(entry.path(), store))
           node.type = Type::protected_path;
-        else if (link_like(entry, status))
+        else if (native_link_like(entry.path(), status))
           node.type = Type::symlink;
         else if (fs::is_directory(status)) {
           require(depth < 128, "native checkout directory nesting exceeds 128 levels");
@@ -136,6 +138,25 @@ bool executable_equal(bool actual, bool expected) {
 #endif
 }
 } // namespace
+void verify_native_checkout_namespace(const Store &store, const fs::path &directory,
+                                      const std::vector<std::string> &target,
+                                      const std::vector<std::string> &removed, OperationOptions options,
+                                      bool final) {
+  const Inventory inventory(directory, store.root(), options);
+  Conflicts conflicts;
+  for (const auto &path : target) {
+    throw_if_cancelled(options.stop);
+    require(inventory.parents(path, conflicts) && inventory.inspect(path, conflicts, true) &&
+                (!final || inventory.find(path)),
+            "native checkout path became obstructed");
+  }
+  for (const auto &path : removed) {
+    throw_if_cancelled(options.stop);
+    require(inventory.parents(path, conflicts) && inventory.inspect(path, conflicts, true) &&
+                (!final || !inventory.find(path)),
+            "native checkout path became obstructed");
+  }
+}
 Json Store::plan_checkout(const fs::path &directory, std::string_view branch, std::string_view target,
                           bool verify_objects, OperationOptions options) const {
   throw_if_cancelled(options.stop);
@@ -148,6 +169,8 @@ Json Store::plan_checkout(const fs::path &directory, std::string_view branch, st
   const auto &destination = source_id && *source_id == target ? source : other;
   const Inventory inventory(directory, root(), options);
   Conflicts conflicts;
+  if (refs().contains("checkouts/active"))
+    conflicts.emplace("", "checkout_pending", "");
   if (!staging["snapshot"].is_null())
     conflicts.emplace("", staging["stale"].get<bool>() ? "stale_staging" : "staging_present", "");
   Bytes buffer(1024 * 1024);

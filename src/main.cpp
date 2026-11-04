@@ -179,6 +179,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native status [--branch main | --revision RÉVISION] [--directory .]
   native status --combined [--branch main] [--directory .]
   native checkout-plan RÉVISION [--branch main] [--directory .] [--verify]
+  native checkout RÉVISION [--branch main] [--directory .]
+  native checkout-status [--id TRANSACTION]
+  native checkout-recover [--abort]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
   native log [--branch main] [--limit 50]
@@ -212,7 +215,8 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export,
+              git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -248,6 +252,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native status [--branch main | --revision REVISION] [--directory .]
   native status --combined [--branch main] [--directory .]
   native checkout-plan REVISION [--branch main] [--directory .] [--verify]
+  native checkout REVISION [--branch main] [--directory .]
+  native checkout-status [--id TRANSACTION]
+  native checkout-recover [--abort]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
   native log [--branch main] [--limit 50]
@@ -281,7 +288,8 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export,
+              git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -494,9 +502,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" &&
-       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
-        sub == "staged" || sub == "reset" || sub == "checkout-plan")) ||
+      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
+                               sub == "add" || sub == "staged" || sub == "reset" || sub == "checkout-plan" ||
+                               sub == "checkout" || sub == "checkout-recover")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -697,6 +705,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         }
       }
       print(store.status_directory(directory, revision, {control->token(), observe}));
+    } else if (sub == "checkout") {
+      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto branch = args.option("--branch").value_or("main");
+      args.count(1);
+      print(store.checkout_directory(directory, branch, args.values[0], {control->token(), observe}));
+    } else if (sub == "checkout-status") {
+      const auto id = args.option("--id");
+      args.count(0);
+      print(store.checkout_status(id));
+    } else if (sub == "checkout-recover") {
+      const auto abort = args.flag("--abort");
+      args.count(0);
+      print(store.recover_checkout(abort, {control->token(), observe}));
     } else if (sub == "checkout-plan") {
       const auto directory = path_from_utf8(args.option("--directory").value_or("."));
       const auto branch = args.option("--branch").value_or("main");

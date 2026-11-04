@@ -12,7 +12,7 @@ Deux modes consomment la même bibliothèque : **Git**, pour conserver son écos
 
 | Composant | Disponible |
 | --- | --- |
-| `syrnck_core` | FastCDC 2020 ou blocs fixes, BLAKE3, Zstd, packs indexés, reconstruction vérifiée, révisions et GC |
+| `syrnck_core` | FastCDC 2020 ou blocs fixes, BLAKE3, Zstd, packs indexés, reconstruction vérifiée, staging, checkout récupérable, révisions et GC |
 | `syrnck_git` | Filtres simples/résident, catalogues des assets, racines conservées, migration LFS hors ligne et hook pre-push optionnel |
 | `syrnck_git_net` | Push/pull groupés, catalogues immuables et hydratation des assets à la demande |
 | `syrnck_net` | API HTTP v1 authentifiée, comparaison et transfert des objets absents, publication par compare-and-swap |
@@ -65,7 +65,7 @@ Pour les gros fichiers, `syrnck put fichier.bin --workers 4 --buffer-mib 32` act
 
 Les réglages du pipeline et les limites des packs sont persistants par dépôt via `config set`. Les options explicites les remplacent pour l'opération, y compris pour `native commit` et `git clean`. Voir les [réglages du dépôt](docs/SETTINGS.md).
 
-Les imports, commandes natives commit/add/staged/reset/status/diff/export, reconstructions, audits `fsck`, filtres Git et transferts de l'agent acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative (code 130). Les exports préparent une arborescence complète avant publication exclusive et préservent les destinations existantes. Une publication déjà engagée peut aboutir. Si la réponse de publication distante est perdue ou ambiguë, le code 3 invite à inspecter la référence. Voir les [contrats des opérations](docs/OPERATIONS.md), [exports transactionnels](docs/EXPORT.md) et [reprises réseau](docs/TRANSFERS.md).
+Les imports, commandes natives commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export, reconstructions, audits `fsck`, filtres Git et transferts de l'agent acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative (code 130). Les exports préparent une arborescence complète avant publication exclusive et préservent les destinations existantes. Une publication déjà engagée peut aboutir. Si la réponse de publication distante est perdue ou ambiguë, le code 3 invite à inspecter la référence. Voir les [contrats des opérations](docs/OPERATIONS.md), [exports transactionnels](docs/EXPORT.md) et [reprises réseau](docs/TRANSFERS.md).
 
 Le cache du moteur évite de répéter le déchiffrement et la décompression d'objets déjà vérifiés, après contrôle de leur enveloppe actuelle. Il est borné à 64 Mio de données et 8 192 empreintes par défaut, configurable avec `--cache-mib` et désactivable avec `--cache-mib 0`. `fsck` et `gc` effectuent leur validation complète sans ce cache.
 
@@ -105,7 +105,9 @@ logiques et trafic des corps d'objets.
 
 `native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). Les patches textuels et le merge restent à développer.
 
-`native status --combined` sépare les changements préparés des modifications locales suivantes. `native checkout-plan RÉVISION` indique les actions proposées et les obstacles, y compris les collisions avec des fichiers ignorés, les liens, les variantes de casse et le staging en attente. `--verify` vérifie aussi toute la fermeture stockée de la cible. Cette préparation est en lecture seule ; l'exécution du checkout et son journal de récupération restent à développer. Voir l'[inspection du workspace natif](docs/NATIVE_WORKSPACE.md).
+`native status --combined` sépare les changements préparés des modifications locales suivantes. `native checkout-plan RÉVISION` indique les actions proposées et les obstacles, y compris les collisions avec des fichiers ignorés, les liens, les variantes de casse et le staging en attente. `--verify` vérifie aussi toute la fermeture stockée de la cible. Voir l'[inspection du workspace natif](docs/NATIVE_WORKSPACE.md).
+
+`native checkout RÉVISION` restaure un workspace suivi propre et déplace la branche sélectionnée, en archivant son ancienne tête et en conservant la cible. `native checkout-status` inspecte une interruption ; `native checkout-recover` reprend l'opération et `--abort` restaure les originaux avant publication. Les déplacements de fichiers sont séquentiels et récupérables grâce au journal. Les fichiers préparés et sauvegardes restent en clair même si les objets sont chiffrés. Il n'y a pas encore de HEAD/branche courante, d'option force ou de nettoyage automatique des archives de checkout. Voir les [garanties, la rétention et la récupération du checkout](docs/NATIVE_CHECKOUT.md).
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 

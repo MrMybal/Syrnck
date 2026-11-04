@@ -117,6 +117,25 @@ void make_executable(const fs::path &path) {
   sync_file(path);
 #endif
 }
+void move_exclusive(const fs::path &source, const fs::path &destination) {
+  SYRNCK_IO_CHECKPOINT("move.before", destination);
+#ifdef _WIN32
+  const bool moved = MoveFileExW(source.c_str(), destination.c_str(), MOVEFILE_WRITE_THROUGH) != 0;
+#elif defined(__linux__)
+  const bool moved = ::syscall(SYS_renameat2, AT_FDCWD, source.c_str(), AT_FDCWD, destination.c_str(),
+                               RENAME_NOREPLACE) == 0;
+#elif defined(__APPLE__)
+  const bool moved = ::renamex_np(source.c_str(), destination.c_str(), RENAME_EXCL) == 0;
+#else
+  const bool moved = false;
+#endif
+  require(moved, "cannot move checkout file exclusively");
+  SYRNCK_IO_CHECKPOINT("move.published", destination);
+  sync_directory(source.parent_path());
+  if (source.parent_path() != destination.parent_path())
+    sync_directory(destination.parent_path());
+  SYRNCK_IO_CHECKPOINT("move.durable", destination);
+}
 void atomic_directory(const fs::path &destination, const std::function<void(const fs::path &)> &writer,
                       const std::function<void()> &before_publish, std::stop_token stop) {
   throw_if_cancelled(stop);

@@ -89,7 +89,7 @@ syrnck native commit --branch release --message "Préparation de la release"
 syrnck native export <identifiant-revision> ../export-release
 ```
 
-`--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante ou de commande de checkout natif. Le commit ordinaire scanne tout le dossier et refuse si un staging existe pour cette branche. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
+`--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante. Le commit ordinaire scanne tout le dossier et refuse si un staging existe pour cette branche. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
 
 Pour préparer une sélection, puis publier les octets figés même après d'autres modifications du dossier :
 
@@ -104,7 +104,18 @@ syrnck native commit --staged --message "Cartes sélectionnées"
 
 `native status` lit les fichiers sélectionnés et compare leur hash complet à `heads/main`, à une autre branche avec `--branch`, ou à un snapshot avec `--revision`. Il n'importe aucun fichier. `native diff` compare les métadonnées de deux snapshots ; il ne produit pas encore de patch textuel. Les deux renvoient un rapport JSON et acceptent progression/annulation. Voir les [contrats de comparaison native](NATIVE_COMPARISON.md).
 
-`native status --combined` renvoie séparément la base vers le staging et le staging vers le dossier de travail. `native checkout-plan RÉVISION` propose les créations/remplacements/suppressions et signale les obstacles sans modifier les fichiers. Sa première politique exige tous les fichiers suivis propres et refuse un staging existant ; les fichiers ignorés restent visibles pour détecter les collisions. `--verify` vérifie aussi toute la fermeture stockée de la cible. Un plan bloqué renvoie son JSON avec le code 1. Le checkout avec journal de récupération reste à implémenter. Voir les [contrats d'inspection du workspace](NATIVE_WORKSPACE.md).
+`native status --combined` renvoie séparément la base vers le staging et le staging vers le dossier de travail. `native checkout-plan RÉVISION` propose les créations/remplacements/suppressions et signale les obstacles sans modifier les fichiers. Sa première politique exige tous les fichiers suivis propres et refuse un staging existant ; les fichiers ignorés restent visibles pour détecter les collisions. `--verify` vérifie aussi toute la fermeture stockée de la cible. Un plan bloqué renvoie son JSON avec le code 1. Voir les [contrats d'inspection du workspace](NATIVE_WORKSPACE.md).
+
+Pour appliquer une révision sur ce workspace propre, en déplaçant la branche choisie et en conservant son ancienne tête :
+
+```text
+syrnck native checkout <identifiant-revision> --branch main --progress
+syrnck native checkout-status
+syrnck native checkout-recover --progress
+syrnck native checkout-recover --abort --progress
+```
+
+Les deux dernières commandes sont les alternatives de reprise ou d'annulation après une interruption. Les fichiers sont déplacés séquentiellement sous journal ; la branche, l'archive source et la rétention cible sont publiées ensemble une fois les fichiers vérifiés. Après publication, seule la fin du nettoyage est possible. Le GC et les écritures natives restent bloqués tant que l'opération est en attente. Les sauvegardes et fichiers préparés restent en clair, même si les objets sont chiffrés. Arrêter les éditeurs externes pendant l'opération. Voir les [limites, la rétention et les états de récupération du checkout](NATIVE_CHECKOUT.md).
 
 Pour raccourcir l'historique tout en gardant une archive :
 

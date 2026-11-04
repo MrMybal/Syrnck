@@ -127,6 +127,7 @@ std::string Store::stage_directory(const fs::path &directory, std::string_view b
                                    const std::vector<std::string> &paths, IngestOptions options) const {
   throw_if_cancelled(options.stop);
   Stage stage(*this, branch);
+  require_no_native_checkout(*this);
   stage.require_fresh();
   Selection selection(paths);
   selection.observe(stage.baseline, options.stop);
@@ -172,6 +173,7 @@ Json Store::staged_status(std::string_view branch, OperationOptions options) con
 std::optional<std::string> Store::reset_stage(std::string_view branch, const std::vector<std::string> &paths,
                                               OperationOptions options) const {
   throw_if_cancelled(options.stop);
+  require_no_native_checkout(*this);
   const Stage stage(*this, branch);
   if (paths.empty()) {
     if (stage.index)
@@ -219,6 +221,7 @@ Json Store::workspace_status(const fs::path &directory, std::string_view branch,
 std::string Store::commit_staged(std::string_view branch, std::string_view message,
                                  OperationOptions options) const {
   throw_if_cancelled(options.stop);
+  require_no_native_checkout(*this);
   const Stage stage(*this, branch);
   require(stage.index.has_value(), "no native staging snapshot");
   stage.require_fresh();

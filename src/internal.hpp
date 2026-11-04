@@ -19,6 +19,8 @@ void atomic_stream(const fs::path &, const std::function<void(std::ostream &)> &
 void atomic_directory(const fs::path &, const std::function<void(const fs::path &)> &,
                       const std::function<void()> &before_publish = {}, std::stop_token = {});
 void make_executable(const fs::path &);
+void move_exclusive(const fs::path &source, const fs::path &destination);
+void require_no_native_checkout(const Store &);
 void sync_directory(const fs::path &);
 // Only call for unknown inventory names, never canonical metadata records.
 bool transient_metadata_disappeared(const fs::path &, std::stop_token = {});

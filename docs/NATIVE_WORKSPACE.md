@@ -2,8 +2,9 @@
 
 The native engine provides a combined branch/index/workspace status and a
 read-only checkout plan. Neither operation changes files, objects, references
-or staging. A plan does not execute a checkout; workspace publication and its
-recovery journal remain future work.
+or staging. A plan does not execute a checkout; the separate
+[recoverable checkout](NATIVE_CHECKOUT.md) prepares verified outputs, rechecks
+the workspace and journals file moves before publishing the branch.
 
 ```text
 syrnck native status --combined --branch main --progress
@@ -110,6 +111,7 @@ plan even if its bytes happen to match the desired target.
 | `tracked_modified`, `tracked_missing` | Local tracked edit/deletion |
 | `tracked_mode_changed` | Local Unix executable metadata differs |
 | `staging_present`, `stale_staging` | The branch has a pending or stale index; path is empty |
+| `checkout_pending` | A checkout journal requires recovery; path is empty |
 | `untracked_collision` | A target file would occupy an untracked file path |
 | `file_directory_transition` | A file/directory conversion or ancestor obstruction needs a later transaction policy |
 | `path_spelling` | A name matches only after Unicode normalization/case folding |
@@ -150,7 +152,7 @@ and full-closure verification collections also remain.
 
 These are observations of a changing filesystem, not an atomic snapshot or a
 workspace lock. Size/type/time/mode changes observed around a file read cause
-failure; later edits can invalidate a completed report. A future executor must
+failure; later edits can invalidate a completed report. The executor must
 prepare verified contents, revalidate its expectations and use a recovery
 journal. Neither `ready` nor a prior plan authorizes it to skip those steps.
 The C ABI and Go binding do not yet expose native workspace operations.
