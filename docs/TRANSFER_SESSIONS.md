@@ -8,9 +8,11 @@ GC attempt and reconcile an acknowledgement lost at publication.
 syrnck agent sessions
 syrnck agent resume https://blocks.example.invalid SESSION_ID --requests 4 --progress
 syrnck agent forget SESSION_ID
+syrnck agent prune
+syrnck agent prune --delete
 ```
 
-`sessions` and `forget` are local commands and need no server token. Resume uses
+`sessions`, `forget` and `prune` are local commands and need no server token. Resume uses
 the current `SYRNCK_TOKEN`, optional `--ca` and current transfer options. Encrypted
 stores still require their local `SYRNCK_KEY`. Opening a Store starts no network
 activity or background recovery.
@@ -102,29 +104,32 @@ crash in the marker/dispatch gap is deliberately treated as uncertain.
 
 ## GC and deliberate discard
 
-Every unfinished local session blocks **GC preview and GC deletion** for the
-entire local Store. A pull may contain metadata with missing dependencies; this
-first implementation avoids trusting a partial retained closure. GC streams
-journals with cancellation checks, without collecting all records in memory.
-Invalid journals also prevent GC. Packing preserves logical objects, but its
+Every unfinished local session contributes its root to GC retention. Pushes
+require a complete verified source closure; pulls retain all available reachable
+objects even when some dependencies are missing. Unrelated objects are collectable.
+GC streams journals with cancellation checks and keeps the root keys needed for
+traversal. Invalid journals prevent GC. Packing preserves logical objects, but its
 full audit can reject incomplete metadata until the pull finishes or its
 unreferenced objects are collected after deliberate discard.
 
 `agent forget ID` removes the journal and releases its hold. It does not alter
 references or remove payloads. Ordinary GC can then reclaim unreferenced objects,
 including incomplete transfer metadata. A valid filename can be discarded even
-if its contents are malformed. Completed receipts remain until forgotten and
-do not pin their roots.
+if its contents are malformed. Completed receipts do not pin their roots.
+`agent prune` previews completed/unfinished counts; `agent prune --delete`
+validates the full inventory before removing only completed receipts. It leaves
+objects, references and unfinished records untouched. Cancellation during removal
+can prune a subset of completed receipts; retry is safe. See
+[selective retention and pruning](SELECTIVE_RETENTION.md).
 
 Local holds require journal-aware engines for every GC run. Compatible servers
 also provide [expiring upload leases and publication receipts](SERVER_UPLOAD_LEASES.md).
 Those receipts can confirm a lost acknowledgement even after a later reference
 change. An expired lease can permit offline server GC; resume renegotiates and
 reuploads missing objects from the protected source. [Read leases](SERVER_READ_LEASES.md)
-protect pull sources until all required objects are local. Selective/distributed
-retention, local journal pruning and background
-recovery remain future work. Session listing materializes its result; receipts
-consume disk space until removed.
+protect pull sources until all required objects are local. Selective server upload
+retention, distributed GC and background recovery remain future work. Session
+listing materializes its result; receipts consume disk space until pruned or forgotten.
 
 ## Validation
 

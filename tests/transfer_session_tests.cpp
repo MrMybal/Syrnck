@@ -96,8 +96,8 @@ int main() {
         for (std::string state : {"transferring", "publishing", "uncertain", "conflict"}) {
           record.state = state;
           store.write_transfer_session(record);
-          fails([&] { (void)store.gc(); });
-          fails([&] { (void)store.gc(true); });
+          check(store.gc()["live_objects"] == 1);
+          check(store.gc(true)["unreachable_objects"] == 0);
           check(text(store.get(object)) == "retained transfer payload");
         }
         record.state = "complete";
@@ -129,7 +129,7 @@ int main() {
       check(TransferSession::parse(record.json()).read_lease == record.read_lease);
       partial.write_transfer_session(record);
       fails([&] { partial.fsck(); });
-      fails([&] { partial.gc(true); });
+      check(partial.gc(true)["live_objects"] == 1);
       partial.remove_transfer_session(record.id);
       check(partial.gc(true)["unreachable_objects"] == 1 && partial.fsck() == 0);
       auto outside = root / "outside";

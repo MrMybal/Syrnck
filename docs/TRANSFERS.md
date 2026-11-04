@@ -41,8 +41,9 @@ interrupted transfer can leave reusable unreferenced objects. Retrying negotiate
 or checks their presence again; incomplete responses are not imported. A pulled
 manifest may temporarily lack some dependencies until retry finishes, so a full
 audit of unreachable objects can fail during this incomplete state. Previously
-retained roots remain reconstructible. An unfinished local session blocks GC
-until resumed or deliberately discarded. See [persistent sessions](TRANSFER_SESSIONS.md).
+retained roots remain reconstructible. An unfinished local session retains its
+source or available downloaded objects during GC until completed or deliberately
+discarded. See [persistent sessions](TRANSFER_SESSIONS.md).
 Negotiated [read leases](SERVER_READ_LEASES.md) protect the exact source root while
 missing objects are downloaded. They are released before local publication,
 when the verified objects and unfinished local journal protect reconstruction.

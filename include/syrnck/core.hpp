@@ -212,6 +212,8 @@ public:
   std::optional<TransferSession> transfer_session(std::string_view id) const;
   void write_transfer_session(const TransferSession &, std::stop_token = {}) const;
   void remove_transfer_session(std::string_view id) const;
+  // Preview by default. Only complete receipts are removable; payloads and refs are untouched.
+  Json prune_transfer_sessions(bool remove = false, OperationOptions = {}) const;
   std::vector<UploadLease> upload_leases(std::stop_token = {}) const;
   std::optional<UploadLease> upload_lease(std::string_view id) const;
   UploadLease acquire_upload_lease(std::string_view id, const ObjectKey &, std::string_view reference,
@@ -250,8 +252,9 @@ private:
   Bytes decode_envelope(const ObjectKey &, std::span<const std::uint8_t>) const;
   Bytes load_object(const ObjectKey &, bool presence_only) const;
   void write_refs(const Refs &, std::stop_token = {}) const;
-  void check_transfer_gc(std::stop_token) const;
+  void transfer_gc_roots(std::vector<ObjectKey> &complete, std::vector<ObjectKey> &partial,
+                         std::stop_token) const;
   void check_upload_gc(std::stop_token, bool remove) const;
-  void check_read_gc(std::stop_token, bool remove) const;
+  void read_gc_roots(std::vector<ObjectKey> &, std::stop_token, bool remove) const;
 };
 } // namespace syrnck

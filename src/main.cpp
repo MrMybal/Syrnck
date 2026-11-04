@@ -134,10 +134,11 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
   agent sessions                     Lister les sessions persistantes locales
   agent forget SESSION              Supprimer le journal et libérer sa protection GC
+  agent prune [--delete]             Prévisualiser ou purger les reçus terminés
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge et agent push/pull/resume.
+              fsck, native commit/export, git clean/smudge et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 )";
@@ -180,10 +181,11 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
   agent sessions                     List persistent local sessions
   agent forget SESSION              Discard the journal and release its GC hold
+  agent prune [--delete]             Preview or prune completed receipts
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
-          fsck, native commit/export, git clean/smudge and agent push/pull/resume.
+              fsck, native commit/export, git clean/smudge and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 )";
@@ -254,10 +256,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   Store store(root, key, false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
-  bool cancellable = command == "put" || command == "get" || command == "fsck" || command == "pack" ||
-                     command == "gc" || (command == "native" && (sub == "commit" || sub == "export")) ||
-                     (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume")) ||
-                     (command == "git" && (sub == "clean" || sub == "smudge"));
+  bool cancellable =
+      command == "put" || command == "get" || command == "fsck" || command == "pack" || command == "gc" ||
+      (command == "native" && (sub == "commit" || sub == "export")) ||
+      (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
+      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -494,6 +497,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(1);
       store.remove_transfer_session(args.values[0]);
       print(Json{{"discarded", args.values[0]}});
+      require(std::cout.good(), "output write failed");
+      return 0;
+    }
+    if (sub == "prune") {
+      auto remove = args.flag("--delete");
+      args.count(0);
+      print(store.prune_transfer_sessions(remove, {control->token(), observe}));
       require(std::cout.good(), "output write failed");
       return 0;
     }

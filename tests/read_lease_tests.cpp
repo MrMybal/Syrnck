@@ -59,8 +59,8 @@ int main() {
         fails([&] {
           store.acquire_read_lease(hex(random_bytes(32)), {Kind::chunk, std::string(64, '0')}, 3600);
         });
-        fails([&] { store.gc(); });
-        fails([&] { store.gc(true); });
+        check(store.gc()["live_objects"] == 1);
+        check(store.gc(true)["unreachable_objects"] == 0);
         check(store.prune_read_leases() == 0 && store.contains(object));
         for (auto bad : {Json{{"version", 2}}, Json{{"expires_at", -1}}, Json{{"expires_at", true}},
                          Json{{"state", "published"}}, Json{{"fence", "invalid"}}, Json{{"extra", 1}}}) {
@@ -73,7 +73,7 @@ int main() {
         Store store(directory, key);
         auto lease = *store.read_lease(id);
         check(lease.fence == fence && store.read_leases().size() == 1);
-        fails([&] { store.gc(true); });
+        check(store.gc(true)["live_objects"] == 1);
         save(store, lease, 1);
         check(store.gc()["unreachable_objects"] == 1);
         check(store.read_lease(id)->state == "active"); // Dry run leaves the journal unchanged.

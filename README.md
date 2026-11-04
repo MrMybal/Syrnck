@@ -97,7 +97,7 @@ Agent transfers accept `--requests 4 --transfer-buffer-mib 64` to overlap object
 
 Transient requests retry up to three times by default (`--retries 0..8`). Optional `--upload-kib-s` and `--download-kib-s` targets share object bandwidth across parallel requests; zero means unlimited. Retry and pacing waits are cancellable. The final reference publication is never retried automatically. See [retry and traffic policy](docs/TRANSFER_POLICY.md).
 
-Transfers persist local recovery records. Use `agent sessions`, `agent resume URL SESSION_ID` and `agent forget SESSION_ID` to inspect, resume or deliberately discard them. Unfinished sessions block local GC, and resume preserves saved reference expectations. See [persistent sessions and publication recovery](docs/TRANSFER_SESSIONS.md).
+Transfers persist local recovery records. Use `agent sessions`, `agent resume URL SESSION_ID` and `agent forget SESSION_ID` to inspect, resume or deliberately discard them. Unfinished sessions retain their complete source or available downloaded objects during local GC, and resume preserves saved reference expectations. `agent prune` previews completed receipts; `agent prune --delete` removes them while preserving unfinished records, references and payloads. See [persistent sessions and publication recovery](docs/TRANSFER_SESSIONS.md) and [selective retention](docs/SELECTIVE_RETENTION.md).
 
 Compatible servers also retain uploads with expiring, renewable leases and fenced publication. Use `--require-lease` to require protection; offline `leases list`, `leases release ID` and `leases prune` manage server records. Publication receipts recover lost acknowledgements without reverting later reference changes. See [server upload leases](docs/SERVER_UPLOAD_LEASES.md).
 

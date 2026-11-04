@@ -120,7 +120,9 @@ int entry(int argc, char **argv) {
         std::cout << "{\"invalid_source\":true}\n";
         return 0;
       }
-      require(mode == "throw" && std::string_view(error.what()) == "network observer sentinel",
+      if (mode != "throw")
+        throw; // Preserve the real transport/lease diagnostic for unexpected failures.
+      require(std::string_view(error.what()) == "network observer sentinel",
               "network observer error was lost");
       std::cout << "{\"observer_error\":true}\n";
     }

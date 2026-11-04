@@ -98,8 +98,8 @@ independent `refs` call supports retries but has no object traffic to limit.
 
 Restarting the command still negotiates remote presence or checks local verified
 objects and reuses completed imports. [Persistent sessions](TRANSFER_SESSIONS.md)
-save the requested root and reference expectation and block local GC until
-completion or deliberate discard. Retry budgets and pacing credit are not
+save the requested root and reference expectation and selectively retain their
+available objects during local GC until completion or deliberate discard. Retry budgets and pacing credit are not
 persisted. [Server upload leases](SERVER_UPLOAD_LEASES.md) protect uploads while
 renewed. [Server read leases](SERVER_READ_LEASES.md) protect exact pull roots until
 their objects are local; background resume remains future work.

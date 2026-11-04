@@ -37,18 +37,18 @@ unreachable server can still cause expiry. Acquisition or renewal after expiry
 gets a new fence; a client observing a changed renewal fence aborts and requires
 resume. Protection is not guaranteed across an expiry gap.
 
-Active read leases block **all offline GC preview and deletion** in that Store,
-including objects unrelated to their roots. The server can be killed and its
+Active read leases retain their **complete verified root closures** during offline
+GC. Unrelated objects remain collectable. The server can be killed and its
 reference removed offline without releasing this hold. Before deleting objects,
 GC durably marks observed expired leases `expired` and rotates their fence, so a
 later wall-clock rollback cannot reactivate a generation whose objects were
-collected. Dry runs do not write expiry transitions. Other unfinished local or
-upload leases can independently block collection.
+collected. Dry runs do not write expiry transitions. Active upload leases can
+independently block collection. See [selective retention](SELECTIVE_RETENTION.md).
 
 After all object requests drain, the client cancels and joins any renewal and
 releases the read lease **before** local reference publication. Source retention
 is no longer needed: verified objects are local and the unfinished local session
-still blocks local GC. Local compare-and-set then verifies the closure and file
+retains those objects during local GC. Local compare-and-set then verifies the closure and file
 hashes before publishing. Cancellation, corruption or a changed local destination
 cannot silently publish an incomplete version.
 
@@ -110,7 +110,7 @@ syrnck leases prune --read
 Prune validates the entire bounded inventory before removing inactive/expired
 records. Deliberate release can interrupt an active reader's retention guarantee.
 Older binaries do not understand these holds and must not run GC on this Store.
-Leases are process-local server retention, not replication, selective GC or
+Leases are process-local server retention, not replication or
 distributed consensus. Startup/renewal checks do not provide backup guarantees
 against disk corruption, external file deletion or an administrator removing
 the lease directory.

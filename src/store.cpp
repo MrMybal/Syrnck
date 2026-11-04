@@ -393,12 +393,22 @@ std::pair<std::string, IngestStats> Store::ingest(std::istream &source, Chunking
 }
 template <class Reader>
 static void stream_manifest(const Json &manifest, std::ostream &output, Reader reader,
-                            const std::function<void(std::uint64_t)> &progress = {}) {
+                            const std::function<void(std::uint64_t)> &progress = {},
+                            bool allow_missing = false) {
   blake3_hasher whole;
   blake3_hasher_init(&whole);
   std::uint64_t processed = 0;
+  bool complete = true;
   for (const auto &block : manifest["blocks"]) {
-    auto data = reader(ObjectKey{Kind::chunk, block["id"].get<std::string>()});
+    Bytes data;
+    try {
+      data = reader(ObjectKey{Kind::chunk, block["id"].get<std::string>()});
+    } catch (const MissingObject &) {
+      if (!allow_missing)
+        throw;
+      complete = false;
+      continue;
+    }
     require(data.size() == block["size"].get<std::size_t>(), "block length mismatch");
     blake3_hasher_update(&whole, data.data(), data.size());
     output.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
@@ -409,7 +419,8 @@ static void stream_manifest(const Json &manifest, std::ostream &output, Reader r
   }
   Key digest{};
   blake3_hasher_finalize(&whole, digest.data(), digest.size());
-  require(hex(digest) == manifest["file_hash"].get<std::string>(), "reconstructed file hash mismatch");
+  require(!complete || hex(digest) == manifest["file_hash"].get<std::string>(),
+          "reconstructed file hash mismatch");
 }
 void Store::reconstruct(std::string_view id, std::ostream &output, OperationOptions options) const {
   throw_if_cancelled(options.stop);
@@ -513,6 +524,45 @@ static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify
         mark(block);
         return bytes;
       });
+    } else {
+      auto children = dependencies(key.kind, data);
+      pending.insert(pending.end(), children.begin(), children.end());
+      peak = std::max(peak, pending.size());
+    }
+  }
+  throw_if_cancelled(stop);
+  return peak;
+}
+template <class Reader>
+static std::size_t retain_partial(const std::vector<ObjectKey> &roots, ObjectMarks &live, Reader read,
+                                  std::stop_token stop) {
+  auto pending = roots;
+  std::size_t peak = pending.size();
+  NullBuffer buffer;
+  std::ostream sink(&buffer);
+  while (!pending.empty()) {
+    throw_if_cancelled(stop);
+    auto key = std::move(pending.back());
+    pending.pop_back();
+    if (live.contains(key))
+      continue;
+    Bytes data;
+    try {
+      data = read(key);
+    } catch (const MissingObject &) {
+      continue; // A partial pull may not yet have received this dependency.
+    }
+    live.insert(key); // Missing objects never enter the packed/loose live marks.
+    if (key.kind == Kind::manifest) {
+      stream_manifest(
+          parse_json(data), sink,
+          [&](const ObjectKey &block) {
+            throw_if_cancelled(stop);
+            auto value = read(block);
+            live.insert(block);
+            return value;
+          },
+          {}, true);
     } else {
       auto children = dependencies(key.kind, data);
       pending.insert(pending.end(), children.begin(), children.end());
@@ -648,11 +698,10 @@ std::size_t Store::fsck(OperationOptions options) const {
 }
 Json Store::gc(bool remove, OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  // A pull may have imported metadata without its complete closure. Holding
-  // the whole local store avoids trusting incomplete reachability information.
-  check_transfer_gc(options.stop);
+  std::vector<ObjectKey> roots, partial;
+  transfer_gc_roots(roots, partial, options.stop);
   check_upload_gc(options.stop, remove);
-  check_read_gc(options.stop, remove);
+  read_gc_roots(roots, options.stop, remove);
   std::uint64_t verified_bytes = 0, planned_bytes = 0, packed_bytes = 0;
   auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
                     std::optional<std::uint64_t> total = {}) {
@@ -661,7 +710,6 @@ Json Store::gc(bool remove, OperationOptions options) const {
   notify(ProgressPhase::verifying, 0);
   CacheBypass audit(impl_->bypass_cache);
   impl_->load_config();
-  std::vector<ObjectKey> roots;
   for (const auto &[name, key] : refs()) {
     (void)name;
     roots.push_back(key);
@@ -669,15 +717,15 @@ Json Store::gc(bool remove, OperationOptions options) const {
   ObjectMarks live(impl_->packs);
   auto peak_pending = [&] {
     auto session = impl_->packs.read_session();
-    return walk_objects(
-        roots, true, [&](const ObjectKey &key) { return live.insert(key); },
-        [&](const ObjectKey &key) {
-          auto data = get(key);
-          verified_bytes += data.size();
-          notify(ProgressPhase::verifying, verified_bytes);
-          return data;
-        },
-        options.stop);
+    auto read = [&](const ObjectKey &key) {
+      auto data = get(key);
+      verified_bytes += data.size();
+      notify(ProgressPhase::verifying, verified_bytes);
+      return data;
+    };
+    auto peak =
+        walk_objects(roots, true, [&](const ObjectKey &key) { return live.insert(key); }, read, options.stop);
+    return std::max(peak, retain_partial(partial, live, read, options.stop));
   }();
   notify(ProgressPhase::verifying, verified_bytes, true);
   notify(ProgressPhase::planning, 0);

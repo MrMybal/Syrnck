@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include <algorithm>
+#include <exception>
 
 namespace syrnck {
 namespace {
@@ -136,11 +137,13 @@ std::vector<TransferSession> Store::transfer_sessions(std::stop_token stop) cons
   throw_if_cancelled(stop);
   return result;
 }
-void Store::check_transfer_gc(std::stop_token stop) const {
+void Store::transfer_gc_roots(std::vector<ObjectKey> &complete, std::vector<ObjectKey> &partial,
+                              std::stop_token stop) const {
   visit_sessions(
       *this,
-      [](const TransferSession &session) {
-        require(session.state == "complete", "garbage collection blocked by unfinished transfer sessions");
+      [&](const TransferSession &session) {
+        if (session.state != "complete")
+          (session.direction == "push" ? complete : partial).push_back(session.root);
       },
       stop);
 }
@@ -162,5 +165,56 @@ void Store::remove_transfer_session(std::string_view id) const {
   check_file(status); // Explicit discard also permits deleting malformed records.
   require(fs::remove(path), "cannot remove transfer session");
   sync_directory(path.parent_path());
+}
+Json Store::prune_transfer_sessions(bool remove, OperationOptions options) const {
+  std::size_t completed = 0, unfinished = 0, removed = 0;
+  std::uint64_t scanned_bytes = 0, candidate_bytes = 0, removed_bytes = 0;
+  report_progress(options, {ProgressPhase::planning, "transfers"});
+  // Validate the entire inventory before the first deletion, without retaining every ID.
+  visit_sessions(
+      *this,
+      [&](const TransferSession &session) {
+        ++(session.state == "complete" ? completed : unfinished);
+        auto size = fs::file_size(session_path(*this, session.id));
+        scanned_bytes += size;
+        if (session.state == "complete")
+          candidate_bytes += size;
+        report_progress(options, {ProgressPhase::planning, "transfers", scanned_bytes});
+      },
+      options.stop);
+  report_progress(options, {ProgressPhase::planning, "transfers", scanned_bytes, scanned_bytes, true});
+  if (remove) {
+    report_progress(options, {ProgressPhase::publishing, "transfers", 0, candidate_bytes});
+    try {
+      visit_sessions(
+          *this,
+          [&](const TransferSession &session) {
+            if (session.state == "complete") {
+              auto path = session_path(*this, session.id);
+              auto size = fs::file_size(path);
+              require(fs::remove(path), "cannot remove transfer session");
+              ++removed;
+              removed_bytes += size;
+              report_progress(options,
+                              {ProgressPhase::publishing, "transfers", removed_bytes, candidate_bytes});
+            }
+          },
+          options.stop);
+    } catch (...) {
+      auto original = std::current_exception();
+      if (removed) {
+        try {
+          sync_directory(session_directory(*this));
+        } catch (...) {
+        }
+      }
+      std::rethrow_exception(original);
+    }
+    if (removed)
+      sync_directory(session_directory(*this));
+    report_progress(options, {ProgressPhase::publishing, "transfers", removed_bytes, candidate_bytes, true});
+  }
+  return Json{
+      {"completed", completed}, {"unfinished", unfinished}, {"removed", removed}, {"deleted", remove}};
 }
 } // namespace syrnck

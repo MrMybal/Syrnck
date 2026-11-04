@@ -139,9 +139,14 @@ class ServerReadLeases(unittest.TestCase):
                 self.assertNotIn(base.TOKEN, json.dumps(record))
                 self.assertNotIn(proxy.url, json.dumps(record))
             self.cmd("unpin", "asset", store=self.remote_store, encrypted=True)
+            orphan_file = self.root / "unrelated-source.bin"
+            orphan_file.write_bytes(b"unrelated read-lease garbage")
+            orphan_id = json.loads(self.cmd("put", orphan_file, store=self.remote_store, encrypted=True).stdout)["manifest"]
+            self.cmd("unpin", "files/" + orphan_id, store=self.remote_store, encrypted=True)
             for flags in ((), ("--delete",)):
-                error = self.cmd("gc", *flags, store=self.remote_store, encrypted=True, expected=1, lang="fr")
-                self.assertIn("baux de lecture actifs", error.stderr.decode())
+                result = json.loads(self.cmd("gc", *flags, store=self.remote_store, encrypted=True).stdout)
+                self.assertGreater(result["unreachable_objects"], 0)
+                self.assertGreater(result["live_objects"], 0)
             with self.serving() as remote:
                 result = json.loads(self.resume(proxy.url).stdout)
                 self.assertGreater(result["reused_objects"], 0)

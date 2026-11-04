@@ -155,15 +155,15 @@ std::size_t Store::prune_read_leases() const {
     sync_directory(directory(*this));
   return inactive.size();
 }
-void Store::check_read_gc(std::stop_token stop, bool remove) const {
+void Store::read_gc_roots(std::vector<ObjectKey> &roots, std::stop_token stop, bool remove) const {
   const auto now = unix_seconds();
   std::vector<ReadLease> expired;
   visit(
       *this,
       [&](const ReadLease &lease) {
-        require(lease.state != "active" || lease.expires_at <= now,
-                "garbage collection blocked by active read leases");
-        if (remove && lease.state == "active")
+        if (lease.state == "active" && lease.expires_at > now)
+          roots.push_back(lease.root);
+        else if (remove && lease.state == "active")
           expired.push_back(lease);
       },
       stop);

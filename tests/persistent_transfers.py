@@ -81,8 +81,9 @@ class PersistentTransfers(unittest.TestCase):
             self.assertNotIn(remote.url, json.dumps(record))
             self.cmd("unpin", self.source_ref)
             for options in ((), ("--delete",)):
-                result = self.cmd("gc", *options, expected=1, lang="fr")
-                self.assertIn("sessions de transfert inachevées", result.stderr.decode())
+                result = json.loads(self.cmd("gc", *options, lang="fr").stdout)
+                self.assertEqual(result["unreachable_objects"], 0)
+                self.assertGreater(result["live_objects"], 0)
             result = json.loads(self.resume(remote, record["id"]).stdout)
             self.assertEqual(result["session"], record["id"])
             self.assertGreater(result["reused_objects"], 0)
@@ -99,7 +100,7 @@ class PersistentTransfers(unittest.TestCase):
             record, = self.sessions(target=True)
             self.assertEqual(record["state"], "transferring")
             self.assertEqual(self.cmd("refs", store=self.target, encrypted=True).stdout.strip(), b"{}")
-            self.cmd("gc", "--delete", store=self.target, encrypted=True, expected=1)
+            self.cmd("gc", "--delete", store=self.target, encrypted=True)
             before = Counter(remote.calls)
             result = json.loads(self.resume(remote, record["id"], target=True).stdout)
             self.assertGreater(result["reused_objects"], 0)
@@ -201,6 +202,25 @@ class PersistentTransfers(unittest.TestCase):
             self.assertEqual(remote.calls, calls)
             self.assertEqual(refs.stat().st_mtime_ns, timestamp)
             self.assertEqual(self.sessions(target=True)[0]["state"], "complete")
+
+    def test_completed_receipt_pruning_is_local_and_preserves_unfinished_sessions(self):
+        with base.server(JournalRepository) as remote:
+            self.probe(remote, "ok")
+            completed, = self.sessions()
+            self.probe(remote, "publish", name="pending")
+            before = self.cmd("refs").stdout
+            calls = list(remote.calls)
+            self.env.pop("SYRNCK_TOKEN")
+            preview = json.loads(self.cmd("agent", "prune", lang="fr").stdout)
+            self.assertEqual(preview, {"completed": 1, "unfinished": 1, "removed": 0, "deleted": False})
+            result = self.cmd("agent", "prune", "--delete", "--progress-json")
+            self.assertEqual(json.loads(result.stdout)["removed"], 1)
+            self.assertTrue(result.stderr)
+            remaining, = self.sessions()
+            self.assertEqual(remaining["state"], "transferring")
+            self.assertNotEqual(remaining["id"], completed["id"])
+            self.assertEqual(self.cmd("refs").stdout, before)
+            self.assertEqual(remote.calls, calls)
 
 
 if __name__ == "__main__":
