@@ -226,6 +226,8 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   require(name.find('/') == name.npos, "remote reference must be a single component");
   auto remote = refs(options, limits);
   auto actual = reference(remote, name);
+  require(!limits.immutable_reference || !actual || *actual == root,
+          "immutable remote reference points to another object");
   auto [session, fresh] = session_for(store, "push", hash(bytes(base_)), root, name, actual);
   detail::UploadProtection protection(
       store, session, options, limits,
@@ -339,6 +341,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
 Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
   limits.validate();
+  require(!limits.immutable_reference, "immutable reference option is only available for push");
   require(!limits.require_upload_lease, "upload lease requirement is only available for push");
   throw_if_cancelled(options.stop);
   validate_ref(name);

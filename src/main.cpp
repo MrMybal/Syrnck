@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <syrnck/git.hpp>
+#include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
 #include <syrnck/i18n.hpp>
 #ifdef _WIN32
@@ -94,6 +95,43 @@ IngestOptions ingestion_options(Args &args, const Store &store) {
   }
   return options;
 }
+net::TransferOptions transfer_options(Args &args) {
+  net::TransferOptions limits;
+  if (auto compression = args.option("--compression")) {
+    require(*compression == "auto" || *compression == "off" || *compression == "zstd",
+            "compression must be auto, off or zstd");
+    limits.compression = *compression == "off"    ? net::ObjectCompression::disabled
+                         : *compression == "zstd" ? net::ObjectCompression::zstd
+                                                  : net::ObjectCompression::automatic;
+  }
+  limits.require_upload_lease = args.flag("--require-lease");
+  limits.require_read_lease = args.flag("--require-read-lease");
+  if (auto requests = args.option("--requests")) {
+    auto count = integer(*requests);
+    require(count >= 1 && count <= 32, "transfer requests must be in 1..32");
+    limits.max_requests = static_cast<std::size_t>(count);
+  }
+  if (auto budget = args.option("--transfer-buffer-mib")) {
+    auto size = integer(*budget);
+    require(size >= 17 && size <= 1024, "transfer buffer must be in 17..1024 MiB");
+    limits.max_in_flight_bytes = static_cast<std::size_t>(size * 1024 * 1024);
+  }
+  if (auto retries = args.option("--retries")) {
+    auto count = integer(*retries);
+    require(count <= 8, "transfer retries must be in 0..8");
+    limits.max_retries = static_cast<std::size_t>(count);
+  }
+  auto rate = [&](std::string_view option) {
+    auto value = args.option(option);
+    auto kib = value ? integer(*value) : 0;
+    require(kib <= (1ULL << 30), "transfer rate must be in 0..1073741824 KiB/s");
+    return kib * 1024;
+  };
+  limits.upload_bytes_per_second = rate("--upload-kib-s");
+  limits.download_bytes_per_second = rate("--download-kib-s");
+  limits.validate();
+  return limits;
+}
 void help(Language language) {
   if (language == Language::french) {
     std::cout << R"(Syrnck 0.1.0 — Stockage de blocs C++20, assets Git et révisions natives
@@ -124,6 +162,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git install [DOSSIER] [--encrypted]
   git catalog COMMIT [--directory CHEMIN]   Inspecter les pointeurs du commit
   git prepare-assets COMMIT [--directory CHEMIN]   Vérifier et conserver ses assets
+  git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -174,6 +213,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git install [DIRECTORY] [--encrypted]
   git catalog COMMIT [--directory PATH]   Inspect committed asset pointers
   git prepare-assets COMMIT [--directory PATH]   Verify and retain its assets
+  git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -275,7 +315,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   }
   auto git_directory =
       command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
-  if (command == "git" && sub == "prepare-assets" && !root_option)
+  if (command == "git" && (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets") &&
+      !root_option)
     root = git::common_store(git_directory);
   Store store(root, key, false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
@@ -284,7 +325,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "put" || command == "get" || command == "fsck" || command == "pack" || command == "gc" ||
       (command == "native" && (sub == "commit" || sub == "export")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
-      (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets"));
+      (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
+                            sub == "push-assets" || sub == "pull-assets"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -460,11 +502,21 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    if (sub == "prepare-assets") {
+    if (sub == "push-assets" || sub == "pull-assets") {
+      auto limits = transfer_options(args);
+      args.count(2);
+      auto catalog = git::catalog(git_directory, args.values[1], {control->token(), observe});
+      require(token.has_value(), "set SYRNCK_TOKEN");
+      net::Remote remote(args.values[0], *token, ca_path);
+      print(sub == "push-assets"
+                ? git::push_assets(store, catalog, remote, {control->token(), observe}, limits)
+                : git::pull_assets(store, catalog, remote, {control->token(), observe}, limits));
+    } else if (sub == "prepare-assets") {
       args.count(1);
       auto catalog = git::catalog(git_directory, args.values[0], {control->token(), observe});
       auto bundle = git::prepare_bundle(store, catalog, {control->token(), observe});
-      print(Json{{"commit", catalog.commit}, {"assets", catalog.assets.size()}, {"bundle", key_json(bundle)}});
+      print(
+          Json{{"commit", catalog.commit}, {"assets", catalog.assets.size()}, {"bundle", key_json(bundle)}});
     } else if (sub == "clean") {
       auto options = ingestion_options(args, store);
       options.stop = control->token();
@@ -537,40 +589,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(std::cout.good(), "output write failed");
       return 0;
     }
-    net::TransferOptions limits;
-    if (auto compression = args.option("--compression")) {
-      require(*compression == "auto" || *compression == "off" || *compression == "zstd",
-              "compression must be auto, off or zstd");
-      limits.compression = *compression == "off"    ? net::ObjectCompression::disabled
-                           : *compression == "zstd" ? net::ObjectCompression::zstd
-                                                    : net::ObjectCompression::automatic;
-    }
-    limits.require_upload_lease = args.flag("--require-lease");
-    limits.require_read_lease = args.flag("--require-read-lease");
-    if (auto requests = args.option("--requests")) {
-      auto count = integer(*requests);
-      require(count >= 1 && count <= 32, "transfer requests must be in 1..32");
-      limits.max_requests = static_cast<std::size_t>(count);
-    }
-    if (auto budget = args.option("--transfer-buffer-mib")) {
-      auto size = integer(*budget);
-      require(size >= 17 && size <= 1024, "transfer buffer must be in 17..1024 MiB");
-      limits.max_in_flight_bytes = static_cast<std::size_t>(size * 1024 * 1024);
-    }
-    if (auto retries = args.option("--retries")) {
-      auto count = integer(*retries);
-      require(count <= 8, "transfer retries must be in 0..8");
-      limits.max_retries = static_cast<std::size_t>(count);
-    }
-    auto rate = [&](std::string_view option) {
-      auto value = args.option(option);
-      auto kib = value ? integer(*value) : 0;
-      require(kib <= (1ULL << 30), "transfer rate must be in 0..1073741824 KiB/s");
-      return kib * 1024;
-    };
-    limits.upload_bytes_per_second = rate("--upload-kib-s");
-    limits.download_bytes_per_second = rate("--download-kib-s");
-    limits.validate();
+    auto limits = transfer_options(args);
     args.count(sub == "resume" ? 2 : 3);
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::Remote remote(args.values[0], *token, ca_path);

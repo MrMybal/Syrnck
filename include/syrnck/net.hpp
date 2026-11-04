@@ -21,6 +21,8 @@ struct TransferOptions {
   bool require_read_lease = false;
   // zstd requires server support, but incompressible bodies still travel raw.
   ObjectCompression compression = ObjectCompression::automatic;
+  // Push-only: refuse replacing an existing reference with another object.
+  bool immutable_reference = false;
   void validate() const;
 };
 struct ServeOptions {

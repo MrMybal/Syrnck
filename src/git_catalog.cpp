@@ -167,6 +167,10 @@ void verify_assets(const Store &store, const Catalog &catalog, OperationOptions 
 }
 ObjectKey prepare_bundle(const Store &store, const Catalog &catalog, OperationOptions operation) {
   auto payload = bundle_bytes(catalog);
+  auto root = ObjectKey{Kind::revision, object_id(Kind::revision, payload)};
+  auto references = store.refs();
+  auto found = references.find("git-assets/" + catalog.commit);
+  require(found == references.end() || found->second == root, "local Git catalog points to another object");
   verify_assets(store, catalog, operation);
   throw_if_cancelled(operation.stop);
   auto key = store.put(Kind::revision, payload).first;

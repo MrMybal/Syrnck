@@ -386,3 +386,8 @@ SYRNCK_MESSAGE("cannot read Git pointer blobs", "impossible de lire les blobs de
 SYRNCK_MESSAGE("invalid Git batch response", "réponse de lot Git invalide")
 SYRNCK_MESSAGE("trailing Git batch response", "données supplémentaires dans la réponse de lot Git")
 SYRNCK_MESSAGE("duplicate Git asset path", "chemin d'asset Git dupliqué")
+SYRNCK_MESSAGE("immutable remote reference points to another object", "la référence distante immuable pointe vers un autre objet")
+SYRNCK_MESSAGE("immutable reference option is only available for push", "l'option de référence immuable est réservée à l'envoi")
+SYRNCK_MESSAGE("local Git catalog points to another object", "le catalogue Git local pointe vers un autre objet")
+SYRNCK_MESSAGE("remote Git catalog does not match commit", "le catalogue Git distant ne correspond pas au commit")
+SYRNCK_MESSAGE("local Git catalog changed during transfer", "le catalogue Git local a changé pendant le transfert")

@@ -33,6 +33,45 @@ GC independently of later changes to Git refs. They currently require explicit
 unpinning to release; automatic Git/ref/reflog retention reconciliation remains
 future work.
 
+## Grouped transfers
+
+```text
+syrnck git push-assets https://blocks.example.invalid HEAD --requests 4 --require-lease
+syrnck git pull-assets https://blocks.example.invalid HEAD --requests 4 --require-read-lease
+```
+
+The local Git commit must already exist. These commands use the common Git store
+unless `--store` overrides it. Tokens/keys remain in their usual environment;
+`--ca`, compression, retries and shared traffic/buffer limits work as for the
+ordinary agent. The result contains `commit`, `assets`, `bundle`, and the nested
+`transfer` statistics/session receipt.
+
+Push prepares the verified bundle, transfers its deduplicated closure using the
+existing persistent upload inventory/lease protocol, and publishes the single
+server reference `git-COMMIT`. That reference is immutable through this command:
+an existing different root fails before transfer rather than being overwritten.
+The final server CAS verifies the complete closure. Another commit, including a
+change only to source code, has its own reference. Git itself is not pushed by
+this command. A repeated upload reuses verified objects and session recovery.
+
+Pull reconstructs the expected bundle ID from the locally committed pointers,
+then requires the matching server reference. It downloads into
+`git-stage/BUNDLE_ID`, verifies all pointer size contracts and file hashes, and
+publishes `git-assets/COMMIT` only after those checks. The staging pin is then
+removed. A failed validation/interruption can retain a staging pin and journal;
+rerun `git pull-assets` after fixing the cause to finish validation/publication.
+An explicit `agent resume` only finishes its underlying staging transfer.
+
+No working file or Git index is modified by grouped transfer. For a fresh clone,
+use `git clone --no-checkout`, run `syrnck git install`, pull the desired commit's
+assets, then explicitly check out that commit. This is an explicit hydration
+workflow; automatic on-demand smudging and `filter-process` remain future work.
+
+The transaction covers one catalog's publication. Multiple Git commits use
+separate roots, and the Git server and block server do not participate in one
+distributed transaction. A failed Git publication can leave retained block roots.
+Do not delete those roots while corresponding Git history must stay reconstructible.
+
 ## Bounds and local Git requirements
 
 Use Git **2.45 or newer**. Local plumbing uses `--no-replace-objects` and
