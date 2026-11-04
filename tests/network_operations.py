@@ -64,6 +64,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.entered.set()
                 self.server.release.wait(8)
             self.reply(self.server.refs)
+        elif self.path == "/v1/capabilities":
+            self.reply({"upload_leases": 0})
         else:
             data = self.server.objects[self.path]
             if self.server.corrupt_download and self.path.startswith("/v1/objects/chunk/"):
@@ -212,7 +214,7 @@ class NetworkOperations(unittest.TestCase):
             result = self.cmd("agent", "push", remote.url, self.source_ref, "cli", "--progress-json")
             self.assertEqual(set(json.loads(result.stdout)), {"transferred_objects", "transferred_bytes", "reused_objects",
                                                               "peak_object_requests", "peak_object_buffer_bytes", "object_retries",
-                                                              "session", "reconciled"})
+                                                              "session", "reconciled", "upload_lease"})
             events = [json.loads(line) for line in result.stderr.splitlines()]
             self.assertTrue(any(e["phase"] == "transferring" for e in events))
             self.assertEqual(events[-1]["phase"], "publishing")

@@ -57,27 +57,34 @@ void TransferSession::validate() const {
               state == "complete",
           "invalid transfer session state");
   require(direction == "push" || state != "uncertain", "invalid transfer session state");
+  if (upload_lease) {
+    require(direction == "push", "only push sessions can hold an upload lease");
+    validate_id(*upload_lease);
+  }
   validate_id(id);
   require(id == identity(direction, endpoint, root, reference), "transfer session identity mismatch");
 }
 Json TransferSession::json() const {
   validate();
-  return Json{{"version", 1},
+  return Json{{"version", 2},
               {"id", id},
               {"direction", direction},
               {"endpoint", endpoint},
               {"reference", reference},
               {"root", key_json(root)},
               {"expected", expected ? key_json(*expected) : Json(nullptr)},
-              {"state", state}};
+              {"state", state},
+              {"upload_lease", upload_lease ? Json(*upload_lease) : Json(nullptr)}};
 }
 TransferSession TransferSession::parse(const Json &value) {
-  require(value.is_object() && value.size() == 8 && value.contains("version") &&
-              value["version"].is_number_integer() && value["version"] == 1 && value.contains("id") &&
-              value["id"].is_string() && value.contains("direction") && value["direction"].is_string() &&
-              value.contains("endpoint") && value["endpoint"].is_string() && value.contains("reference") &&
-              value["reference"].is_string() && value.contains("state") && value["state"].is_string() &&
-              value.contains("root") && value.contains("expected"),
+  require(value.is_object() && value.contains("version") && value["version"].is_number_integer() &&
+              ((value["version"] == 1 && value.size() == 8) ||
+               (value["version"] == 2 && value.size() == 9 && value.contains("upload_lease") &&
+                (value["upload_lease"].is_null() || value["upload_lease"].is_string()))) &&
+              value.contains("id") && value["id"].is_string() && value.contains("direction") &&
+              value["direction"].is_string() && value.contains("endpoint") && value["endpoint"].is_string() &&
+              value.contains("reference") && value["reference"].is_string() && value.contains("state") &&
+              value["state"].is_string() && value.contains("root") && value.contains("expected"),
           "invalid transfer session document");
   TransferSession result;
   result.id = value["id"].get<std::string>();
@@ -88,6 +95,8 @@ TransferSession TransferSession::parse(const Json &value) {
   result.root = parse_key(value["root"]);
   if (!value["expected"].is_null())
     result.expected = parse_key(value["expected"]);
+  if (value["version"] == 2 && !value["upload_lease"].is_null())
+    result.upload_lease = value["upload_lease"].get<std::string>();
   result.validate();
   return result;
 }

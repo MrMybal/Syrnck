@@ -23,12 +23,12 @@ addresses that new root; use the session ID to resume the original root.
 
 ## Format and writes
 
-Records live in `STORE/transfers/ID.json`, with a strict version-1 schema and a
-16 KiB limit:
+Records live in `STORE/transfers/ID.json`, with a strict version-2 schema and a
+16 KiB limit. Version-1 records remain readable:
 
 | Field | Meaning |
 | --- | --- |
-| `version` | Journal schema version, currently 1 |
+| `version` | Journal schema version, currently 2 |
 | `id` | Stable BLAKE3 identity over direction, endpoint fingerprint, root and reference |
 | `direction` | `push` or `pull` |
 | `endpoint` | Hash of the client's canonical base URL |
@@ -36,6 +36,7 @@ Records live in `STORE/transfers/ID.json`, with a strict version-1 schema and a
 | `reference` | Destination reference name |
 | `expected` | Destination reference at session creation, or null |
 | `state` | Recovery state described below |
+| `upload_lease` | Nullable server upload lease ID (added in version 2) |
 
 URL, token, encryption key, CA filename and exception text are not recorded.
 Endpoint matching is exact after URL normalization; equivalent URL spellings
@@ -113,13 +114,14 @@ including incomplete transfer metadata. A valid filename can be discarded even
 if its contents are malformed. Completed receipts remain until forgotten and
 do not pin their roots.
 
-Protection is **local** and requires journal-aware engines for every GC run.
-Older binaries ignore these holds. Remote server-side transfer leases are not
-implemented; offline server GC can reclaim incomplete uploads. Resume
-renegotiates and reuploads them from the protected source. Distributed leases,
-selective object retention, journal pruning and background recovery remain
-future work. Session listing materializes its result; receipts consume disk
-space until removed.
+Local holds require journal-aware engines for every GC run. Compatible servers
+also provide [expiring upload leases and publication receipts](SERVER_UPLOAD_LEASES.md).
+Those receipts can confirm a lost acknowledgement even after a later reference
+change. An expired lease can permit offline server GC; resume renegotiates and
+reuploads missing objects from the protected source. Remote read leases for
+pulls, selective/distributed retention, local journal pruning and background
+recovery remain future work. Session listing materializes its result; receipts
+consume disk space until removed.
 
 ## Validation
 

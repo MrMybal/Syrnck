@@ -80,6 +80,8 @@ Les requêtes en erreur temporaire sont relancées jusqu'à trois fois par défa
 
 Les transferts enregistrent un journal local persistant. Les commandes `agent sessions`, `agent resume URL SESSION_ID` et `agent forget SESSION_ID` permettent de le consulter, de reprendre ou de l'abandonner explicitement. Les sessions inachevées bloquent le GC local et conservent la référence attendue avant l'interruption. Voir les [sessions et la récupération des publications](docs/TRANSFER_SESSIONS.md).
 
+Les serveurs compatibles protègent aussi les envois avec des baux persistants, renouvelables et expirables, et refusent les anciens jetons de publication. `--require-lease` exige cette protection ; `leases list`, `leases release ID` et `leases prune` administrent les baux hors ligne. Les reçus permettent de retrouver une publication sans écraser une référence modifiée ensuite. Voir les [baux d'envoi serveur](docs/SERVER_UPLOAD_LEASES.md).
+
 ## Validation et migration
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.

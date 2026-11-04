@@ -124,7 +124,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git install [DOSSIER] [--encrypted]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
+        [--lease-seconds 3600] [--require-lease]
+  leases list | release ID | prune   Gérer les baux d'envoi du store serveur
   agent push URL RÉF_LOCALE RÉF_DISTANTE
+             [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
   agent resume URL SESSION           Reprendre une session interrompue
              [--requests 1..32] [--transfer-buffer-mib 64] (push, pull ou resume)
@@ -167,7 +170,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git install [DIRECTORY] [--encrypted]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
+        [--lease-seconds 3600] [--require-lease]
+  leases list | release ID | prune   Manage the server store's upload leases
   agent push URL LOCAL_REF REMOTE_REF
+             [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF
   agent resume URL SESSION           Resume an interrupted session
              [--requests 1..32] [--transfer-buffer-mib 64] (push, pull or resume)
@@ -230,7 +236,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     return 0;
   }
   std::string sub;
-  if (command == "git" || command == "native" || command == "agent" || command == "config")
+  if (command == "git" || command == "native" || command == "agent" || command == "config" ||
+      command == "leases")
     sub = args.pop();
   if (command == "git" && sub == "install") {
     auto encrypted = args.flag("--encrypted");
@@ -437,11 +444,31 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       git::smudge(store, std::cin, std::cout, {control->token(), observe});
     } else
       throw Error("unknown Git command");
+  } else if (command == "leases") {
+    if (sub == "list") {
+      args.count(0);
+      auto result = Json::array();
+      for (const auto &lease : store.upload_leases())
+        result.push_back(lease.json());
+      print(result);
+    } else if (sub == "release") {
+      args.count(1);
+      store.release_upload_lease(args.values[0]);
+      print(Json{{"released", args.values[0]}});
+    } else if (sub == "prune") {
+      args.count(0);
+      print(Json{{"removed", store.prune_upload_leases()}});
+    } else
+      throw Error("unknown lease command");
   } else if (command == "serve") {
+    net::ServeOptions limits;
+    limits.require_upload_lease = args.flag("--require-lease");
+    if (auto seconds = args.option("--lease-seconds"))
+      limits.upload_lease_seconds = integer(*seconds);
     auto listen = args.option("--listen").value_or("127.0.0.1:7437");
     args.count(0);
     require(token.has_value(), "set SYRNCK_TOKEN");
-    net::serve(store, *token, listen, language);
+    net::serve(store, *token, listen, language, limits);
   } else if (command == "agent") {
     if (sub == "sessions") {
       args.count(0);
@@ -460,6 +487,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       return 0;
     }
     net::TransferOptions limits;
+    limits.require_upload_lease = args.flag("--require-lease");
     if (auto requests = args.option("--requests")) {
       auto count = integer(*requests);
       require(count >= 1 && count <= 32, "transfer requests must be in 1..32");

@@ -180,6 +180,8 @@ Les transferts acceptent `--requests 4 --transfer-buffer-mib 64`, `--retries 0..
 
 Pour un accès distant, publier le serveur derrière un proxy HTTPS. Le client refuse HTTP hors loopback et les redirections. Un certificat d'autorité privé peut être fourni avec `--ca racine.pem`. Le prototype ne fournit pas encore de configuration de déploiement ou de gestion de certificats.
 
+Les envois négocient automatiquement les baux persistants quand le serveur les annonce. `agent push ... --require-lease` exige leur prise en charge ; `serve --require-lease --lease-seconds 3600` impose les publications protégées. Après arrêt du serveur, `leases list`, `leases release ID` et `leases prune` permettent l'administration. Un bail actif bloque le GC serveur ; son expiration autorise la collecte des objets non référencés. Voir les [baux d'envoi, jetons et reçus](SERVER_UPLOAD_LEASES.md).
+
 ## Chiffrement au repos
 
 Exemple PowerShell :

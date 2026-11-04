@@ -59,11 +59,24 @@ struct TransferSession {
   std::string id, direction, endpoint, reference, state = "transferring";
   ObjectKey root{Kind::manifest, {}};
   std::optional<ObjectKey> expected;
+  std::optional<std::string> upload_lease;
   static std::string identity(std::string_view direction, std::string_view endpoint, const ObjectKey &,
                               std::string_view reference);
   void validate() const;
   Json json() const;
   static TransferSession parse(const Json &);
+};
+struct LeaseRejected : Error {
+  using Error::Error;
+};
+struct UploadLease {
+  std::string id, reference, fence, state = "active";
+  ObjectKey root{Kind::manifest, {}};
+  std::optional<ObjectKey> expected;
+  std::uint64_t expires_at = 0;
+  void validate() const;
+  Json json() const;
+  static UploadLease parse(const Json &);
 };
 struct Chunking {
   bool fixed = false;
@@ -190,6 +203,15 @@ public:
   std::optional<TransferSession> transfer_session(std::string_view id) const;
   void write_transfer_session(const TransferSession &, std::stop_token = {}) const;
   void remove_transfer_session(std::string_view id) const;
+  std::vector<UploadLease> upload_leases(std::stop_token = {}) const;
+  std::optional<UploadLease> upload_lease(std::string_view id) const;
+  UploadLease acquire_upload_lease(std::string_view id, const ObjectKey &, std::string_view reference,
+                                   const std::optional<ObjectKey> &expected, std::uint64_t seconds,
+                                   const std::optional<std::string> &fence = {}) const;
+  bool publish_upload_lease(std::string_view id, std::string_view fence) const;
+  void confirm_upload_lease(std::string_view id, std::string_view fence) const;
+  void release_upload_lease(std::string_view id) const;
+  std::size_t prune_upload_leases() const;
   std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false, std::stop_token = {},
                               ProgressCallback = {}) const;
   std::vector<ObjectKey> objects() const;
@@ -214,5 +236,6 @@ private:
   Bytes load_object(const ObjectKey &, bool presence_only) const;
   void write_refs(const Refs &, std::stop_token = {}) const;
   void check_transfer_gc(std::stop_token) const;
+  void check_upload_gc(std::stop_token, bool remove) const;
 };
 } // namespace syrnck

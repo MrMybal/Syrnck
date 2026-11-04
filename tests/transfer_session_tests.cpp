@@ -60,7 +60,11 @@ int main() {
           bad.erase(field);
           fails([&] { (void)TransferSession::parse(bad); });
         }
-        for (auto bad : {Json{{"version", true}}, Json{{"version", 2}}, Json{{"direction", "other"}},
+        auto legacy = document;
+        legacy.erase("upload_lease");
+        legacy["version"] = 1;
+        check(TransferSession::parse(legacy).json() == document);
+        for (auto bad : {Json{{"version", true}}, Json{{"version", 3}}, Json{{"direction", "other"}},
                          Json{{"state", "other"}}, Json{{"id", std::string(64, '0')}},
                          Json{{"expected", Json::array()}}, Json{{"extra", 1}}}) {
           auto changed = document;

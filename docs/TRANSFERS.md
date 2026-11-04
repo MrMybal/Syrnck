@@ -17,7 +17,8 @@ protocol path, such as `v1/objects/chunk/ID`.
 `transferring` bytes are HTTP request-body plus response-body bytes for one
 attempt. They reset between requests and retry attempts. The total may initially be unknown; it
 becomes known when libcurl learns a content length, and is exact at successful
-request completion. Control requests also produce events. A completed request
+request completion. Foreground control requests also produce events; background
+lease renewals have no user callbacks. A completed request
 does not mean an imported object has passed validation or a reference has been
 published. The existing final `transferred_bytes` statistic counts only logical
 payloads of newly transferred objects; it excludes control messages and reused
@@ -68,11 +69,15 @@ requested. The server may already have updated the reference. Inspect that
 reference before deciding whether to retry. Transport failures, server errors
 and unexpected responses are treated conservatively; 401/403/404/409 remain
 ordinary request failures. Resume uses the persistent journal to confirm a
-matching remote root; it does not automatically repeat an ambiguous CAS.
+matching remote root; it does not automatically repeat an ambiguous CAS. On
+compatible servers, a [published upload receipt](SERVER_UPLOAD_LEASES.md) can
+also complete recovery after a later writer changed the reference. A leased
+412/428 precondition rejection leaves the session available for deliberate retry.
 
 Ordinary cooperative cancellation exits **130**. It does not remove already
 verified objects and does not delete existing references. Object formats,
-authentication rules and the v1 HTTP protocol are unchanged.
+authentication rules and the base v1 HTTP protocol remain compatible; upload
+leases use an explicitly negotiated extension.
 
 ## Validation and remaining work
 

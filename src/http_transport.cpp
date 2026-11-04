@@ -45,7 +45,8 @@ std::optional<std::chrono::milliseconds> retry_delay(const std::exception_ptr &e
   auto delay = std::chrono::milliseconds(std::min<std::uint64_t>(30000, limits.retry_delay_ms << retries));
   return std::max(delay, server_delay);
 }
-void wait_until(std::chrono::steady_clock::time_point deadline, std::stop_token stop) {
+void wait_until(std::chrono::steady_clock::time_point deadline, std::stop_token stop,
+                const std::function<void()> &tick) {
   throw_if_cancelled(stop);
   if (deadline <= std::chrono::steady_clock::now())
     return;
@@ -54,6 +55,8 @@ void wait_until(std::chrono::steady_clock::time_point deadline, std::stop_token 
   std::unique_lock lock(mutex);
   while (std::chrono::steady_clock::now() < deadline) {
     throw_if_cancelled(stop);
+    if (tick)
+      tick();
     changed.wait_until(lock, stop,
                        std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)),
                        [] { return false; });
@@ -315,7 +318,8 @@ void HttpRequest::rate_share(const TransferOptions &limits, std::size_t slots) {
 void transfer_objects(std::string_view base, std::string_view token, const std::optional<fs::path> &ca,
                       bool upload, const TransferOptions &limits, const OperationOptions &operation,
                       TransferStats &stats, TrafficBudget &traffic, const TransferNext &next,
-                      const TransferPrepare &prepare, const TransferComplete &complete) {
+                      const TransferPrepare &prepare, const TransferComplete &complete,
+                      const std::function<void()> &tick) {
   limits.validate();
   throw_if_cancelled(operation.stop);
   std::unique_ptr<CURLM, decltype(&curl_multi_cleanup)> multi(curl_multi_init(), &curl_multi_cleanup);
@@ -339,7 +343,9 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
   const auto reservation = response_limit + (upload ? max_object_size : 0);
   for (;;) {
     throw_if_cancelled(operation.stop);
-    wait_until(traffic.ready(), operation.stop);
+    if (tick)
+      tick();
+    wait_until(traffic.ready(), operation.stop, tick);
     for (auto it = waiting.begin(); it != waiting.end();) {
       if (it->ready > std::chrono::steady_clock::now()) {
         ++it;
@@ -377,7 +383,7 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
         return;
       auto first = std::min_element(waiting.begin(), waiting.end(),
                                     [](const auto &a, const auto &b) { return a.ready < b.ready; });
-      wait_until(first->ready, operation.stop);
+      wait_until(first->ready, operation.stop, tick);
       continue;
     }
     for (auto &[handle, job] : active)

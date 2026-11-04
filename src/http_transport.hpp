@@ -20,7 +20,8 @@ struct HttpTransportError : Error {
 };
 std::optional<std::chrono::milliseconds> retry_delay(const std::exception_ptr &, std::size_t retries,
                                                      const TransferOptions &);
-void wait_until(std::chrono::steady_clock::time_point, std::stop_token);
+void wait_until(std::chrono::steady_clock::time_point, std::stop_token,
+                const std::function<void()> &tick = {});
 struct TrafficBudget {
   explicit TrafficBudget(const TransferOptions &);
   void account(std::uint64_t uploaded, std::uint64_t downloaded);
@@ -64,5 +65,5 @@ using TransferComplete = std::function<void(const ObjectKey &, Bytes, std::size_
 void transfer_objects(std::string_view base, std::string_view token, const std::optional<fs::path> &ca,
                       bool upload, const TransferOptions &, const OperationOptions &, TransferStats &,
                       TrafficBudget &, const TransferNext &, const TransferPrepare &,
-                      const TransferComplete &);
+                      const TransferComplete &, const std::function<void()> &tick = {});
 } // namespace syrnck::net::detail

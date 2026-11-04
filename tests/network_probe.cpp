@@ -36,6 +36,11 @@ int entry(int argc, char **argv) {
                                  completed += event.complete;
                                  bytes_seen |= event.bytes > 0;
                                  if (event.path.starts_with("v1/objects/chunk/") && event.bytes > 0) {
+                                   if (mode == "renew_stop" && !late.joinable())
+                                     late = std::jthread([&] {
+                                       std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                       stop.request_stop();
+                                     });
                                    if ((mode == "backoff" || mode == "pace") && !late.joinable())
                                      late = std::jthread([&] {
                                        std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -67,6 +72,10 @@ int entry(int argc, char **argv) {
       limits.upload_bytes_per_second = 1024;
       limits.download_bytes_per_second = 1024;
     }
+    if (mode == "renew" || mode == "renew_stop") {
+      limits.upload_bytes_per_second = 128 * 1024;
+      limits.require_upload_lease = true;
+    }
     try {
       Json result;
       if (operation == "push")
@@ -77,7 +86,7 @@ int entry(int argc, char **argv) {
         (void)remote.refs(options);
         result = Json::object();
       }
-      require(mode == "ok" || mode == "late", "network probe expected failure");
+      require(mode == "ok" || mode == "late" || mode == "renew", "network probe expected failure");
       std::cout << Json{{"result", result},
                         {"events", events},
                         {"completed", completed},
@@ -89,7 +98,8 @@ int entry(int argc, char **argv) {
       require(mode == "uncertain", "unexpected uncertain publication");
       std::cout << "{\"uncertain\":true}\n";
     } catch (const Cancelled &) {
-      require(mode == "pre" || mode == "transfer" || mode == "publish" || mode == "backoff" || mode == "pace",
+      require(mode == "pre" || mode == "transfer" || mode == "publish" || mode == "backoff" ||
+                  mode == "pace" || mode == "renew_stop",
               "unexpected cancellation");
       std::cout << Json{{"cancelled", true}, {"events", events}}.dump() << '\n';
     } catch (const Error &error) {

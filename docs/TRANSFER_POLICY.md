@@ -100,7 +100,8 @@ Restarting the command still negotiates remote presence or checks local verified
 objects and reuses completed imports. [Persistent sessions](TRANSFER_SESSIONS.md)
 save the requested root and reference expectation and block local GC until
 completion or deliberate discard. Retry budgets and pacing credit are not
-persisted. Background resume and remote transfer leases remain future work.
+persisted. [Server upload leases](SERVER_UPLOAD_LEASES.md) protect uploads while
+renewed; background resume and remote read leases remain future work.
 
 `resilient_transfers` runs a real HTTP peer that returns transient statuses,
 loses acknowledgements and truncates downloads. It exercises control/object

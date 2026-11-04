@@ -102,7 +102,7 @@ Les noms distants utilisent un seul composant d'URL. Les références locales pe
 
 Les objets peuvent arriver avant leurs dépendances. Ils ne sont pas publiés comme nouvelle version tant que la référence n'a pas été validée et remplacée. Un retry du PUT d'un objet déjà présent est idempotent. Le client désactive les redirections pour ne pas déplacer les requêtes authentifiées.
 
-Cette v1 n'est compatible ni avec BEP, ni avec l'API Git LFS, ni avec le protocole Lore. Elle n'offre pas encore négociation de capacités, quotas, leases, compression réseau, flux multiplexés ou réplication serveur.
+Cette v1 n'est compatible ni avec BEP, ni avec l'API Git LFS, ni avec le protocole Lore. L'extension négociée `GET /v1/capabilities` annonce les [baux d'envoi persistants](SERVER_UPLOAD_LEASES.md), leur durée et les reçus de publication. Les publications protégées ajoutent `upload: {id, fence}` au corps existant ; les requêtes historiques restent acceptées sauf si le serveur impose les baux. La compression réseau, les quotas d'objets/utilisateurs, les baux de lecture et la réplication serveur restent à développer.
 
 ## Interface C
 

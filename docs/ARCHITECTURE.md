@@ -94,13 +94,13 @@ Trois opérations doivent rester distinctes :
 
 `native detach-history` archive l'ancienne tête avant de déplacer la branche. Pour libérer ensuite les données anciennes, il faut retirer cette archive puis lancer le GC. Une version volontairement supprimée de toutes les racines et nettoyée ne peut plus être reconstruite. Une suppression définitive et une conservation éternelle des mêmes données seraient incompatibles.
 
-Pour un déploiement réel, ajouter des délais de grâce, des politiques de rétention, des pins de releases, un journal de récupération, des backups vérifiés et des leases de transfert. Le GC distribué ne pourra pas se contenter des racines d'un seul client.
+Les [journaux de transfert](TRANSFER_SESSIONS.md) protègent le store local et les [baux d'envoi serveur](SERVER_UPLOAD_LEASES.md) protègent les uploads jusqu'à expiration ou publication. Pour un déploiement réel, compléter les délais de grâce, politiques de rétention, pins de releases et backups vérifiés. Le GC distribué ne pourra pas se contenter des racines d'un seul client.
 
 ## Synchronisation et serveur
 
 L'agent compare des identifiants d'objets, demande les absents puis transfère leur contenu. Les objets reçus sont vérifiés, stockés et réutilisables lors d'une reprise. La nouvelle référence devient visible seulement lorsque toute sa fermeture de dépendances a été validée. Une comparaison avec la valeur attendue protège la publication contre un écrasement concurrent.
 
-Le serveur initial est mono-store avec un jeton partagé ; il sérialise les accès au stockage. Le GC et les autres processus locaux sont exclus pendant son exécution. Le réseau limite les corps à 16 Mio, les requêtes de présence à 4 096 objets et les requêtes actives à 16. Les transferts de l'agent sont actuellement séquentiels.
+Le serveur initial est mono-store avec un jeton partagé ; il sérialise les accès au stockage. Le GC et les autres processus locaux sont exclus pendant son exécution. Le réseau limite les corps à 16 Mio, les requêtes de présence à 4 096 objets et le pool serveur à 16 threads. L'agent peut chevaucher des requêtes d'objets avec des [plafonds de concurrence et de buffers](PARALLEL_TRANSFERS.md), tout en coordonnant les accès au Store.
 
 Un transfert de blocs ne règle pas les conflits entre deux modifications de fichiers. La synchronisation continue devra définir versions causales, suppressions, conflits, renommages et publication multi-fichier, indépendamment de l'algorithme de déduplication.
 
