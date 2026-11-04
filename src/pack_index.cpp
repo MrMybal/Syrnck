@@ -136,6 +136,15 @@ std::optional<std::size_t> PackIndex::candidate(const IndexKey &key) const {
   auto page = static_cast<std::size_t>(after - pages_.begin() - 1);
   return key <= pages_[page].last ? std::optional(page) : std::nullopt;
 }
+std::pair<std::size_t, std::size_t> PackIndex::kind_pages(Kind kind) const {
+  require(kind >= Kind::chunk && kind <= Kind::revision, "invalid object kind");
+  auto value = static_cast<std::uint8_t>(kind);
+  auto first = std::lower_bound(pages_.begin(), pages_.end(), value,
+                                [](const Page &page, auto k) { return page.last.value[0] < k; });
+  auto after = std::upper_bound(first, pages_.end(), value,
+                                [](auto k, const Page &page) { return k < page.first.value[0]; });
+  return {static_cast<std::size_t>(first - pages_.begin()), static_cast<std::size_t>(after - pages_.begin())};
+}
 std::unique_ptr<std::ifstream> PackIndex::open() const {
   check_file(path_, header_size + record_size * count_);
   auto result = std::make_unique<std::ifstream>(path_, std::ios::binary);

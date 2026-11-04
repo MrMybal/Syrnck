@@ -292,15 +292,26 @@ std::size_t PackStorage::entry_count(std::size_t segment) const {
 }
 void PackStorage::visit(std::size_t segment,
                         const std::function<void(const ObjectKey &, Position)> &visitor) const {
+  visit_range(segment, {}, visitor);
+}
+void PackStorage::visit_kind(std::size_t segment, Kind kind,
+                             const std::function<void(const ObjectKey &, Position)> &visitor) const {
+  visit_range(segment, kind, visitor);
+}
+void PackStorage::visit_range(std::size_t segment, std::optional<Kind> kind,
+                              const std::function<void(const ObjectKey &, Position)> &visitor) const {
   auto session = read_session();
   (void)entry_count(segment);
-  for (std::size_t page = 0; page < segments_[segment].index.page_count(); ++page) {
+  const auto &index = segments_[segment].index;
+  auto [first, after] = kind ? index.kind_pages(*kind) : std::pair(std::size_t{0}, index.page_count());
+  for (auto page = first; page < after; ++page) {
     // Own this page: a nested lookup can evict any cached page or replace scratch.
     auto data = segments_[segment].index.read_page(page, index_stream(segment));
     ++index_page_reads_;
     for (std::size_t i = 0; i < data.size() / record_size; ++i) {
       auto item = PackIndex::record(data, i);
-      visitor(item.key.object(), Position{segment, page * PackIndex::records_per_page + i, item.length});
+      if (!kind || item.key.value[0] == static_cast<std::uint8_t>(*kind))
+        visitor(item.key.object(), Position{segment, page * PackIndex::records_per_page + i, item.length});
     }
   }
 }
@@ -310,7 +321,9 @@ std::optional<PackStorage::Position> PackStorage::locate(const ObjectKey &key) c
     return {};
   return Position{found->segment, found->ordinal, found->length};
 }
-bool PackStorage::contains(const ObjectKey &key) const { return find(key).has_value(); }
+bool PackStorage::contains(const ObjectKey &key) const {
+  return find(key).has_value();
+}
 std::vector<ObjectKey> PackStorage::keys() const {
   auto session = read_session();
   std::vector<ObjectKey> result;

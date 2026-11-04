@@ -71,7 +71,7 @@ syrnck --lang fr --help
 
 Parallel compression/encryption is optional and uses a bounded queue; sequential ingestion remains the default. Indexed immutable packs reduce file counts. Ordinary packing appends new packs; explicit compaction regroups the store. GC keeps unaffected packs and rewrites only partially reachable packs.
 
-The verified object cache defaults to 64 MiB and 8,192 fingerprints. Every hit still checks the freshly read envelope; `fsck` and `gc` bypass decoded validation caches. The independent index page cache defaults to 4 MiB (`--index-cache-mib`). GC enumerates objects and rewrites survivors in a stream, with one mark bit per packed object. Loose live keys and metadata still consume memory proportional to their size.
+The verified object cache defaults to 64 MiB and 8,192 fingerprints. Every hit still checks the freshly read envelope; `fsck` and `gc` bypass decoded validation caches. The independent index page cache defaults to 4 MiB (`--index-cache-mib`). Both operations enumerate objects in a stream, with one mark bit per packed object; GC also rewrites survivors in a stream. Loose-only keys and metadata still consume memory proportional to their size. See [integrity audit guarantees and memory limits](docs/AUDIT.md).
 
 Packing explicitly enables physical storage v2 for a single pack, or v3 for multiple packs. New stores remain v1 until packing; logical IDs and encrypted envelopes stay unchanged. Older readers reject unsupported physical formats. See [pack publication and recovery](docs/PACKS.md), [paged indexes](docs/INDEXES.md), and [reproducible measurements](docs/PERFORMANCE.md), currently documented in French.
 

@@ -110,8 +110,12 @@ Store::Store(const fs::path &root, std::optional<Key> key, bool create, StoreOpt
 Store::~Store() = default;
 Store::Store(Store &&) noexcept = default;
 Store &Store::operator=(Store &&) noexcept = default;
-const fs::path &Store::root() const { return impl_->root; }
-bool Store::encrypted() const { return impl_->key.has_value(); }
+const fs::path &Store::root() const {
+  return impl_->root;
+}
+bool Store::encrypted() const {
+  return impl_->key.has_value();
+}
 StoreIoStats Store::io_stats() const {
   auto result = impl_->io;
   result.cached_objects = impl_->cache.entries();
@@ -124,7 +128,9 @@ StoreIoStats Store::io_stats() const {
   result.index_cached_pages = index.cached_pages;
   return result;
 }
-void Store::reset_io_stats() const { impl_->io = {}; }
+void Store::reset_io_stats() const {
+  impl_->io = {};
+}
 void Store::clear_cache() const {
   impl_->cache.clear();
   impl_->packs.clear_index_cache();
@@ -177,7 +183,9 @@ bool Store::import(const ObjectKey &key, std::span<const std::uint8_t> data) con
   require(object_id(key.kind, data) == key.id, "object hash mismatch");
   return put(key.kind, data).second;
 }
-Bytes Store::get(const ObjectKey &key) const { return load_object(key, false); }
+Bytes Store::get(const ObjectKey &key) const {
+  return load_object(key, false);
+}
 Bytes Store::read_envelope(const ObjectKey &key) const {
   const bool packed = impl_->packs.contains(key);
   Bytes envelope;
@@ -440,8 +448,12 @@ void Store::remove_ref(std::string_view name) const {
   write_refs(all);
 }
 struct NullBuffer : std::streambuf {
-  std::streamsize xsputn(const char *, std::streamsize n) override { return n; }
-  int_type overflow(int_type c) override { return traits_type::not_eof(c); }
+  std::streamsize xsputn(const char *, std::streamsize n) override {
+    return n;
+  }
+  int_type overflow(int_type c) override {
+    return traits_type::not_eof(c);
+  }
 };
 template <class Marker, class Reader>
 static std::size_t walk_objects(const std::vector<ObjectKey> &roots, bool verify, Marker mark, Reader read) {
@@ -477,11 +489,14 @@ std::set<ObjectKey> Store::closure(const std::vector<ObjectKey> &roots, bool ver
       [&](const ObjectKey &key) { return get(key); });
   return seen;
 }
-template <class Visitor> static void visit_loose_objects(const fs::path &root, Visitor visitor) {
+template <class Visitor>
+static void visit_loose_objects(const fs::path &root, Visitor visitor, std::optional<Kind> only = {}) {
   auto directory = root / "objects";
   if (fs::exists(directory))
     require(fs::is_directory(directory) && !fs::is_symlink(directory), "invalid object directory");
   for (auto kind : {Kind::chunk, Kind::manifest, Kind::revision}) {
+    if (only && kind != *only)
+      continue;
     auto base = directory / kind_name(kind);
     if (!fs::exists(base))
       continue;
@@ -517,27 +532,42 @@ std::vector<ObjectKey> Store::objects() const {
 struct CacheBypass {
   bool &flag;
   bool before;
-  explicit CacheBypass(bool &value) : flag(value), before(value) { flag = true; }
-  ~CacheBypass() { flag = before; }
+  explicit CacheBypass(bool &value) : flag(value), before(value) {
+    flag = true;
+  }
+  ~CacheBypass() {
+    flag = before;
+  }
 };
 std::size_t Store::fsck() const {
   CacheBypass audit(impl_->bypass_cache);
   impl_->load_config();
   auto session = impl_->packs.read_session();
-  // A duplicate loose copy must not hide a damaged active pack during an audit.
-  for (const auto &key : impl_->packs.keys())
-    if (fs::exists(object_path(key))) {
-      auto envelope = impl_->read_pack(impl_->packs, key);
-      (void)decode_envelope(key, envelope);
-    }
-  auto all = objects();
-  auto roots = all;
+  ObjectMarks verified(impl_->packs);
+  auto check = [&](const ObjectKey &key) {
+    (void)walk_objects(
+        {key}, true, [&](const ObjectKey &object) { return verified.insert(object); },
+        [&](const ObjectKey &object) { return get(object); });
+  };
   for (const auto &[name, key] : refs()) {
     (void)name;
-    roots.push_back(key);
+    check(key);
   }
-  (void)closure(roots, true);
-  return all.size();
+  // Audit metadata before standalone chunks: file hashes consume their blocks
+  // directly, without first decoding the entire chunk inventory separately.
+  for (auto kind : {Kind::revision, Kind::manifest, Kind::chunk}) {
+    for (std::size_t segment = 0; segment < impl_->packs.pack_count(); ++segment)
+      impl_->packs.visit_kind(segment, kind, [&](const ObjectKey &key, PackStorage::Position position) {
+        // Ordinary reads prefer loose objects. Check the secondary packed copy
+        // even when the logical object was already visited through a reference.
+        if (fs::exists(object_path(key)))
+          (void)decode_envelope(key, impl_->read_pack(impl_->packs, key));
+        if (!verified.contains(position))
+          check(key);
+      });
+    visit_loose_objects(root(), check, kind);
+  }
+  return verified.size();
 }
 Json Store::gc(bool remove) const {
   CacheBypass audit(impl_->bypass_cache);

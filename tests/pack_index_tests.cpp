@@ -50,6 +50,54 @@ int main() {
     std::cout << "PASS " << name << '\n';
   };
   try {
+    test("typed enumeration skips unrelated pages and preserves physical positions", [&] {
+      for (std::size_t chunks : {0, 1, 255, 256, 257, 4097}) {
+        auto directory = root / ("typed-" + std::to_string(chunks));
+        std::vector<ObjectKey> keys;
+        for (std::size_t i = 0; i < chunks; ++i)
+          keys.push_back(fixture::key(i, Kind::chunk).object());
+        // With no manifests, one boundary page can straddle the missing kind.
+        auto manifests = chunks % 2 == 0 ? 0U : 257U;
+        for (std::size_t i = 0; i < manifests; ++i)
+          keys.push_back(fixture::key(i, Kind::manifest).object());
+        for (std::size_t i = 0; i < 255; ++i)
+          keys.push_back(fixture::key(i, Kind::revision).object());
+        auto built = PackStorage::build(directory, keys,
+                                        [](const ObjectKey &) { return Bytes{'S', 'Y', 'R', '1', 'x'}; });
+        for (std::size_t budget : {std::size_t{0}, PackIndex::page_bytes}) {
+          PackStorage packs(directory, budget);
+          packs.load(built.metadata());
+          for (auto kind : {Kind::revision, Kind::manifest, Kind::chunk}) {
+            std::vector<ObjectKey> selected;
+            auto before = packs.index_stats().page_reads;
+            packs.visit_kind(0, kind, [&](const ObjectKey &key, PackStorage::Position position) {
+              check(position.segment == 0 && position.length == 5 && keys.at(position.ordinal) == key);
+              selected.push_back(key);
+            });
+            std::vector<ObjectKey> expected;
+            std::copy_if(keys.begin(), keys.end(), std::back_inserter(expected),
+                         [&](const ObjectKey &key) { return key.kind == kind; });
+            check(selected == expected);
+            std::size_t pages = 0;
+            for (std::size_t i = 0; i < keys.size(); i += PackIndex::records_per_page)
+              if (keys[i].kind <= kind &&
+                  keys[std::min(i + PackIndex::records_per_page, keys.size()) - 1].kind >= kind)
+                ++pages;
+            check(packs.index_stats().page_reads - before == pages);
+            // Nested zero-cache lookups may replace scratch or evict another page.
+            packs.visit_kind(0, kind, [&](const ObjectKey &key, PackStorage::Position position) {
+              check(packs.read(keys.front()).size() == 5 && packs.read(keys.back()).size() == 5);
+              check(keys.at(position.ordinal) == key && packs.locate(key)->ordinal == position.ordinal);
+            });
+          }
+          fails([&] { packs.visit_kind(0, static_cast<Kind>(3), [](const auto &, auto) {}); });
+          fails([&] { packs.visit_kind(1, Kind::chunk, [](const auto &, auto) {}); });
+          fails(
+              [&] { packs.visit_kind(0, Kind::revision, [](const auto &, auto) { throw Error("stop"); }); });
+          check(packs.open_streams() == 0 && packs.open_index_streams() == 0);
+        }
+      }
+    });
     test("large index retains only fences/filter and a bounded page cache", [&] {
       auto directory = root / "large";
       constexpr std::size_t records = 262144;

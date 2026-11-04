@@ -160,10 +160,31 @@ Json materialized_gc(Store &store) {
               {"packs_to_drop", dropped},           {"pack_bytes_to_write", rewrite_bytes},
               {"memory_with_inventories", memory()}};
 }
+Json materialized_audit(Store &store) {
+  // Reproduce the old fsck inventories with current readers/codecs. This fixture
+  // has no loose duplicates; both paths still enumerate/check their existence.
+  auto config = parse_json(read_bytes(store.root() / "config.json"));
+  PackStorage packs(store.root(), 0);
+  packs.load(config.at("pack"));
+  for (const auto &key : packs.keys()) {
+    auto path = store.root() / "objects" / kind_name(key.kind) / key.id.substr(0, 2) / key.id;
+    require(!fs::exists(path), "audit benchmark requires a packed-only fixture");
+  }
+  auto all = store.objects();
+  auto roots = all;
+  for (const auto &[name, key] : store.refs()) {
+    (void)name;
+    roots.push_back(key);
+  }
+  auto verified = store.closure(roots, true);
+  require(verified.size() == all.size(), "audit closure differs from inventory");
+  return Json{{"objects", all.size()}, {"memory_with_inventories", memory()}};
+}
 } // namespace
 int main(int argc, char **argv) {
   try {
-    require(argc >= 3, "usage: gc_bench prepare DIRECTORY CHUNKS | materialized|stream|delete DIRECTORY");
+    require(argc >= 3, "usage: gc_bench prepare DIRECTORY CHUNKS | "
+                       "materialized|stream|delete|audit-materialized|audit-stream DIRECTORY");
     auto root = path_from_utf8(argv[2]);
     std::string mode = argv[1];
     if (mode == "prepare") {
@@ -171,11 +192,34 @@ int main(int argc, char **argv) {
       prepare(root, static_cast<std::size_t>(std::stoull(argv[3])));
       return 0;
     }
-    require(argc == 3 && (mode == "materialized" || mode == "stream" || mode == "delete"), "invalid mode");
+    const bool audit = mode == "audit-materialized" || mode == "audit-stream";
+    require(argc == 3 && (mode == "materialized" || mode == "stream" || mode == "delete" || audit),
+            "invalid mode");
     auto expected = parse_json(read_bytes(root / "fixture.json"));
     Store store(root, {}, false, {.decoded_cache_bytes = 0, .verified_cache_entries = 0});
     auto before = memory();
     auto start = Clock::now();
+    if (audit) {
+      auto result =
+          mode == "audit-materialized" ? materialized_audit(store) : Json{{"objects", store.fsck()}};
+      auto seconds = std::chrono::duration<double>(Clock::now() - start).count();
+      auto after = memory();
+      auto io = store.io_stats();
+      require(result["objects"] == expected["objects"] &&
+                  io.object_reads == expected["objects"].get<std::size_t>() &&
+                  io.decoded_objects == io.object_reads,
+              "audit count or single-pass object reads differ");
+      std::cout << Json{{"mode", mode},
+                        {"seconds", seconds},
+                        {"memory_before", before},
+                        {"memory_after", after},
+                        {"result", result},
+                        {"io", io.json()},
+                        {"all_file_hashes_verified", true}}
+                       .dump()
+                << '\n';
+      return 0;
+    }
     auto result = mode == "materialized" ? materialized_gc(store) : store.gc(mode == "delete");
     auto seconds = std::chrono::duration<double>(Clock::now() - start).count();
     auto after = memory();

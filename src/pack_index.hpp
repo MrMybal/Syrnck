@@ -23,6 +23,8 @@ public:
   static PackIndex scan(const fs::path &, std::size_t count, std::uint64_t pack_bytes,
                         std::string_view expected_hash);
   std::optional<std::size_t> candidate(const IndexKey &) const;
+  // Half-open page range intersecting this kind, including boundary pages.
+  std::pair<std::size_t, std::size_t> kind_pages(Kind) const;
   std::unique_ptr<std::ifstream> open() const;
   Bytes read_page(std::size_t, std::istream *stream = nullptr) const;
   std::size_t page_count() const {

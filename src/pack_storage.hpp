@@ -56,6 +56,7 @@ public:
   // Each callback receives an independent key. Nested reads/lookups are safe,
   // even with the page cache disabled; publication during a visit is forbidden.
   void visit(std::size_t segment, const std::function<void(const ObjectKey &, Position)> &) const;
+  void visit_kind(std::size_t segment, Kind, const std::function<void(const ObjectKey &, Position)> &) const;
   std::optional<Position> locate(const ObjectKey &) const;
   bool contains(const ObjectKey &) const;
   std::vector<ObjectKey> keys() const;
@@ -63,7 +64,9 @@ public:
   std::uint64_t stored_size(const ObjectKey &) const;
   // Reuse one handle only within a serialized operation. No handle survives
   // between calls that can replace the pack path or publish a new generation.
-  ReadSession read_session() const { return ReadSession(*this); }
+  ReadSession read_session() const {
+    return ReadSession(*this);
+  }
   static PackStorage build(const fs::path &root, const std::vector<ObjectKey> &,
                            const std::function<Bytes(const ObjectKey &)> &verified_envelope,
                            std::uint64_t max_bytes = INT64_MAX,
@@ -120,6 +123,8 @@ private:
   const Bytes &index_page(std::size_t segment, std::size_t page) const;
   std::optional<Entry> find(const ObjectKey &) const;
   void validate_unique() const;
+  void visit_range(std::size_t segment, std::optional<Kind>,
+                   const std::function<void(const ObjectKey &, Position)> &) const;
   void check_directory() const;
   fs::path path(std::size_t segment, std::string_view extension) const;
   void check_file(const fs::path &, std::uint64_t size) const;

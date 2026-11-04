@@ -1,5 +1,25 @@
 # Mesures et stratégie de performance
 
+## Streaming integrity audit — 4 November 2026
+
+`fsck` now enumerates objects by kind without materializing a complete inventory,
+using one mark bit per packed entry. It still verifies unreachable metadata,
+complete file hashes and both physical copies of loose/packed duplicates.
+
+For 131,137 valid objects (131,072 distinct 64-byte blocks, 64 manifests and one
+revision), three alternating Windows x64 Release runs measured a median peak
+working set of **11.64 MiB**, versus **85.27 MiB** for a comparison implementation
+retaining the previous inventories. Median times were **8.312 s** and **8.537 s**.
+Both paths read and decoded all 131,137 objects, verified every file hash and left
+the store byte-identical. The comparator uses current codecs/indexes in the same
+binary, rather than a historical executable; OS caches are uncontrolled.
+
+See [audit guarantees, methodology and limits](AUDIT.md), the
+[complete report](benchmarks/streaming-audit-windows-x64-2026-11-04.json), and
+`scripts/benchmark_audit.py` for reproduction. Loose-only IDs, dependency stacks
+and metadata still consume memory; this is not a global constant-memory claim
+or a benchmark of Unreal assets.
+
 ## GC en flux et marquage compact — 4 novembre 2026
 
 Le GC ne construit plus de collections complètes pour l'inventaire des objets, les objets morts et les survivants de chaque pack. Il parcourt les index par pages, marque chaque objet empaqueté avec un bit et recopie les survivants en flux. Les hashes complets des fichiers conservés restent vérifiés avant toute suppression. Voir les [garanties et limites mémoire](PACKS.md#mémoire-du-gc).
@@ -27,7 +47,7 @@ Le [rapport complet](benchmarks/streaming-gc-windows-x64-2026-11-04.json) conser
 python scripts/benchmark_gc.py --exe build/Release/syrnck_gc_bench.exe --output rapport-gc.json
 ```
 
-Sur Unix, utiliser `build/syrnck_gc_bench` ; les compteurs mémoire y retournent actuellement `null`. Les tests fonctionnels couvrent séparément le chiffrement et le stockage mixte. Les objets vivants isolés, la pile et les métadonnées restent en RAM ; `fsck`, la compaction et l'API publique `closure()` conservent encore leurs inventaires complets. Aucune extrapolation à un projet réel, à un GC distribué ou à une RAM globalement constante n'est faite.
+Sur Unix, utiliser `build/syrnck_gc_bench` ; les compteurs mémoire y retournent actuellement `null`. Les tests fonctionnels couvrent séparément le chiffrement et le stockage mixte. Les objets vivants isolés, la pile et les métadonnées restent en RAM ; la compaction et l'API publique `closure()` conservent encore leurs inventaires complets. L'audit `fsck` a depuis reçu le parcours en flux décrit ci-dessus ; les résultats du GC restent ceux du binaire historique indiqué dans leur rapport. Aucune extrapolation à un projet réel, à un GC distribué ou à une RAM globalement constante n'est faite.
 
 ## Index paginés et mémoire — 4 novembre 2026
 
@@ -233,4 +253,4 @@ Utiliser un corpus autorisé de vrais projets : code, cartes Unreal, World Parti
 
 Mesurer séparément scan froid/chaud, CDC, hash, compression, chiffrement, validation, publication, fsck, GC et transfert. Rapporter temps p50/p95, RAM maximale, CPU, lectures/écritures, taille de métadonnées, taille compressée et octets réseau effectifs. Tester latence élevée, bande passante réduite, reprise et plusieurs clients.
 
-Les optimisations suivantes sont l'index transactionnel d'objets vérifiés, les arbres de métadonnées, les inventaires de `fsck`/compaction en flux, le marquage borné des objets isolés, la fusion automatique des packs, la propagation des réglages du pipeline aux autres commandes, les transferts groupés et le suivi incrémental du disque. Les tests de reconstruction et de rétention doivent rester invariants pendant ces changements.
+Les optimisations suivantes sont l'index transactionnel d'objets vérifiés, les arbres de métadonnées, les inventaires de compaction en flux, le marquage borné des objets isolés, la fusion automatique des packs, la propagation des réglages du pipeline aux autres commandes, les transferts groupés et le suivi incrémental du disque. Les tests de reconstruction et de rétention doivent rester invariants pendant ces changements.

@@ -66,7 +66,7 @@ Le cache du moteur évite de répéter le déchiffrement et la décompression d'
 
 Le lecteur consulte les index de packs par pages vérifiées, avec **4 Mio de cache** par défaut, réglable avec `--index-cache-mib`. Le répertoire de pages et un filtre de clés absentes remplacent la table complète des objets en mémoire. Les formats v2/v3 restent identiques ; l'ouverture vérifie toujours l'index complet. Voir [fonctionnement, garanties et mémoire](docs/INDEXES.md).
 
-Le GC parcourt les inventaires en flux et marque les objets empaquetés avec **un bit par entrée**, puis réécrit les seuls survivants sans liste complète d'IDs. Les objets vivants isolés et les métadonnées gardent leurs propres coûts mémoire. Voir les [budgets et garanties du GC](docs/PACKS.md#mémoire-du-gc).
+Le GC et `fsck` parcourent les inventaires en flux et marquent les objets empaquetés avec **un bit par entrée**. Le GC réécrit les seuls survivants sans liste complète d'IDs. Les clés absentes des packs et les métadonnées gardent leurs propres coûts mémoire. Voir les [garanties des audits](docs/AUDIT.md) et les [budgets du GC](docs/PACKS.md#mémoire-du-gc).
 
 Dans un dépôt Git existant, lancer `syrnck git install`, puis ajouter les règles de [examples/unreal.gitattributes](examples/unreal.gitattributes). **Un `git push` ne transfère pas encore les blocs Syrnck** : le transfert reste explicite via l'agent. Les parcours complets sont dans [docs/USAGE.md](docs/USAGE.md).
 
