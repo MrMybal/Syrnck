@@ -23,7 +23,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - name: macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ninja openssl@3
+        run: |
+          brew install ninja openssl@3
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Configure
         run: python scripts/build.py configure
       - name: Build

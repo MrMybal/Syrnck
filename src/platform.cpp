@@ -194,8 +194,9 @@ static std::string file_contents(std::FILE *f) {
 }
 ProcessResult process(const std::vector<std::string> &args, const fs::path &cwd, std::string_view input) {
   require(!args.empty(), "empty child command");
-  using File = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
-  File in(std::tmpfile(), &std::fclose), out(std::tmpfile(), &std::fclose), err(std::tmpfile(), &std::fclose);
+  auto close_file = [](std::FILE *file) noexcept { (void)std::fclose(file); };
+  using File = std::unique_ptr<std::FILE, decltype(close_file)>;
+  File in(std::tmpfile(), close_file), out(std::tmpfile(), close_file), err(std::tmpfile(), close_file);
   require(in && out && err, "cannot allocate child streams");
   require(std::fwrite(input.data(), 1, input.size(), in.get()) == input.size(), "child input write failed");
   std::rewind(in.get());

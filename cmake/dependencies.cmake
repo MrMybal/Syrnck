@@ -36,6 +36,9 @@ if(WIN32)
   set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
 else()
   set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
+  # The pinned curl predates OpenSSL 4 APIs. Fail clearly rather than silently
+  # selecting an incompatible newer installation (notably on Homebrew hosts).
+  find_package(OpenSSL 3...<4 REQUIRED COMPONENTS SSL Crypto)
 endif()
 syrnck_archive(curl https://curl.se/download/curl-8.16.0.tar.xz 40c8cddbcb6cc6251c03dea423a472a6cea4037be654ba5cf5dec6eb2d22ff1d)
 FetchContent_MakeAvailable(curl)

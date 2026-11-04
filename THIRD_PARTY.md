@@ -13,6 +13,6 @@ Syrnck's implementation is C++20, with native C dependencies. No Rust compiler, 
 | Zstd | 1.5.7 | [Official release archive](https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz) | BSD-3-Clause / GPL-2.0 option; licenses in the fetched archive |
 | curl / libcurl | 8.16.0 | [Official archive](https://curl.se/download/curl-8.16.0.tar.xz) | curl license; `COPYING` in the fetched archive |
 
-The small dependencies are vendored. CMake fetches Zstd and curl from versioned archives, verifies SHA-256, and also accepts the identical cached archives in `.tools/downloads`. Their hashes are recorded in `cmake/dependencies.cmake`. Windows uses Schannel for HTTPS; Unix uses OpenSSL supplied by the build environment. OS CSPRNGs provide keys and nonces.
+The small dependencies are vendored. CMake fetches Zstd and curl from versioned archives, verifies SHA-256, and also accepts the identical cached archives in `.tools/downloads`. Their hashes are recorded in `cmake/dependencies.cmake`. Windows uses Schannel for HTTPS; Unix uses OpenSSL 3.x supplied by the build environment. The pinned curl is incompatible with OpenSSL 4 APIs, so the network configuration rejects that major version. OS CSPRNGs provide keys and nonces.
 
 The source project still needs its own distribution license. Any release package must include these notices and applicable dependency licenses. No Lore or Syncthing implementation was copied into this project.

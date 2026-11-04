@@ -25,7 +25,7 @@ XChaCha20-Poly1305 protects objects **at rest**. An authorized server can read t
 
 ## Build and test
 
-Requirements: CMake 3.25+, a C++20 compiler, a C compiler, and Ninja. On Windows, install the Visual Studio 2022 C++ tools and a Windows SDK. Linux/macOS also need OpenSSL development libraries. Python 3.9+ runs the build helper and tests; the engine and CLI are native binaries.
+Requirements: CMake 3.25+, a C++20 compiler, a C compiler, and Ninja. On Windows, install the Visual Studio 2022 C++ tools and a Windows SDK. Linux/macOS also need OpenSSL **3.x** development libraries. Python 3.9+ runs the build helper and tests; the engine and CLI are native binaries.
 
 ```text
 python scripts/build.py configure
@@ -42,6 +42,8 @@ ctest --preset windows
 ```
 
 Use the `unix` preset on Linux/macOS. Small dependencies are vendored; CMake downloads pinned Zstd and libcurl archives and verifies their SHA-256 hashes. See [third-party components and notices](THIRD_PARTY.md).
+
+On macOS with Homebrew, install `ninja` and `openssl@3`. If multiple OpenSSL versions are installed, configure with `python scripts/build.py configure -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"`. The pinned curl requires OpenSSL 3.x; the network build rejects OpenSSL 4 instead of compiling against incompatible APIs.
 
 The CLI is `build/Release/syrnck.exe` on Windows and `build/syrnck` with the Unix preset. Embed the C++ library through [core.hpp](include/syrnck/core.hpp), or use the [C ABI](include/syrnck.h). CMake targets are available through `add_subdirectory`.
 
