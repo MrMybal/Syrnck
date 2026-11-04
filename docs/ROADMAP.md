@@ -22,7 +22,8 @@ Critère de sortie : aucune perte des versions conservées après suppression de
 
 ## 1 — Usage Git quotidien
 
-- [ ] Catalogue des assets nécessaires à un commit, push/pull groupés et transaction de publication.
+- [x] Catalogue déterministe des pointeurs d'un commit Git et racine locale vérifiée conservant ses assets.
+- [ ] Push/pull groupés des catalogues et transaction de publication.
 - [ ] Hook pre-push avec envoi des blocs avant la publication Git.
 - [ ] Téléchargement à la demande au checkout et stratégie de clone sans assets.
 - [ ] Protocole `filter-process`, hydratation différée, cache commun aux worktrees.

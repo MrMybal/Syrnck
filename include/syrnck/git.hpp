@@ -13,4 +13,21 @@ void smudge(const Store &, std::istream &, std::ostream &);
 void smudge(const Store &, std::istream &, std::ostream &, OperationOptions);
 fs::path common_store(const fs::path &directory);
 void install(const fs::path &directory, const fs::path &executable, const fs::path &store);
+struct Asset {
+  std::string path, blob, manifest;
+  std::uint64_t size = 0;
+  bool executable = false;
+};
+struct Catalog {
+  std::string commit;
+  std::vector<Asset> assets;
+  Json json() const;
+};
+// Reads raw committed Git blobs, never checkout filters or working files.
+Catalog catalog(const fs::path &directory, std::string_view revision, OperationOptions = {});
+// A deterministic parentless revision containing the catalog's asset paths.
+Bytes bundle_bytes(const Catalog &);
+ObjectKey bundle_key(const Catalog &);
+void verify_assets(const Store &, const Catalog &, OperationOptions = {});
+ObjectKey prepare_bundle(const Store &, const Catalog &, OperationOptions = {});
 } // namespace syrnck::git

@@ -122,6 +122,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch main]
   git install [DOSSIER] [--encrypted]
+  git catalog COMMIT [--directory CHEMIN]   Inspecter les pointeurs du commit
+  git prepare-assets COMMIT [--directory CHEMIN]   Vérifier et conserver ses assets
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -170,6 +172,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch main]
   git install [DIRECTORY] [--encrypted]
+  git catalog COMMIT [--directory PATH]   Inspect committed asset pointers
+  git prepare-assets COMMIT [--directory PATH]   Verify and retain its assets
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -201,7 +205,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << "syrnck 0.1.0 (C++20)\n";
     return 0;
   }
-  auto root = path_from_utf8(args.option("--store").value_or(".syrnck"));
+  auto root_option = args.option("--store");
+  auto root = path_from_utf8(root_option.value_or(".syrnck"));
   StoreOptions store_options;
   if (auto cache_mib = args.option("--cache-mib")) {
     auto size = integer(*cache_mib);
@@ -255,6 +260,23 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize("\nAssign filter=syrnck -text to assets in .gitattributes.\n", language);
     return 0;
   }
+  if (command == "git" && sub == "catalog") {
+    auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    auto text = args.flag("--progress"), json = args.flag("--progress-json");
+    require(!(text && json), "choose one progress output mode");
+    args.count(1);
+    control = std::make_unique<cli::OperationControl>(language, json   ? cli::ProgressMode::json
+                                                                : text ? cli::ProgressMode::text
+                                                                       : cli::ProgressMode::none);
+    print(git::catalog(directory, args.values[0],
+                       {control->token(), [&](const ProgressEvent &event) { control->report(event); }})
+              .json());
+    return 0;
+  }
+  auto git_directory =
+      command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
+  if (command == "git" && sub == "prepare-assets" && !root_option)
+    root = git::common_store(git_directory);
   Store store(root, key, false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
@@ -262,7 +284,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "put" || command == "get" || command == "fsck" || command == "pack" || command == "gc" ||
       (command == "native" && (sub == "commit" || sub == "export")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
-      (command == "git" && (sub == "clean" || sub == "smudge"));
+      (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -438,7 +460,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    if (sub == "clean") {
+    if (sub == "prepare-assets") {
+      args.count(1);
+      auto catalog = git::catalog(git_directory, args.values[0], {control->token(), observe});
+      auto bundle = git::prepare_bundle(store, catalog, {control->token(), observe});
+      print(Json{{"commit", catalog.commit}, {"assets", catalog.assets.size()}, {"bundle", key_json(bundle)}});
+    } else if (sub == "clean") {
       auto options = ingestion_options(args, store);
       options.stop = control->token();
       options.progress = observe;

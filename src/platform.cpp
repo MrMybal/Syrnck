@@ -292,12 +292,13 @@ FileLock::~FileLock() {
     ::close(static_cast<int>(handle_));
 #endif
 }
-static std::string file_contents(std::FILE *f) {
+static std::string file_contents(std::FILE *f, std::size_t limit) {
   std::rewind(f);
   std::string out;
   std::array<char, 8192> buf{};
   for (;;) {
     auto n = std::fread(buf.data(), 1, buf.size(), f);
+    require(n <= limit - out.size(), "child output exceeds size limit");
     out.append(buf.data(), n);
     if (n < buf.size()) {
       require(!std::ferror(f), "child output read failed");
@@ -306,7 +307,8 @@ static std::string file_contents(std::FILE *f) {
   }
   return out;
 }
-ProcessResult process(const std::vector<std::string> &args, const fs::path &cwd, std::string_view input) {
+ProcessResult process(const std::vector<std::string> &args, const fs::path &cwd, std::string_view input,
+                      std::size_t output_limit) {
   require(!args.empty(), "empty child command");
   auto close_file = [](std::FILE *file) noexcept { (void)std::fclose(file); };
   using File = std::unique_ptr<std::FILE, decltype(close_file)>;
@@ -389,6 +391,6 @@ ProcessResult process(const std::vector<std::string> &args, const fs::path &cwd,
   }
   int status = WIFEXITED(wait) ? WEXITSTATUS(wait) : 128;
 #endif
-  return {status, file_contents(out.get()), file_contents(err.get())};
+  return {status, file_contents(out.get(), output_limit), file_contents(err.get(), 16384)};
 }
 } // namespace syrnck

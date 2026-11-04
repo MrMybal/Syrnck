@@ -37,8 +37,8 @@ struct ProcessResult {
   int status;
   std::string out, err;
 };
-ProcessResult process(const std::vector<std::string> &, const fs::path &cwd = {},
-                      std::string_view input = {});
+ProcessResult process(const std::vector<std::string> &, const fs::path &cwd = {}, std::string_view input = {},
+                      std::size_t output_limit = 64 * 1024 * 1024);
 class FileLock {
 public:
   explicit FileLock(const fs::path &);
