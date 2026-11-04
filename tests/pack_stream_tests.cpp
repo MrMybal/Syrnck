@@ -22,8 +22,19 @@ fs::path loose(const Store &store, const ObjectKey &key) {
 std::map<fs::path, Bytes> files(const fs::path &root) {
   std::map<fs::path, Bytes> result;
   for (const auto &file : fs::recursive_directory_iterator(root))
-    if (file.is_regular_file())
-      result.emplace(file.path(), read_bytes(file.path()));
+    if (file.is_regular_file()) {
+      try {
+        result.emplace(file.path(), read_bytes(file.path()));
+      } catch (const std::exception &) {
+        // Windows can expose a short-lived, non-store *.tmp file during this
+        // snapshot. Ignore it only if it has already disappeared. Canonical
+        // packs/objects and Syrnck's .tmp<hex> staging files remain strict.
+        std::error_code error;
+        if (file.path().extension() == ".tmp" && !fs::exists(file.path(), error) && !error)
+          continue;
+        throw;
+      }
+    }
   return result;
 }
 PackStorage::KeySequence sequence(const std::vector<ObjectKey> &keys) {
