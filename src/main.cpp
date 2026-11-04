@@ -235,8 +235,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   Store store(root, key, false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
-  bool cancellable = command == "put" || command == "get" || command == "fsck" ||
-                     (command == "native" && (sub == "commit" || sub == "export")) ||
+  bool cancellable = command == "put" || command == "get" || command == "fsck" || command == "pack" ||
+                     command == "gc" || (command == "native" && (sub == "commit" || sub == "export")) ||
                      (command == "agent" && (sub == "push" || sub == "pull")) ||
                      (command == "git" && (sub == "clean" || sub == "smudge"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
@@ -348,7 +348,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   } else if (command == "gc") {
     auto remove = args.flag("--delete");
     args.count(0);
-    print(store.gc(remove));
+    print(store.gc(remove, {control->token(), observe}));
   } else if (command == "pack") {
     auto options = store.settings().pack_options();
     options.compact = args.flag("--compact");
@@ -363,7 +363,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       options.max_objects_per_pack = static_cast<std::size_t>(n);
     }
     args.count(0);
-    print(store.pack(options));
+    print(store.pack(options, {control->token(), observe}));
   } else if (command == "fsck") {
     args.count(0);
     auto checked = store.fsck({control->token(), observe});

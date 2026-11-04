@@ -79,7 +79,7 @@ public:
   static PackStorage build_stream(const fs::path &, std::size_t count, const KeySource &,
                                   const std::function<Bytes(const ObjectKey &)> &verified_envelope,
                                   std::uint64_t max_bytes = INT64_MAX,
-                                  std::size_t index_cache_bytes = 4 * 1024 * 1024);
+                                  std::size_t index_cache_bytes = 4 * 1024 * 1024, std::stop_token = {});
   static PackStorage build_many(const fs::path &, const std::vector<ObjectKey> &,
                                 const std::function<Bytes(const ObjectKey &)> &,
                                 const std::function<std::uint64_t(const ObjectKey &)> &size,
@@ -92,9 +92,9 @@ public:
                                        const std::function<Bytes(const ObjectKey &)> &,
                                        const std::function<std::uint64_t(const ObjectKey &)> &size,
                                        const PackOptions &, std::size_t available_packs = max_packs,
-                                       std::size_t index_cache_bytes = 4 * 1024 * 1024);
+                                       std::size_t index_cache_bytes = 4 * 1024 * 1024, std::stop_token = {});
   // Returns physical files/bytes removed. Only generated, inactive names qualify.
-  std::pair<std::size_t, std::uint64_t> cleanup(bool remove = true) const;
+  std::pair<std::size_t, std::uint64_t> cleanup(bool remove = true, std::stop_token = {}) const;
 
 private:
   struct Entry {

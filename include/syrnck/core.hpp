@@ -77,7 +77,9 @@ enum class ProgressPhase {
   publishing,
   verifying,
   exporting,
-  transferring
+  transferring,
+  planning,
+  packing
 };
 struct ProgressEvent {
   ProgressPhase phase = ProgressPhase::ingesting;
@@ -177,11 +179,11 @@ public:
                               ProgressCallback = {}) const;
   std::vector<ObjectKey> objects() const;
   std::size_t fsck(OperationOptions = {}) const;
-  Json gc(bool remove = false) const;
+  Json gc(bool remove = false, OperationOptions = {}) const;
   // Physical v2 for a single pack, v3 for multiple packs; logical objects stay v1.
   // Validates all objects before publication and removal of loose copies.
   Json pack() const;
-  Json pack(PackOptions) const;
+  Json pack(PackOptions, OperationOptions = {}) const;
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message) const;
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message,
                                IngestOptions) const;

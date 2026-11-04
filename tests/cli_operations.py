@@ -60,9 +60,22 @@ class CliOperations(unittest.TestCase):
             self.assertIn(expected, result.stderr.decode("utf-8"))
             self.assertEqual(json.loads(result.stdout)["manifest"], manifest)
         for args in (("put", source, "--progress", "--progress-json"),
-                     ("put", source, "--progress", "--progress"), ("gc", "--progress-json"),
-                     ("pack", "--progress"), ("native", "export", "--progress")):
+                     ("put", source, "--progress", "--progress"), ("config", "show", "--progress-json"),
+                     ("refs", "--progress"), ("native", "export", "--progress")):
             self.run_cli(*args, ok=False)
+
+    def test_maintenance_progress(self):
+        self.run_cli("git", "clean", data=b"maintenance data" * 10000)
+        packed = self.run_cli("pack", "--progress-json")
+        self.assertGreater(json.loads(packed.stdout)["objects"], 0)
+        self.assertEqual(self.events(packed)[-1]["phase"], "publishing")
+        dry = self.run_cli("gc", "--progress-json")
+        self.assertFalse(json.loads(dry.stdout)["deleted"])
+        self.assertEqual(self.events(dry)[-1]["phase"], "planning")
+        removed = self.run_cli("gc", "--delete", "--progress-json")
+        self.assertTrue(json.loads(removed.stdout)["deleted"])
+        self.assertEqual(self.events(removed)[-1]["phase"], "publishing")
+        self.assertIn("Empaquetage", self.run_cli("pack", "--compact", "--progress", lang="fr").stderr.decode("utf-8"))
 
     def test_native_commit_and_filter_stdout(self):
         project = self.root

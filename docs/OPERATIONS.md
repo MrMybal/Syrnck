@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `native commit/export`, `git clean/smudge` and
+`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
@@ -43,7 +43,7 @@ exits with code **130**. The handler only records an atomic flag; an ordinary
 monitor thread requests the C++ stop token. A read blocked on a pipe or device
 must return before cancellation can finish. Repeated interrupts request the
 same stop; forced process termination still uses the separate crash-recovery
-path. Packing and GC do not yet use this controller.
+path. Committed maintenance cleanup finishes without further cancellation.
 
 The implementation follows the C++ requirements for
 [signal-safe operations](https://eel.is/c++draft/support.signal) and
@@ -123,7 +123,9 @@ Network requests also support these options, with a separate final remote
 publication commit point and exit 3 for uncertain publication. See
 [transfer cancellation, progress and recovery](TRANSFERS.md).
 
-These options do not yet extend to GC or packing.
+GC and packing allow cancellation during verification, planning, construction
+and readback. After their publication/deletion commit point, cleanup finishes
+without further callbacks or cancellation. See [maintenance guarantees and limits](MAINTENANCE.md).
 Process-kill recovery remains a separate mechanism described in
 [crash recovery](CRASH_RECOVERY.md). No object, pointer, network or C ABI format
 changes are needed; C++ callers should rebuild against the updated headers.

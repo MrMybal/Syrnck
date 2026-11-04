@@ -27,7 +27,7 @@ struct Store::Impl {
       : root(std::move(p)), key(k), lock(root / "store.lock"), packs(root, options.pack_index_cache_bytes),
         cache(options), index_cache_budget(options.pack_index_cache_bytes) {}
   void load_config();
-  void publish_pack(PackStorage next);
+  void publish_pack(PackStorage next, std::stop_token = {});
   Bytes read_pack(const PackStorage &source, const ObjectKey &item) {
     auto envelope = source.read(item);
     ++io.object_reads;
@@ -65,7 +65,7 @@ void Store::Impl::load_config() {
   packs.load(version == 3 ? config.at("packs") : (version == 2 ? config.at("pack") : Json(nullptr)));
   format_version = version.get<int>();
 }
-void Store::Impl::publish_pack(PackStorage next) {
+void Store::Impl::publish_pack(PackStorage next, std::stop_token stop) {
   next.set_index_cache_limit(index_cache_budget);
   const bool multiple = format_version >= 3 || next.pack_count() > 1;
   auto config = Json{{"version", multiple ? 3 : 2},
@@ -73,7 +73,7 @@ void Store::Impl::publish_pack(PackStorage next) {
                      {multiple ? "packs" : "pack", multiple ? next.catalog() : next.metadata()}}
                     .dump();
   try {
-    atomic_write(root / "config.json", bytes(config), true);
+    atomic_write(root / "config.json", bytes(config), true, stop);
   } catch (...) {
     // A durability error can happen after the atomic replacement. Reload the
     // actual publication pointer before allowing any more operations or cleanup.
@@ -646,7 +646,13 @@ std::size_t Store::fsck(OperationOptions options) const {
   notify(true);
   return verified.size();
 }
-Json Store::gc(bool remove) const {
+Json Store::gc(bool remove, OperationOptions options) const {
+  std::uint64_t verified_bytes = 0, planned_bytes = 0, packed_bytes = 0;
+  auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
+                    std::optional<std::uint64_t> total = {}) {
+    report_progress(options, {phase, "gc", count, total, complete});
+  };
+  notify(ProgressPhase::verifying, 0);
   CacheBypass audit(impl_->bypass_cache);
   impl_->load_config();
   std::vector<ObjectKey> roots;
@@ -659,8 +665,16 @@ Json Store::gc(bool remove) const {
     auto session = impl_->packs.read_session();
     return walk_objects(
         roots, true, [&](const ObjectKey &key) { return live.insert(key); },
-        [&](const ObjectKey &key) { return get(key); });
+        [&](const ObjectKey &key) {
+          auto data = get(key);
+          verified_bytes += data.size();
+          notify(ProgressPhase::verifying, verified_bytes);
+          return data;
+        },
+        options.stop);
   }();
+  notify(ProgressPhase::verifying, verified_bytes, true);
+  notify(ProgressPhase::planning, 0);
   std::size_t dead = 0;
   std::uint64_t size = 0;
   bool repack = false;
@@ -677,6 +691,7 @@ Json Store::gc(bool remove) const {
     for (std::size_t i = 0; i < plans.size(); ++i) {
       auto &plan = plans[i];
       impl_->packs.visit(i, [&](const ObjectKey &key, PackStorage::Position position) {
+        throw_if_cancelled(options.stop);
         if (live.contains(position)) {
           ++plan.survivors;
           plan.bytes += position.length;
@@ -687,6 +702,8 @@ Json Store::gc(bool remove) const {
           if (remove)
             impl_->cache.erase(key);
         }
+        planned_bytes += position.length;
+        notify(ProgressPhase::planning, planned_bytes);
       });
       if (plan.survivors == 0)
         ++dropped;
@@ -697,16 +714,26 @@ Json Store::gc(bool remove) const {
     }
     // Validate the complete loose tree before creating or deleting any files.
     // Packed duplicates count once logically, but all dead copies count in bytes.
-    visit_loose_objects(root(), [&](const ObjectKey &key) {
-      if (!live.contains(key)) {
-        size += fs::file_size(object_path(key));
-        if (!impl_->packs.contains(key))
-          ++dead;
-      }
-    });
+    visit_loose_objects(
+        root(),
+        [&](const ObjectKey &key) {
+          auto length = fs::file_size(object_path(key));
+          if (!live.contains(key)) {
+            size += length;
+            if (!impl_->packs.contains(key))
+              ++dead;
+          }
+          planned_bytes += length;
+          notify(ProgressPhase::planning, planned_bytes);
+        },
+        {}, options.stop);
   }
-  auto obsolete = impl_->packs.cleanup(false);
+  auto obsolete = impl_->packs.cleanup(false, options.stop);
+  notify(ProgressPhase::planning, planned_bytes, true);
   if (remove) {
+    const auto packing_total = rewrite_bytes - 8 * rewritten;
+    if (rewritten)
+      notify(ProgressPhase::packing, 0, false, packing_total);
     if (repack) {
       Json updated = Json::array();
       for (std::size_t i = 0; i < plans.size(); ++i) {
@@ -720,6 +747,7 @@ Json Store::gc(bool remove) const {
                 root(), plan.survivors,
                 [&](const PackStorage::KeyVisitor &emit) {
                   impl_->packs.visit(i, [&](const ObjectKey &key, PackStorage::Position position) {
+                    throw_if_cancelled(options.stop);
                     if (live.contains(position))
                       emit(key);
                   });
@@ -727,20 +755,30 @@ Json Store::gc(bool remove) const {
                 [&](const ObjectKey &key) {
                   auto envelope = impl_->read_pack(impl_->packs, key);
                   (void)decode_envelope(key, envelope);
+                  packed_bytes += envelope.size();
+                  notify(ProgressPhase::packing, packed_bytes, false, packing_total);
                   return envelope;
                 },
-                plan.bytes, impl_->index_cache_budget);
+                plan.bytes, impl_->index_cache_budget, options.stop);
           }();
           part.visit(0, [&](const ObjectKey &key, PackStorage::Position) {
-            (void)decode_envelope(key, impl_->read_pack(part, key));
+            throw_if_cancelled(options.stop);
+            auto data = decode_envelope(key, impl_->read_pack(part, key));
+            verified_bytes += data.size();
+            notify(ProgressPhase::verifying, verified_bytes);
           });
           updated.push_back(part.metadata());
         }
       }
       PackStorage next(root(), impl_->index_cache_budget);
       next.load(updated);
-      impl_->publish_pack(std::move(next));
+      notify(ProgressPhase::publishing, packed_bytes);
+      impl_->publish_pack(std::move(next), options.stop);
+    } else {
+      notify(ProgressPhase::publishing, 0);
     }
+    // Commit point: finish cleanup without callbacks or cancellation. Stopping
+    // here could strand dead loose metadata after its packed dependencies left.
     // The bitmap addresses the OLD catalog. After publication use the compact
     // loose marks and the NEW catalog, whose packed keys are all retained.
     auto session = impl_->packs.read_session();
@@ -767,21 +805,37 @@ Json Store::gc(bool remove) const {
               {"peak_pending_objects", peak_pending},
               {"deleted", remove}};
 }
-Json Store::pack(PackOptions options) const {
+Json Store::pack(PackOptions options, OperationOptions operation) const {
+  throw_if_cancelled(operation.stop);
   PackStorage::validate_options(options);
   CacheBypass audit(impl_->bypass_cache);
-  (void)fsck(); // Includes orphan metadata dependencies and complete file hashes.
+  (void)fsck(operation); // Includes orphan metadata dependencies and complete file hashes.
+  std::uint64_t planned = 0, packed_bytes = 0, verified = 0;
+  auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
+                    std::optional<std::uint64_t> total = {}) {
+    report_progress(operation, {phase, "pack", count, total, complete});
+  };
+  notify(ProgressPhase::planning, 0);
   // Filesystem enumeration is unordered. Only loose-only IDs need sorting;
   // packed IDs already have immutable, ordered indexes that can be merged.
   std::vector<IndexKey> loose;
   {
     auto session = impl_->packs.read_session();
-    visit_loose_objects(root(), [&](const ObjectKey &key) {
-      if (!impl_->packs.contains(key))
-        loose.push_back(IndexKey::from(key));
-    });
+    visit_loose_objects(
+        root(),
+        [&](const ObjectKey &key) {
+          if (!impl_->packs.contains(key))
+            loose.push_back(IndexKey::from(key));
+        },
+        {}, operation.stop);
   }
-  std::sort(loose.begin(), loose.end());
+  std::size_t comparisons = 0;
+  std::sort(loose.begin(), loose.end(), [&](const IndexKey &a, const IndexKey &b) {
+    if ((++comparisons & 4095) == 0)
+      throw_if_cancelled(operation.stop);
+    return a < b;
+  });
+  throw_if_cancelled(operation.stop);
   auto catalog = options.compact ? Json::array() : impl_->packs.catalog();
   const auto old_count = catalog.size();
   std::uint64_t existing_objects = 0;
@@ -793,11 +847,17 @@ Json Store::pack(PackOptions options) const {
       object_count += impl_->packs.entry_count(i);
   require(object_count <= PackStorage::max_catalog_entries - existing_objects,
           "pack catalog object limit exceeded");
+  std::size_t passes = 0;
   PackStorage::KeySequence source = [&]() -> PackStorage::KeyNext {
+    if (++passes == 2) {
+      notify(ProgressPhase::planning, planned, true);
+      notify(ProgressPhase::packing, 0, false, planned);
+    }
     auto packed = options.compact ? impl_->packs.ordered_keys() : PackStorage::KeyNext{};
     auto head = packed ? packed() : std::optional<ObjectKey>{};
     return [&, packed = std::move(packed), head = std::move(head),
             i = std::size_t{0}]() mutable -> std::optional<ObjectKey> {
+      throw_if_cancelled(operation.stop);
       if (head && (i == loose.size() || IndexKey::from(*head) < loose[i])) {
         auto result = std::move(head);
         head = packed();
@@ -813,21 +873,32 @@ Json Store::pack(PackOptions options) const {
         [&](const ObjectKey &key) {
           auto envelope = read_envelope(key);
           (void)decode_envelope(key, envelope);
+          packed_bytes += envelope.size();
+          notify(ProgressPhase::packing, packed_bytes, false, planned);
           return envelope;
         },
         [&](const ObjectKey &key) {
-          return fs::exists(object_path(key)) ? fs::file_size(object_path(key))
-                                              : impl_->packs.stored_size(key);
+          auto length =
+              fs::exists(object_path(key)) ? fs::file_size(object_path(key)) : impl_->packs.stored_size(key);
+          planned += length;
+          notify(ProgressPhase::planning, planned);
+          return length;
         },
-        options, PackStorage::max_packs - old_count, impl_->index_cache_budget);
+        options, PackStorage::max_packs - old_count, impl_->index_cache_budget, operation.stop);
   }();
+  notify(ProgressPhase::packing, packed_bytes, true, planned);
+  notify(ProgressPhase::verifying, 0);
   {
     auto session = next.read_session();
     for (std::size_t i = 0; i < next.pack_count(); ++i)
       next.visit(i, [&](const ObjectKey &key, PackStorage::Position) {
-        (void)decode_envelope(key, impl_->read_pack(next, key));
+        throw_if_cancelled(operation.stop);
+        auto data = decode_envelope(key, impl_->read_pack(next, key));
+        verified += data.size();
+        notify(ProgressPhase::verifying, verified);
       });
   }
+  notify(ProgressPhase::verifying, verified, true);
   const auto created = next.pack_count();
   std::uint64_t written_bytes = 0, written_index_bytes = 0;
   for (const auto &metadata : next.catalog()) {
@@ -838,8 +909,12 @@ Json Store::pack(PackOptions options) const {
   if (created || options.compact || impl_->format_version == 1) {
     PackStorage combined(root(), impl_->index_cache_budget);
     combined.load(catalog);
-    impl_->publish_pack(std::move(combined));
+    notify(ProgressPhase::publishing, packed_bytes);
+    impl_->publish_pack(std::move(combined), operation.stop);
+  } else {
+    notify(ProgressPhase::publishing, 0);
   }
+  // Commit point: deleting loose copies and obsolete packs must now finish.
   std::size_t removed = 0;
   {
     auto session = impl_->packs.read_session();

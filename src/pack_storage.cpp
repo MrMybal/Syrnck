@@ -465,7 +465,9 @@ PackStorage PackStorage::build(const fs::path &root, const std::vector<ObjectKey
 }
 PackStorage PackStorage::build_stream(const fs::path &root, std::size_t count, const KeySource &source,
                                       const std::function<Bytes(const ObjectKey &)> &reader,
-                                      std::uint64_t max_bytes, std::size_t index_cache_bytes) {
+                                      std::uint64_t max_bytes, std::size_t index_cache_bytes,
+                                      std::stop_token stop) {
+  throw_if_cancelled(stop);
   require(count <= max_entries, "pack object count exceeds the current 1M index limit");
   PackStorage result(root, index_cache_bytes);
   if (count == 0) {
@@ -481,50 +483,60 @@ PackStorage PackStorage::build_stream(const fs::path &root, std::size_t count, c
   blake3_hasher_init(&index_hash);
   std::uint64_t offset = pack_magic.size();
   std::optional<ObjectKey> previous;
-  atomic_stream(index_path, [&](std::ostream &index_out) {
-    auto write_index = [&](std::span<const std::uint8_t> data) {
-      index_out.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
-      require(index_out.good(), "pack index write failed");
-      blake3_hasher_update(&index_hash, data.data(), data.size());
-    };
-    Bytes header(index_magic.begin(), index_magic.end());
-    append_integer(header, count, 8);
-    write_index(header);
-    Bytes page;
-    page.reserve(PackIndex::page_bytes);
-    atomic_stream(pack_path, [&](std::ostream &out) {
-      out.write(pack_magic.data(), pack_magic.size());
-      std::size_t emitted = 0;
-      source([&](const ObjectKey &key) {
-        require(emitted < count, "pack source count mismatch");
-        auto raw = IndexKey::from(key);
-        require(!previous || *previous < key, "pack input must be strictly sorted");
-        auto envelope = reader(key); // Caller validates exactly these envelope bytes.
-        require(envelope.size() >= 5 && envelope.size() <= max_envelope_size && offset <= max_bytes &&
-                    envelope.size() <= max_bytes - offset && max_bytes <= INT64_MAX,
-                "pack size limit exceeded");
-        page.insert(page.end(), raw.value.begin(), raw.value.end());
-        append_integer(page, offset, 8);
-        append_integer(page, envelope.size(), 4);
-        if (page.size() == PackIndex::page_bytes) {
-          write_index(page);
-          page.clear();
-        }
-        out.write(reinterpret_cast<const char *>(envelope.data()),
-                  static_cast<std::streamsize>(envelope.size()));
-        require(out.good(), "pack write failed");
-        SYRNCK_IO_CHECKPOINT("pack.envelope_written", pack_path);
-        offset += envelope.size();
-        previous = key;
-        ++emitted;
-      });
-      require(emitted == count, "pack source count mismatch");
-    });
-    write_index(page);
-  });
+  atomic_stream(
+      index_path,
+      [&](std::ostream &index_out) {
+        auto write_index = [&](std::span<const std::uint8_t> data) {
+          index_out.write(reinterpret_cast<const char *>(data.data()),
+                          static_cast<std::streamsize>(data.size()));
+          require(index_out.good(), "pack index write failed");
+          blake3_hasher_update(&index_hash, data.data(), data.size());
+        };
+        Bytes header(index_magic.begin(), index_magic.end());
+        append_integer(header, count, 8);
+        write_index(header);
+        Bytes page;
+        page.reserve(PackIndex::page_bytes);
+        atomic_stream(
+            pack_path,
+            [&](std::ostream &out) {
+              out.write(pack_magic.data(), pack_magic.size());
+              std::size_t emitted = 0;
+              source([&](const ObjectKey &key) {
+                throw_if_cancelled(stop);
+                require(emitted < count, "pack source count mismatch");
+                auto raw = IndexKey::from(key);
+                require(!previous || *previous < key, "pack input must be strictly sorted");
+                auto envelope = reader(key); // Caller validates exactly these envelope bytes.
+                throw_if_cancelled(stop);
+                require(envelope.size() >= 5 && envelope.size() <= max_envelope_size && offset <= max_bytes &&
+                            envelope.size() <= max_bytes - offset && max_bytes <= INT64_MAX,
+                        "pack size limit exceeded");
+                page.insert(page.end(), raw.value.begin(), raw.value.end());
+                append_integer(page, offset, 8);
+                append_integer(page, envelope.size(), 4);
+                if (page.size() == PackIndex::page_bytes) {
+                  write_index(page);
+                  page.clear();
+                }
+                out.write(reinterpret_cast<const char *>(envelope.data()),
+                          static_cast<std::streamsize>(envelope.size()));
+                require(out.good(), "pack write failed");
+                SYRNCK_IO_CHECKPOINT("pack.envelope_written", pack_path);
+                offset += envelope.size();
+                previous = key;
+                ++emitted;
+              });
+              require(emitted == count, "pack source count mismatch");
+            },
+            false, stop);
+        write_index(page);
+      },
+      false, stop);
   Key sum{};
   blake3_hasher_finalize(&index_hash, sum.data(), sum.size());
   result.load(Json{{"name", name}, {"objects", count}, {"bytes", offset}, {"index_hash", hex(sum)}});
+  throw_if_cancelled(stop);
   return result;
 }
 void PackStorage::validate_options(const PackOptions &options) {
@@ -552,7 +564,8 @@ PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t cou
                                            const std::function<Bytes(const ObjectKey &)> &reader,
                                            const std::function<std::uint64_t(const ObjectKey &)> &sizer,
                                            const PackOptions &options, std::size_t available_packs,
-                                           std::size_t index_cache_bytes) {
+                                           std::size_t index_cache_bytes, std::stop_token stop) {
+  throw_if_cancelled(stop);
   validate_options(options);
   require(count <= max_catalog_entries, "pack catalog object limit exceeded");
   struct Plan {
@@ -584,6 +597,7 @@ PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t cou
     std::optional<ObjectKey> previous;
     std::size_t emitted = 0;
     while (auto key = next()) {
+      throw_if_cancelled(stop);
       require(emitted++ < count, "pack source count mismatch");
       (void)IndexKey::from(*key);
       require(!previous || *previous < *key, "pack input must be strictly sorted");
@@ -607,6 +621,7 @@ PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t cou
   {
     auto next = source();
     for (const auto &plan : plans) {
+      throw_if_cancelled(stop);
       blake3_hasher hash;
       blake3_hasher_init(&hash);
       auto pack = build_stream(
@@ -623,7 +638,7 @@ PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t cou
             add(hash, key, envelope.size());
             return envelope;
           },
-          options.max_pack_bytes, index_cache_bytes);
+          options.max_pack_bytes, index_cache_bytes, stop);
       Key digest{};
       blake3_hasher_finalize(&hash, digest.data(), digest.size());
       require(digest == plan.digest && pack.metadata().at("bytes") == plan.bytes,
@@ -634,9 +649,11 @@ PackStorage PackStorage::build_many_stream(const fs::path &root, std::size_t cou
   }
   PackStorage result(root, index_cache_bytes);
   result.load(catalog);
+  throw_if_cancelled(stop);
   return result;
 }
-std::pair<std::size_t, std::uint64_t> PackStorage::cleanup(bool remove) const {
+std::pair<std::size_t, std::uint64_t> PackStorage::cleanup(bool remove, std::stop_token stop) const {
+  throw_if_cancelled(stop);
   (void)metadata();
   if (!fs::exists(directory_))
     return {};
@@ -649,6 +666,7 @@ std::pair<std::size_t, std::uint64_t> PackStorage::cleanup(bool remove) const {
   std::vector<fs::path> obsolete;
   std::uint64_t size = 0;
   for (const auto &file : fs::directory_iterator(directory_)) {
+    throw_if_cancelled(stop);
     if (!generated_name(utf8(file.path().filename())))
       continue;
     require(file.is_regular_file() && !file.is_symlink(), "invalid pack entry");
@@ -659,6 +677,7 @@ std::pair<std::size_t, std::uint64_t> PackStorage::cleanup(bool remove) const {
   }
   if (remove)
     for (const auto &file : obsolete) {
+      throw_if_cancelled(stop);
       require(fs::remove(file), "cannot remove obsolete pack file");
       SYRNCK_IO_CHECKPOINT("pack.obsolete_removed", file);
     }
