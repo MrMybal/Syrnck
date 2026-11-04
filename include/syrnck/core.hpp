@@ -212,6 +212,9 @@ public:
                          OperationOptions = {}) const;
   void restore_file_range(std::string_view id, const fs::path &destination, std::uint64_t offset,
                           std::uint64_t length, OperationOptions = {}) const;
+  // Metadata-only chunk reuse plan. Source offsets identify matching chunks;
+  // callers must still verify payloads and the complete reconstructed file.
+  Json compare_files(std::string_view source, std::string_view target, OperationOptions = {}) const;
   Refs refs() const;
   void set_ref(std::string_view, const ObjectKey &, std::stop_token = {}) const;
   bool compare_set_ref(std::string_view, const std::optional<ObjectKey> &, const ObjectKey &,
