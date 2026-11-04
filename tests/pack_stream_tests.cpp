@@ -1,6 +1,8 @@
 #include "pack_index_fixture.hpp"
 #include <iostream>
 #include <sstream>
+#include <chrono>
+#include <thread>
 using namespace syrnck;
 namespace fixture = index_fixture;
 namespace {
@@ -27,10 +29,21 @@ std::map<fs::path, Bytes> files(const fs::path &root) {
         result.emplace(file.path(), read_bytes(file.path()));
       } catch (const std::exception &) {
         // Windows can expose a short-lived, non-store *.tmp file during this
-        // snapshot. Ignore it only if it has already disappeared. Canonical
+        // snapshot, including a delete-pending file that still reports present.
+        // Give only non-store *.tmp artifacts a bounded chance to disappear.
+        // Ignore them only after confirmed disappearance. Canonical
         // packs/objects and Syrnck's .tmp<hex> staging files remain strict.
         std::error_code error;
-        if (file.path().extension() == ".tmp" && !fs::exists(file.path(), error) && !error)
+        bool disappeared = false;
+        if (file.path().extension() == ".tmp")
+          for (int attempt = 0; attempt < 25; ++attempt) {
+            if (!fs::exists(file.path(), error) && !error) {
+              disappeared = true;
+              break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+          }
+        if (disappeared)
           continue;
         throw;
       }
