@@ -37,7 +37,9 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 
 - [ ] Corpus : assets Unreal réels, sources, textures, audio, données compressées et fichiers dépassant la RAM.
 - [x] Pipeline d'ingestion avec compression/chiffrement parallèles, plafond d'octets et de tâches ; écriture coordonnée et annulation coopérative C++.
-- [ ] Parallélisme configuré par dépôt et propagation aux commits/filtres ; annulation du CLI et progression.
+- [x] Réglages persistants par dépôt, surcharges explicites et propagation du pipeline aux commits natifs et filtres Git.
+- [x] Progression C++ et CLI (texte anglais/français ou JSON sur stderr), annulation coopérative des imports, commits, reconstructions et filtres ; protection des références et destinations avant publication.
+- [ ] Étendre l'annulation et la progression à la maintenance, aux audits, à l'export et aux transferts ; validation des signaux sur les autres plateformes.
 - [x] Cache borné de lectures vérifiées, contrôle de l'enveloppe à chaque accès et validation des fichiers dans la traversée des dépendances.
 - [ ] Index transactionnel des objets vérifiés ; validation incrémentale des dépendances.
 - [x] Pack immuable indexé, activation physique v2 explicite, compaction GC et reprise aux frontières de publication simulées.

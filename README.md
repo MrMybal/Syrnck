@@ -64,6 +64,8 @@ syrnck gc
 
 ```text
 syrnck put large-file.bin --workers 4 --buffer-mib 32
+syrnck config set --workers 4 --buffer-mib 32
+syrnck native commit --message "Project snapshot" --progress
 syrnck pack
 syrnck pack --compact
 syrnck --lang fr --help
@@ -77,7 +79,9 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 ## Languages
 
-Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence. See [repository settings](docs/SETTINGS.md).
+Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).
+
+Imports, native commits, reconstruction and Git filters accept `--progress` (English/French) or `--progress-json`, both on stderr. Ctrl+C requests cooperative cancellation and exits with code 130 before publishing an incomplete destination or reference. Current native IO may finish first, and an atomic publication already started can complete. See [progress, cancellation and limits](docs/OPERATIONS.md).
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

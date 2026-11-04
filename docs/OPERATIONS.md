@@ -6,6 +6,56 @@ repository pipeline defaults; explicit `IngestOptions` replace those defaults.
 The CLI accepts `--workers` and `--buffer-mib` for `put`, `native commit` and
 `git clean` without changing saved preferences.
 
+## CLI
+
+```text
+syrnck config set --workers 4 --buffer-mib 32
+syrnck put Content/Map.uasset --progress
+syrnck native commit -m "Snapshot" --progress-json
+syrnck get MANIFEST restored.uasset --progress
+```
+
+`put`, `get`, `native commit`, `git clean` and `git smudge` accept mutually
+exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
+keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
+flag, successful commands stay quiet on stderr. Other commands reject these
+flags. Plain source data passing through smudge and existing clean pointers do
+not need block processing and may produce no progress events.
+
+Text uses the selected interface language and quotes paths to escape newlines
+and control characters. JSON is language-independent, with one object per line:
+
+```json
+{"phase":"ingesting","path":"Content/Map.uasset","bytes":1048576,"total_bytes":8388608,"complete":false,"buffered_blocks":2}
+```
+
+`total_bytes` is null when unknown. Native commit paths are relative; put/get
+report the source/destination argument (Windows paths use forward slashes).
+Events are throttled to about ten per second for an unchanged phase/path;
+phase/path changes and file completion are always emitted. Scanning and branch
+publication events are not aggregate project-byte totals. A nonzero exit code
+is authoritative even if an earlier file event had `complete: true`.
+
+These five commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
+available. Cooperative cancellation reports an English/French diagnostic and
+exits with code **130**. The handler only records an atomic flag; an ordinary
+monitor thread requests the C++ stop token. A read blocked on a pipe or device
+must return before cancellation can finish. Repeated interrupts request the
+same stop; forced process termination still uses the separate crash-recovery
+path. Network, packing, GC, fsck and export do not yet use this controller.
+
+The implementation follows the C++ requirements for
+[signal-safe operations](https://eel.is/c++draft/support.signal) and
+[lock-free atomic flags](https://eel.is/c++draft/atomics.flag), and the Windows
+[console handler contract](https://learn.microsoft.com/en-us/windows/console/handlerroutine).
+`cli_control` tests handler restoration and callback framing; `cli_operations`
+checks stdout preservation and real OS interruption. Its Windows-only relay
+creates a hidden private console and sends a real Ctrl+Break to the CLI; it is
+not installed or linked into production code. Local validation was on Windows;
+the Unix SIGINT/SIGTERM cases are included for the next platform CI run.
+
+## C++ operations
+
 `IngestOptions::progress` receives a `ProgressEvent` synchronously on the calling
 coordinator thread. Phases are scanning, ingesting, reconstructing and publishing.
 Events contain processed bytes, an optional total, optional path context, a

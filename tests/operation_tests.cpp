@@ -29,6 +29,18 @@ std::string sample(std::size_t size) {
   }
   return data;
 }
+class CancelAtEof : public std::stringbuf {
+  std::stop_source &stop_;
+
+public:
+  CancelAtEof(std::string data, std::stop_source &stop) : std::stringbuf(std::move(data)), stop_(stop) {}
+  std::streamsize xsgetn(char *out, std::streamsize size) override {
+    auto count = std::stringbuf::xsgetn(out, size);
+    if (count < size)
+      stop_.request_stop();
+    return count;
+  }
+};
 } // namespace
 int main() {
   auto root = fs::temp_directory_path() / path_from_utf8("syrnck-operations-" + hex(random_bytes(16)));
@@ -132,6 +144,12 @@ int main() {
       std::ostringstream no_pointer;
       cancelled([&] { git::clean(filtered, retry, no_pointer, options); });
       check(no_pointer.str().empty() && filtered.refs() == before);
+      std::stop_source passthrough_stop;
+      CancelAtEof raw(std::string(2048, 'x'), passthrough_stop);
+      std::istream passthrough(&raw);
+      std::ostringstream partial;
+      cancelled([&] { git::smudge(filtered, passthrough, partial, {passthrough_stop.get_token(), {}}); });
+      check(partial.str() == std::string(1025, 'x') && filtered.refs() == before);
       check(filtered.fsck() > 0 && store.fsck() > 0);
     }
     auto target = root / "atomic.json";

@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "cli_control.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -126,6 +127,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   agent push URL RÉF_LOCALE RÉF_DISTANTE
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
+Progression : --progress ou --progress-json sur stderr pour put, get,
+              native commit et git clean/smudge. Ctrl+C annule (code 130).
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 )";
     return;
@@ -160,10 +163,12 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   agent push URL LOCAL_REF REMOTE_REF
   agent pull URL REMOTE_REF LOCAL_REF
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
+Progress: --progress or --progress-json on stderr for put, get,
+          native commit and git clean/smudge. Ctrl+C cancels (exit 130).
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 )";
 }
-int run(Args args, Language language) {
+int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &control) {
   if (args.flag("--help") || args.flag("-h") || args.values.empty()) {
     help(language);
     return 0;
@@ -226,6 +231,16 @@ int run(Args args, Language language) {
     return 0;
   }
   Store store(root, key, false, store_options);
+  auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
+  require(!(text_progress && json_progress), "choose one progress output mode");
+  bool cancellable = command == "put" || command == "get" || (command == "native" && sub == "commit") ||
+                     (command == "git" && (sub == "clean" || sub == "smudge"));
+  require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
+  if (cancellable)
+    control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
+                                                                : text_progress ? cli::ProgressMode::text
+                                                                                : cli::ProgressMode::none);
+  auto observe = [&](const ProgressEvent &event) { control->report(event); };
   if (command == "config") {
     if (sub == "show") {
       args.count(0);
@@ -268,8 +283,19 @@ int run(Args args, Language language) {
     auto size = args.option("--fixed-size");
     auto options = ingestion_options(args, store);
     args.count(1);
-    std::ifstream in(path_from_utf8(args.values[0]), std::ios::binary);
+    auto source = path_from_utf8(args.values[0]);
+    std::ifstream in(source, std::ios::binary);
     require(in.is_open(), "cannot open source file");
+    std::error_code size_error;
+    auto source_size = fs::file_size(source, size_error);
+    options.stop = control->token();
+    options.progress = [&](const ProgressEvent &event) {
+      auto contextual = event;
+      contextual.path = args.values[0];
+      if (!size_error)
+        contextual.total_bytes = source_size;
+      control->report(contextual);
+    };
     Chunking chunking;
     if (size) {
       auto n = integer(*size);
@@ -277,11 +303,16 @@ int run(Args args, Language language) {
       chunking = Chunking::fixed_size(static_cast<std::uint32_t>(n));
     }
     auto [id, stats] = store.ingest(in, chunking, options);
-    store.set_ref("files/" + id, {Kind::manifest, id});
+    store.set_ref("files/" + id, {Kind::manifest, id}, options.stop);
     print(Json{{"manifest", id}, {"stats", stats.json()}});
   } else if (command == "get") {
     args.count(2);
-    store.restore_file(args.values[0], path_from_utf8(args.values[1]));
+    store.restore_file(args.values[0], path_from_utf8(args.values[1]),
+                       {control->token(), [&](const ProgressEvent &event) {
+                          auto contextual = event;
+                          contextual.path = args.values[1];
+                          control->report(contextual);
+                        }});
   } else if (command == "inspect") {
     args.count(2);
     print(store.metadata(parse_kind(args.values[0]), args.values[1]));
@@ -336,6 +367,8 @@ int run(Args args, Language language) {
   } else if (command == "native") {
     if (sub == "commit") {
       auto options = ingestion_options(args, store);
+      options.stop = control->token();
+      options.progress = observe;
       auto directory = path_from_utf8(args.option("--directory").value_or("."));
       auto branch = args.option("--branch").value_or("main");
       auto message = args.option("--message", "-m");
@@ -378,11 +411,13 @@ int run(Args args, Language language) {
   } else if (command == "git") {
     if (sub == "clean") {
       auto options = ingestion_options(args, store);
+      options.stop = control->token();
+      options.progress = observe;
       args.count(0);
       git::clean(store, std::cin, std::cout, options);
     } else if (sub == "smudge") {
       args.count(0);
-      git::smudge(store, std::cin, std::cout);
+      git::smudge(store, std::cin, std::cout, {control->token(), observe});
     } else
       throw Error("unknown Git command");
   } else if (command == "serve") {
@@ -411,16 +446,22 @@ int run(Args args, Language language) {
 }
 int entry(Args args) {
   auto language = Language::english;
+  std::unique_ptr<cli::OperationControl> control;
   try {
     auto code = args.option("--lang");
     if (!code)
       code = environment("SYRNCK_LANG");
     if (code)
       language = parse_language(*code);
-    return run(std::move(args), language);
+    return run(std::move(args), language, control);
+  } catch (const Cancelled &) {
+    std::cerr << localize("Error: ", language) << localize("operation cancelled", language) << '\n';
+    return 130;
   } catch (const std::exception &e) {
-    std::cerr << localize("Error: ", language) << localize(e.what(), language) << '\n';
-    return 1;
+    auto interrupted = control && control->interrupted();
+    std::cerr << localize("Error: ", language)
+              << localize(interrupted ? "operation cancelled" : e.what(), language) << '\n';
+    return interrupted ? 130 : 1;
   }
 }
 } // namespace

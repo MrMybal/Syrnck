@@ -99,8 +99,10 @@ void smudge(const Store &store, std::istream &input, std::ostream &output, Opera
     while (input) {
       throw_if_cancelled(options.stop);
       input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+      throw_if_cancelled(options.stop);
       output.write(buffer.data(), input.gcount());
     }
+    throw_if_cancelled(options.stop);
     require(!input.bad() && output.good(), "filter pass-through failed");
   }
 }

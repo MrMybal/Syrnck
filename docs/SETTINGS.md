@@ -24,8 +24,9 @@ and the existing pack limits still apply. The ingest budget must also fit the
 selected maximum chunk size: default CDC needs at least 4 MiB. The budget covers
 queued raw block bytes, rather than total process memory.
 
-`put` reads these preferences, then applies its explicit `--workers` and
-`--buffer-mib` overrides. `pack` applies `--max-mib` and `--max-objects` similarly.
+`put`, `native commit` and `git clean` read these preferences, then apply explicit
+`--workers` and `--buffer-mib` overrides. `pack` applies `--max-mib` and
+`--max-objects` similarly.
 Overrides do not rewrite settings. Compaction and deletion remain explicit
 actions. Cache budgets still use their existing per-process flags.
 
@@ -43,3 +44,6 @@ are malformed. Different stores, including Git's common store and a standalone
 
 For Git filters, use `--store <common-store>` with the path printed by `git install`.
 An ordinary standalone `config` command otherwise addresses `.syrnck` by default.
+
+See [progress and cancellation](OPERATIONS.md) for CLI output modes, Ctrl+C and
+the C++ callback interface.

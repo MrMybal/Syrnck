@@ -60,6 +60,10 @@ syrnck gc
 
 Pour les gros fichiers, `syrnck put fichier.bin --workers 4 --buffer-mib 32` active la compression et le chiffrement parallèles avec une file bornée. Le mode séquentiel reste le défaut ; les formats et identifiants v1 sont conservés. Voir les [limites et réglages](docs/USAGE.md) et les [mesures](docs/PERFORMANCE.md).
 
+Les réglages du pipeline et les limites des packs sont persistants par dépôt via `config set`. Les options explicites les remplacent pour l'opération, y compris pour `native commit` et `git clean`. Voir les [réglages du dépôt](docs/SETTINGS.md).
+
+Les imports, commits natifs, reconstructions et filtres Git acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative et renvoie le code 130 avant publication d'une destination ou référence incomplète. Une opération native en cours peut finir ; une publication atomique déjà engagée peut aboutir. Voir [progression, annulation et limites](docs/OPERATIONS.md).
+
 Le cache du moteur évite de répéter le déchiffrement et la décompression d'objets déjà vérifiés, après contrôle de leur enveloppe actuelle. Il est borné à 64 Mio de données et 8 192 empreintes par défaut, configurable avec `--cache-mib` et désactivable avec `--cache-mib 0`. `fsck` et `gc` effectuent leur validation complète sans ce cache.
 
 `syrnck pack` ajoute des packs immuables indexés pour les nouveaux objets ; `pack --compact` regroupe tout le stock. Le GC réécrit seulement les packs partiellement morts et conserve les blocs partagés. Les IDs et le chiffrement restent inchangés. La maintenance active le **stockage physique v2** pour un seul pack, puis **v3** pour plusieurs packs ; les nouveaux stores restent v1 jusqu'à cet appel. Voir [activation, reprise et limites des packs](docs/PACKS.md).
