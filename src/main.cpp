@@ -165,6 +165,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git prepare-assets COMMIT [--directory CHEMIN]   Vérifier et conserver ses assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git configure-remote NOM URL | git install-hook [--directory CHEMIN]
+  git configure-checkout local|download|skip [--remote NOM] [--directory CHEMIN]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -185,6 +186,7 @@ Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
               fsck, native commit/export, git clean/smudge et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
+Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
 )";
     return;
   }
@@ -217,6 +219,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git prepare-assets COMMIT [--directory PATH]   Verify and retain its assets
   git push-assets URL COMMIT | git pull-assets URL COMMIT [--requests N]
   git configure-remote NAME URL | git install-hook [--directory PATH]
+  git configure-checkout local|download|skip [--remote NAME] [--directory PATH]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -237,6 +240,7 @@ Progress: --progress or --progress-json on stderr for put, get, pack, gc,
               fsck, native commit/export, git clean/smudge and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
+Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
 )";
 }
 int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &control) {
@@ -276,6 +280,49 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << hex(random_bytes(32)) << '\n';
     return 0;
   }
+  std::string sub;
+  if (command == "git" || command == "native" || command == "agent" || command == "config" ||
+      command == "leases")
+    sub = args.pop();
+  if (command == "git" && sub == "smudge") {
+    auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    auto configured = args.flag("--checkout-policy");
+    auto skip = environment("SYRNCK_SKIP_SMUDGE").value_or("0");
+    require(skip == "0" || skip == "1", "SYRNCK_SKIP_SMUDGE must be 0 or 1");
+    git::CheckoutPolicy policy;
+    if (skip == "1")
+      policy.mode = git::CheckoutMode::skip;
+    else if (configured)
+      policy = git::checkout_policy(directory);
+    if (configured && !root_option && policy.mode != git::CheckoutMode::skip)
+      root = git::common_store(directory);
+    auto limits = transfer_options(args);
+    require(!limits.require_upload_lease, "upload lease requirement is only available for push");
+    auto text = args.flag("--progress"), json = args.flag("--progress-json");
+    require(!(text && json), "choose one progress output mode");
+    args.count(0);
+    control = std::make_unique<cli::OperationControl>(language, json   ? cli::ProgressMode::json
+                                                                : text ? cli::ProgressMode::text
+                                                                       : cli::ProgressMode::none);
+    OperationOptions operation{control->token(), [&](const ProgressEvent &event) { control->report(event); }};
+    if (policy.mode == git::CheckoutMode::skip) {
+      git::skip_smudge(std::cin, std::cout, operation);
+    } else {
+      Store store(root, read_key(), false, store_options);
+      git::AssetResolver resolve;
+      if (policy.mode == git::CheckoutMode::download) {
+        limits.require_read_lease = true;
+        resolve = [&](const git::Pointer &pointer) {
+          require(token.has_value(), "set SYRNCK_TOKEN");
+          net::Remote remote(git::remote_url(directory, policy.remote), *token, ca_path);
+          (void)git::hydrate_asset(store, pointer, remote, operation, limits);
+        };
+      }
+      git::smudge(store, std::cin, std::cout, operation, resolve);
+    }
+    require(std::cout.good(), "output write failed");
+    return 0;
+  }
   auto key = read_key();
   if (command == "init") {
     auto encrypted = args.flag("--encrypted");
@@ -287,10 +334,6 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize(store.encrypted() ? "true" : "false", language) << ")\n";
     return 0;
   }
-  std::string sub;
-  if (command == "git" || command == "native" || command == "agent" || command == "config" ||
-      command == "leases")
-    sub = args.pop();
   if (command == "git" && sub == "install") {
     auto encrypted = args.flag("--encrypted");
     require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, or omit both");
@@ -316,7 +359,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               .json());
     return 0;
   }
-  if (command == "git" && (sub == "configure-remote" || sub == "install-hook")) {
+  if (command == "git" &&
+      (sub == "configure-remote" || sub == "configure-checkout" || sub == "install-hook")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
     if (sub == "configure-remote") {
       args.count(2);
@@ -324,6 +368,21 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       (void)validate;
       git::configure_remote(directory, args.values[0], args.values[1]);
       print(Json{{"remote", args.values[0]}, {"configured", true}});
+    } else if (sub == "configure-checkout") {
+      auto remote = args.option("--remote").value_or("");
+      args.count(1);
+      auto mode = args.values[0];
+      require(mode == "local" || mode == "download" || mode == "skip", "invalid Git checkout mode");
+      git::CheckoutPolicy policy{mode == "download" ? git::CheckoutMode::download
+                                 : mode == "skip"   ? git::CheckoutMode::skip
+                                                    : git::CheckoutMode::local,
+                                 remote};
+      auto location = root_option ? root : git::common_store(directory);
+      require(fs::is_regular_file(location / "config.json"),
+              "initialize Git filters before configuring checkout");
+      git::install(directory, executable_path(), fs::absolute(location));
+      git::configure_checkout(directory, policy);
+      print(Json{{"mode", mode}, {"remote", remote}});
     } else {
       args.count(0);
       auto location = root_option ? root : git::common_store(directory);
@@ -584,9 +643,6 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       options.progress = observe;
       args.count(0);
       git::clean(store, std::cin, std::cout, options);
-    } else if (sub == "smudge") {
-      args.count(0);
-      git::smudge(store, std::cin, std::cout, {control->token(), observe});
     } else
       throw Error("unknown Git command");
   } else if (command == "leases") {

@@ -151,6 +151,43 @@ int main() {
       cancelled([&] { git::smudge(filtered, passthrough, partial, {passthrough_stop.get_token(), {}}); });
       check(partial.str() == std::string(1025, 'x') && filtered.refs() == before);
       check(filtered.fsck() > 0 && store.fsck() > 0);
+      // A validly addressed manifest may still lie about its whole-file hash.
+      // The filter must reject it before emitting any content or invoking a
+      // resolver intended only for absent objects.
+      auto invalid = filtered.metadata(Kind::manifest, manifest);
+      invalid["file_hash"] = std::string(64, '0');
+      auto bad = filtered.put(Kind::manifest, bytes(invalid.dump())).first;
+      std::istringstream bad_pointer(git::Pointer{bad.id, data.size()}.encode());
+      std::ostringstream rejected;
+      bool resolved = false, hash_failed = false;
+      try {
+        git::smudge(filtered, bad_pointer, rejected, {}, [&](const git::Pointer &) { resolved = true; });
+      } catch (const Error &error) {
+        hash_failed = std::string(error.what()) == "reconstructed file hash mismatch";
+      }
+      check(hash_failed && !resolved && rejected.str().empty() && filtered.refs() == before);
+
+      Store hydrated(root / (encrypted ? "hydrate-encrypted" : "hydrate-plain"), key, true);
+      auto resolve = [&](const git::Pointer &p) {
+        check(p.manifest == manifest && p.size == data.size());
+        for (const auto &object : filtered.closure({{Kind::manifest, manifest}}, true))
+          hydrated.import(object, filtered.get(object));
+      };
+      std::stop_source hydration_stop;
+      std::istringstream pending_pointer(pointer.str());
+      std::ostringstream pending_output;
+      cancelled([&] {
+        git::smudge(hydrated, pending_pointer, pending_output, {hydration_stop.get_token(), {}},
+                    [&](const git::Pointer &p) {
+                      resolve(p);
+                      hydration_stop.request_stop();
+                    });
+      });
+      check(pending_output.str().empty() && hydrated.refs().empty());
+      std::istringstream ready_pointer(pointer.str());
+      std::ostringstream ready_output;
+      git::smudge(hydrated, ready_pointer, ready_output);
+      check(ready_output.str() == data && hydrated.refs().contains("git/" + manifest));
     }
     auto target = root / "atomic.json";
     atomic_write(target, bytes("old"), false);

@@ -70,10 +70,16 @@ void clean(const Store &store, std::istream &input, std::ostream &output, Ingest
   auto first = prefix(input);
   throw_if_cancelled(options.stop);
   if (auto p = parse_pointer(first)) {
-    require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
-            "pointer size mismatch");
-    store.set_ref("git/" + p->manifest, {Kind::manifest, p->manifest}, options.stop);
+    try {
+      require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
+              "pointer size mismatch");
+      store.set_ref("git/" + p->manifest, {Kind::manifest, p->manifest}, options.stop);
+    } catch (const MissingObject &) {
+      // A pointer-only checkout must remain clean without inventing a pin for
+      // an incomplete closure. Publication still verifies all referenced data.
+    }
     output << first;
+    require(output.good(), "filter output write failed");
     return;
   }
   PrefixBuffer buffer(first, input.rdbuf());
@@ -87,24 +93,67 @@ void smudge(const Store &store, std::istream &input, std::ostream &output) {
   smudge(store, input, output, {});
 }
 void smudge(const Store &store, std::istream &input, std::ostream &output, OperationOptions options) {
+  smudge(store, input, output, std::move(options), {});
+}
+static void pass_through(std::string_view first, std::istream &input, std::ostream &output,
+                         OperationOptions options) {
+  output << first;
+  std::array<char, 8192> buffer{};
+  while (input) {
+    throw_if_cancelled(options.stop);
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    throw_if_cancelled(options.stop);
+    output.write(buffer.data(), input.gcount());
+  }
+  throw_if_cancelled(options.stop);
+  require(!input.bad() && output.good(), "filter pass-through failed");
+}
+void skip_smudge(std::istream &input, std::ostream &output, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  auto first = prefix(input);
+  (void)parse_pointer(first);
+  throw_if_cancelled(options.stop);
+  pass_through(first, input, output, std::move(options));
+}
+void smudge(const Store &store, std::istream &input, std::ostream &output, OperationOptions options,
+            const AssetResolver &resolve) {
   throw_if_cancelled(options.stop);
   auto first = prefix(input);
   throw_if_cancelled(options.stop);
   if (auto p = parse_pointer(first)) {
-    require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
-            "pointer size mismatch");
+    auto verify = [&] {
+      require(store.metadata(Kind::manifest, p->manifest)["size"].get<std::uint64_t>() == p->size,
+              "pointer size mismatch");
+      // Verify every block and the complete file hash before output. Reuse an
+      // existing pin without rewriting refs on each checkout.
+      ObjectKey key{Kind::manifest, p->manifest};
+      auto name = "git/" + p->manifest;
+      auto refs = store.refs();
+      auto found = refs.find(name);
+      if (found != refs.end() && found->second == key)
+        (void)store.closure({key}, true, options.stop, options.progress);
+      else
+        store.set_ref(name, key, options.stop);
+      // A completed pull may have stopped before finishing the Git pin, or a
+      // previous pointer may have declared the wrong size. Finish its staging
+      // cleanup even when this retry needs no resolver or network request.
+      auto stage = "git-fetch/" + p->manifest;
+      auto staged = refs.find(stage);
+      if (staged != refs.end() && staged->second == key)
+        store.remove_ref(stage);
+    };
+    try {
+      verify();
+    } catch (const MissingObject &) {
+      if (!resolve)
+        throw;
+      resolve(*p);
+      throw_if_cancelled(options.stop);
+      verify();
+    }
     store.reconstruct(p->manifest, output, options);
   } else {
-    output << first;
-    std::array<char, 8192> buffer{};
-    while (input) {
-      throw_if_cancelled(options.stop);
-      input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-      throw_if_cancelled(options.stop);
-      output.write(buffer.data(), input.gcount());
-    }
-    throw_if_cancelled(options.stop);
-    require(!input.bad() && output.good(), "filter pass-through failed");
+    pass_through(first, input, output, std::move(options));
   }
 }
 static std::string trim_newline(std::string s) {
@@ -131,12 +180,14 @@ std::string detail::shell_quote(const fs::path &p) {
 }
 void install(const fs::path &directory, const fs::path &executable, const fs::path &store) {
   auto command = detail::shell_quote(executable) + " --store " + detail::shell_quote(store) + " git ";
-  std::vector<std::pair<std::string, std::string>> config = {{"filter.syrnck.clean", command + "clean"},
-                                                             {"filter.syrnck.smudge", command + "smudge"},
-                                                             {"filter.syrnck.required", "true"}};
+  std::vector<std::pair<std::string, std::string>> config = {
+      {"filter.syrnck.clean", command + "clean"},
+      {"filter.syrnck.smudge", command + "smudge --checkout-policy"},
+      {"filter.syrnck.required", "true"}};
   for (const auto &[name, value] : config) {
     auto current = process({"git", "config", "--get", name}, directory);
-    require(current.status != 0 || trim_newline(current.out) == value,
+    require(current.status != 0 || trim_newline(current.out) == value ||
+                (name == "filter.syrnck.smudge" && trim_newline(current.out) == command + "smudge"),
             "existing filter differs; refusing to overwrite it");
   }
   for (const auto &[name, value] : config) {

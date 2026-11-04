@@ -46,7 +46,7 @@ class Localization(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="syrnck-i18n-")
         self.root = Path(self.temp.name)
         self.env = {k: v for k, v in os.environ.items()
-                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
+                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG", "SYRNCK_SKIP_SMUDGE")}
 
     def tearDown(self):
         self.temp.cleanup()

@@ -21,7 +21,7 @@ class CliOperations(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.env = {k: v for k, v in os.environ.items()
-                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_LANG", "SYRNCK_TOKEN")}
+                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_LANG", "SYRNCK_TOKEN", "SYRNCK_SKIP_SMUDGE")}
         self.run_cli("init")
 
     def run_cli(self, *args, lang="en", data=None, ok=True):

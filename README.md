@@ -16,7 +16,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 | --- | --- |
 | `syrnck_core` | FastCDC 2020 or fixed blocks, BLAKE3, Zstd, verified reconstruction, indexed packs, revisions, retention, and GC |
 | `syrnck_git` | Clean/smudge filters, committed asset catalogs, retained bundles and opt-in pre-push hooks |
-| `syrnck_git_net` | Grouped Git asset push/pull with verified, immutable catalog publication |
+| `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
 | `syrnck` | Cross-platform CLI, loopback server, and push/pull agent |
 | `syrnck_ffi` / `syrnck_ffi_static` | Shared/static C ABI for blocks, verified import, dependencies, reconstruction, and pins |
@@ -90,7 +90,7 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 ## Git and synchronization
 
-In an existing Git repository, run `syrnck git install`, then add the appropriate rules from [examples/unreal.gitattributes](examples/unreal.gitattributes). An opt-in [pre-push hook](docs/GIT_ASSETS.md#opt-in-pre-push-hook) can verify and upload assets throughout the history being pushed before Git proceeds. Install it explicitly and configure a separate block URL. The [catalog and grouped transfers](docs/GIT_ASSETS.md) also support an explicit clone-without-checkout workflow; automatic checkout hydration and a resident watcher remain future work.
+In an existing Git repository, run `syrnck git install`, then add the appropriate rules from [examples/unreal.gitattributes](examples/unreal.gitattributes). An opt-in [pre-push hook](docs/GIT_ASSETS.md#opt-in-pre-push-hook) can verify and upload assets throughout the history being pushed before Git proceeds. Install it explicitly and configure a separate block URL. [Checkout policies](docs/GIT_ASSETS.md#on-demand-checkout-and-pointer-only-clones) support verified local reconstruction, opt-in downloads of missing blocks, and pointer-only clones for code work. A resident filter/watcher remains future work.
 
 The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for chunked storage and [Syncthing](https://github.com/syncthing/syncthing) for differential synchronization. No implementation code from either project was copied into this engine. Syncthing interoperability is not currently implemented.
 

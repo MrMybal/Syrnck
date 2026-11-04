@@ -29,6 +29,42 @@ std::string remote_url(const fs::path &directory, std::string_view name) {
   require(result.status == 0 && !result.out.empty(), "configure a Syrnck block URL for this Git remote");
   return detail::trim_line(std::move(result.out));
 }
+namespace {
+std::string encode_checkout(const CheckoutPolicy &policy) {
+  if (policy.mode == CheckoutMode::download) {
+    (void)remote_key(policy.remote);
+    return "download:" + policy.remote;
+  }
+  require(policy.remote.empty(), "checkout remote is only available in download mode");
+  require(policy.mode == CheckoutMode::local || policy.mode == CheckoutMode::skip,
+          "invalid Git checkout mode");
+  return policy.mode == CheckoutMode::skip ? "skip" : "local";
+}
+} // namespace
+void configure_checkout(const fs::path &directory, const CheckoutPolicy &policy) {
+  auto value = encode_checkout(policy);
+  if (policy.mode == CheckoutMode::download)
+    (void)remote_url(directory, policy.remote);
+  auto result = detail::local_git(directory, {"config", "--local", "syrnck.checkout", value});
+  require(result.status == 0, "cannot configure Git checkout policy");
+}
+CheckoutPolicy checkout_policy(const fs::path &directory) {
+  auto result = detail::local_git(directory, {"config", "--local", "--get", "syrnck.checkout"}, {}, 1024);
+  if (result.status == 1)
+    return {};
+  require(result.status == 0, "cannot read Git checkout policy");
+  auto value = detail::trim_line(std::move(result.out));
+  CheckoutPolicy policy;
+  if (value == "skip")
+    policy.mode = CheckoutMode::skip;
+  else if (value.starts_with("download:")) {
+    policy.mode = CheckoutMode::download;
+    policy.remote = value.substr(9);
+  } else
+    require(value == "local", "invalid Git checkout mode");
+  (void)encode_checkout(policy);
+  return policy;
+}
 void install_pre_push(const fs::path &directory, const fs::path &executable, const fs::path &store) {
   auto configured = detail::local_git(directory, {"config", "--get", "core.hooksPath"}, {}, 8192);
   require(configured.status == 1, "custom core.hooksPath requires manual Syrnck hook integration");

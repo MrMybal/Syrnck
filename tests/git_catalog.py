@@ -18,7 +18,7 @@ class GitCatalog(unittest.TestCase):
         self.repo = self.root / "repo with 'quote é"
         self.repo.mkdir()
         self.env = {k: v for k, v in os.environ.items() if k.upper() not in
-                    ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
+                    ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG", "SYRNCK_SKIP_SMUDGE")}
         self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
         self.initialize()
 

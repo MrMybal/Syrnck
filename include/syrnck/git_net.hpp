@@ -7,4 +7,7 @@ Json push_assets(const Store &, const Catalog &, const net::Remote &, OperationO
                  net::TransferOptions = {});
 Json pull_assets(const Store &, const Catalog &, const net::Remote &, OperationOptions = {},
                  net::TransferOptions = {});
+// Hydrate exactly the pointer's manifest closure; no Git HEAD or catalog lookup.
+Json hydrate_asset(const Store &, const Pointer &, const net::Remote &, OperationOptions = {},
+                   net::TransferOptions = {});
 } // namespace syrnck::git

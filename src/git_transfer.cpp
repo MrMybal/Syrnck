@@ -1,6 +1,18 @@
 #include "git_internal.hpp"
 #include <syrnck/git_net.hpp>
 namespace syrnck::git {
+Json hydrate_asset(const Store &store, const Pointer &pointer, const net::Remote &remote,
+                   OperationOptions operation, net::TransferOptions limits) {
+  (void)pointer.encode();
+  const ObjectKey root{Kind::manifest, pointer.manifest};
+  const auto stage = "git-fetch/" + pointer.manifest;
+  auto transferred = remote.pull(store, root, stage, operation, limits);
+  require(store.metadata(Kind::manifest, pointer.manifest)["size"].get<std::uint64_t>() == pointer.size,
+          "pointer size mismatch");
+  store.set_ref("git/" + pointer.manifest, root, operation.stop);
+  store.remove_ref(stage);
+  return transferred;
+}
 std::string catalog_reference(std::string_view commit) {
   detail::validate_oid(commit);
   return "git-" + std::string(commit);

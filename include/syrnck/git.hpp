@@ -11,6 +11,18 @@ void clean(const Store &, std::istream &, std::ostream &);
 void clean(const Store &, std::istream &, std::ostream &, IngestOptions);
 void smudge(const Store &, std::istream &, std::ostream &);
 void smudge(const Store &, std::istream &, std::ostream &, OperationOptions);
+// Called only for missing objects, before any reconstructed bytes are emitted.
+using AssetResolver = std::function<void(const Pointer &)>;
+void smudge(const Store &, std::istream &, std::ostream &, OperationOptions, const AssetResolver &);
+// Preserve canonical pointers and stream ordinary content without opening a Store.
+void skip_smudge(std::istream &, std::ostream &, OperationOptions = {});
+enum class CheckoutMode { local, download, skip };
+struct CheckoutPolicy {
+  CheckoutMode mode = CheckoutMode::local;
+  std::string remote;
+};
+void configure_checkout(const fs::path &directory, const CheckoutPolicy &);
+CheckoutPolicy checkout_policy(const fs::path &directory);
 fs::path common_store(const fs::path &directory);
 void install(const fs::path &directory, const fs::path &executable, const fs::path &store);
 struct Asset {

@@ -26,7 +26,7 @@ Critère de sortie : aucune perte des versions conservées après suppression de
 - [x] Push/pull groupés des catalogues, racines distantes immuables, validation en staging et publication par catalogue.
 - [x] Hook pre-push opt-in : parcours de toute l'ascendance, blocs des versions intermédiaires, baux et refus de publication si les assets manquent.
 - [ ] Validation côté serveur Git et coordination distribuée de la publication ; le hook local reste contournable.
-- [ ] Téléchargement à la demande au checkout et stratégie de clone sans assets.
+- [x] Téléchargement à la demande au checkout, baux de lecture, contrôle d'intégrité avant sortie et clones à pointeurs seuls (`local`/`download`/`skip`).
 - [ ] Protocole `filter-process`, hydratation différée, cache commun aux worktrees.
 - [ ] Migration depuis Git LFS sans conversion manuelle fichier par fichier.
 - [ ] Compatibilité explicite GitHub/GitLab et documentation d'hébergement des blocs.
