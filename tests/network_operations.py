@@ -22,13 +22,13 @@ TOKEN = "syrnck-test-token-0123456789-0123456789"
 class Repository(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self):
+    def __init__(self, handler=None):
         self.objects, self.refs, self.calls = {}, {}, []
         self.idle, self.disconnect, self.server_error, self.conflict = False, False, False, False
         self.publish_delay = 0
         self.corrupt_download = False
         self.entered, self.release = threading.Event(), threading.Event()
-        super().__init__(("127.0.0.1", 0), Handler)
+        super().__init__(("127.0.0.1", 0), handler or Handler)
 
     @property
     def url(self):
@@ -103,8 +103,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 @contextlib.contextmanager
-def server():
-    repository = Repository()
+def server(factory=Repository):
+    repository = factory()
     thread = threading.Thread(target=repository.serve_forever, daemon=True)
     thread.start()
     try:
@@ -143,10 +143,10 @@ class NetworkOperations(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stderr.decode("utf-8", "replace"))
         return result
 
-    def probe(self, repository, mode, operation="push", name="asset"):
+    def probe(self, repository, mode, operation="push", name="asset", requests=1, buffer_mib=64):
         target = self.target if operation == "pull" else self.source
         result = subprocess.run([PROBE, mode, operation, str(target), repository.url, "manifest", self.identifier,
-                                 name, "encrypted" if operation == "pull" else "plain"], cwd=self.root,
+                                 name, "encrypted" if operation == "pull" else "plain", str(requests), str(buffer_mib)], cwd=self.root,
                                 env=self.env, capture_output=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
         return json.loads(result.stdout)
@@ -210,7 +210,8 @@ class NetworkOperations(unittest.TestCase):
             self.assertTrue(self.probe(remote, "uncertain", name="server-error")["uncertain"])
             remote.server_error = False
             result = self.cmd("agent", "push", remote.url, self.source_ref, "cli", "--progress-json")
-            self.assertEqual(set(json.loads(result.stdout)), {"transferred_objects", "transferred_bytes", "reused_objects"})
+            self.assertEqual(set(json.loads(result.stdout)), {"transferred_objects", "transferred_bytes", "reused_objects",
+                                                              "peak_object_requests", "peak_object_buffer_bytes"})
             events = [json.loads(line) for line in result.stderr.splitlines()]
             self.assertTrue(any(e["phase"] == "transferring" for e in events))
             self.assertEqual(events[-1]["phase"], "publishing")

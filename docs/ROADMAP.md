@@ -42,7 +42,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Audits `fsck` interruptibles, progression des vérifications et restauration des sessions/caches après annulation.
 - [x] Exports natifs préparés puis publiés par renommage exclusif ; annulation, collisions et arrêts forcés vérifiés.
 - [x] Progression et annulation de l'agent HTTP, reprise des objets vérifiés et résultat explicite si la réponse de publication distante est perdue.
-- [ ] Étendre l'annulation et la progression au GC et à l'empaquetage ; validation des signaux et du renommage exclusif sur les autres plateformes.
+- [x] GC et empaquetage interruptibles pendant la préparation ; nettoyage terminé après publication, avec tests d'annulation aux frontières exactes.
+- [ ] Validation des signaux et du renommage exclusif sur les autres plateformes.
 - [x] Cache borné de lectures vérifiées, contrôle de l'enveloppe à chaque accès et validation des fichiers dans la traversée des dépendances.
 - [ ] Index transactionnel des objets vérifiés ; validation incrémentale des dépendances.
 - [x] Pack immuable indexé, activation physique v2 explicite, compaction GC et reprise aux frontières de publication simulées.
@@ -56,7 +57,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [ ] Fusion automatique des petits packs et validation de charge du moteur complet ; borner le tri et les marques des clés isolées, la pile de parcours et les autres métadonnées.
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
-- [ ] Transferts parallèles bornés, compression réseau négociée et cache des présences.
+- [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
+- [ ] Compression réseau négociée et cache des présences.
 - [ ] Journal persistant des sessions de transfert, retry/backoff et débits limités.
 - [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
 

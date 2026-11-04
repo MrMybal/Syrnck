@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "http_transport.hpp"
 #include <curl/curl.h>
 #include <exception>
 #include <httplib.h>
@@ -8,25 +9,6 @@
 #include <syrnck/net.hpp>
 namespace syrnck::net {
 namespace {
-struct HttpTransferError : Error {
-  using Error::Error;
-};
-struct HttpStatusError : Error {
-  long status;
-  explicit HttpStatusError(long status)
-      : Error("HTTP request failed with status " + std::to_string(status)), status(status) {}
-};
-struct TransferContext {
-  OperationOptions options;
-  std::string_view path;
-  Bytes response;
-  std::exception_ptr error{};
-  std::uint64_t bytes = 0;
-  std::optional<std::uint64_t> total{};
-  void notify(bool complete = false) const {
-    report_progress(options, {ProgressPhase::transferring, path, bytes, total, complete});
-  }
-};
 struct CurlGlobal {
   CurlGlobal() {
     require(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK, "curl initialization failed");
@@ -112,105 +94,24 @@ Remote::Remote(std::string url, std::string token, std::optional<fs::path> ca)
 }
 Bytes Remote::request(std::string_view method, std::string_view path, std::span<const std::uint8_t> body,
                       OperationOptions options) const {
-  throw_if_cancelled(options.stop);
-  using Handle = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
-  Handle curl(curl_easy_init(), &curl_easy_cleanup);
-  require(curl != nullptr, "cannot create HTTP client");
-  std::string url = base_ + std::string(path), verb(method), auth = "Authorization: Bearer " + token_;
-  curl_slist *list = nullptr;
-  list = curl_slist_append(list, auth.c_str());
-  list = curl_slist_append(list, "Content-Type: application/json");
-  std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(list, &curl_slist_free_all);
-  TransferContext context{std::move(options), path, {}};
-  auto set = [&](CURLoption option, auto value) {
-    require(curl_easy_setopt(curl.get(), option, value) == CURLE_OK, "HTTP client option failed");
-  };
-  set(CURLOPT_URL, url.c_str());
-  set(CURLOPT_CUSTOMREQUEST, verb.c_str());
-  set(CURLOPT_HTTPHEADER, list);
-  set(CURLOPT_FOLLOWLOCATION, 0L);
-  set(CURLOPT_PROTOCOLS_STR, "http,https");
-  set(CURLOPT_CONNECTTIMEOUT, 15L);
-  set(CURLOPT_TIMEOUT, 120L);
-  set(CURLOPT_NOSIGNAL, 1L);
-  set(CURLOPT_SSL_VERIFYPEER, 1L);
-  set(CURLOPT_SSL_VERIFYHOST, 2L);
-  // Never forward the shared token to an environment-configured HTTP proxy.
-  set(CURLOPT_PROXY, "");
-  std::string ca;
-  if (ca_) {
-    ca = utf8(*ca_);
-    set(CURLOPT_CAINFO, ca.c_str());
-  }
-  if (method != "GET") {
-    set(CURLOPT_POSTFIELDS, body.empty() ? "" : reinterpret_cast<const char *>(body.data()));
-    set(CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(body.size()));
-  }
-  using Callback = std::size_t (*)(char *, std::size_t, std::size_t, void *);
-  Callback callback = +[](char *data, std::size_t size, std::size_t n, void *opaque) -> std::size_t {
-    auto &state = *static_cast<TransferContext *>(opaque);
-    auto &out = state.response;
-    if (size != 0 && n > max_object_size / size)
-      return 0;
-    auto count = size * n;
-    if (count > max_object_size - out.size())
-      return 0;
-    try {
-      throw_if_cancelled(state.options.stop);
-      out.insert(out.end(), reinterpret_cast<std::uint8_t *>(data),
-                 reinterpret_cast<std::uint8_t *>(data) + count);
-    } catch (...) {
-      if (!state.error)
-        state.error = std::current_exception();
-      return 0;
-    }
-    return count;
-  };
-  set(CURLOPT_WRITEFUNCTION, callback);
-  set(CURLOPT_WRITEDATA, &context);
-  if (context.options.stop.stop_possible() || context.options.progress) {
-    using Progress = int (*)(void *, curl_off_t, curl_off_t, curl_off_t, curl_off_t);
-    Progress progress = +[](void *opaque, curl_off_t down_total, curl_off_t down_now, curl_off_t up_total,
-                            curl_off_t up_now) -> int {
-      auto &state = *static_cast<TransferContext *>(opaque);
-      try {
-        auto positive = [](curl_off_t n) { return static_cast<std::uint64_t>(std::max<curl_off_t>(0, n)); };
-        state.bytes = positive(down_now) + positive(up_now);
-        auto total = positive(down_total) + positive(up_total);
-        state.total = total ? std::optional(total) : std::nullopt;
-        state.notify();
-        return 0;
-      } catch (...) {
-        if (!state.error)
-          state.error = std::current_exception();
-        return 1;
-      }
-    };
-    set(CURLOPT_NOPROGRESS, 0L);
-    set(CURLOPT_XFERINFOFUNCTION, progress);
-    set(CURLOPT_XFERINFODATA, &context);
-  }
-  context.notify();
-  auto status = curl_easy_perform(curl.get());
-  if (context.error)
-    std::rethrow_exception(context.error);
-  throw_if_cancelled(context.options.stop);
-  if (status != CURLE_OK)
-    throw HttpTransferError(std::string("HTTP transfer failed: ") + curl_easy_strerror(status));
-  long code = 0;
-  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &code);
-  if (code < 200 || code >= 300)
-    throw HttpStatusError(code);
-  context.bytes = body.size() + context.response.size();
-  context.total = context.bytes;
-  context.notify(true);
-  return std::move(context.response);
+  Bytes payload;
+  if (!body.empty())
+    payload.assign(body.begin(), body.end());
+  detail::HttpRequest request(base_, token_, ca_, std::string(method), std::string(path), std::move(payload),
+                              std::move(options));
+  return request.perform();
+}
+void TransferOptions::validate() const {
+  require(max_requests >= 1 && max_requests <= 32, "transfer requests must be in 1..32");
+  require(max_in_flight_bytes >= max_object_size + 4096 && max_in_flight_bytes <= 1024ULL * 1024 * 1024,
+          "transfer buffer must fit a maximum object and response and be at most 1 GiB");
 }
 Refs Remote::refs(OperationOptions options) const {
   return decode_refs(parse_json(request("GET", "v1/refs", {}, std::move(options))));
 }
-Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name,
-                  OperationOptions options) const {
+Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
+                  TransferOptions limits) const {
+  limits.validate();
   throw_if_cancelled(options.stop);
   validate_ref(name);
   require(name.find('/') == name.npos, "remote reference must be a single component");
@@ -220,6 +121,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   std::vector<ObjectKey> objects(closure.begin(), closure.end());
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
+  detail::TransferStats stats;
   for (std::size_t start = 0; start < objects.size(); start += 4096) {
     throw_if_cancelled(options.stop);
     auto end = std::min(objects.size(), start + 4096);
@@ -239,13 +141,17 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
       unique.insert(key);
     }
     reused += end - start - unique.size();
-    for (const auto &key : unique) {
-      throw_if_cancelled(options.stop);
-      auto data = store.get(key);
-      (void)request("PUT", "v1/objects/" + std::string(kind_name(key.kind)) + "/" + key.id, data, options);
-      ++sent;
-      total += data.size();
-    }
+    auto current = unique.begin();
+    detail::transfer_objects(
+        base_, token_, ca_, true, limits, options, stats,
+        [&]() -> std::optional<ObjectKey> {
+          return current == unique.end() ? std::nullopt : std::optional(*current++);
+        },
+        [&](const ObjectKey &key) { return store.get(key); },
+        [&](const ObjectKey &, Bytes, std::size_t uploaded) {
+          ++sent;
+          total += uploaded;
+        });
   }
   auto body = Json{{"root", key_json(root)}, {"expected", expected}}.dump();
   report_progress(options, {ProgressPhase::publishing, name});
@@ -253,7 +159,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   // result instead of aborting a request the server may already have applied.
   try {
     (void)request("PUT", "v1/refs/" + std::string(name), bytes(body));
-  } catch (const HttpStatusError &error) {
+  } catch (const detail::HttpStatusError &error) {
     if (error.status != 401 && error.status != 403 && error.status != 404 && error.status != 409)
       throw PublicationUncertain(
           "remote reference publication outcome is unknown; inspect the remote reference before retrying");
@@ -262,39 +168,59 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
     throw PublicationUncertain(
         "remote reference publication outcome is unknown; inspect the remote reference before retrying");
   }
-  return Json{{"transferred_objects", sent}, {"transferred_bytes", total}, {"reused_objects", reused}};
+  return Json{{"transferred_objects", sent},
+              {"transferred_bytes", total},
+              {"reused_objects", reused},
+              {"peak_object_requests", stats.peak_requests},
+              {"peak_object_buffer_bytes", stats.peak_buffered_bytes}};
 }
-Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name,
-                  OperationOptions options) const {
+Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
+                  TransferOptions limits) const {
+  limits.validate();
   throw_if_cancelled(options.stop);
   validate_ref(name);
   std::vector<ObjectKey> pending{root};
   std::set<ObjectKey> seen;
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
-  while (!pending.empty()) {
-    throw_if_cancelled(options.stop);
-    auto key = pending.back();
-    pending.pop_back();
-    if (!seen.insert(key).second)
-      continue;
-    Bytes data;
-    if (store.contains(key)) {
-      ++reused;
-      data = store.get(key);
-    } else {
-      data = request("GET", "v1/objects/" + std::string(kind_name(key.kind)) + "/" + key.id, {}, options);
-      throw_if_cancelled(options.stop);
-      store.import(key, data);
-      ++sent;
-      total += data.size();
-    }
-    auto children = dependencies(key.kind, data);
-    pending.insert(pending.end(), children.begin(), children.end());
-  }
+  detail::TransferStats stats;
+  detail::transfer_objects(
+      base_, token_, ca_, false, limits, options, stats,
+      [&]() -> std::optional<ObjectKey> {
+        while (!pending.empty()) {
+          throw_if_cancelled(options.stop);
+          auto key = std::move(pending.back());
+          pending.pop_back();
+          if (!seen.insert(key).second)
+            continue;
+          Bytes data;
+          try {
+            data = store.get(key);
+          } catch (const MissingObject &) {
+            return key;
+          }
+          ++reused;
+          auto children = dependencies(key.kind, data);
+          pending.insert(pending.end(), children.begin(), children.end());
+        }
+        return {};
+      },
+      {},
+      [&](const ObjectKey &key, Bytes data, std::size_t) {
+        throw_if_cancelled(options.stop);
+        store.import(key, data);
+        ++sent;
+        total += data.size();
+        auto children = dependencies(key.kind, data);
+        pending.insert(pending.end(), children.begin(), children.end());
+      });
   report_progress(options, {ProgressPhase::publishing, name});
   store.set_ref(name, root, options.stop);
-  return Json{{"transferred_objects", sent}, {"transferred_bytes", total}, {"reused_objects", reused}};
+  return Json{{"transferred_objects", sent},
+              {"transferred_bytes", total},
+              {"reused_objects", reused},
+              {"peak_object_requests", stats.peak_requests},
+              {"peak_object_buffer_bytes", stats.peak_buffered_bytes}};
 }
 void serve(Store &store, std::string_view token, std::string_view listen, Language language) {
   validate_token(token);

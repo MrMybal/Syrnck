@@ -6,14 +6,22 @@ namespace syrnck::net {
 struct PublicationUncertain : Error {
   using Error::Error;
 };
+struct TransferOptions {
+  std::size_t max_requests = 1;
+  // Charges object uploads plus reserved response buffers, not total RSS.
+  std::size_t max_in_flight_bytes = 64 * 1024 * 1024;
+  void validate() const;
+};
 void serve(Store &, std::string_view token, std::string_view listen = "127.0.0.1:7437",
            Language language = Language::english);
 class Remote {
 public:
   Remote(std::string url, std::string token, std::optional<fs::path> ca = {});
   Refs refs(OperationOptions = {}) const;
-  Json push(const Store &, const ObjectKey &, std::string_view remote_ref, OperationOptions = {}) const;
-  Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {}) const;
+  Json push(const Store &, const ObjectKey &, std::string_view remote_ref, OperationOptions = {},
+            TransferOptions = {}) const;
+  Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {},
+            TransferOptions = {}) const;
 
 private:
   std::string base_, token_;

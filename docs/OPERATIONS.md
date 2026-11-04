@@ -59,7 +59,7 @@ the Unix SIGINT/SIGTERM cases are included for the next platform CI run.
 
 C++ observers receive a `ProgressEvent` synchronously on the calling coordinator
 thread. Phases are scanning, ingesting, reconstructing, verifying, exporting,
-transferring and publishing. Events contain processed bytes, an optional total,
+transferring, planning, packing and publishing. Events contain processed bytes, an optional total,
 optional path context, a completion flag for the reported scope and the current
 buffered-block count. Native commits provide each relative file path and its
 observed size. An ordinary stream import has no known total. Empty files still

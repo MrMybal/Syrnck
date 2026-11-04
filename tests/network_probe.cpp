@@ -5,7 +5,8 @@
 using namespace syrnck;
 int entry(int argc, char **argv) {
   try {
-    require(argc == 9, "network probe expects mode operation store URL kind ID ref encryption");
+    require(argc == 11,
+            "network probe expects mode operation store URL kind ID ref encryption requests buffer-MiB");
     std::string mode = argv[1], operation = argv[2];
     std::optional<Key> key;
     if (std::string_view(argv[8]) == "encrypted") {
@@ -34,7 +35,7 @@ int entry(int argc, char **argv) {
                                if (event.phase == ProgressPhase::transferring) {
                                  completed += event.complete;
                                  bytes_seen |= event.bytes > 0;
-                                 if (event.path.starts_with("v1/objects/") && event.bytes > 0) {
+                                 if (event.path.starts_with("v1/objects/chunk/") && event.bytes > 0) {
                                    if (mode == "transfer")
                                      stop.request_stop();
                                    if (mode == "throw")
@@ -53,12 +54,14 @@ int entry(int argc, char **argv) {
                              }};
     if (mode == "pre")
       stop.request_stop();
+    net::TransferOptions limits{static_cast<std::size_t>(std::stoull(argv[9])),
+                                static_cast<std::size_t>(std::stoull(argv[10]) * 1024 * 1024)};
     try {
       Json result;
       if (operation == "push")
-        result = remote.push(store, root, argv[7], options);
+        result = remote.push(store, root, argv[7], options, limits);
       else if (operation == "pull")
-        result = remote.pull(store, root, argv[7], options);
+        result = remote.pull(store, root, argv[7], options, limits);
       else {
         (void)remote.refs(options);
         result = Json::object();
@@ -78,6 +81,10 @@ int entry(int argc, char **argv) {
       require(mode == "pre" || mode == "transfer" || mode == "publish", "unexpected cancellation");
       std::cout << Json{{"cancelled", true}, {"events", events}}.dump() << '\n';
     } catch (const Error &error) {
+      if (mode == "overlong" && std::string_view(error.what()).starts_with("HTTP transfer failed: ")) {
+        std::cout << "{\"oversized_response\":true}\n";
+        return 0;
+      }
       if (mode == "corrupt" && std::string_view(error.what()) == "object hash mismatch") {
         std::cout << "{\"corrupt_response\":true}\n";
         return 0;

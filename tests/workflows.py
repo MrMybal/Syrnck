@@ -355,22 +355,22 @@ class Workflows(unittest.TestCase):
             self.cmd("pack", "--max-objects", 1, store=folder, env=env)
 
         with self.server(encrypted=True, prepare=prepare) as (url, folder):
-            pushed = json.loads(self.cmd("agent", "push", url, "files/" + first["manifest"], "asset", env=client_env))
+            pushed = json.loads(self.cmd("agent", "push", "--requests", 4, url, "files/" + first["manifest"], "asset", env=client_env))
             self.assertEqual(pushed["transferred_objects"], 0)
             target = self.root / "target-packed"
             target_env = dict(client_env, SYRNCK_KEY="03" * 32)
             self.cmd("init", "--encrypted", store=target, env=target_env)
             self.ingest(b"a" * 4096, fixed=4096, store=target, env=target_env)
             self.cmd("pack", "--max-objects", 1, store=target, env=target_env)
-            pulled = json.loads(self.cmd("agent", "pull", url, "asset", "received", store=target, env=target_env))
+            pulled = json.loads(self.cmd("agent", "pull", "--requests", 4, url, "asset", "received", store=target, env=target_env))
             self.assertEqual(pulled["transferred_objects"], 3)
             self.assertEqual(pulled["reused_objects"], 1)
             changed = b"a" * 4096 + b"d" * 4096 + b"c" * 4096
             second = self.ingest(changed, fixed=4096)
-            pushed = json.loads(self.cmd("agent", "push", url, "files/" + second["manifest"], "asset", env=client_env))
+            pushed = json.loads(self.cmd("agent", "push", "--requests", 4, url, "files/" + second["manifest"], "asset", env=client_env))
             self.assertEqual(pushed["transferred_objects"], 2)
             self.assertEqual(pushed["reused_objects"], 2)
-            self.cmd("agent", "pull", url, "asset", "received", store=target, env=target_env)
+            self.cmd("agent", "pull", "--requests", 4, url, "asset", "received", store=target, env=target_env)
             self.cmd("pack", store=target, env=target_env)
             self.cmd("get", second["manifest"], self.root / "network-packed-output", store=target, env=target_env)
             self.assertEqual((self.root / "network-packed-output").read_bytes(), changed)

@@ -80,8 +80,9 @@ A real Windows Ctrl+Break interrupts an idle HTTP request; Unix SIGINT is includ
 for the next CI run. Existing workflows also exercise the production server and
 packed/encrypted stores. Local validation is Windows x64.
 
-Transfers still process one object request at a time. Push materializes its
-closure and sorted object list; pull retains a seen set and pending traversal.
-There is no persistent session journal, automatic retry/backoff, bandwidth limit,
-parallel transfer scheduler, background watcher or automatic Git push/checkout
-integration yet.
+Object requests default to sequential execution and can run concurrently with
+`--requests` and a buffer budget. See [parallel transfers and resource limits](PARALLEL_TRANSFERS.md).
+Push still materializes its closure and sorted object list; pull retains a seen
+set and pending traversal. There is no persistent session journal, automatic
+retry/backoff, bandwidth limit, background watcher or automatic Git
+push/checkout integration yet.

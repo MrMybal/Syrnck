@@ -74,6 +74,8 @@ Le GC et `fsck` parcourent les inventaires en flux et marquent les objets empaqu
 
 Dans un dépôt Git existant, lancer `syrnck git install`, puis ajouter les règles de [examples/unreal.gitattributes](examples/unreal.gitattributes). **Un `git push` ne transfère pas encore les blocs Syrnck** : le transfert reste explicite via l'agent. Les parcours complets sont dans [docs/USAGE.md](docs/USAGE.md).
 
+L'agent accepte `--requests 4 --transfer-buffer-mib 64` pour chevaucher les requêtes d'objets, avec accès au Store coordonnés. Le défaut reste une requête ; le budget couvre les payloads et les réponses réservées, pas toute la mémoire du processus. Voir [limites et reprises des transferts parallèles](docs/PARALLEL_TRANSFERS.md). Le GC et l'empaquetage deviennent interruptibles pendant la préparation, puis terminent leur nettoyage après publication ; voir les [frontières de maintenance](docs/MAINTENANCE.md).
+
 ## Validation et migration
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.

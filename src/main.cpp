@@ -126,8 +126,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
   agent push URL RÉF_LOCALE RÉF_DISTANTE
   agent pull URL RÉF_DISTANTE RÉF_LOCALE
+             [--requests 1..32] [--transfer-buffer-mib 64] (push ou pull)
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
-Progression : --progress ou --progress-json sur stderr pour put, get,
+Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
               fsck, native commit/export, git clean/smudge et agent push/pull.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -163,8 +164,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
   agent push URL LOCAL_REF REMOTE_REF
   agent pull URL REMOTE_REF LOCAL_REF
+             [--requests 1..32] [--transfer-buffer-mib 64] (push or pull)
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
-Progress: --progress or --progress-json on stderr for put, get,
+Progress: --progress or --progress-json on stderr for put, get, pack, gc,
           fsck, native commit/export, git clean/smudge and agent push/pull.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -431,17 +433,29 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::serve(store, *token, listen, language);
   } else if (command == "agent") {
+    net::TransferOptions limits;
+    if (auto requests = args.option("--requests")) {
+      auto count = integer(*requests);
+      require(count >= 1 && count <= 32, "transfer requests must be in 1..32");
+      limits.max_requests = static_cast<std::size_t>(count);
+    }
+    if (auto budget = args.option("--transfer-buffer-mib")) {
+      auto size = integer(*budget);
+      require(size >= 17 && size <= 1024, "transfer buffer must be in 17..1024 MiB");
+      limits.max_in_flight_bytes = static_cast<std::size_t>(size * 1024 * 1024);
+    }
+    limits.validate();
     args.count(3);
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::Remote remote(args.values[0], *token, ca_path);
     if (sub == "push") {
       auto refs = store.refs();
       require(refs.contains(args.values[1]), "unknown local reference");
-      print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}));
+      print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
     } else if (sub == "pull") {
       auto refs = remote.refs({control->token(), observe});
       require(refs.contains(args.values[1]), "unknown remote reference");
-      print(remote.pull(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}));
+      print(remote.pull(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
     } else
       throw Error("unknown agent command");
   } else
