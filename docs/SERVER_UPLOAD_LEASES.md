@@ -1,7 +1,7 @@
 # Persistent server upload leases
 
 New clients automatically protect uploads when the server advertises this
-extension. Active leases survive server restarts and block offline GC. A lease
+extension. Active leases survive server restarts and protect uploads during offline GC. A lease
 expires when its client stops renewing it; published references then provide
 ordinary retention after a successful transfer.
 
@@ -41,8 +41,10 @@ delay scheduling. A short TTL cannot guarantee continuous protection through an
 arbitrarily long stall. Keep the normal TTL large enough for those operations;
 one-second leases are useful for controlled tests rather than deployment guidance.
 
-An active, unexpired lease blocks **GC preview and deletion for the whole server
-Store**. GC streams and validates the records before planning. An expired,
+An active, unexpired legacy lease blocks **GC preview and deletion for the whole
+server Store**. New clients negotiate [paged upload inventories](UPLOAD_INVENTORIES.md),
+allowing unrelated objects to be collected while declared objects remain retained.
+GC streams and validates the records before planning. An expired,
 released or published lease does not retain objects. Expiry never deletes
 payloads itself; an ordinary GC is still required. The server holds the Store's
 exclusive process lock while running, so current maintenance is offline.
@@ -57,13 +59,14 @@ syrnck --store server-data leases prune
 
 `release` deliberately revokes an active lease. It does not modify references
 or payloads and leaves published receipts intact. `prune` removes expired,
-released and published records after validating the full inventory. Live leases
-are preserved. Removing a published receipt can reduce what a disconnected
+released and published records and obsolete inventory generations after validation.
+Live leases and their committed inventories are preserved. Removing a published receipt can reduce what a disconnected
 client can prove, but never authorizes replaying its old publication.
 
 The store permits at most **4,096 lease records**, including receipts. New lease
 creation fails at capacity until inactive records are pruned. Records are at
-most 16 KiB; listing materializes at most that bounded inventory. Malformed
+most 16 KiB; separately stored inventory pages are capped at 1 MiB each.
+Listing materializes at most that bounded lease inventory. Malformed
 records and symlinked paths fail closed. Every GC binary must understand this
 extension; older binaries ignore server upload holds.
 
@@ -110,9 +113,10 @@ All endpoints use the existing bearer authentication:
 
 | Request | Behavior |
 | --- | --- |
-| `GET v1/capabilities` | Advertises `upload_leases: 1` and `lease_seconds` |
+| `GET v1/capabilities` | Advertises `upload_leases: 1`, `lease_seconds` and optional `upload_inventories: 1` |
 | `GET v1/uploads/ID` | Returns `lease` metadata and configured `lease_seconds`, or 404 |
-| `PUT v1/uploads/ID` | Creates/renews an exact descriptor; body has `root`, `reference`, `expected`, `fence` |
+| `PUT v1/uploads/ID` | Creates/renews an exact descriptor; body has `root`, `reference`, `expected`, `fence`, optionally `inventory: true` |
+| `PUT v1/uploads/ID/inventory/INDEX` | Registers a fenced page before querying presence; see [upload inventories](UPLOAD_INVENTORIES.md) |
 | `POST v1/uploads/ID/confirm` | Confirms a matching reference without publishing it; body has `fence` |
 | `PUT v1/refs/NAME` with `upload: {id, fence}` | Validates the lease and performs/reconciles its bound CAS |
 
@@ -120,9 +124,11 @@ Creation sends a null fence. A retried creation is idempotent for the same
 descriptor; renewals send the last observed fence. Lease request and response
 bodies are capped at 16 KiB in the client; the server rejects oversized control
 requests before parsing. Server records in `STORE/uploads/ID.json` use a strict
-version-1 schema: `version`, `id`, `reference`, `root`, `expected`, `fence`,
+version-1 schema for legacy leases: `version`, `id`, `reference`, `root`, `expected`, `fence`,
 `expires_at` (Unix seconds), and `state` (`active`, `expired`, `published`, `released`).
 Writes use the same flushed-file and atomic-publication mechanisms as journals.
+Inventory-enabled schema-2 records also commit `inventory_pages` and `inventory_hash`;
+their separate registration requests permit at most 1 MiB.
 
 HTTP 412 rejects an expired/released/fenced leased publication; 428 rejects an
 unleased publication when the server requires leases. The client treats these

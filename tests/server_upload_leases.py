@@ -27,6 +27,13 @@ class ProxyHandler(base.Handler):
         with response:
             status, data = response.status, response.read()
         self.server.calls.append((self.command, self.path))
+        if self.command == "GET" and self.path == "/v1/capabilities" and self.server.hide_inventory:
+            capabilities = json.loads(data)
+            capabilities.pop("upload_inventories", None)
+            data = json.dumps(capabilities).encode()
+        if self.command == "PUT" and "/inventory/" in self.path and self.server.hold_inventory and status == 204:
+            self.server.inventory_entered.set()
+            self.server.inventory_release.wait(8)
         if self.server.hold_renewal:
             if self.command == "PUT" and self.path.startswith("/v1/uploads/") and self.server.calls.count((self.command, self.path)) == 2:
                 self.server.renewal_entered.set()
@@ -47,6 +54,8 @@ class Proxy(base.Repository):
         super().__init__(ProxyHandler)
         self.target, self.gate = target, True
         self.hold_renewal = False
+        self.hide_inventory, self.hold_inventory = False, False
+        self.inventory_entered, self.inventory_release = threading.Event(), threading.Event()
         self.renewal_entered, self.renewal_release, self.object_during_renewal = threading.Event(), threading.Event(), threading.Event()
 
 
@@ -131,9 +140,14 @@ class ServerUploadLeases(unittest.TestCase):
             self.assertIsInstance(identifier, str)
             self.assertEqual(self.lease(remote.url, identifier)["state"], "active")
             self.assertEqual(self.http(remote.url, "GET", "/v1/refs"), {})
+        orphan_file = self.root / "unrelated.bin"
+        orphan_file.write_bytes(b"unrelated upload-lease garbage")
+        orphan_id = json.loads(self.cmd("put", orphan_file, store=self.remote_store, encrypted=True).stdout)["manifest"]
+        self.cmd("unpin", "files/" + orphan_id, store=self.remote_store, encrypted=True)
         for option in ((), ("--delete",)):
-            result = self.cmd("gc", *option, store=self.remote_store, encrypted=True, expected=1, lang="fr")
-            self.assertIn("baux d'envoi actifs", result.stderr.decode())
+            result = json.loads(self.cmd("gc", *option, store=self.remote_store, encrypted=True).stdout)
+            self.assertGreater(result["unreachable_objects"], 0)
+            self.assertEqual(result["live_objects"], 13)
         self.assertEqual(len(json.loads(self.cmd("leases", "list", store=self.remote_store, encrypted=True).stdout)), 1)
         with self.serving() as remote:
             result = self.resume(remote.url, record["id"])
@@ -262,6 +276,84 @@ class ServerUploadLeases(unittest.TestCase):
             result = self.probe(remote, "ok")["result"]
             self.assertIsNone(result["upload_lease"])
             self.assertEqual(remote.refs["asset"], self.root_key)
+
+    def test_legacy_lease_keeps_its_global_hold_after_capability_upgrade(self):
+        self.setup_server()
+        with base.server(lambda: Proxy(f"http://127.0.0.1:{self.port}")) as proxy:
+            proxy.gate, proxy.hide_inventory = False, True
+            with self.serving():
+                self.probe(proxy, "publish", requests=4)
+                record = self.active_session()
+            for option in ((), ("--delete",)):
+                result = self.cmd("gc", *option, store=self.remote_store, encrypted=True, expected=1)
+                self.assertIn(b"active upload leases", result.stderr)
+            proxy.hide_inventory = False
+            with self.serving() as remote:
+                result = self.resume(proxy.url, record["id"])
+                self.assertEqual(result["transferred_objects"], 0)
+                self.assertEqual(self.lease(remote.url, record["upload_lease"])["version"], 1)
+                self.assertFalse(any("/inventory/" in path for _, path in proxy.calls))
+
+    def test_lost_inventory_ack_survives_agent_and_server_restart(self):
+        self.setup_server()
+        with self.serving() as remote:
+            self.probe(remote, "ok", requests=4)  # Seed a complete version whose reference will be removed.
+        self.cmd("unpin", "asset", store=self.remote_store, encrypted=True)
+        with base.server(lambda: Proxy(f"http://127.0.0.1:{self.port}")) as proxy:
+            proxy.gate, proxy.hold_inventory = False, True
+            with self.serving() as remote:
+                process = subprocess.Popen([base.CLI, "--store", str(self.source), "agent", "push", proxy.url,
+                                            self.source_ref, "pending", "--require-lease"], env=self.env,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                try:
+                    self.assertTrue(proxy.inventory_entered.wait(8), "agent did not reach inventory acknowledgement")
+                    self.assertIsNone(process.poll())
+                    process.kill()
+                    self.assertEqual(process.communicate(timeout=5)[0], b"")
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate(timeout=5)
+                    proxy.hold_inventory = False
+                    proxy.inventory_release.set()
+                record = next(r for r in json.loads(self.cmd("agent", "sessions").stdout) if r["reference"] == "pending")
+                self.assertEqual(record["state"], "transferring")
+                lease = self.lease(remote.url, record["upload_lease"])
+                self.assertEqual(lease["inventory_pages"], 1)
+                self.assertFalse(any(path == "/v1/missing" for _, path in proxy.calls))
+            orphan = self.root / "inventory-unrelated.bin"
+            orphan.write_bytes(b"unrelated to the registered inventory")
+            identifier = json.loads(self.cmd("put", orphan, store=self.remote_store, encrypted=True).stdout)["manifest"]
+            self.cmd("unpin", "files/" + identifier, store=self.remote_store, encrypted=True)
+            result = json.loads(self.cmd("gc", "--delete", store=self.remote_store, encrypted=True).stdout)
+            self.assertEqual(result["live_objects"], 13)
+            self.assertGreater(result["unreachable_objects"], 0)
+            with self.serving() as remote:
+                result = self.resume(proxy.url, record["id"])
+                self.assertEqual(result["transferred_objects"], 0)
+                self.assertEqual(self.lease(remote.url, record["upload_lease"])["state"], "published")
+            self.cmd("fsck", store=self.remote_store, encrypted=True)
+
+    def test_inventory_auth_fencing_schema_and_no_capability_downgrade(self):
+        self.setup_server()
+        with self.serving() as remote, base.server(lambda: Proxy(remote.url)) as proxy:
+            proxy.gate = False
+            self.probe(proxy, "publish")
+            record = self.active_session()
+            lease = self.lease(remote.url, record["upload_lease"])
+            path = "/v1/uploads/" + lease["id"] + "/inventory/0"
+            self.http(remote.url, "PUT", path, {}, expected=401, token="invalid")
+            self.http(remote.url, "PUT", path, {"fence": lease["fence"], "objects": []}, expected=400)
+            self.http(remote.url, "PUT", path, {"fence": "0" * 64, "objects": [self.root_key]}, expected=412)
+            self.http(remote.url, "PUT", path, {"fence": lease["fence"], "objects": [self.root_key]}, expected=400)
+            proxy.hide_inventory = True
+            before = list(proxy.calls)
+            result = self.cmd("agent", "resume", proxy.url, record["id"], expected=1)
+            self.assertIn(b"no longer supports the saved upload inventory", result.stderr)
+            self.assertEqual(sum(path.startswith("/v1/objects/") for _, path in before),
+                             sum(path.startswith("/v1/objects/") for _, path in proxy.calls))
+            self.assertEqual(self.http(remote.url, "GET", "/v1/refs"), {})
 
 
 if __name__ == "__main__":

@@ -65,7 +65,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Baux de lecture persistants pour les pulls : racine exacte, reprise après suppression de référence, renouvellement asynchrone et libération avant publication locale.
 - [x] Rétention sélective des sources locales, pulls incomplets et baux de lecture ; collecte des objets sans lien avec les transferts, avec validation des fichiers complets.
 - [x] Purge locale des reçus terminés, aperçu par défaut, validation complète avant suppression et conservation des sessions inachevées.
-- [ ] Rétention sélective des envois serveur avant réception du manifeste et GC distribué.
+- [x] Rétention sélective des envois serveur avant réception du manifeste : inventaires paginés, engagement des pages avant négociation, intégrité, reprise et purge des générations obsolètes.
+- [ ] GC distribué avec protection coordonnée entre serveurs et réplication.
 - [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
 
 Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets transférés mesurés ; aucun réglage de vitesse ne dégrade les garanties de reconstruction. Les cibles chiffrées doivent être fixées à partir des machines et des corpus de référence.

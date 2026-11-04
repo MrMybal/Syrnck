@@ -75,6 +75,9 @@ struct UploadLease {
   ObjectKey root{Kind::manifest, {}};
   std::optional<ObjectKey> expected;
   std::uint64_t expires_at = 0;
+  // Null keeps legacy global retention; a value enables paged selective retention.
+  std::optional<std::uint32_t> inventory_pages;
+  std::string inventory_hash;
   void validate() const;
   Json json() const;
   static UploadLease parse(const Json &);
@@ -218,7 +221,10 @@ public:
   std::optional<UploadLease> upload_lease(std::string_view id) const;
   UploadLease acquire_upload_lease(std::string_view id, const ObjectKey &, std::string_view reference,
                                    const std::optional<ObjectKey> &expected, std::uint64_t seconds,
-                                   const std::optional<std::string> &fence = {}) const;
+                                   const std::optional<std::string> &fence = {},
+                                   bool inventory = false) const;
+  void register_upload_inventory(std::string_view id, std::string_view fence, std::uint32_t page,
+                                 const std::vector<ObjectKey> &) const;
   bool publish_upload_lease(std::string_view id, std::string_view fence) const;
   void confirm_upload_lease(std::string_view id, std::string_view fence) const;
   void release_upload_lease(std::string_view id) const;
@@ -254,7 +260,9 @@ private:
   void write_refs(const Refs &, std::stop_token = {}) const;
   void transfer_gc_roots(std::vector<ObjectKey> &complete, std::vector<ObjectKey> &partial,
                          std::stop_token) const;
-  void check_upload_gc(std::stop_token, bool remove) const;
+  std::vector<UploadLease> prepare_upload_gc(std::stop_token, bool remove) const;
+  void visit_upload_inventory(const UploadLease &, const std::function<void(const ObjectKey &)> &,
+                              std::stop_token) const;
   void read_gc_roots(std::vector<ObjectKey> &, std::stop_token, bool remove) const;
 };
 } // namespace syrnck

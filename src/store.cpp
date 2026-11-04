@@ -700,7 +700,7 @@ Json Store::gc(bool remove, OperationOptions options) const {
   throw_if_cancelled(options.stop);
   std::vector<ObjectKey> roots, partial;
   transfer_gc_roots(roots, partial, options.stop);
-  check_upload_gc(options.stop, remove);
+  auto uploads = prepare_upload_gc(options.stop, remove);
   read_gc_roots(roots, options.stop, remove);
   std::uint64_t verified_bytes = 0, planned_bytes = 0, packed_bytes = 0;
   auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
@@ -725,7 +725,24 @@ Json Store::gc(bool remove, OperationOptions options) const {
     };
     auto peak =
         walk_objects(roots, true, [&](const ObjectKey &key) { return live.insert(key); }, read, options.stop);
-    return std::max(peak, retain_partial(partial, live, read, options.stop));
+    peak = std::max(peak, retain_partial(partial, live, read, options.stop));
+    // Direct inventory marks do not prove a manifest's children were visited.
+    // Traverse dependency roots first so shared marks cannot hide those children.
+    for (const auto &lease : uploads)
+      visit_upload_inventory(
+          lease,
+          [&](const ObjectKey &key) {
+            if (live.contains(key))
+              return;
+            try {
+              (void)read(key);
+            } catch (const MissingObject &) {
+              return; // Registration can precede both object presence and its dependencies.
+            }
+            live.insert(key);
+          },
+          options.stop);
+    return peak;
   }();
   notify(ProgressPhase::verifying, verified_bytes, true);
   notify(ProgressPhase::planning, 0);

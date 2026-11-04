@@ -8,6 +8,7 @@
 #include <iostream>
 #include <monocypher.h>
 #include <mutex>
+#include <limits>
 #include <syrnck/net.hpp>
 namespace syrnck::net {
 namespace {
@@ -240,6 +241,9 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
       batch.push_back(key_json(objects[i]));
       allowed.insert(objects[i]);
     }
+    require(start / 4096 <= std::numeric_limits<std::uint32_t>::max(),
+            "upload inventory page limit exceeded");
+    protection.announce(static_cast<std::uint32_t>(start / 4096), batch);
     auto body = batch.dump();
     auto missing = parse_json(request("POST", "v1/missing", bytes(body), options, &limits));
     require(missing.is_array(), "invalid missing response");
@@ -450,6 +454,7 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   };
   server.Get("/v1/capabilities", guarded([&](const auto &, auto &response) {
                response.set_content(Json{{"upload_leases", 1},
+                                         {"upload_inventories", 1},
                                          {"lease_seconds", limits.upload_lease_seconds},
                                          {"read_leases", 1},
                                          {"read_lease_seconds", limits.read_lease_seconds}}
@@ -504,8 +509,11 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   server.Put(R"(/v1/uploads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
                require(request.body.size() <= 16384, "upload lease request exceeds size limit");
                auto j = parse_json(bytes(request.body));
-               require(j.is_object() && j.size() == 4 && j.contains("root") && j.contains("reference") &&
-                           j["reference"].is_string() && j.contains("expected") && j.contains("fence") &&
+               require(j.is_object() &&
+                           (j.size() == 4 || (j.size() == 5 && j.contains("inventory") &&
+                                              j["inventory"].is_boolean() && j["inventory"] == true)) &&
+                           j.contains("root") && j.contains("reference") && j["reference"].is_string() &&
+                           j.contains("expected") && j.contains("fence") &&
                            (j["fence"].is_null() || j["fence"].is_string()),
                        "invalid upload lease request");
                std::optional<ObjectKey> expected;
@@ -514,10 +522,26 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                std::optional<std::string> fence;
                if (!j["fence"].is_null())
                  fence = j["fence"].template get<std::string>();
-               auto lease = store.acquire_upload_lease(request.matches[1].str(), parse_key(j["root"]),
-                                                       j["reference"].template get<std::string>(), expected,
-                                                       limits.upload_lease_seconds, fence);
+               auto lease = store.acquire_upload_lease(
+                   request.matches[1].str(), parse_key(j["root"]), j["reference"].template get<std::string>(),
+                   expected, limits.upload_lease_seconds, fence, j.contains("inventory"));
                lease_reply(lease, response);
+             }));
+  server.Put(R"(/v1/uploads/([a-f0-9]{64})/inventory/([0-9]{1,4}))",
+             guarded([&](const auto &request, auto &response) {
+               require(request.body.size() <= 1024 * 1024, "upload inventory request exceeds size limit");
+               auto j = parse_json(bytes(request.body));
+               require(j.is_object() && j.size() == 2 && j.contains("fence") && j["fence"].is_string() &&
+                           j.contains("objects") && j["objects"].is_array() && !j["objects"].empty() &&
+                           j["objects"].size() <= 4096,
+                       "invalid upload inventory request");
+               std::vector<ObjectKey> objects;
+               for (const auto &key : j["objects"])
+                 objects.push_back(parse_key(key));
+               store.register_upload_inventory(
+                   request.matches[1].str(), j["fence"].template get<std::string>(),
+                   static_cast<std::uint32_t>(std::stoul(request.matches[2].str())), objects);
+               response.status = 204;
              }));
   server.Post(R"(/v1/uploads/([a-f0-9]{64})/confirm)", guarded([&](const auto &request, auto &response) {
                 require(request.body.size() <= 16384, "upload lease request exceeds size limit");

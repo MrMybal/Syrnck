@@ -11,7 +11,8 @@ opens its Store.
 | Unfinished local push | Verify and retain its complete source closure |
 | Unfinished local pull | Retain every available object reachable through its saved root |
 | Active server read lease | Verify and retain the complete leased closure |
-| Active server upload lease | Block all GC until expiry, publication or deliberate release |
+| Active inventory-enabled server upload lease | Retain existing objects in committed inventory pages |
+| Active legacy server upload lease | Block all GC until expiry, publication or deliberate release |
 | Completed local receipt or inactive server lease | Does not retain payloads |
 | Invalid journal or lease metadata | Fail before payload deletion |
 
@@ -41,11 +42,10 @@ expires while GC is running, this invocation conservatively keeps its objects.
 Previously observed expired generations are still durably fenced before deleting
 payloads, preventing clock rollback from reviving a collected generation.
 
-Upload leases keep their global hold because an upload may send chunks before
-its root manifest. The current lease does not contain an inventory identifying
-those early chunks. Selective upload retention requires an additional negotiated
-inventory or staging design. Multi-server/distributed retention is also future
-work; local process locks and leases do not implement distributed consensus.
+New [server upload inventories](UPLOAD_INVENTORIES.md) register batches before
+remote presence queries, retaining declared objects even before manifest arrival.
+Legacy upload leases keep their global hold. Multi-server/distributed retention
+is still future work; local process locks and leases do not implement distributed consensus.
 
 ## Pruning completed local receipts
 

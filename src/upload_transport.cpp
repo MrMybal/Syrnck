@@ -14,6 +14,13 @@ bool UploadProtection::supported() {
                   caps["upload_leases"].get<std::uint64_t>() <= 1,
               "invalid server capabilities");
       supported_ = caps["upload_leases"] == 1;
+      if (caps.contains("upload_inventories")) {
+        require(caps["upload_inventories"].is_number_unsigned() &&
+                    caps["upload_inventories"].get<std::uint64_t>() <= 1 &&
+                    (caps["upload_inventories"] == 0 || *supported_),
+                "invalid server capabilities");
+        inventories_ = caps["upload_inventories"] == 1;
+      }
     } catch (const HttpStatusError &error) {
       if (error.status != 404)
         throw;
@@ -65,16 +72,26 @@ void UploadProtection::acquire() {
   } else {
     (void)receipt();
   }
+  require(!lease_ || !lease_->inventory_pages || inventories_,
+          "server no longer supports the saved upload inventory");
   auto payload = body();
   received(request_("PUT", path(), bytes(payload), operation_));
 }
 std::string UploadProtection::body() const {
   auto old = lease_ ? std::optional(lease_->fence) : std::nullopt;
-  return Json{{"root", key_json(session_.root)},
-              {"reference", session_.reference},
-              {"expected", session_.expected ? key_json(*session_.expected) : Json(nullptr)},
-              {"fence", old ? Json(*old) : Json(nullptr)}}
-      .dump();
+  auto value = Json{{"root", key_json(session_.root)},
+                    {"reference", session_.reference},
+                    {"expected", session_.expected ? key_json(*session_.expected) : Json(nullptr)},
+                    {"fence", old ? Json(*old) : Json(nullptr)}};
+  if (lease_ ? lease_->inventory_pages.has_value() : inventories_)
+    value["inventory"] = true;
+  return value.dump();
+}
+void UploadProtection::announce(std::uint32_t page, const Json &objects) {
+  if (!lease_ || !lease_->inventory_pages)
+    return;
+  auto payload = Json{{"fence", lease_->fence}, {"objects", objects}}.dump();
+  (void)request_("PUT", path() + "/inventory/" + std::to_string(page), bytes(payload), operation_);
 }
 void UploadProtection::received(const Bytes &data, const std::optional<std::string> &expected_fence) {
   decode(data);

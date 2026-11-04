@@ -7,6 +7,7 @@ public:
   ~UploadProtection();
   bool receipt();
   void acquire();
+  void announce(std::uint32_t page, const Json &objects);
   void tick();
   void finish();
   void confirm();
@@ -22,6 +23,7 @@ private:
   TransferOptions limits_;
   LeaseRequest request_;
   std::optional<bool> supported_;
+  bool inventories_ = false;
   std::optional<UploadLease> lease_;
   std::uint64_t seconds_ = 3600;
   std::chrono::steady_clock::time_point renew_{};

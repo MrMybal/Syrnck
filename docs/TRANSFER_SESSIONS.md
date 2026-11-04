@@ -127,8 +127,8 @@ also provide [expiring upload leases and publication receipts](SERVER_UPLOAD_LEA
 Those receipts can confirm a lost acknowledgement even after a later reference
 change. An expired lease can permit offline server GC; resume renegotiates and
 reuploads missing objects from the protected source. [Read leases](SERVER_READ_LEASES.md)
-protect pull sources until all required objects are local. Selective server upload
-retention, distributed GC and background recovery remain future work. Session
+protect pull sources until all required objects are local. [Upload inventories](UPLOAD_INVENTORIES.md)
+retain declared server objects selectively. Distributed GC and background recovery remain future work. Session
 listing materializes its result; receipts consume disk space until pruned or forgotten.
 
 ## Validation

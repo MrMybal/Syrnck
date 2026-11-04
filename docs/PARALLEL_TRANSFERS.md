@@ -92,8 +92,10 @@ Local validation is Windows x64; other platform/sanitizer runs await CI.
 The production server still serializes Store operations under its mutex while
 HTTP IO can overlap. Metadata traversal and imports remain coordinated rather
 than parallel. [Persistent journals](TRANSFER_SESSIONS.md) retain local recovery
-state and block local GC for unfinished sessions. Compatible servers also use
+state and retain available transfer objects during local GC. Compatible servers also use
 [upload leases](SERVER_UPLOAD_LEASES.md), whose dedicated renewal worker leaves
 object IO running while callbacks and Store access remain coordinated. Its
-control connection/buffers are outside the object counters. Network compression, remote read leases,
+control connection/buffers are outside the object counters. [Upload inventory](UPLOAD_INVENTORIES.md)
+registration also uses foreground control requests outside those counters.
+[Read leases](SERVER_READ_LEASES.md) protect pull sources. Network compression,
 distributed retention and multi-source scheduling remain future work.

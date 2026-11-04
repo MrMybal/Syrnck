@@ -127,8 +127,9 @@ objects during GC until completed or deliberately discarded; records are checked
 before GC planning. `agent prune` previews completed receipts and `agent prune --delete`
 removes only those receipts. See [selective retention and pruning](SELECTIVE_RETENTION.md) and
 [journal recovery and retention](TRANSFER_SESSIONS.md).
-Active server upload leases also block offline GC until expiry, publication or
-deliberate release. See [server leases and fenced publication](SERVER_UPLOAD_LEASES.md).
+Legacy server upload leases block offline GC until expiry, publication or deliberate
+release. [Inventory-enabled uploads](UPLOAD_INVENTORIES.md) retain declared objects
+selectively, with committed page/hash validation. See [server leases and fenced publication](SERVER_UPLOAD_LEASES.md).
 Active [read leases](SERVER_READ_LEASES.md) retain their complete root closure
 during offline GC, even after the source reference disappears. Pull releases them once its verified objects are
 local; `leases ... --read` manages their records after server shutdown.
