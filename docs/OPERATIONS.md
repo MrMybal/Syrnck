@@ -4,7 +4,7 @@ The C++ ingestion, native commit, reconstruction and Git-filter interfaces can
 report progress and accept cancellation. Native commits and clean filters use
 repository pipeline defaults; explicit `IngestOptions` replace those defaults.
 The CLI accepts `--workers` and `--buffer-mib` for `put`, `native commit` and
-`git clean` without changing saved preferences.
+`git clean` and `git migrate-lfs` without changing saved preferences.
 
 ## CLI
 
@@ -15,7 +15,8 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process` and
+`put`, `get`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process`,
+`git lfs-preview/migrate-lfs` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
 keeps its ordinary JSON, revision ID, Git pointer or binary stream. With neither
@@ -36,6 +37,10 @@ Events are throttled to about ten per second for an unchanged phase/path;
 phase/path changes and file completion are always emitted. Scanning and branch
 publication events are not aggregate project-byte totals. A nonzero exit code
 is authoritative even if an earlier file event had `complete: true`.
+
+LFS preview reports verification progress; migration adds ingestion and branch
+publication events. Its prepared Git transaction finishes without cancellation
+after the final commit command begins. See [LFS migration recovery](GIT_LFS_MIGRATION.md#cancellation-and-recovery).
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

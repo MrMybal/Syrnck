@@ -29,7 +29,8 @@ Critère de sortie : aucune perte des versions conservées après suppression de
 - [x] Téléchargement à la demande au checkout, baux de lecture, contrôle d'intégrité avant sortie et clones à pointeurs seuls (`local`/`download`/`skip`).
 - [x] Protocole `filter-process` v2 séquentiel, Store/cache conservés entre fichiers d'une commande Git, messages bornés et reprise après erreur d'un fichier.
 - [ ] Hydratation différée (`delay`) et cache partagé entre processus/worktrees.
-- [ ] Migration depuis Git LFS sans conversion manuelle fichier par fichier.
+- [x] Migration hors ligne d'un snapshot Git LFS vers un commit enfant sur une nouvelle branche : audit SHA-256, import dédupliqué, attributs et rétention complète avant publication, sans modifier HEAD/index/workspace.
+- [ ] Réécriture de tout l'historique LFS, téléchargement depuis les serveurs LFS et prise en charge des extensions de pointeurs.
 - [ ] Compatibilité explicite GitHub/GitLab et documentation d'hébergement des blocs.
 - [ ] Réconciliation de rétention avec branches, tags, index, reflogs, stashes et worktrees.
 - [ ] Exécutable installable, configuration par dépôt, mises à jour et désinstallation.

@@ -5,6 +5,10 @@ working files, the index and checkout filters. Git keeps source code and its
 normal history. A deterministic Syrnck revision describes only the assets needed
 by one Git commit.
 
+Existing LFS snapshots can be converted with the separate [offline migration](GIT_LFS_MIGRATION.md).
+It verifies cached SHA-256 objects, imports native blocks and retains the new
+catalog before publishing a child commit on a new branch.
+
 ```text
 syrnck git catalog HEAD
 syrnck git catalog release --directory PATH_TO_REPOSITORY --progress-json

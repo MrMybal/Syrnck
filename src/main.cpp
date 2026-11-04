@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <syrnck/git.hpp>
+#include <syrnck/git_lfs.hpp>
 #include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
 #include <syrnck/i18n.hpp>
@@ -168,6 +169,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git configure-checkout local|download|skip [--remote NOM] [--directory CHEMIN]
   git clean [--workers N] [--buffer-mib N] | git smudge
   git filter-process [--checkout-policy]   Protocole Git v2, plusieurs fichiers par processus
+  git lfs-preview COMMIT [--lfs-objects CHEMIN]   Auditer les objets LFS locaux
+  git migrate-lfs COMMIT --branch NOUVELLE [--lfs-objects CHEMIN]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Gérer les baux du store serveur
@@ -184,7 +187,8 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge/filter-process et agent push/pull/resume/prune.
+              fsck, native commit/export, git clean/smudge/filter-process,
+              git lfs-preview/migrate-lfs et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
 Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
@@ -223,6 +227,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git configure-checkout local|download|skip [--remote NAME] [--directory PATH]
   git clean [--workers N] [--buffer-mib N] | git smudge
   git filter-process [--checkout-policy]   Git protocol v2, multiple files per process
+  git lfs-preview COMMIT [--lfs-objects PATH]   Audit local LFS objects
+  git migrate-lfs COMMIT --branch NEW [--lfs-objects PATH]
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Manage server store leases
@@ -239,7 +245,8 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
-              fsck, native commit/export, git clean/smudge/filter-process and agent push/pull/resume/prune.
+              fsck, native commit/export, git clean/smudge/filter-process,
+              git lfs-preview/migrate-lfs and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
 Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
@@ -354,8 +361,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     require(std::cout.good(), "output write failed");
     return 0;
   }
-  auto key = read_key();
   if (command == "init") {
+    auto key = read_key();
     auto encrypted = args.flag("--encrypted");
     args.count(0);
     require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, or omit both");
@@ -366,6 +373,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     return 0;
   }
   if (command == "git" && sub == "install") {
+    auto key = read_key();
     auto encrypted = args.flag("--encrypted");
     require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, or omit both");
     auto directory = args.values.empty() ? fs::path(".") : path_from_utf8(args.pop());
@@ -377,17 +385,26 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize("\nAssign filter=syrnck -text to assets in .gitattributes.\n", language);
     return 0;
   }
-  if (command == "git" && sub == "catalog") {
+  if (command == "git" && (sub == "catalog" || sub == "lfs-preview")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    auto cache = sub == "lfs-preview" ? args.option("--lfs-objects") : std::optional<std::string>{};
     auto text = args.flag("--progress"), json = args.flag("--progress-json");
     require(!(text && json), "choose one progress output mode");
     args.count(1);
     control = std::make_unique<cli::OperationControl>(language, json   ? cli::ProgressMode::json
                                                                 : text ? cli::ProgressMode::text
                                                                        : cli::ProgressMode::none);
-    print(git::catalog(directory, args.values[0],
-                       {control->token(), [&](const ProgressEvent &event) { control->report(event); }})
-              .json());
+    OperationOptions operation{control->token(), [&](const ProgressEvent &event) { control->report(event); }};
+    if (sub == "lfs-preview") {
+      auto objects =
+          git::lfs_objects(directory, cache ? std::optional{path_from_utf8(*cache)} : std::nullopt);
+      auto result =
+          git::preview_lfs(git::lfs_catalog(directory, args.values[0], operation), objects, operation);
+      auto ready = result["ready"].get<bool>();
+      print(result);
+      return ready ? 0 : 1;
+    }
+    print(git::catalog(directory, args.values[0], operation).json());
     return 0;
   }
   if (command == "git" &&
@@ -427,18 +444,20 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   auto git_directory =
       command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
   if (command == "git" &&
-      (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets" || sub == "pre-push") &&
+      (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
+       sub == "migrate-lfs") &&
       !root_option)
     root = git::common_store(git_directory);
-  Store store(root, key, false, store_options);
+  Store store(root, read_key(), false, store_options);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "fsck" || command == "pack" || command == "gc" ||
       (command == "native" && (sub == "commit" || sub == "export")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
-      (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
-                            sub == "push-assets" || sub == "pull-assets" || sub == "pre-push"));
+      (command == "git" &&
+       (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
+        sub == "pull-assets" || sub == "pre-push" || sub == "migrate-lfs"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -614,7 +633,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown native command");
   } else if (command == "git") {
-    if (sub == "pre-push") {
+    if (sub == "migrate-lfs") {
+      auto branch = args.option("--branch");
+      require(branch.has_value(), "--branch is required for Git LFS migration");
+      auto cache = args.option("--lfs-objects");
+      auto objects =
+          git::lfs_objects(git_directory, cache ? std::optional{path_from_utf8(*cache)} : std::nullopt);
+      auto options = ingestion_options(args, store);
+      options.stop = control->token();
+      options.progress = observe;
+      args.count(1);
+      print(git::migrate_lfs(store, git_directory, args.values[0], objects, *branch, options));
+    } else if (sub == "pre-push") {
       auto limits = transfer_options(args);
       require(!limits.require_read_lease, "read lease requirement is only available for pull");
       limits.require_upload_lease = true;
@@ -769,6 +799,9 @@ int entry(Args args) {
       language = parse_language(*code);
     return run(std::move(args), language, control);
   } catch (const net::PublicationUncertain &error) {
+    std::cerr << localize("Error: ", language) << localize(error.what(), language) << '\n';
+    return 3;
+  } catch (const git::LfsPublicationUncertain &error) {
     std::cerr << localize("Error: ", language) << localize(error.what(), language) << '\n';
     return 3;
   } catch (const Cancelled &) {

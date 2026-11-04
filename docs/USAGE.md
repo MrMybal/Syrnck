@@ -131,6 +131,8 @@ git switch -c feature
 
 Le contenu de `Source/Game.cpp` reste dans Git ; `Content/Map.uasset` est représenté dans Git par un pointeur et reconstruit dans le workspace. Pour convertir des fichiers déjà suivis, appliquer les attributs avec `git add --renormalize` aux chemins concernés et examiner le diff avant de commiter. Ne pas superposer filtres LFS et Syrnck sur les mêmes chemins.
 
+Pour les pointeurs Git LFS déjà commités, utiliser `syrnck git lfs-preview HEAD` puis `syrnck git migrate-lfs HEAD --branch converted-assets`. La [migration LFS hors ligne](GIT_LFS_MIGRATION.md) contrôle le cache SHA-256, importe les blocs et prépare un commit enfant sans modifier HEAD/index/workspace. Elle ajuste les attributs exacts et conserve le catalogue complet avant de créer la branche. L'ancien historique reste au format LFS.
+
 Les pins `git/<manifeste>` protègent les assets même si un commit disparaît du graphe Git. Leur retrait est manuel dans ce prototype. Git conserve ses propres règles pour l'historique de code, indépendamment du GC Syrnck.
 
 Le transfert des blocs est encore explicite, par référence de manifeste :
