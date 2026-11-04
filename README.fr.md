@@ -101,6 +101,8 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+`native status` compare le contenu du dossier de travail à une branche ou une révision native sans importer les fichiers. `native diff SOURCE CIBLE` compare les métadonnées de deux snapshots, avec distinction du contenu, du mode et du manifeste. Voir les [contrats et limites des comparaisons natives](docs/NATIVE_COMPARISON.md). L'index de staging et les différences textuelles restent à développer.
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

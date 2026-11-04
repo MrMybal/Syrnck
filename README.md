@@ -14,7 +14,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 
 | Component | Available functionality |
 | --- | --- |
-| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, revisions, retention and GC |
+| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native status/snapshot diff, revisions, retention and GC |
 | `syrnck_git` | Git filters, asset catalogs, retention inventory/protection, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
@@ -84,7 +84,9 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).
 
-Imports, native commits/exports, reconstruction, `fsck`, Git filters and agent transfers accept `--progress` (English/French) or `--progress-json` on stderr. Ctrl+C requests cooperative cancellation (exit 130). Native exports prepare a complete tree before exclusive publication; existing destinations are preserved. A publication already started can complete. Remote publication with a lost/ambiguous response exits 3 so the caller can inspect the reference. See [operation contracts](docs/OPERATIONS.md), [transactional exports](docs/EXPORT.md) and [transfer recovery](docs/TRANSFERS.md).
+Imports, native commits/status/diffs/exports, reconstruction, `fsck`, Git filters and agent transfers accept `--progress` (English/French) or `--progress-json` on stderr. Ctrl+C requests cooperative cancellation (exit 130). Native exports prepare a complete tree before exclusive publication; existing destinations are preserved. A publication already started can complete. Remote publication with a lost/ambiguous response exits 3 so the caller can inspect the reference. See [operation contracts](docs/OPERATIONS.md), [transactional exports](docs/EXPORT.md) and [transfer recovery](docs/TRANSFERS.md).
+
+`native status` hashes working files against a native branch or exact revision without ingesting them. `native diff SOURCE TARGET` compares snapshot metadata, including content, mode and manifest changes. See [native comparison contracts and limits](docs/NATIVE_COMPARISON.md). Staging and text patches remain future work.
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

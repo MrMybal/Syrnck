@@ -263,6 +263,12 @@ public:
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message) const;
   std::string commit_directory(const fs::path &, std::string_view branch, std::string_view message,
                                IngestOptions) const;
+  // Read-only comparison with a native snapshot, or an empty baseline.
+  // Files are hashed in full; timestamps never establish content equality.
+  Json status_directory(const fs::path &, const std::optional<std::string> &revision = {},
+                        OperationOptions = {}) const;
+  // Current file entries only: no parent traversal or chunk payload reads.
+  Json compare_revisions(std::string_view source, std::string_view target, OperationOptions = {}) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
   void export_revision(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
 

@@ -158,6 +158,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
                 [--workers N] [--buffer-mib N]
+  native status [--branch main | --revision RÉVISION] [--directory .]
+  native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
   native log [--branch main] [--limit 50]
   native export RÉVISION NOUVEAU_DOSSIER
@@ -190,7 +192,7 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/export, git clean/smudge/filter-process,
+              fsck, native commit/status/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -219,6 +221,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
                 [--workers N] [--buffer-mib N]
+  native status [--branch main | --revision REVISION] [--directory .]
+  native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
   native log [--branch main] [--limit 50]
   native export REVISION NEW_DIRECTORY
@@ -251,7 +255,7 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/export, git clean/smudge/filter-process,
+              fsck, native commit/status/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -463,7 +467,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
-      command == "pack" || command == "gc" || (command == "native" && (sub == "commit" || sub == "export")) ||
+      command == "pack" || command == "gc" ||
+      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -621,6 +626,25 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(0);
       require(message.has_value(), "--message is required");
       std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
+    } else if (sub == "status") {
+      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto branch = args.option("--branch");
+      auto revision = args.option("--revision");
+      args.count(0);
+      require(!(branch && revision), "choose either --branch or --revision");
+      if (!revision) {
+        const auto name = "heads/" + branch.value_or("main");
+        validate_ref(name);
+        const auto all = store.refs();
+        if (const auto found = all.find(name); found != all.end()) {
+          require(found->second.kind == Kind::revision, "branch must point to a revision");
+          revision = found->second.id;
+        }
+      }
+      print(store.status_directory(directory, revision, {control->token(), observe}));
+    } else if (sub == "diff") {
+      args.count(2);
+      print(store.compare_revisions(args.values[0], args.values[1], {control->token(), observe}));
     } else if (sub == "branch") {
       args.count(2);
       auto name = "heads/" + args.values[0];

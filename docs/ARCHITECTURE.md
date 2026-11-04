@@ -58,7 +58,7 @@ Chaque manifeste complet passé dans le filtre est épinglé. Un pointeur canoni
 
 Le prototype offre la création de révisions, des branches nommées, un journal par premier parent et un export vers un nouveau dossier. Il permet aussi de détacher l'historique en gardant l'état courant et en archivant l'ancienne tête.
 
-L'index de staging, le checkout d'un workspace existant, les merges de texte à trois voies, les conflits, tags, rebase, cherry-pick, stash, blame, bisect, historique des renommages et signatures font partie de la feuille de route. Les parents multiples sont représentables dans le format, mais aucun algorithme de merge autonome n'est implémenté.
+Les [comparaisons natives](NATIVE_COMPARISON.md) ajoutent un `status` du dossier par hash complet et un `diff` des métadonnées de snapshots, sans import ni publication. L'index de staging, les patches textuels, le checkout d'un workspace existant, les merges de texte à trois voies, les conflits, tags, rebase, cherry-pick, stash, blame, bisect, historique des renommages et signatures font partie de la feuille de route. Les parents multiples sont représentables dans le format, mais aucun algorithme de merge autonome n'est implémenté.
 
 Les fichiers source utilisent actuellement le même moteur de stockage en mode autonome. Leur future interface de diff et de merge sera textuelle. L'utilisation de blocs pour les stocker n'oblige pas à présenter des différences de blocs à l'utilisateur.
 

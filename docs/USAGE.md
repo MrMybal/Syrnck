@@ -78,6 +78,9 @@ Copier les exclusions Unreal de `examples/unreal.syrnckignore` dans `.syrnckigno
 ```text
 syrnck native commit --message "Import du projet"
 syrnck native commit --message "Modification de la carte"
+syrnck native status --progress
+syrnck native status --revision <identifiant-revision>
+syrnck native diff <ancienne-revision> <nouvelle-revision>
 syrnck native log
 syrnck native branch release <identifiant-revision>
 syrnck native commit --branch release --message "Préparation de la release"
@@ -85,6 +88,8 @@ syrnck native export <identifiant-revision> ../export-release
 ```
 
 `--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante, d'index de staging ou de commande de checkout natif. Chaque commit scanne tout le dossier. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
+
+`native status` lit les fichiers sélectionnés et compare leur hash complet à `heads/main`, à une autre branche avec `--branch`, ou à un snapshot avec `--revision`. Il n'importe aucun fichier. `native diff` compare les métadonnées de deux snapshots ; il ne produit pas encore de patch textuel. Les deux renvoient un rapport JSON et acceptent progression/annulation. Voir les [contrats de comparaison native](NATIVE_COMPARISON.md).
 
 Pour raccourcir l'historique tout en gardant une archive :
 

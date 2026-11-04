@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/status/diff/export`, `git clean/smudge/filter-process`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -50,6 +50,12 @@ cancellation before output publication.
 [Git retention](GIT_RETENTION.md) scans metadata, verifies observed
 assets and publishes all added protections together. Cancellation before that
 publication changes no pin; unobserved pins are never removed automatically.
+
+[Native status and snapshot comparison](NATIVE_COMPARISON.md) are read-only:
+status hashes selected working files, while revision comparison reads only
+revision/manifest metadata. Planning events count entries rather than bytes;
+status verification events report bytes within the current file. Cancellation
+and callback failure produce no partial report or Store publication.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

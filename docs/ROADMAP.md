@@ -108,7 +108,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 
 ## 5 — Contrôle de versions autonome complet
 
-- [ ] Index de staging, sélection de changements, status et diff textuel.
+- [x] État du dossier natif par hash complet, exclusions partagées avec le commit et comparaison des snapshots par contenu, mode et représentation ; API C++ et CLI interruptibles sans écriture.
+- [ ] Index de staging, sélection de changements et diff textuel.
 - [ ] HEAD/branches/tags, checkout transactionnel, protection des modifications et journal de récupération.
 - [ ] Merge à trois voies, base commune, conflits de texte, conflits binaires et renommages.
 - [ ] Rebase, cherry-pick, revert, reset, stash, squash et amend.
