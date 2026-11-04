@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include "http_transport.hpp"
+#include "object_compression.hpp"
 #include "upload_transport.hpp"
 #include "read_transport.hpp"
 #include <curl/curl.h>
@@ -98,14 +99,16 @@ std::pair<TransferSession, bool> session_for(const Store &store, std::string_vie
   return {std::move(session), true};
 }
 Json transfer_result(const TransferSession &session, std::size_t sent = 0, std::uint64_t total = 0,
-                     std::size_t reused = 0, const detail::TransferStats &stats = {},
-                     bool reconciled = false) {
+                     std::size_t reused = 0, const detail::TransferStats &stats = {}, bool reconciled = false,
+                     const detail::TrafficBudget *traffic = nullptr) {
   return Json{{"transferred_objects", sent},
               {"transferred_bytes", total},
               {"reused_objects", reused},
               {"peak_object_requests", stats.peak_requests},
               {"peak_object_buffer_bytes", stats.peak_buffered_bytes},
               {"object_retries", stats.retries},
+              {"object_upload_bytes", traffic ? traffic->uploaded_bytes() : 0},
+              {"object_download_bytes", traffic ? traffic->downloaded_bytes() : 0},
               {"session", session.id},
               {"reconciled", reconciled},
               {"upload_lease", session.upload_lease ? Json(*session.upload_lease) : Json(nullptr)},
@@ -172,10 +175,37 @@ void TransferOptions::validate() const {
   require(max_in_flight_bytes >= max_object_size + 4096 && max_in_flight_bytes <= 1024ULL * 1024 * 1024,
           "transfer buffer must fit a maximum object and response and be at most 1 GiB");
   require(max_retries <= 8, "transfer retries must be in 0..8");
+  require(compression == ObjectCompression::automatic || compression == ObjectCompression::disabled ||
+              compression == ObjectCompression::zstd,
+          "invalid network compression mode");
   require(retry_delay_ms >= 1 && retry_delay_ms <= 30000, "transfer retry delay must be in 1..30000 ms");
   for (auto rate : {upload_bytes_per_second, download_bytes_per_second})
     require(rate == 0 || (rate >= max_requests && rate <= (1ULL << 40)),
             "transfer rate must be zero or between the request count and 1 TiB/s");
+}
+bool Remote::negotiate_compression(std::optional<bool> &cached, OperationOptions operation,
+                                   const TransferOptions &limits) const {
+  if (limits.compression == ObjectCompression::disabled)
+    return false;
+  if (!cached) {
+    bool supported = false;
+    try {
+      auto caps = parse_json(request("GET", "v1/capabilities", {}, std::move(operation), &limits));
+      require(caps.is_object(), "invalid server capabilities");
+      if (caps.contains("object_zstd")) {
+        require(caps["object_zstd"].is_number_unsigned() && caps["object_zstd"].get<std::uint64_t>() <= 1,
+                "invalid server capabilities");
+        supported = caps["object_zstd"] == 1;
+      }
+    } catch (const detail::HttpStatusError &error) {
+      if (error.status != 404)
+        throw;
+    }
+    cached = supported;
+  }
+  require(*cached || limits.compression != ObjectCompression::zstd,
+          "server does not support network Zstandard compression");
+  return *cached;
 }
 Refs Remote::refs(OperationOptions options, TransferOptions limits) const {
   limits.validate();
@@ -231,6 +261,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   std::uint64_t total = 0;
   detail::TransferStats stats;
   detail::TrafficBudget traffic(limits);
+  std::optional<bool> compressed;
   for (std::size_t start = 0; start < objects.size(); start += 4096) {
     throw_if_cancelled(options.stop);
     protection.tick();
@@ -265,7 +296,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
           ++sent;
           total += uploaded;
         },
-        [&] { protection.tick(); });
+        [&] { protection.tick(); }, [&] { return negotiate_compression(compressed, options, limits); });
   }
   protection.finish();
   auto publication = Json{{"root", key_json(root)},
@@ -303,7 +334,7 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
     throw PublicationUncertain(
         "transfer published but session completion could not be saved; resume the session");
   }
-  return transfer_result(session, sent, total, reused, stats);
+  return transfer_result(session, sent, total, reused, stats, false, &traffic);
 }
 Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
@@ -336,6 +367,7 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
   std::uint64_t total = 0;
   detail::TransferStats stats;
   detail::TrafficBudget traffic(limits);
+  std::optional<bool> compressed;
   detail::transfer_objects(
       base_, token_, ca_, false, limits, options, stats, traffic,
       [&]() -> std::optional<ObjectKey> {
@@ -367,7 +399,7 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
         auto children = dependencies(key.kind, data);
         pending.insert(pending.end(), children.begin(), children.end());
       },
-      [&] { protection.tick(); });
+      [&] { protection.tick(); }, [&] { return negotiate_compression(compressed, options, limits); });
   protection.release();
   report_progress(options, {ProgressPhase::publishing, name});
   session.state = "publishing";
@@ -382,7 +414,7 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
   } catch (...) {
     throw Error("transfer published but session completion could not be saved; resume the session");
   }
-  return transfer_result(session, sent, total, reused, stats);
+  return transfer_result(session, sent, total, reused, stats, false, &traffic);
 }
 Json Remote::resume(const Store &store, std::string_view id, OperationOptions options,
                     TransferOptions limits) const {
@@ -437,6 +469,18 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   });
   auto guarded = [&](auto handler) {
     return [&, handler](const httplib::Request &request, httplib::Response &response) {
+      // The bounded body has been consumed before this handler. Rejecting a
+      // coding during pre-routing can reset a connection with unread data,
+      // hiding the 415 response on Windows and confusing persistent clients.
+      auto count = request.get_header_value_count("Syrnck-Object-Encoding");
+      auto http_count = request.get_header_value_count("Content-Encoding");
+      if ((http_count && (http_count != 1 || request.get_header_value("Content-Encoding") != "identity")) ||
+          (count && (count != 1 || !limits.object_compression || request.method != "PUT" ||
+                     !request.path.starts_with("/v1/objects/") ||
+                     request.get_header_value("Syrnck-Object-Encoding") != "zstd"))) {
+        response.status = 415;
+        return;
+      }
       std::lock_guard lock(mutex);
       try {
         handler(request, response);
@@ -455,6 +499,7 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   server.Get("/v1/capabilities", guarded([&](const auto &, auto &response) {
                response.set_content(Json{{"upload_leases", 1},
                                          {"upload_inventories", 1},
+                                         {"object_zstd", limits.object_compression ? 1 : 0},
                                          {"lease_seconds", limits.upload_lease_seconds},
                                          {"read_leases", 1},
                                          {"read_lease_seconds", limits.read_lease_seconds}}
@@ -571,12 +616,31 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                  return;
                }
                auto data = store.get(key);
+               response.set_header("Vary", "Syrnck-Accept-Object-Encoding");
+               if (limits.object_compression &&
+                   request.get_header_value_count("Syrnck-Accept-Object-Encoding") == 1 &&
+                   request.get_header_value("Syrnck-Accept-Object-Encoding") == "zstd") {
+                 auto encoded =
+                     detail::compress_object(data, detail::compression_capacity(data.size(), data.size()));
+                 if (!encoded.empty()) {
+                   data = std::move(encoded);
+                   response.set_header("Syrnck-Object-Encoding", "zstd");
+                 }
+               }
                response.set_content(text(data), "application/octet-stream");
              }));
   server.Put(R"(/v1/objects/(chunk|manifest|revision)/([a-f0-9]{64}))",
              guarded([&](const auto &request, auto &response) {
                ObjectKey key{parse_kind(request.matches[1].str()), request.matches[2].str()};
-               response.status = store.import(key, bytes(request.body)) ? 201 : 204;
+               if (request.has_header("Syrnck-Object-Encoding")) {
+                 Bytes data;
+                 detail::ObjectDecoder decoder;
+                 decoder.append(data, bytes(request.body));
+                 decoder.finish();
+                 response.status = store.import(key, data) ? 201 : 204;
+               } else {
+                 response.status = store.import(key, bytes(request.body)) ? 201 : 204;
+               }
              }));
   server.Get("/v1/refs", guarded([&](const auto &, auto &response) {
                response.set_content(refs_json(store.refs()).dump(), "application/json");

@@ -26,6 +26,12 @@ struct TrafficBudget {
   explicit TrafficBudget(const TransferOptions &);
   void account(std::uint64_t uploaded, std::uint64_t downloaded);
   std::chrono::steady_clock::time_point ready() const;
+  std::uint64_t uploaded_bytes() const {
+    return uploaded_;
+  }
+  std::uint64_t downloaded_bytes() const {
+    return downloaded_;
+  }
 
 private:
   std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
@@ -36,7 +42,8 @@ public:
   HttpRequest(std::string_view base, std::string_view token, const std::optional<fs::path> &ca,
               std::string method, std::string path, Bytes body, OperationOptions,
               std::size_t response_limit = max_object_size, std::exception_ptr *first_error = nullptr,
-              TrafficBudget *traffic = nullptr, const TransferOptions *limits = nullptr);
+              TrafficBudget *traffic = nullptr, const TransferOptions *limits = nullptr,
+              bool accept_zstd = false, bool encoded_body = false);
   ~HttpRequest();
   HttpRequest(const HttpRequest &) = delete;
   HttpRequest &operator=(const HttpRequest &) = delete;
@@ -46,7 +53,6 @@ public:
   Bytes perform();
   Bytes finish(CURLcode);
   std::size_t charge() const;
-  std::size_t uploaded_bytes() const;
   void restart();
   void rate_share(const TransferOptions &, std::size_t slots);
 
@@ -65,5 +71,6 @@ using TransferComplete = std::function<void(const ObjectKey &, Bytes, std::size_
 void transfer_objects(std::string_view base, std::string_view token, const std::optional<fs::path> &ca,
                       bool upload, const TransferOptions &, const OperationOptions &, TransferStats &,
                       TrafficBudget &, const TransferNext &, const TransferPrepare &,
-                      const TransferComplete &, const std::function<void()> &tick = {});
+                      const TransferComplete &, const std::function<void()> &tick = {},
+                      const std::function<bool()> &compression = {});
 } // namespace syrnck::net::detail

@@ -35,6 +35,11 @@ request. Before decoding another upload, the scheduler also requires enough
 free budget for a maximum object and its acknowledgement. Consequently actual
 concurrency can be lower than the requested maximum.
 
+[Negotiated compression](NETWORK_COMPRESSION.md) also charges candidate upload
+buffers while the original bytes remain live, including candidates discarded
+for insufficient savings. Compressed downloads decode directly into their
+reserved response buffer. Codec contexts remain outside these body credits.
+
 Object response vectors reserve their permitted capacity once on first data,
 avoiding old-and-new growth buffers during object transfer. Credits remain
 charged while the coordinator consumes a completed response. Completed requests
@@ -51,6 +56,8 @@ The final statistics retain `transferred_objects`, `transferred_bytes` and
 | `peak_object_requests` | Maximum simultaneous scheduled object requests |
 | `peak_object_buffer_bytes` | Maximum charged upload/response-buffer credits |
 | `object_retries` | Additional object attempts scheduled after transient failures |
+| `object_upload_bytes` | Encoded object request-body bytes, including repeated attempts |
+| `object_download_bytes` | Encoded object response-body bytes, including partial attempts and upload acknowledgements |
 
 The buffer counter includes reserved response capacity, even when a response is
 small. It is **not process RSS**. It excludes allocator overhead, libcurl/TLS

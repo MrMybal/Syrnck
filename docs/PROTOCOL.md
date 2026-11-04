@@ -93,7 +93,7 @@ Chaque requête porte `Authorization: Bearer <jeton>`. Le serveur initial expose
 | Méthode et chemin | Corps / réponse |
 | --- | --- |
 | `POST /v1/missing` | Tableau JSON de clés ; retourne le sous-ensemble absent ; maximum 4 096 entrées |
-| `GET /v1/objects/{kind}/{id}` | Octets non compressés de l'objet, maximum 16 Mio |
+| `GET /v1/objects/{kind}/{id}` | Octets logiques ou trame Zstandard négociée, maximum 16 Mio |
 | `PUT /v1/objects/{kind}/{id}` | Même représentation ; vérifie type, hash et format ; 201 si créé, 204 si déjà présent |
 | `GET /v1/refs` | Table JSON `nom → clé` |
 | `PUT /v1/refs/{name}` | `{root: clé, expected: clé ou null}` ; valide toutes les dépendances avant publication |
@@ -102,9 +102,11 @@ Les noms distants utilisent un seul composant d'URL. Les références locales pe
 
 Les objets peuvent arriver avant leurs dépendances. Ils ne sont pas publiés comme nouvelle version tant que la référence n'a pas été validée et remplacée. Un retry du PUT d'un objet déjà présent est idempotent. Le client désactive les redirections pour ne pas déplacer les requêtes authentifiées.
 
-Cette v1 n'est compatible ni avec BEP, ni avec l'API Git LFS, ni avec le protocole Lore. L'extension négociée `GET /v1/capabilities` annonce les [baux d'envoi persistants](SERVER_UPLOAD_LEASES.md), leur durée et les reçus de publication. Les publications protégées ajoutent `upload: {id, fence}` au corps existant ; les requêtes historiques restent acceptées sauf si le serveur impose les baux. L'extension [baux de lecture](SERVER_READ_LEASES.md) annonce `read_leases: 1` et `read_lease_seconds`, avec acquisition/renouvellement sur `PUT /v1/reads/ID`, consultation sur `GET /v1/reads/ID` et libération sur `POST /v1/reads/ID/release`. Elle protège une racine exacte avant le téléchargement des blocs manquants. La compression réseau, les quotas d'objets/utilisateurs et la réplication serveur restent à développer.
+Cette v1 n'est compatible ni avec BEP, ni avec l'API Git LFS, ni avec le protocole Lore. L'extension négociée `GET /v1/capabilities` annonce les [baux d'envoi persistants](SERVER_UPLOAD_LEASES.md), leur durée et les reçus de publication. Les publications protégées ajoutent `upload: {id, fence}` au corps existant ; les requêtes historiques restent acceptées sauf si le serveur impose les baux. L'extension [baux de lecture](SERVER_READ_LEASES.md) annonce `read_leases: 1` et `read_lease_seconds`, avec acquisition/renouvellement sur `PUT /v1/reads/ID`, consultation sur `GET /v1/reads/ID` et libération sur `POST /v1/reads/ID/release`. Elle protège une racine exacte avant le téléchargement des blocs manquants. Les quotas d'objets/utilisateurs et la réplication serveur restent à développer.
 
 L'extension [inventaires d'envoi](UPLOAD_INVENTORIES.md) annonce `upload_inventories: 1`. La création du bail ajoute `inventory: true` ; `PUT /v1/uploads/ID/inventory/INDEX` enregistre un lot de clés et son jeton avant la demande de présence. Les pages sont chaînées et leur nombre/empreinte finale sont conservés dans le bail de schéma 2. Les baux historiques de schéma 1 gardent leur protection globale. Le format logique des objets et l'ABI C restent inchangés.
+
+L'extension de [compression réseau](NETWORK_COMPRESSION.md) annonce `object_zstd: 1`. Les en-têtes `Syrnck-Accept-Object-Encoding: zstd` et `Syrnck-Object-Encoding: zstd` négocient une trame par objet. Les clients historiques continuent de recevoir des octets logiques. Le client vérifie taille, fenêtre, intégrité et format avant import ; les corps JSON et la publication CAS gardent leur représentation existante.
 
 ## Interface C
 

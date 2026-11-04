@@ -86,6 +86,12 @@ Les nouveaux envois négocient des [inventaires paginés](docs/UPLOAD_INVENTORIE
 
 Les téléchargements acquièrent aussi des [baux de lecture](docs/SERVER_READ_LEASES.md) sur la racine source exacte avant de demander les blocs manquants. Ils survivent au redémarrage du serveur et à la suppression de la référence jusqu'à expiration ou libération. `--require-read-lease` exige cette protection ; `serve --read-lease-seconds 3600` règle leur durée et `leases ... --read` permet leur administration hors ligne.
 
+Les transferts négocient la [compression Zstandard](docs/NETWORK_COMPRESSION.md)
+par défaut. `--compression auto|off|zstd` la règle côté client et
+`serve --no-compression` la désactive côté serveur. Le décodage est borné et les
+objets incompressibles peuvent rester bruts ; les compteurs distinguent octets
+logiques et trafic des corps d'objets.
+
 ## Validation et migration
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.

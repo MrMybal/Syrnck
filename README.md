@@ -105,6 +105,11 @@ New uploads negotiate [paged inventories](docs/UPLOAD_INVENTORIES.md), registere
 
 Pulls also acquire renewable [read leases](docs/SERVER_READ_LEASES.md) for the exact source root before downloading missing blocks. They survive server restarts and reference removal until expiry or release. Use `--require-read-lease` to require support, `serve --read-lease-seconds 3600` to set their TTL, and `leases ... --read` for offline maintenance.
 
+Object transfers negotiate [Zstandard compression](docs/NETWORK_COMPRESSION.md)
+by default. Use `--compression auto|off|zstd` or `serve --no-compression`.
+Incompressible data can travel raw; bounded decoding preserves object IDs and
+verification. Results distinguish logical bytes from observed object-body traffic.
+
 ## Validation and repository publishing
 
 Local builds and tests have been run on Windows x64 with MSVC. CI is configured for Windows, Linux, macOS, and Linux sanitizers; configuration alone does not establish that those remote runs have passed. The C++ implementation needs no Rust compiler or runtime. Compatibility fixtures exercise the original v1 Rust format, including encrypted stores.

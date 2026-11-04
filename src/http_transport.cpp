@@ -1,4 +1,5 @@
 #include "http_transport.hpp"
+#include "object_compression.hpp"
 #include <algorithm>
 #include <map>
 #include <charconv>
@@ -86,6 +87,10 @@ struct HttpRequest::Impl {
   std::string path;
   Bytes body, response;
   std::size_t response_limit;
+  bool accept_zstd, encoded_response = false, encoding_seen = false, content_encoding_seen = false;
+  bool headers_complete = false;
+  std::size_t received = 0;
+  std::unique_ptr<ObjectDecoder> decoder;
   std::exception_ptr error{};
   std::exception_ptr *first_error;
   TrafficBudget *traffic;
@@ -115,9 +120,10 @@ struct HttpRequest::Impl {
   }
   Impl(std::string_view base, std::string_view token, const std::optional<fs::path> &ca, std::string method,
        std::string relative, Bytes payload, OperationOptions operation, std::size_t limit,
-       std::exception_ptr *first, TrafficBudget *budget, const TransferOptions *limits)
+       std::exception_ptr *first, TrafficBudget *budget, const TransferOptions *limits,
+       bool accept_compression, bool encoded_body)
       : options(std::move(operation)), path(std::move(relative)), body(std::move(payload)),
-        response_limit(limit), first_error(first), traffic(budget) {
+        response_limit(limit), accept_zstd(accept_compression), first_error(first), traffic(budget) {
     throw_if_cancelled(options.stop);
     curl.reset(curl_easy_init());
     require(curl != nullptr, "cannot create HTTP client");
@@ -129,7 +135,13 @@ struct HttpRequest::Impl {
     };
     auto auth = "Authorization: Bearer " + std::string(token);
     append(auth.c_str());
-    append("Content-Type: application/json");
+    append(path.starts_with("v1/objects/") ? "Content-Type: application/octet-stream"
+                                           : "Content-Type: application/json");
+    append("Accept-Encoding: identity");
+    if (accept_zstd)
+      append("Syrnck-Accept-Object-Encoding: zstd");
+    if (encoded_body)
+      append("Syrnck-Object-Encoding: zstd");
     auto set = [&](CURLoption option, auto value) {
       require(curl_easy_setopt(curl.get(), option, value) == CURLE_OK, "HTTP client option failed");
     };
@@ -138,6 +150,7 @@ struct HttpRequest::Impl {
     set(CURLOPT_CUSTOMREQUEST, method.c_str());
     set(CURLOPT_HTTPHEADER, headers.get());
     set(CURLOPT_FOLLOWLOCATION, 0L);
+    set(CURLOPT_HTTP_CONTENT_DECODING, 0L);
     set(CURLOPT_PROTOCOLS_STR, "http,https");
     set(CURLOPT_CONNECTTIMEOUT, 15L);
     // Include the worst-case throttled duration; the normal 120-second
@@ -166,7 +179,7 @@ struct HttpRequest::Impl {
       if (size && n > state.response_limit / size)
         return 0;
       auto count = size * n;
-      if (count > state.response_limit - state.response.size())
+      if (count > state.response_limit - state.received)
         return 0;
       try {
         throw_if_cancelled(state.options.stop);
@@ -174,8 +187,15 @@ struct HttpRequest::Impl {
         // avoids transient old+new vector buffers during geometric growth.
         if (state.first_error && count && state.response.capacity() == 0)
           state.response.reserve(state.response_limit);
-        state.response.insert(state.response.end(), reinterpret_cast<std::uint8_t *>(data),
-                              reinterpret_cast<std::uint8_t *>(data) + count);
+        auto input = std::span(reinterpret_cast<const std::uint8_t *>(data), count);
+        if (state.encoded_response) {
+          if (!state.decoder)
+            state.decoder = std::make_unique<ObjectDecoder>();
+          state.decoder->append(state.response, input, state.options.stop);
+        } else {
+          state.response.insert(state.response.end(), input.begin(), input.end());
+        }
+        state.received += count;
       } catch (...) {
         state.remember_error();
         return 0;
@@ -192,8 +212,37 @@ struct HttpRequest::Impl {
       const auto count = size * n;
       try {
         std::string_view line(data, count);
-        if (line.starts_with("HTTP/"))
+        if (line.starts_with("HTTP/")) {
           state.retry_after = {};
+          state.encoded_response = state.encoding_seen = state.content_encoding_seen = false;
+          state.headers_complete = false;
+        }
+        if (line == "\r\n" || line == "\n")
+          state.headers_complete = true;
+        auto colon = line.find(':');
+        if (colon != line.npos) {
+          auto key = line.substr(0, colon), value = line.substr(colon + 1);
+          auto equals = [](std::string_view a, std::string_view b) {
+            return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+                     return (x >= 'A' && x <= 'Z' ? x + ('a' - 'A') : x) == y;
+                   });
+          };
+          while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+            value.remove_prefix(1);
+          while (!value.empty() && (value.back() == ' ' || value.back() == '\t' || value.back() == '\r' ||
+                                    value.back() == '\n'))
+            value.remove_suffix(1);
+          if (equals(key, "syrnck-object-encoding")) {
+            require(!state.headers_complete && !state.encoding_seen && state.accept_zstd && value == "zstd",
+                    "unexpected network object encoding");
+            state.encoding_seen = state.encoded_response = true;
+          }
+          if (equals(key, "content-encoding")) {
+            require(!state.headers_complete && !state.content_encoding_seen && equals(value, "identity"),
+                    "unexpected HTTP content encoding");
+            state.content_encoding_seen = true;
+          }
+        }
         constexpr std::string_view name = "retry-after:";
         if (line.size() <= 128 && line.size() >= name.size() &&
             std::equal(name.begin(), name.end(), line.begin(),
@@ -253,9 +302,10 @@ struct HttpRequest::Impl {
 HttpRequest::HttpRequest(std::string_view base, std::string_view token, const std::optional<fs::path> &ca,
                          std::string method, std::string path, Bytes body, OperationOptions options,
                          std::size_t limit, std::exception_ptr *first, TrafficBudget *traffic,
-                         const TransferOptions *limits)
+                         const TransferOptions *limits, bool accept_zstd, bool encoded_body)
     : impl_(std::make_unique<Impl>(base, token, ca, std::move(method), std::move(path), std::move(body),
-                                   std::move(options), limit, first, traffic, limits)) {}
+                                   std::move(options), limit, first, traffic, limits, accept_zstd,
+                                   encoded_body)) {}
 HttpRequest::~HttpRequest() = default;
 CURL *HttpRequest::handle() const {
   return impl_->curl.get();
@@ -287,7 +337,11 @@ Bytes HttpRequest::finish(CURLcode code) {
           "HTTP response inspection failed");
   if (status < 200 || status >= 300)
     throw HttpStatusError(status, impl_->retry_after);
-  impl_->bytes = impl_->body.size() + impl_->response.size();
+  if (impl_->encoded_response) {
+    require(impl_->decoder != nullptr, "incomplete network compressed object");
+    impl_->decoder->finish();
+  }
+  impl_->bytes = impl_->body.size() + impl_->received;
   impl_->total = impl_->bytes;
   impl_->notify(true);
   return std::move(impl_->response);
@@ -295,15 +349,16 @@ Bytes HttpRequest::finish(CURLcode code) {
 std::size_t HttpRequest::charge() const {
   return impl_->body.capacity() + impl_->response_limit;
 }
-std::size_t HttpRequest::uploaded_bytes() const {
-  return impl_->body.size();
-}
 void HttpRequest::restart() {
   impl_->response.clear(); // Retain the already charged capacity.
   impl_->error = {};
   impl_->bytes = impl_->uploaded = impl_->downloaded = 0;
   impl_->total = {};
   impl_->retry_after = {};
+  impl_->received = 0;
+  impl_->decoder.reset();
+  impl_->encoded_response = impl_->encoding_seen = impl_->content_encoding_seen = false;
+  impl_->headers_complete = false;
   impl_->notify();
 }
 void HttpRequest::rate_share(const TransferOptions &limits, std::size_t slots) {
@@ -319,7 +374,7 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
                       bool upload, const TransferOptions &limits, const OperationOptions &operation,
                       TransferStats &stats, TrafficBudget &traffic, const TransferNext &next,
                       const TransferPrepare &prepare, const TransferComplete &complete,
-                      const std::function<void()> &tick) {
+                      const std::function<void()> &tick, const std::function<bool()> &compression) {
   limits.validate();
   throw_if_cancelled(operation.stop);
   std::unique_ptr<CURLM, decltype(&curl_multi_cleanup)> multi(curl_multi_init(), &curl_multi_cleanup);
@@ -333,6 +388,7 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
     ObjectKey key;
     std::unique_ptr<HttpRequest> request;
     std::size_t charge;
+    std::size_t logical_bytes;
     std::size_t retries = 0;
     std::chrono::steady_clock::time_point ready{};
   };
@@ -366,14 +422,28 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
       auto payload = upload ? prepare(*key) : Bytes{};
       require(payload.capacity() <= limits.max_in_flight_bytes - charged - response_limit,
               "transfer buffer budget exceeded");
+      auto logical_bytes = payload.size();
+      auto zstd = compression && compression();
+      bool encoded_body = false;
+      if (upload && zstd) {
+        auto capacity = compression_capacity(payload.size(), limits.max_in_flight_bytes - charged -
+                                                                 response_limit - payload.capacity());
+        stats.peak_buffered_bytes =
+            std::max(stats.peak_buffered_bytes, charged + payload.capacity() + capacity + response_limit);
+        auto encoded = compress_object(payload, capacity, operation.stop);
+        if (!encoded.empty()) {
+          payload = std::move(encoded);
+          encoded_body = true;
+        }
+      }
       auto path = "v1/objects/" + std::string(kind_name(key->kind)) + "/" + key->id;
-      auto request = std::make_unique<HttpRequest>(base, token, ca, upload ? "PUT" : "GET", std::move(path),
-                                                   std::move(payload), operation, response_limit,
-                                                   &first_error, &traffic, &limits);
+      auto request = std::make_unique<HttpRequest>(
+          base, token, ca, upload ? "PUT" : "GET", std::move(path), std::move(payload), operation,
+          response_limit, &first_error, &traffic, &limits, !upload && zstd, encoded_body);
       auto charge = request->charge();
       auto *handle = request->handle();
       request->attach(multi.get());
-      active.emplace(handle, Active{std::move(*key), std::move(request), charge});
+      active.emplace(handle, Active{std::move(*key), std::move(request), charge, logical_bytes});
       charged += charge;
       stats.peak_requests = std::max(stats.peak_requests, active.size() + waiting.size());
       stats.peak_buffered_bytes = std::max(stats.peak_buffered_bytes, charged);
@@ -418,7 +488,7 @@ void transfer_objects(std::string_view base, std::string_view token, const std::
         finished = true;
         continue;
       }
-      complete(job.key, std::move(data), job.request->uploaded_bytes());
+      complete(job.key, std::move(data), job.logical_bytes);
       charged -= job.charge;
       finished = true;
     }

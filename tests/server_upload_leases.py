@@ -17,15 +17,19 @@ import parallel_transfers as parallel
 class ProxyHandler(base.Handler):
     def forward(self):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0))) if self.command != "GET" else None
+        headers = {"Authorization": "Bearer " + base.TOKEN, "Content-Type": "application/json"}
+        for name in ("Syrnck-Object-Encoding", "Syrnck-Accept-Object-Encoding"):
+            if name in self.headers:
+                headers[name] = self.headers[name]
         request = urllib.request.Request(self.server.target + self.path, data=body, method=self.command,
-                                        headers={"Authorization": "Bearer " + base.TOKEN,
-                                                 "Content-Type": "application/json"})
+                                        headers=headers)
         try:
             response = urllib.request.urlopen(request, timeout=8)
         except urllib.error.HTTPError as error:
             response = error
         with response:
             status, data = response.status, response.read()
+            encoding = response.headers.get("Syrnck-Object-Encoding")
         self.server.calls.append((self.command, self.path))
         if self.command == "GET" and self.path == "/v1/capabilities" and self.server.hide_inventory:
             capabilities = json.loads(data)
@@ -44,7 +48,14 @@ class ProxyHandler(base.Handler):
         if self.server.gate and self.command == "PUT" and self.path == "/v1/refs/asset" and status == 204:
             self.server.entered.set()
             self.server.release.wait(8)
-        self.reply(data, status)
+        if encoding:
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Syrnck-Object-Encoding", encoding)
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self.reply(data, status)
 
     do_GET = do_POST = do_PUT = forward
 
@@ -81,12 +92,14 @@ class ServerUploadLeases(unittest.TestCase):
             self.port = sock.getsockname()[1]
 
     @contextlib.contextmanager
-    def serving(self, seconds=3600, strict=False, read_seconds=3600):
+    def serving(self, seconds=3600, strict=False, read_seconds=3600, compression=True):
         env = dict(self.env, SYRNCK_KEY="39" * 32)
         command = [base.CLI, "--store", str(self.remote_store), "serve", "--listen", f"127.0.0.1:{self.port}",
                    "--lease-seconds", str(seconds), "--read-lease-seconds", str(read_seconds)]
         if strict:
             command.append("--require-lease")
+        if not compression:
+            command.append("--no-compression")
         process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         url = f"http://127.0.0.1:{self.port}"

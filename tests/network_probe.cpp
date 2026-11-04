@@ -73,6 +73,8 @@ int entry(int argc, char **argv) {
       limits.download_bytes_per_second = 1024;
     }
     if (mode == "renew" || mode == "renew_stop") {
+      // These tests exercise lease timing independently of compression gains.
+      limits.compression = net::ObjectCompression::disabled;
       if (operation == "push") {
         limits.upload_bytes_per_second = 128 * 1024;
         limits.require_upload_lease = true;

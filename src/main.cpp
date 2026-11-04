@@ -135,6 +135,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   agent sessions                     Lister les sessions persistantes locales
   agent forget SESSION              Supprimer le journal et libérer sa protection GC
   agent prune [--delete]             Prévisualiser ou purger les reçus terminés
+Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, pack, gc,
@@ -182,6 +183,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   agent sessions                     List persistent local sessions
   agent forget SESSION              Discard the journal and release its GC hold
   agent prune [--delete]             Preview or prune completed receipts
+Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, pack, gc,
@@ -474,6 +476,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       throw Error("unknown lease command");
   } else if (command == "serve") {
     net::ServeOptions limits;
+    limits.object_compression = !args.flag("--no-compression");
     limits.require_upload_lease = args.flag("--require-lease");
     if (auto seconds = args.option("--lease-seconds"))
       limits.upload_lease_seconds = integer(*seconds);
@@ -508,6 +511,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       return 0;
     }
     net::TransferOptions limits;
+    if (auto compression = args.option("--compression")) {
+      require(*compression == "auto" || *compression == "off" || *compression == "zstd",
+              "compression must be auto, off or zstd");
+      limits.compression = *compression == "off"    ? net::ObjectCompression::disabled
+                           : *compression == "zstd" ? net::ObjectCompression::zstd
+                                                    : net::ObjectCompression::automatic;
+    }
     limits.require_upload_lease = args.flag("--require-lease");
     limits.require_read_lease = args.flag("--require-read-lease");
     if (auto requests = args.option("--requests")) {

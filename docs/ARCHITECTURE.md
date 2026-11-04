@@ -114,6 +114,8 @@ Le prototype compresse puis chiffre chaque objet au repos avec XChaCha20-Poly130
 
 La clé se fournit via `SYRNCK_KEY`, pas dans la configuration. Il n'y a pas encore de dérivation depuis un mot de passe, rotation, récupération de clé ou coffre système. Le détenteur des droits sur le processus et son environnement reste un acteur de confiance.
 
+La [compression réseau négociée](NETWORK_COMPRESSION.md) utilise Zstandard niveau 1 sur les objets logiques, avec repli brut si le gain ou le budget ne suffit pas. Le décodage vérifie la trame avant import et écrit directement dans le buffer réservé. Les compteurs et cibles de débit réseau incluent les tentatives répétées ; les octets logiques réussis gardent leur compteur distinct.
+
 Les objets sont déchiffrés pour le transfert, protégé par HTTPS lorsqu'il est distant. Le serveur est donc de confiance. Un chiffrement de bout en bout devra rendre le serveur opaque, protéger les manifestes et établir une politique explicite de déduplication et de fuite d'égalité par dépôt. Il devra également traiter les attaques par rejeu d'anciennes racines et la révocation des appareils.
 
 Le [mode appareils non fiables de Syncthing](https://docs.syncthing.net/specs/untrusted.html) illustre un autre compromis : son chiffrement de blocs dépend du fichier et de l'offset, ce qui limite les corrélations. Reprendre ce choix tel quel empêcherait la déduplication globale entre fichiers et positions visée ici. Son transport BEP utilise TLS et l'identité des certificats ; le prototype Syrnck utilise un jeton et un proxy TLS, sans identité d'appareil Syncthing.

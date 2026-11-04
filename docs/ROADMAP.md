@@ -58,7 +58,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et lecture par plages.
 - [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
-- [ ] Compression réseau négociée et cache des présences.
+- [x] Compression réseau Zstandard négociée, repli brut, décodage borné, budgets de préparation et compteurs logiques/réseau distincts.
+- [ ] Cache des présences et validation de charge de la compression sur des corpus réels.
 - [x] Retry/backoff bornés des requêtes idempotentes, attente annulable et cibles de débit partagées entre les requêtes ; publication finale jamais relancée automatiquement.
 - [x] Journal local persistant, reprise explicite/automatique, références attendues conservées et protection des objets transférés contre le GC local ; réconciliation des publications incertaines sans rejouer le CAS.
 - [x] Baux d'envoi serveur persistants avec expiration, renouvellement, fencing, reçus de publication et administration hors ligne ; refus du GC tant qu'un bail est actif.

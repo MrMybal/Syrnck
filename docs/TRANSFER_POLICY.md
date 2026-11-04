@@ -49,6 +49,12 @@ scheduled by this policy. Control-plane retries are excluded. Existing
 objects once; they are not wire-traffic counters and exclude repeated or partial
 attempts. Exhaustion returns an error without final success statistics.
 
+With [negotiated compression](NETWORK_COMPRESSION.md), rate targets and progress
+use encoded HTTP object-body bytes. `object_upload_bytes` and
+`object_download_bytes` expose these observed counts, including retries;
+`transferred_bytes` keeps its logical meaning. Codec/header errors fail without
+retry. Download retries reset the decoder and upload retries reuse their frame.
+
 The [publication boundary](TRANSFERS.md#publication-boundary) is unchanged:
 after the final remote CAS is dispatched it completes without observer calls or
 cooperative cancellation. Ambiguous publication exits **3** and requires checking

@@ -180,6 +180,15 @@ Les transferts acceptent `--requests 4 --transfer-buffer-mib 64`, `--retries 0..
 
 Pour un accès distant, publier le serveur derrière un proxy HTTPS. Le client refuse HTTP hors loopback et les redirections. Un certificat d'autorité privé peut être fourni avec `--ca racine.pem`. Le prototype ne fournit pas encore de configuration de déploiement ou de gestion de certificats.
 
+La [compression réseau](NETWORK_COMPRESSION.md) est négociée automatiquement
+quand des objets manquent. `--compression off` demande des octets bruts et
+`--compression zstd` exige la capacité du serveur pour les objets à transférer.
+Les objets petits ou incompressibles peuvent rester bruts. `serve --no-compression`
+désactive l'extension. `transferred_bytes` compte les octets logiques réussis ;
+`object_upload_bytes` et `object_download_bytes` comptent les corps HTTP réellement
+transférés, tentatives répétées comprises. Les cibles de débit portent sur ces
+octets réseau. Le budget inclut les candidats compressés, sans borner toute la RAM.
+
 Les envois négocient automatiquement les baux persistants quand le serveur les annonce. `agent push ... --require-lease` exige leur prise en charge ; `serve --require-lease --lease-seconds 3600` impose les publications protégées. Après arrêt du serveur, `leases list`, `leases release ID` et `leases prune` permettent l'administration. Les nouveaux envois négocient aussi des [inventaires paginés](UPLOAD_INVENTORIES.md), enregistrés avant les demandes de présence : le GC protège les objets déclarés et peut collecter les autres. Un ancien bail sans inventaire bloque encore tout le GC serveur. L'expiration autorise la collecte des objets non référencés et la reprise redéclare son inventaire sous un nouveau jeton. `leases prune` nettoie aussi les générations obsolètes. Voir les [baux d'envoi, jetons et reçus](SERVER_UPLOAD_LEASES.md).
 
 Les pulls négocient aussi un [bail de lecture](SERVER_READ_LEASES.md) avant leur première demande de bloc manquant. `agent pull ... --require-read-lease` ou `agent resume ... --require-read-lease` exige cette prise en charge. `serve --read-lease-seconds 3600` règle leur durée. Après arrêt du serveur, les commandes `leases list --read`, `leases release ID --read` et `leases prune --read` administrent ces baux. La racine reste protégée même sans référence tant que le bail est actif ; le client le libère lorsque tous les objets sont locaux, avant la publication de la référence locale.
