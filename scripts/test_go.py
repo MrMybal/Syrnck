@@ -22,7 +22,13 @@ if os.name == "nt":
     env["CGO_ENABLED"] = "0"
 else:
     env["CGO_ENABLED"] = "1"
-    env["CGO_LDFLAGS"] = env.get("CGO_LDFLAGS", "") + ' -L"' + str(library.parent) + '"'
+    # cmd/go recognizes quotes only around an ENTIRE argument. Quotes after
+    # -L survive parsing and break the generated go:cgo_ldflag directive.
+    flag = "-L" + str(library.parent)
+    quote = "'" if "'" not in flag else '"'
+    if quote in flag:
+        parser.error("cgo library path cannot contain both single and double quotes")
+    env["CGO_LDFLAGS"] = env.get("CGO_LDFLAGS", "") + " " + quote + flag + quote
     for key in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         env[key] = str(library.parent) + os.pathsep + env.get(key, "")
 command = [go, "test", "-v", "-count=1"]

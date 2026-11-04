@@ -233,13 +233,18 @@ class Workflows(unittest.TestCase):
         self.assertEqual(set(files), {".syrnckignore", "important.tmp", "Éditeur.cpp"})
 
     def test_case_collisions_and_reserved_paths(self):
-        if os.name != "nt":
-            (self.root / "Foo").write_text("a")
-            (self.root / "foo").write_text("b")
+        upper, lower = self.root / "Foo", self.root / "foo"
+        upper.write_text("a")
+        lower.write_text("b")
+        if not upper.samefile(lower):
             self.cmd("native", "commit", "--directory", self.root, "-m", "bad", ok=False)
         else:
-            # Windows refuses many unsafe names itself; invalid ID tests cover traversal at the API.
-            self.cmd("get", "..\\config.json", self.root / "bad", ok=False)
+            # Case-insensitive APFS/NTFS aliases these names to one file. This is
+            # a valid snapshot, not an engine collision between two entries.
+            revision = self.commit("one physical file")
+            files = self.metadata("revision", revision)["files"]
+            self.assertEqual([name.casefold() for name in files], ["foo"])
+        self.cmd("get", "..\\config.json", self.root / "bad", ok=False)
 
     def test_git_filters_preserve_code_and_binary_history(self):
         repo = self.root / "repo with spaces and 'quote é"
