@@ -127,11 +127,14 @@ discarded; their records are checked before GC planning. See
 [journal recovery and retention](TRANSFER_SESSIONS.md).
 Active server upload leases also block offline GC until expiry, publication or
 deliberate release. See [server leases and fenced publication](SERVER_UPLOAD_LEASES.md).
+Active [read leases](SERVER_READ_LEASES.md) also block offline GC, even after the
+source reference disappears. Pull releases them once its verified objects are
+local; `leases ... --read` manages their records after server shutdown.
 
 GC and packing allow cancellation during verification, planning, construction
 and readback. After their publication/deletion commit point, cleanup finishes
 without further callbacks or cancellation. See [maintenance guarantees and limits](MAINTENANCE.md).
 Process-kill recovery remains a separate mechanism described in
 [crash recovery](CRASH_RECOVERY.md). Object, pointer and C ABI formats remain
-unchanged; upload leases negotiate an HTTP extension. C++ callers should rebuild
+unchanged; upload and read leases negotiate HTTP extensions. C++ callers should rebuild
 against the updated headers.

@@ -1,8 +1,6 @@
 #pragma once
-#include "http_transport.hpp"
+#include "lease_renewal.hpp"
 namespace syrnck::net::detail {
-using LeaseRequest =
-    std::function<Bytes(std::string_view, std::string_view, std::span<const std::uint8_t>, OperationOptions)>;
 class UploadProtection {
 public:
   UploadProtection(const Store &, TransferSession &, OperationOptions, TransferOptions, LeaseRequest);
@@ -27,8 +25,7 @@ private:
   std::optional<UploadLease> lease_;
   std::uint64_t seconds_ = 3600;
   std::chrono::steady_clock::time_point renew_{};
-  struct Renewal;
-  std::unique_ptr<Renewal> pending_;
+  std::unique_ptr<LeaseRenewal> pending_;
   bool supported();
   std::string path() const;
   void decode(const Bytes &);

@@ -1,27 +1,5 @@
 #include "upload_transport.hpp"
-#include <future>
-#include <thread>
 namespace syrnck::net::detail {
-struct UploadProtection::Renewal {
-  std::promise<Bytes> promise;
-  std::future<Bytes> future = promise.get_future();
-  std::string fence;
-  // Destroyed first: request cancellation and join before destroying the promise.
-  std::jthread worker;
-  Renewal(LeaseRequest request, std::string path, std::string body, std::string generation,
-          std::stop_token external)
-      : fence(std::move(generation)), worker([this, request = std::move(request), path = std::move(path),
-                                              body = std::move(body), external](std::stop_token internal) {
-          std::stop_source combined;
-          std::stop_callback outer(external, [&] { combined.request_stop(); });
-          std::stop_callback inner(internal, [&] { combined.request_stop(); });
-          try {
-            promise.set_value(request("PUT", path, bytes(body), {combined.get_token(), {}}));
-          } catch (...) {
-            promise.set_exception(std::current_exception());
-          }
-        }) {}
-};
 UploadProtection::UploadProtection(const Store &store, TransferSession &session, OperationOptions operation,
                                    TransferOptions limits, LeaseRequest request)
     : store_(store), session_(session), operation_(std::move(operation)), limits_(limits),
@@ -112,7 +90,7 @@ void UploadProtection::tick() {
     received(done->future.get(), done->fence);
   }
   if (lease_ && lease_->state == "active" && std::chrono::steady_clock::now() >= renew_)
-    pending_ = std::make_unique<Renewal>(request_, path(), body(), lease_->fence, operation_.stop);
+    pending_ = std::make_unique<LeaseRenewal>(request_, path(), body(), lease_->fence, operation_.stop);
 }
 void UploadProtection::finish() {
   tick();

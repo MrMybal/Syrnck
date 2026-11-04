@@ -652,6 +652,7 @@ Json Store::gc(bool remove, OperationOptions options) const {
   // the whole local store avoids trusting incomplete reachability information.
   check_transfer_gc(options.stop);
   check_upload_gc(options.stop, remove);
+  check_read_gc(options.stop, remove);
   std::uint64_t verified_bytes = 0, planned_bytes = 0, packed_bytes = 0;
   auto notify = [&](ProgressPhase phase, std::uint64_t count, bool complete = false,
                     std::optional<std::uint64_t> total = {}) {

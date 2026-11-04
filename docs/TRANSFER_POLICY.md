@@ -101,7 +101,8 @@ objects and reuses completed imports. [Persistent sessions](TRANSFER_SESSIONS.md
 save the requested root and reference expectation and block local GC until
 completion or deliberate discard. Retry budgets and pacing credit are not
 persisted. [Server upload leases](SERVER_UPLOAD_LEASES.md) protect uploads while
-renewed; background resume and remote read leases remain future work.
+renewed. [Server read leases](SERVER_READ_LEASES.md) protect exact pull roots until
+their objects are local; background resume remains future work.
 
 `resilient_transfers` runs a real HTTP peer that returns transient statuses,
 loses acknowledgements and truncates downloads. It exercises control/object

@@ -61,12 +61,16 @@ int main() {
           fails([&] { (void)TransferSession::parse(bad); });
         }
         auto legacy = document;
+        legacy.erase("read_lease");
+        legacy["version"] = 2;
+        check(TransferSession::parse(legacy).json() == document);
         legacy.erase("upload_lease");
         legacy["version"] = 1;
         check(TransferSession::parse(legacy).json() == document);
-        for (auto bad : {Json{{"version", true}}, Json{{"version", 3}}, Json{{"direction", "other"}},
-                         Json{{"state", "other"}}, Json{{"id", std::string(64, '0')}},
-                         Json{{"expected", Json::array()}}, Json{{"extra", 1}}}) {
+        for (auto bad :
+             {Json{{"version", true}}, Json{{"version", 4}}, Json{{"direction", "other"}},
+              Json{{"state", "other"}}, Json{{"id", std::string(64, '0')}}, Json{{"expected", Json::array()}},
+              Json{{"extra", 1}}, Json{{"read_lease", std::string(64, 'a')}}}) {
           auto changed = document;
           changed.update(bad);
           fails([&] { (void)TransferSession::parse(changed); });
@@ -121,6 +125,8 @@ int main() {
       ObjectKey manifest{Kind::manifest, id};
       partial.import(manifest, source.get(manifest));
       auto record = session(manifest, "pull");
+      record.read_lease = hex(random_bytes(32));
+      check(TransferSession::parse(record.json()).read_lease == record.read_lease);
       partial.write_transfer_session(record);
       fails([&] { partial.fsck(); });
       fails([&] { partial.gc(true); });

@@ -31,8 +31,11 @@ template <class Visitor> void visit_sessions(const Store &store, Visitor visitor
     auto name = utf8(file.path().filename());
     if (name.starts_with(".tmp"))
       continue; // An interrupted atomic write has not committed a record.
+    const bool canonical = name.size() == 69 && name.ends_with(".json");
+    if (!canonical && transient_metadata_disappeared(file.path(), stop))
+      continue;
     check_file(file.symlink_status());
-    require(name.size() == 69 && name.ends_with(".json"), "invalid transfer session file");
+    require(canonical, "invalid transfer session file");
     auto session = store.transfer_session(std::string_view(name).substr(0, 64));
     require(session.has_value(), "transfer session disappeared");
     visitor(std::move(*session));
@@ -61,12 +64,16 @@ void TransferSession::validate() const {
     require(direction == "push", "only push sessions can hold an upload lease");
     validate_id(*upload_lease);
   }
+  if (read_lease) {
+    require(direction == "pull", "only pull sessions can hold a read lease");
+    validate_id(*read_lease);
+  }
   validate_id(id);
   require(id == identity(direction, endpoint, root, reference), "transfer session identity mismatch");
 }
 Json TransferSession::json() const {
   validate();
-  return Json{{"version", 2},
+  return Json{{"version", 3},
               {"id", id},
               {"direction", direction},
               {"endpoint", endpoint},
@@ -74,13 +81,18 @@ Json TransferSession::json() const {
               {"root", key_json(root)},
               {"expected", expected ? key_json(*expected) : Json(nullptr)},
               {"state", state},
-              {"upload_lease", upload_lease ? Json(*upload_lease) : Json(nullptr)}};
+              {"upload_lease", upload_lease ? Json(*upload_lease) : Json(nullptr)},
+              {"read_lease", read_lease ? Json(*read_lease) : Json(nullptr)}};
 }
 TransferSession TransferSession::parse(const Json &value) {
   require(value.is_object() && value.contains("version") && value["version"].is_number_integer() &&
               ((value["version"] == 1 && value.size() == 8) ||
-               (value["version"] == 2 && value.size() == 9 && value.contains("upload_lease") &&
-                (value["upload_lease"].is_null() || value["upload_lease"].is_string()))) &&
+               ((value["version"] == 2 || value["version"] == 3) &&
+                value.size() == (value["version"] == 2 ? 9 : 10) && value.contains("upload_lease") &&
+                (value["upload_lease"].is_null() || value["upload_lease"].is_string()) &&
+                (value["version"] == 2 ||
+                 (value.contains("read_lease") &&
+                  (value["read_lease"].is_null() || value["read_lease"].is_string()))))) &&
               value.contains("id") && value["id"].is_string() && value.contains("direction") &&
               value["direction"].is_string() && value.contains("endpoint") && value["endpoint"].is_string() &&
               value.contains("reference") && value["reference"].is_string() && value.contains("state") &&
@@ -95,8 +107,10 @@ TransferSession TransferSession::parse(const Json &value) {
   result.root = parse_key(value["root"]);
   if (!value["expected"].is_null())
     result.expected = parse_key(value["expected"]);
-  if (value["version"] == 2 && !value["upload_lease"].is_null())
+  if (value["version"] >= 2 && !value["upload_lease"].is_null())
     result.upload_lease = value["upload_lease"].get<std::string>();
+  if (value["version"] == 3 && !value["read_lease"].is_null())
+    result.read_lease = value["read_lease"].get<std::string>();
   result.validate();
   return result;
 }

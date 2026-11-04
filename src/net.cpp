@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "http_transport.hpp"
 #include "upload_transport.hpp"
+#include "read_transport.hpp"
 #include <curl/curl.h>
 #include <exception>
 #include <httplib.h>
@@ -106,7 +107,8 @@ Json transfer_result(const TransferSession &session, std::size_t sent = 0, std::
               {"object_retries", stats.retries},
               {"session", session.id},
               {"reconciled", reconciled},
-              {"upload_lease", session.upload_lease ? Json(*session.upload_lease) : Json(nullptr)}};
+              {"upload_lease", session.upload_lease ? Json(*session.upload_lease) : Json(nullptr)},
+              {"read_lease", session.read_lease ? Json(*session.read_lease) : Json(nullptr)}};
 }
 void save_failure(const Store &store, TransferSession &session, std::string_view state) noexcept {
   // The durable 'publishing' record already protects an unknown outcome.
@@ -149,7 +151,9 @@ Bytes Remote::request(std::string_view method, std::string_view path, std::span<
     payload.assign(body.begin(), body.end());
   detail::HttpRequest request(
       base_, token_, ca_, std::string(method), std::string(path), std::move(payload), options,
-      path == "v1/capabilities" || path.starts_with("v1/uploads/") ? 16384 : max_object_size);
+      path == "v1/capabilities" || path.starts_with("v1/uploads/") || path.starts_with("v1/reads/")
+          ? 16384
+          : max_object_size);
   for (std::size_t retries = 0;; ++retries) {
     try {
       return request.perform();
@@ -179,10 +183,13 @@ Refs Remote::refs(OperationOptions options, TransferOptions limits) const {
 void ServeOptions::validate() const {
   require(upload_lease_seconds >= 1 && upload_lease_seconds <= 86400,
           "upload lease duration must be in 1..86400 seconds");
+  require(read_lease_seconds >= 1 && read_lease_seconds <= 86400,
+          "read lease duration must be in 1..86400 seconds");
 }
 Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
   limits.validate();
+  require(!limits.require_read_lease, "read lease requirement is only available for pull");
   throw_if_cancelled(options.stop);
   validate_ref(name);
   require(name.find('/') == name.npos, "remote reference must be a single component");
@@ -302,9 +309,14 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
   validate_ref(name);
   auto actual = reference(store.refs(), name);
   auto [session, fresh] = session_for(store, "pull", hash(bytes(base_)), root, name, actual);
+  detail::ReadProtection protection(
+      store, session, options, limits,
+      [&](std::string_view method, std::string_view path, std::span<const std::uint8_t> body,
+          OperationOptions control) { return request(method, path, body, std::move(control), &limits); });
   if (!fresh) {
     if ((session.state != "transferring" || actual != session.expected) && actual == root) {
       (void)store.closure({root}, true, options.stop, options.progress);
+      protection.release();
       return reconciled(store, session, options);
     }
     if (session.state == "conflict" || actual != session.expected) {
@@ -333,6 +345,7 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
           try {
             data = store.get(key);
           } catch (const MissingObject &) {
+            protection.acquire();
             return key;
           }
           ++reused;
@@ -349,7 +362,9 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
         total += data.size();
         auto children = dependencies(key.kind, data);
         pending.insert(pending.end(), children.begin(), children.end());
-      });
+      },
+      [&] { protection.tick(); });
+  protection.release();
   report_progress(options, {ProgressPhase::publishing, name});
   session.state = "publishing";
   store.write_transfer_session(session, options.stop);
@@ -434,10 +449,50 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
     };
   };
   server.Get("/v1/capabilities", guarded([&](const auto &, auto &response) {
+               response.set_content(Json{{"upload_leases", 1},
+                                         {"lease_seconds", limits.upload_lease_seconds},
+                                         {"read_leases", 1},
+                                         {"read_lease_seconds", limits.read_lease_seconds}}
+                                        .dump(),
+                                    "application/json");
+             }));
+  server.Get(R"(/v1/reads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
+               auto lease = store.read_lease(request.matches[1].str());
+               if (!lease) {
+                 response.status = 404;
+                 return;
+               }
                response.set_content(
-                   Json{{"upload_leases", 1}, {"lease_seconds", limits.upload_lease_seconds}}.dump(),
+                   Json{{"lease", lease->json()}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
                    "application/json");
              }));
+  server.Put(R"(/v1/reads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
+               require(request.body.size() <= 16384, "read lease request exceeds size limit");
+               auto j = parse_json(bytes(request.body));
+               require(j.is_object() && j.size() == 2 && j.contains("root") && j.contains("fence") &&
+                           (j["fence"].is_null() || j["fence"].is_string()),
+                       "invalid read lease request");
+               std::optional<std::string> fence;
+               if (!j["fence"].is_null())
+                 fence = j["fence"].template get<std::string>();
+               auto lease = store.acquire_read_lease(request.matches[1].str(), parse_key(j["root"]),
+                                                     limits.read_lease_seconds, fence);
+               response.set_content(
+                   Json{{"lease", lease.json()}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
+                   "application/json");
+             }));
+  server.Post(R"(/v1/reads/([a-f0-9]{64})/release)", guarded([&](const auto &request, auto &response) {
+                require(request.body.size() <= 16384, "read lease request exceeds size limit");
+                auto j = parse_json(bytes(request.body));
+                require(j.is_object() && j.size() == 1 && j.contains("fence") && j["fence"].is_string(),
+                        "invalid read lease request");
+                auto id = request.matches[1].str();
+                store.release_read_lease(id, j["fence"].template get<std::string>());
+                response.set_content(Json{{"lease", store.read_lease(id)->json()},
+                                          {"lease_seconds", limits.read_lease_seconds}}
+                                         .dump(),
+                                     "application/json");
+              }));
   server.Get(R"(/v1/uploads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
                auto lease = store.upload_lease(request.matches[1].str());
                if (!lease) {

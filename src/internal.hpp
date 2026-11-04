@@ -20,6 +20,8 @@ void atomic_directory(const fs::path &, const std::function<void(const fs::path 
                       const std::function<void()> &before_publish = {}, std::stop_token = {});
 void make_executable(const fs::path &);
 void sync_directory(const fs::path &);
+// Only call for unknown inventory names, never canonical metadata records.
+bool transient_metadata_disappeared(const fs::path &, std::stop_token = {});
 std::uint64_t unix_seconds();
 inline std::span<const std::uint8_t> bytes(std::string_view s) {
   return {reinterpret_cast<const std::uint8_t *>(s.data()), s.size()};

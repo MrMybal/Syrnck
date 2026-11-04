@@ -16,11 +16,13 @@ struct TransferOptions {
   // Object-body average targets shared by the operation. Zero means unlimited.
   std::uint64_t upload_bytes_per_second = 0, download_bytes_per_second = 0;
   bool require_upload_lease = false;
+  bool require_read_lease = false;
   void validate() const;
 };
 struct ServeOptions {
   std::uint64_t upload_lease_seconds = 3600;
   bool require_upload_lease = false;
+  std::uint64_t read_lease_seconds = 3600;
   void validate() const;
 };
 void serve(Store &, std::string_view token, std::string_view listen = "127.0.0.1:7437",

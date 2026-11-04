@@ -124,11 +124,11 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git install [DOSSIER] [--encrypted]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
-        [--lease-seconds 3600] [--require-lease]
-  leases list | release ID | prune   Gérer les baux d'envoi du store serveur
+        [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
+  leases list | release ID | prune [--read]   Gérer les baux du store serveur
   agent push URL RÉF_LOCALE RÉF_DISTANTE
              [--require-lease]      Exiger la protection du GC côté serveur
-  agent pull URL RÉF_DISTANTE RÉF_LOCALE
+  agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
   agent resume URL SESSION           Reprendre une session interrompue
              [--requests 1..32] [--transfer-buffer-mib 64] (push, pull ou resume)
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
@@ -170,11 +170,11 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git install [DIRECTORY] [--encrypted]
   git clean [--workers N] [--buffer-mib N] | git smudge
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
-        [--lease-seconds 3600] [--require-lease]
-  leases list | release ID | prune   Manage the server store's upload leases
+        [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
+  leases list | release ID | prune [--read]   Manage server store leases
   agent push URL LOCAL_REF REMOTE_REF
              [--require-lease]      Require server GC protection
-  agent pull URL REMOTE_REF LOCAL_REF
+  agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
   agent resume URL SESSION           Resume an interrupted session
              [--requests 1..32] [--transfer-buffer-mib 64] (push, pull or resume)
              [--retries 0..8] [--upload-kib-s 0] [--download-kib-s 0]
@@ -445,19 +445,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown Git command");
   } else if (command == "leases") {
+    auto reads = args.flag("--read");
     if (sub == "list") {
       args.count(0);
       auto result = Json::array();
-      for (const auto &lease : store.upload_leases())
-        result.push_back(lease.json());
+      if (reads) {
+        for (const auto &lease : store.read_leases())
+          result.push_back(lease.json());
+      } else {
+        for (const auto &lease : store.upload_leases())
+          result.push_back(lease.json());
+      }
       print(result);
     } else if (sub == "release") {
       args.count(1);
-      store.release_upload_lease(args.values[0]);
+      if (reads)
+        store.release_read_lease(args.values[0]);
+      else
+        store.release_upload_lease(args.values[0]);
       print(Json{{"released", args.values[0]}});
     } else if (sub == "prune") {
       args.count(0);
-      print(Json{{"removed", store.prune_upload_leases()}});
+      print(Json{{"removed", reads ? store.prune_read_leases() : store.prune_upload_leases()}});
     } else
       throw Error("unknown lease command");
   } else if (command == "serve") {
@@ -465,6 +474,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     limits.require_upload_lease = args.flag("--require-lease");
     if (auto seconds = args.option("--lease-seconds"))
       limits.upload_lease_seconds = integer(*seconds);
+    if (auto seconds = args.option("--read-lease-seconds"))
+      limits.read_lease_seconds = integer(*seconds);
     auto listen = args.option("--listen").value_or("127.0.0.1:7437");
     args.count(0);
     require(token.has_value(), "set SYRNCK_TOKEN");
@@ -488,6 +499,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     }
     net::TransferOptions limits;
     limits.require_upload_lease = args.flag("--require-lease");
+    limits.require_read_lease = args.flag("--require-read-lease");
     if (auto requests = args.option("--requests")) {
       auto count = integer(*requests);
       require(count >= 1 && count <= 32, "transfer requests must be in 1..32");

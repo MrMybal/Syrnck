@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <fstream>
 #include <system_error>
+#include <algorithm>
+#include <chrono>
+#include <thread>
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>
@@ -171,6 +174,25 @@ void atomic_directory(const fs::path &destination, const std::function<void(cons
   SYRNCK_IO_CHECKPOINT("directory.published", target);
   sync_directory(parent);
   SYRNCK_IO_CHECKPOINT("directory.durable", target);
+}
+bool transient_metadata_disappeared(const fs::path &path, std::stop_token stop) {
+  if (path.extension() != ".tmp")
+    return false;
+  // Some local filesystem tools briefly create NAME.JSON.tmp during deletion.
+  // Persistent unknown files and symlinks still fail the caller's inventory checks.
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
+  for (;;) {
+    throw_if_cancelled(stop);
+    std::error_code error;
+    auto status = fs::symlink_status(path, error);
+    if (status.type() == fs::file_type::not_found &&
+        (!error || error == std::errc::no_such_file_or_directory))
+      return true;
+    auto now = std::chrono::steady_clock::now();
+    if (now >= deadline)
+      return false;
+    std::this_thread::sleep_until(std::min(deadline, now + std::chrono::milliseconds(2)));
+  }
 }
 void atomic_stream(const fs::path &destination, const std::function<void(std::ostream &)> &writer,
                    bool replace, std::stop_token stop) {

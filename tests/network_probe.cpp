@@ -73,8 +73,13 @@ int entry(int argc, char **argv) {
       limits.download_bytes_per_second = 1024;
     }
     if (mode == "renew" || mode == "renew_stop") {
-      limits.upload_bytes_per_second = 128 * 1024;
-      limits.require_upload_lease = true;
+      if (operation == "push") {
+        limits.upload_bytes_per_second = 128 * 1024;
+        limits.require_upload_lease = true;
+      } else {
+        limits.download_bytes_per_second = 128 * 1024;
+        limits.require_read_lease = true;
+      }
     }
     try {
       Json result;

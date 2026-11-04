@@ -104,6 +104,8 @@ Le serveur initial est mono-store avec un jeton partagé ; il sérialise les acc
 
 Un transfert de blocs ne règle pas les conflits entre deux modifications de fichiers. La synchronisation continue devra définir versions causales, suppressions, conflits, renommages et publication multi-fichier, indépendamment de l'algorithme de déduplication.
 
+Les [baux de lecture persistants](SERVER_READ_LEASES.md) protègent la racine exacte d'un pull contre le GC hors ligne tant qu'ils sont actifs, même après suppression de la référence source. Le client les renouvelle par une requête indépendante, puis les libère lorsque tous les objets sont locaux. Le GC reste bloqué pour tout le store ; la protection sélective et distribuée reste à développer.
+
 L'interface C expose l'ingestion, la reconstruction, la présence/lecture/importation des objets, leur fermeture de dépendances et les pins vérifiés. Le binding `bindings/go` utilise cette interface par DLL sous Windows et cgo sous Unix. Son banc de copie entre stores valide le transfert différentiel et la reprise sous Windows x64. L'adaptateur BEP reste à faire : un fork Syncthing ou une modification négociée du protocole sera nécessaire pour exploiter des frontières CDC entre pairs.
 
 ## Chiffrement

@@ -13,7 +13,7 @@ syrnck agent push https://blocks.example.invalid files/MANIFEST asset --require-
 The server still requires `SYRNCK_TOKEN`, a loopback bind and an HTTPS proxy for
 remote access. Encrypted stores use their own `SYRNCK_KEY`. English/French CLI
 text is supported; protocol fields remain English. This extension currently
-covers **uploads**, not remote read leases for pulls.
+covers **uploads**; [read leases for pulls](SERVER_READ_LEASES.md) use a separate extension.
 
 ## Lifetime, GC and administration
 
@@ -136,8 +136,9 @@ loss of support for a saved lease fail rather than silently downgrade. Client
 `--require-lease` rejects unleased final reference PUTs; legacy object PUTs remain
 available. The flag is for push and resumed push, not pull.
 
-Local transfer journals now write schema **2**, adding nullable `upload_lease`;
-schema-1 journals remain readable. Final statistics add nullable `upload_lease`.
+Local transfer journals write schema **3**, retaining nullable `upload_lease`
+from schema 2 and adding `read_lease` for pulls; schemas 1 and 2 remain readable.
+Final statistics include nullable `upload_lease` and `read_lease`.
 That ID identifies the negotiated lease, not its current liveness. Logical
 objects, Git pointers and C ABI formats are unchanged.
 

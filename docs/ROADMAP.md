@@ -62,7 +62,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Retry/backoff bornés des requêtes idempotentes, attente annulable et cibles de débit partagées entre les requêtes ; publication finale jamais relancée automatiquement.
 - [x] Journal local persistant, reprise explicite/automatique, références attendues conservées et protection globale contre le GC local ; réconciliation des publications incertaines sans rejouer le CAS.
 - [x] Baux d'envoi serveur persistants avec expiration, renouvellement, fencing, reçus de publication et administration hors ligne ; refus du GC tant qu'un bail est actif.
-- [ ] Baux de lecture pour les pulls, protection sélective/distribuée contre le GC et purge des journaux locaux terminés.
+- [x] Baux de lecture persistants pour les pulls : racine exacte, reprise après suppression de référence, renouvellement asynchrone et libération avant publication locale.
+- [ ] Protection sélective/distribuée contre le GC et purge des journaux locaux terminés.
 - [ ] Stockage distant compatible S3, caches locaux et réplication vérifiée.
 
 Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets transférés mesurés ; aucun réglage de vitesse ne dégrade les garanties de reconstruction. Les cibles chiffrées doivent être fixées à partir des machines et des corpus de référence.

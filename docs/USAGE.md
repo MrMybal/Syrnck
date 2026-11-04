@@ -182,6 +182,8 @@ Pour un accès distant, publier le serveur derrière un proxy HTTPS. Le client r
 
 Les envois négocient automatiquement les baux persistants quand le serveur les annonce. `agent push ... --require-lease` exige leur prise en charge ; `serve --require-lease --lease-seconds 3600` impose les publications protégées. Après arrêt du serveur, `leases list`, `leases release ID` et `leases prune` permettent l'administration. Un bail actif bloque le GC serveur ; son expiration autorise la collecte des objets non référencés. Voir les [baux d'envoi, jetons et reçus](SERVER_UPLOAD_LEASES.md).
 
+Les pulls négocient aussi un [bail de lecture](SERVER_READ_LEASES.md) avant leur première demande de bloc manquant. `agent pull ... --require-read-lease` ou `agent resume ... --require-read-lease` exige cette prise en charge. `serve --read-lease-seconds 3600` règle leur durée. Après arrêt du serveur, les commandes `leases list --read`, `leases release ID --read` et `leases prune --read` administrent ces baux. La racine reste protégée même sans référence tant que le bail est actif ; le client le libère lorsque tous les objets sont locaux, avant la publication de la référence locale.
+
 ## Chiffrement au repos
 
 Exemple PowerShell :

@@ -23,12 +23,12 @@ addresses that new root; use the session ID to resume the original root.
 
 ## Format and writes
 
-Records live in `STORE/transfers/ID.json`, with a strict version-2 schema and a
-16 KiB limit. Version-1 records remain readable:
+Records live in `STORE/transfers/ID.json`, with a strict version-3 schema and a
+16 KiB limit. Version-1 and version-2 records remain readable:
 
 | Field | Meaning |
 | --- | --- |
-| `version` | Journal schema version, currently 2 |
+| `version` | Journal schema version, currently 3 |
 | `id` | Stable BLAKE3 identity over direction, endpoint fingerprint, root and reference |
 | `direction` | `push` or `pull` |
 | `endpoint` | Hash of the client's canonical base URL |
@@ -37,6 +37,7 @@ Records live in `STORE/transfers/ID.json`, with a strict version-2 schema and a
 | `expected` | Destination reference at session creation, or null |
 | `state` | Recovery state described below |
 | `upload_lease` | Nullable server upload lease ID (added in version 2) |
+| `read_lease` | Nullable server read lease ID for pulls (added in version 3) |
 
 URL, token, encryption key, CA filename and exception text are not recorded.
 Endpoint matching is exact after URL normalization; equivalent URL spellings
@@ -79,6 +80,7 @@ changed back. The original CAS is never blindly replayed.
 A local pull validates the complete closure and publishes with compare-and-set
 against saved `expected`. A changed destination is preserved. After a crash, an
 already matching local root is verified and marked complete without downloading.
+Any saved read lease is released before completion; cleanup may contact the server.
 If the local reference still equals `expected`, publication can be retried. A
 known conflict remains blocked until resolved/discarded; an already matching
 desired root can also satisfy the session.
@@ -118,8 +120,9 @@ Local holds require journal-aware engines for every GC run. Compatible servers
 also provide [expiring upload leases and publication receipts](SERVER_UPLOAD_LEASES.md).
 Those receipts can confirm a lost acknowledgement even after a later reference
 change. An expired lease can permit offline server GC; resume renegotiates and
-reuploads missing objects from the protected source. Remote read leases for
-pulls, selective/distributed retention, local journal pruning and background
+reuploads missing objects from the protected source. [Read leases](SERVER_READ_LEASES.md)
+protect pull sources until all required objects are local. Selective/distributed
+retention, local journal pruning and background
 recovery remain future work. Session listing materializes its result; receipts
 consume disk space until removed.
 

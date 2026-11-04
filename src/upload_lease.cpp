@@ -49,8 +49,11 @@ template <class Visitor> void visit(const Store &store, Visitor visitor, std::st
     auto name = utf8(file.path().filename());
     if (name.starts_with(".tmp"))
       continue;
+    const bool canonical = name.size() == 69 && name.ends_with(".json");
+    if (!canonical && transient_metadata_disappeared(file.path(), stop))
+      continue;
     regular(file.symlink_status());
-    require(name.size() == 69 && name.ends_with(".json"), "invalid upload lease file");
+    require(canonical, "invalid upload lease file");
     require(++count <= maximum_leases, "upload lease capacity exceeded; prune inactive leases");
     auto lease = store.upload_lease(std::string_view(name).substr(0, 64));
     require(lease.has_value(), "upload lease disappeared");

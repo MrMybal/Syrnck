@@ -101,6 +101,8 @@ Transfers persist local recovery records. Use `agent sessions`, `agent resume UR
 
 Compatible servers also retain uploads with expiring, renewable leases and fenced publication. Use `--require-lease` to require protection; offline `leases list`, `leases release ID` and `leases prune` manage server records. Publication receipts recover lost acknowledgements without reverting later reference changes. See [server upload leases](docs/SERVER_UPLOAD_LEASES.md).
 
+Pulls also acquire renewable [read leases](docs/SERVER_READ_LEASES.md) for the exact source root before downloading missing blocks. They survive server restarts and reference removal until expiry or release. Use `--require-read-lease` to require support, `serve --read-lease-seconds 3600` to set their TTL, and `leases ... --read` for offline maintenance.
+
 ## Validation and repository publishing
 
 Local builds and tests have been run on Windows x64 with MSVC. CI is configured for Windows, Linux, macOS, and Linux sanitizers; configuration alone does not establish that those remote runs have passed. The C++ implementation needs no Rust compiler or runtime. Compatibility fixtures exercise the original v1 Rust format, including encrypted stores.

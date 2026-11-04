@@ -60,6 +60,7 @@ struct TransferSession {
   ObjectKey root{Kind::manifest, {}};
   std::optional<ObjectKey> expected;
   std::optional<std::string> upload_lease;
+  std::optional<std::string> read_lease;
   static std::string identity(std::string_view direction, std::string_view endpoint, const ObjectKey &,
                               std::string_view reference);
   void validate() const;
@@ -77,6 +78,14 @@ struct UploadLease {
   void validate() const;
   Json json() const;
   static UploadLease parse(const Json &);
+};
+struct ReadLease {
+  std::string id, fence, state = "active";
+  ObjectKey root{Kind::manifest, {}};
+  std::uint64_t expires_at = 0;
+  void validate() const;
+  Json json() const;
+  static ReadLease parse(const Json &);
 };
 struct Chunking {
   bool fixed = false;
@@ -212,6 +221,12 @@ public:
   void confirm_upload_lease(std::string_view id, std::string_view fence) const;
   void release_upload_lease(std::string_view id) const;
   std::size_t prune_upload_leases() const;
+  std::vector<ReadLease> read_leases(std::stop_token = {}) const;
+  std::optional<ReadLease> read_lease(std::string_view id) const;
+  ReadLease acquire_read_lease(std::string_view id, const ObjectKey &, std::uint64_t seconds,
+                               const std::optional<std::string> &fence = {}) const;
+  void release_read_lease(std::string_view id, const std::optional<std::string> &fence = {}) const;
+  std::size_t prune_read_leases() const;
   std::set<ObjectKey> closure(const std::vector<ObjectKey> &, bool verify_files = false, std::stop_token = {},
                               ProgressCallback = {}) const;
   std::vector<ObjectKey> objects() const;
@@ -237,5 +252,6 @@ private:
   void write_refs(const Refs &, std::stop_token = {}) const;
   void check_transfer_gc(std::stop_token) const;
   void check_upload_gc(std::stop_token, bool remove) const;
+  void check_read_gc(std::stop_token, bool remove) const;
 };
 } // namespace syrnck

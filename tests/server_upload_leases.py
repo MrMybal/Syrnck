@@ -72,10 +72,10 @@ class ServerUploadLeases(unittest.TestCase):
             self.port = sock.getsockname()[1]
 
     @contextlib.contextmanager
-    def serving(self, seconds=3600, strict=False):
+    def serving(self, seconds=3600, strict=False, read_seconds=3600):
         env = dict(self.env, SYRNCK_KEY="39" * 32)
         command = [base.CLI, "--store", str(self.remote_store), "serve", "--listen", f"127.0.0.1:{self.port}",
-                   "--lease-seconds", str(seconds)]
+                   "--lease-seconds", str(seconds), "--read-lease-seconds", str(read_seconds)]
         if strict:
             command.append("--require-lease")
         process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
