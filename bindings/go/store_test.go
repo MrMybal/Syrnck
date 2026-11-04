@@ -38,7 +38,7 @@ func writeTest(t *testing.T, path string, content []byte) {
 func TestFileRangeAndComparison(t *testing.T) {
 	for _, encrypted := range []bool{false, true} {
 		t.Run(fmt.Sprint(encrypted), func(t *testing.T) {
-			dir := t.TempDir()
+			dir := tempDirectory(t)
 			var key []byte
 			if encrypted {
 				key = bytes.Repeat([]byte{91}, 32)
@@ -127,7 +127,7 @@ func TestFileRangeAndComparison(t *testing.T) {
 }
 
 func TestDifferentialTransfer(t *testing.T) {
-	dir := t.TempDir()
+	dir := tempDirectory(t)
 	// The stores use different at-rest encryption keys. Object IDs stay stable.
 	source := openTest(t, filepath.Join(dir, "source"), bytes.Repeat([]byte{17}, 32))
 	dest := openTest(t, filepath.Join(dir, "destination"), bytes.Repeat([]byte{39}, 32))
@@ -193,7 +193,7 @@ func TestDifferentialTransfer(t *testing.T) {
 }
 
 func TestImportResumeAndValidation(t *testing.T) {
-	dir := t.TempDir()
+	dir := tempDirectory(t)
 	source := openTest(t, filepath.Join(dir, "source"), nil)
 	destPath := filepath.Join(dir, "destination")
 	dest := openTest(t, destPath, nil)
@@ -255,7 +255,7 @@ func TestImportResumeAndValidation(t *testing.T) {
 }
 
 func TestConcurrencyErrorsAndClose(t *testing.T) {
-	dir := t.TempDir()
+	dir := tempDirectory(t)
 	key := bytes.Repeat([]byte{81}, 32)
 	path := filepath.Join(dir, "store")
 	s := openTest(t, path, key)
@@ -296,10 +296,18 @@ func TestConcurrencyErrorsAndClose(t *testing.T) {
 	if _, err := Open(path, Options{Key: bytes.Repeat([]byte{82}, 32)}); err == nil {
 		t.Fatal("accepted wrong encryption key")
 	}
+	// A failed constructor must also release its exclusive native lock.
+	reopened, err := Open(path, Options{Key: key})
+	if err != nil {
+		t.Fatalf("native handle was not released: %v", err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestEmptyFileAndSameStore(t *testing.T) {
-	dir := t.TempDir()
+	dir := tempDirectory(t)
 	s := openTest(t, filepath.Join(dir, "store"), nil)
 	path := filepath.Join(dir, "empty")
 	writeTest(t, path, nil)

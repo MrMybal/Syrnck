@@ -68,6 +68,15 @@ et les headers doivent provenir de cette version ; le numéro ABI 1 est conserv�
 avec des symboles supplémentaires. Voir les contrats anglais des [plages](../../docs/FILE_RANGES.md)
 et [comparaisons](../../docs/FILE_COMPARISON.md).
 
+## Windows test cleanup
+
+The tests close native handles before removing their owned temporary directories.
+The concurrency test additionally reopens the encrypted Store after a rejected
+wrong-key open, verifying that failed construction releases its exclusive lock.
+Windows cleanup waits at most two seconds for `ERROR_DIR_NOT_EMPTY`; other
+errors retain `testing.TempDir`'s ordinary cleanup behavior. Persistent failures
+still fail the test. Native calls and functional assertions are never retried.
+
 ## Syncthing
 
 Ce binding prépare l'utilisation du moteur depuis Go. Il ne modifie pas Syncthing et n'implémente pas BEP : les hashes BLAKE3 avec domaine, les manifestes et le CDC Syrnck ne correspondent pas à son protocole. Même le mode fixe conserve le format Syrnck. Une future intégration devra adapter explicitement les index et échanges, ou négocier une extension entre pairs modifiés. Voir la [spécification BEP](https://docs.syncthing.net/specs/bep-v1.html) et les [règles cgo](https://pkg.go.dev/cmd/cgo#hdr-Passing_pointers).
