@@ -170,15 +170,19 @@ Json Store::status_directory(const fs::path &directory, const std::optional<std:
 }
 Json Store::compare_revisions(std::string_view source, std::string_view target,
                               OperationOptions options) const {
+  return compare_native_snapshots(*this, std::string(source), std::string(target), options);
+}
+Json compare_native_snapshots(const Store &store, const std::optional<std::string> &source,
+                              const std::optional<std::string> &target, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  ManifestSummaries summaries(*this);
-  const auto before = snapshot(*this, source, summaries, options);
-  const auto other = source == target ? Snapshot{} : snapshot(*this, target, summaries, options);
+  ManifestSummaries summaries(store);
+  const auto before = source ? snapshot(store, *source, summaries, options) : Snapshot{};
+  const auto other = source == target || !target ? Snapshot{} : snapshot(store, *target, summaries, options);
   const auto &after = source == target ? before : other;
   auto result = changes(before, after, false, options);
   return Json{{"version", 1},
-              {"source", source},
-              {"target", target},
+              {"source", source ? Json(*source) : Json{}},
+              {"target", target ? Json(*target) : Json{}},
               {"equal", result["changes"].empty()},
               {"source_files", before.size()},
               {"target_files", after.size()},

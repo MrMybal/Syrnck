@@ -269,6 +269,18 @@ public:
                         OperationOptions = {}) const;
   // Current file entries only: no parent traversal or chunk payload reads.
   Json compare_revisions(std::string_view source, std::string_view target, OperationOptions = {}) const;
+  // Branch-local immutable staging snapshot. Paths are repository-relative
+  // files/directory prefixes, or "." for the entire selected workspace.
+  std::string stage_directory(const fs::path &, std::string_view branch,
+                              const std::vector<std::string> &paths) const;
+  std::string stage_directory(const fs::path &, std::string_view branch,
+                              const std::vector<std::string> &paths, IngestOptions) const;
+  Json staged_status(std::string_view branch, OperationOptions = {}) const;
+  // No paths clears the index, including a stale index. Selected paths restore
+  // their recorded baseline entries. Working files are never changed.
+  std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
+                                         OperationOptions = {}) const;
+  std::string commit_staged(std::string_view branch, std::string_view message, OperationOptions = {}) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
   void export_revision(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
 

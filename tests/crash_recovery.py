@@ -30,6 +30,9 @@ def cases():
                 result.append((operation, "atomic.linked", kind, occurrence))
 
     atomic("commit", ("chunk", "manifest", "revision", "refs"))
+    atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
+    atomic("stage-commit", ("revision", "refs"))
+    atomic("stage-reset", ("refs",))
     result.extend(("commit", phase, "chunk", 2) for phase in ("atomic.file_synced", "atomic.published"))
     for occurrence in (1, 2):
         atomic("detach", ("refs",), occurrence)
@@ -134,6 +137,14 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation in ("stage-add", "stage-commit", "stage-reset"):
+            changed = kind == "refs" and published
+            refs = checked["refs"]
+            self.assertEqual(refs["heads/main"] != info["old_revision"],
+                             operation == "stage-commit" and changed)
+            self.assertEqual("staging/main" in refs, changed if operation == "stage-add" else not changed)
+            self.assertEqual({k: v for k, v in refs.items() if k not in ("heads/main", "staging/main")},
+                             {k: v for k, v in info["refs"].items() if k not in ("heads/main", "staging/main")})
         elif operation == "detach":
             archive = "archive/" + info["old_revision"]["id"]
             archived = archive in checked["refs"]

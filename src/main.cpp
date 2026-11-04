@@ -52,6 +52,20 @@ public:
       values.erase(it);
     require(values.size() == n, "unexpected or missing arguments; use --help");
   }
+  std::vector<std::string> paths() {
+    const auto separator = std::find(values.begin(), values.end(), "--");
+    for (auto it = values.begin(); it != separator; ++it)
+      require(!it->starts_with('-'), "unexpected or missing arguments; use --help");
+    count(values.size() - (separator != values.end()));
+    std::vector<std::string> result;
+    for (const auto &value : values) {
+      auto path = path_from_utf8(value).lexically_normal();
+      if (!path.empty() && path.filename().empty())
+        path = path.parent_path();
+      result.push_back(utf8(path));
+    }
+    return result;
+  }
   std::string pop() {
     require(!values.empty(), "missing command; use --help");
     auto value = values.front();
@@ -158,6 +172,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
                 [--workers N] [--buffer-mib N]
+  native commit --staged -m MESSAGE [--branch main]
+  native add CHEMIN... [--branch main] [--directory .]
+  native staged [--branch main]      Inspecter les changements préparés
+  native reset [CHEMIN...] [--branch main]
   native status [--branch main | --revision RÉVISION] [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
@@ -192,7 +210,7 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/status/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -221,6 +239,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch main] [--directory .]
                 [--workers N] [--buffer-mib N]
+  native commit --staged -m MESSAGE [--branch main]
+  native add PATH... [--branch main] [--directory .]
+  native staged [--branch main]      Inspect staged changes
+  native reset [PATH...] [--branch main]
   native status [--branch main | --revision REVISION] [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
@@ -255,7 +277,7 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/status/diff/export, git clean/smudge/filter-process,
+              fsck, native commit/add/staged/reset/status/diff/export, git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -468,7 +490,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff")) ||
+      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
+                               sub == "add" || sub == "staged" || sub == "reset")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -617,15 +640,36 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize(" objects and every file hash\n", language);
   } else if (command == "native") {
     if (sub == "commit") {
+      const auto staged = args.flag("--staged");
+      auto branch = args.option("--branch").value_or("main");
+      auto message = args.option("--message", "-m");
+      require(message.has_value(), "--message is required");
+      if (staged) {
+        args.count(0);
+        std::cout << store.commit_staged(branch, *message, {control->token(), observe}) << '\n';
+      } else {
+        auto options = ingestion_options(args, store);
+        options.stop = control->token();
+        options.progress = observe;
+        auto directory = path_from_utf8(args.option("--directory").value_or("."));
+        args.count(0);
+        std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
+      }
+    } else if (sub == "add") {
       auto options = ingestion_options(args, store);
       options.stop = control->token();
       options.progress = observe;
-      auto directory = path_from_utf8(args.option("--directory").value_or("."));
-      auto branch = args.option("--branch").value_or("main");
-      auto message = args.option("--message", "-m");
+      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto branch = args.option("--branch").value_or("main");
+      std::cout << store.stage_directory(directory, branch, args.paths(), options) << '\n';
+    } else if (sub == "staged") {
+      const auto branch = args.option("--branch").value_or("main");
       args.count(0);
-      require(message.has_value(), "--message is required");
-      std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
+      print(store.staged_status(branch, {control->token(), observe}));
+    } else if (sub == "reset") {
+      const auto branch = args.option("--branch").value_or("main");
+      const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
+      print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
     } else if (sub == "status") {
       const auto directory = path_from_utf8(args.option("--directory").value_or("."));
       const auto branch = args.option("--branch");

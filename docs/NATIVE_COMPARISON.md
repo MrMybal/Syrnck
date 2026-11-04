@@ -51,7 +51,8 @@ symlinks and special files are rejected; excluded paths are not followed.
 Ignore rules apply to the complete candidate snapshot, including tracked files.
 Adding a tracked file to `.syrnckignore` therefore reports it as `removed`, even
 if it still exists on disk. The next ordinary native commit also excludes it.
-This follows the current native commit contract. There is no staging index yet.
+This follows the current native commit contract. [Native staging](NATIVE_STAGING.md)
+can freeze selected entries independently of subsequent workspace changes.
 Executable bits are inspected on Unix; native Windows scans record false, as
 native commits already do.
 
@@ -74,7 +75,7 @@ are also distinguished. Revision messages, timestamps and parents do not affect
 file-entry equality. Renames are reported as removal plus addition.
 
 This command compares snapshot metadata. Text patches, rename inference,
-staging, checkout into an existing directory and merge/conflict resolution
+checkout into an existing directory and merge/conflict resolution
 remain future work.
 
 ## C++ and operation boundaries

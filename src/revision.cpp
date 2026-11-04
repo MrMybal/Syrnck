@@ -175,6 +175,31 @@ void visit_native_files(const fs::path &directory, const fs::path &store_root,
   }
   throw_if_cancelled(options.stop);
 }
+Json ingest_native_file(const Store &store, const NativeFile &file, IngestOptions options,
+                        std::string_view changed_message) {
+  std::ifstream input(file.path, std::ios::binary);
+  require(input.is_open(), "cannot open source file");
+  auto file_options = options;
+  if (options.progress)
+    file_options.progress = [&](const ProgressEvent &progress) {
+      auto event = progress;
+      event.path = file.relative;
+      event.total_bytes = file.size;
+      options.progress(event);
+    };
+  const auto [id, stats] = store.ingest(input, {}, file_options);
+  const auto status = fs::symlink_status(file.path);
+  bool executable = false;
+#ifndef _WIN32
+  executable = (status.permissions() &
+                (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) != fs::perms::none;
+#endif
+  require(fs::is_regular_file(status) && stats.file_bytes == file.size &&
+              fs::file_size(file.path) == file.size && fs::last_write_time(file.path) == file.modified &&
+              executable == file.executable,
+          changed_message);
+  return Json{{"manifest", id}, {"executable", file.executable}};
+}
 std::string Store::commit_directory(const fs::path &directory, std::string_view branch,
                                     std::string_view message) const {
   return commit_directory(directory, branch, message, settings().ingest_options());
@@ -183,29 +208,21 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
                                     std::string_view message, IngestOptions options) const {
   throw_if_cancelled(options.stop);
   validate_ref(branch);
+  require(!refs().contains("staging/" + std::string(branch)),
+          "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
   visit_native_files(directory, root(),
                      [&](const NativeFile &file) {
-                       std::ifstream input(file.path, std::ios::binary);
-                       require(input.is_open(), "cannot open source file");
-                       auto file_options = options;
-                       if (options.progress)
-                         file_options.progress = [&](const ProgressEvent &progress) {
-                           auto event = progress;
-                           event.path = file.relative;
-                           event.total_bytes = file.size;
-                           options.progress(event);
-                         };
-                       auto [id, stats] = ingest(input, {}, file_options);
-                       require(stats.file_bytes == file.size && fs::file_size(file.path) == file.size &&
-                                   fs::last_write_time(file.path) == file.modified,
-                               "file changed during ingestion; retry commit");
-                       files.emplace(file.relative, Json{{"manifest", id}, {"executable", file.executable}});
+                       files.emplace(file.relative,
+                                     ingest_native_file(*this, file, options,
+                                                        "file changed during ingestion; retry commit"));
                      },
                      {options.stop, options.progress});
   Json entries = Json::object();
+  auto &object = entries.get_ref<Json::object_t &>();
+  object.reserve(files.size());
   for (auto &[name, value] : files)
-    entries[name] = value;
+    object.emplace_back(name, std::move(value));
   Json parents = Json::array();
   auto name = "heads/" + std::string(branch);
   auto all = refs();

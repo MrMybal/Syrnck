@@ -103,6 +103,11 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (operation == "stage-add" || operation == "stage-commit" || operation == "stage-reset") {
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(1)), false);
+    if (operation != "stage-add")
+      store.stage_directory(root.parent_path(), "main", {"asset.bin"});
+  }
   if (operation == "append" || operation == "compact") {
     auto next = ingest(store, 1);
     auto next_tip = put_revision(store, next, tip);
@@ -134,6 +139,13 @@ void perform(Store &store, const Json &info) {
     auto next = ingest(store, 1, 4);
     auto tip = put_revision(store, next, parse_key(info.at("old_revision")));
     store.set_ref("heads/main", tip);
+  } else if (op == "stage-add") {
+    store.stage_directory(store.root().parent_path(), "main", {"asset.bin"});
+  } else if (op == "stage-commit") {
+    if (store.refs().contains("staging/main"))
+      store.commit_staged("main", "Staged crash fixture");
+  } else if (op == "stage-reset") {
+    store.reset_stage("main");
   } else if (op == "detach") {
     store.detach_history("main", "Detached crash fixture");
   } else if (op == "append" || op == "compact") {
@@ -174,6 +186,25 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op == "stage-add" || op == "stage-commit" || op == "stage-reset") {
+    const bool indexed = refs.contains("staging/main");
+    if (indexed) {
+      const auto report = store.staged_status("main");
+      check(report["base"] == old.id && report["stale"] == false && current.str() == content(0),
+            "staged publication left mixed branch/index state");
+      const auto staged = store.metadata(Kind::revision, refs.at("staging/main").id);
+      std::ostringstream prepared;
+      store.reconstruct(staged["files"]["asset.bin"]["manifest"].get<std::string>(), prepared);
+      check(prepared.str() == content(1), "prepared staging bytes were lost");
+    }
+    if (resumed) {
+      check(indexed == (op == "stage-add"), "staging operation did not resume");
+      check(current.str() == content(op == "stage-commit" ? 1 : 0), "staged commit bytes differ");
+      if (op == "stage-commit")
+        check(head["parents"] == Json::array({old.id}) && head["message"] == "Staged crash fixture",
+              "staged commit ancestry differs");
+    }
+  }
   if (resumed) {
     if (op == "commit" || op == "append" || op == "compact")
       check(current.str() == content(1), "new revision was not recovered");

@@ -3,8 +3,8 @@
 The C++ ingestion, native commit, reconstruction and Git-filter interfaces can
 report progress and accept cancellation. Native commits and clean filters use
 repository pipeline defaults; explicit `IngestOptions` replace those defaults.
-The CLI accepts `--workers` and `--buffer-mib` for `put`, `native commit` and
-`git clean` and `git migrate-lfs` without changing saved preferences.
+The CLI accepts `--workers` and `--buffer-mib` for `put`, `native commit`,
+`native add`, `git clean` and `git migrate-lfs` without changing saved preferences.
 
 ## CLI
 
@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/status/diff/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/diff/export`, `git clean/smudge/filter-process`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -56,6 +56,13 @@ status hashes selected working files, while revision comparison reads only
 revision/manifest metadata. Planning events count entries rather than bytes;
 status verification events report bytes within the current file. Cancellation
 and callback failure produce no partial report or Store publication.
+
+[Native staging](NATIVE_STAGING.md) freezes selected files during `native add`;
+`staged` reads metadata and `reset` changes only the index. Staged commit never
+reads working files. Before publication, cancellation or observer failure keeps
+both branch and index unchanged; preparation may leave unreachable objects.
+The final `publishing` event identifies `refs`. Branch movement and index removal
+publish together, with no cancellation or observer call after that boundary.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

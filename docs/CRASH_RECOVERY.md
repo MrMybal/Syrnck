@@ -15,6 +15,7 @@ crash by throwing an exception or unwinding the stack.
 | Operation | Boundaries and checks |
 | --- | --- |
 | Revision publication | Parallel ingestion, chunk/manifest/revision writes and reference replacement; previous revision and archive remain reconstructible |
+| Native staging | Selected chunk/manifest/snapshot writes, atomic branch/index commit and index reset; prepared bytes survive, with either the old head plus index or the new head without index |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
 | Incremental packing | Pack/index staging, second-pack construction, catalog replacement and loose cleanup; existing packs remain byte-identical |
 | Compaction | Staging, catalog replacement, loose and obsolete-file cleanup; every logical object survives |
@@ -41,7 +42,7 @@ audit. Packing and GC must clean inactive generated pack/index files. A positive
 control releases the checkpoint normally and confirms that another process
 cannot open the locked store while the writer is paused.
 
-The local Windows x64 Release run on 4 November 2026 passed **222 process-kill
+The local Windows x64 Release run on 4 November 2026 passed **292 process-kill
 combinations**, plus checkpoint/lock and production-isolation checks. Unix adds
 hard-link-boundary cases. This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it

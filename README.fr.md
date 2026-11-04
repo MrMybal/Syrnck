@@ -65,7 +65,7 @@ Pour les gros fichiers, `syrnck put fichier.bin --workers 4 --buffer-mib 32` act
 
 Les réglages du pipeline et les limites des packs sont persistants par dépôt via `config set`. Les options explicites les remplacent pour l'opération, y compris pour `native commit` et `git clean`. Voir les [réglages du dépôt](docs/SETTINGS.md).
 
-Les imports, commits/exports natifs, reconstructions, audits `fsck`, filtres Git et transferts de l'agent acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative (code 130). Les exports préparent une arborescence complète avant publication exclusive et préservent les destinations existantes. Une publication déjà engagée peut aboutir. Si la réponse de publication distante est perdue ou ambiguë, le code 3 invite à inspecter la référence. Voir les [contrats des opérations](docs/OPERATIONS.md), [exports transactionnels](docs/EXPORT.md) et [reprises réseau](docs/TRANSFERS.md).
+Les imports, commandes natives commit/add/staged/reset/status/diff/export, reconstructions, audits `fsck`, filtres Git et transferts de l'agent acceptent `--progress` (anglais/français) ou `--progress-json` sur stderr. Ctrl+C demande une annulation coopérative (code 130). Les exports préparent une arborescence complète avant publication exclusive et préservent les destinations existantes. Une publication déjà engagée peut aboutir. Si la réponse de publication distante est perdue ou ambiguë, le code 3 invite à inspecter la référence. Voir les [contrats des opérations](docs/OPERATIONS.md), [exports transactionnels](docs/EXPORT.md) et [reprises réseau](docs/TRANSFERS.md).
 
 Le cache du moteur évite de répéter le déchiffrement et la décompression d'objets déjà vérifiés, après contrôle de leur enveloppe actuelle. Il est borné à 64 Mio de données et 8 192 empreintes par défaut, configurable avec `--cache-mib` et désactivable avec `--cache-mib 0`. `fsck` et `gc` effectuent leur validation complète sans ce cache.
 
@@ -101,7 +101,9 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
-`native status` compare le contenu du dossier de travail à une branche ou une révision native sans importer les fichiers. `native diff SOURCE CIBLE` compare les métadonnées de deux snapshots, avec distinction du contenu, du mode et du manifeste. Voir les [contrats et limites des comparaisons natives](docs/NATIVE_COMPARISON.md). L'index de staging et les différences textuelles restent à développer.
+`native status` compare le contenu du dossier de travail à une branche ou une révision native sans importer les fichiers. `native diff SOURCE CIBLE` compare les métadonnées de deux snapshots, avec distinction du contenu, du mode et du manifeste. Voir les [contrats et limites des comparaisons natives](docs/NATIVE_COMPARISON.md).
+
+`native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). Les patches textuels et le merge restent à développer.
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 

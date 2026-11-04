@@ -87,7 +87,18 @@ syrnck native commit --branch release --message "Préparation de la release"
 syrnck native export <identifiant-revision> ../export-release
 ```
 
-`--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante, d'index de staging ou de commande de checkout natif. Chaque commit scanne tout le dossier. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
+`--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante ou de commande de checkout natif. Le commit ordinaire scanne tout le dossier et refuse si un staging existe pour cette branche. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
+
+Pour préparer une sélection, puis publier les octets figés même après d'autres modifications du dossier :
+
+```text
+syrnck native add Source Content/Maps --progress
+syrnck native staged
+syrnck native reset Source
+syrnck native commit --staged --message "Cartes sélectionnées"
+```
+
+`native add .` prépare tout le snapshot candidat, y compris les suppressions. `native reset CHEMIN...` restaure la sélection depuis la base dans le staging ; `native reset` sans chemin efface tout le staging, y compris si la branche a avancé. Ces commandes ne modifient pas les fichiers de travail. Le staging conserve ses blocs contre le GC et le commit publie la branche et consomme l'index atomiquement. Voir les [contrats du staging natif](NATIVE_STAGING.md).
 
 `native status` lit les fichiers sélectionnés et compare leur hash complet à `heads/main`, à une autre branche avec `--branch`, ou à un snapshot avec `--revision`. Il n'importe aucun fichier. `native diff` compare les métadonnées de deux snapshots ; il ne produit pas encore de patch textuel. Les deux renvoient un rapport JSON et acceptent progression/annulation. Voir les [contrats de comparaison native](NATIVE_COMPARISON.md).
 
