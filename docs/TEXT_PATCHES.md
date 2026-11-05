@@ -32,6 +32,7 @@ escaped labels, timestamp suffixes, renames, mode changes, file presence changes
 wrappers are outside this subset. A second file or trailing unsupported data
 is refused. An empty patch or one containing no added/removed rows is refused.
 The selected portable path is validated but is never opened by this function.
+The index-line mode is informational and never changes the source executable flag.
 
 ## Exact bytes and bounds
 
@@ -63,3 +64,43 @@ Tests cover fixed/mixed newline cases, Unicode, missing final newlines, empty
 existing contents, zero-count ranges, omitted counts, Git preambles, 1,000
 deterministic random diff/patch round trips, malformed/truncated/multi-file
 patches, path/range/context mismatches, all budgets and interruption.
+
+## Prepare an external patch in the native index
+
+C++ callers use `store.plan_stage_patch(branch, path, patch_bytes, limits, operation)`
+and `store.stage_patch(branch, path, patch_bytes, expected_plan, limits, operation)`.
+The source is the complete frozen file in `staging/BRANCH`, or `heads/BRANCH`
+without an index. No working directory argument or working-file read is needed.
+Dirty, absent, ignored or directory-replaced working paths do not affect it.
+The source file must already exist in the stored snapshot; initial preparation
+on an unborn branch is supported when an existing initial index contains it.
+
+The read-only plan reports `operation: stage-patch`, branch/path/head/index/base,
+source revision and verified file metadata, raw BLAKE3 `patch_hash`, patch byte
+count and result byte/hash/hunk/addition/deletion counts. Inspect the original
+patch for its rows; the report does not echo or render the patch. The canonical
+preview JSON, before adding `plan_id`, is hashed in the existing chunk domain.
+No plan object is written. Options (including validated `context`), patch bytes,
+source state and result identity are bound to that exact preview.
+
+Application recomputes and requires the same expected ID before ingestion.
+Invalid format, missing/oversized sources, binary input and context/range/budget
+failures throw without writing objects or references. Valid previews may still
+be blocked by pending checkout, stale staging, an identical result or a
+conflicting old-index archive. Plans verify only the selected file's payload;
+publication verifies the complete candidate, retained index and branch closures.
+Corrupt unrelated data can therefore block publication after a valid preview.
+
+Application starts from the complete frozen index/head file map, changes only
+the selected manifest and preserves its executable flag and other preparations.
+It ingests default CDC with repository compression/worker settings, then uses
+the same atomic publication as [hunk/line selection](NATIVE_HUNKS.md): head/index/
+symbolic HEAD/archive expectations guard the replacement staging root and
+`archive/stage-index/OLD_INDEX_ID`. Exact archives can be reused. The previous
+index and its baseline remain reconstructible after GC and later commit.
+
+Cancellation, observer failure or failed closure checks before publication keep
+the old references; complete unreachable objects may remain. No workspace
+journal is needed. No observer runs after reference publication. The complete
+preview/application report is capped at 16 MiB, independently of patch input.
+The caller keeps the borrowed patch bytes stable for the duration of each call.

@@ -375,6 +375,12 @@ public:
                         OperationOptions = {}) const;
   Json reset_lines(std::string_view branch, std::string_view path, std::string_view expected_plan,
                    const std::vector<std::size_t> &lines, TextDiffOptions = {}, OperationOptions = {}) const;
+  // Exact external patch against the frozen index/head, without working reads.
+  // Publication retains the complete former index under archive/stage-index/ID.
+  Json plan_stage_patch(std::string_view branch, std::string_view path, std::span<const std::uint8_t> patch,
+                        TextDiffOptions = {}, OperationOptions = {}) const;
+  Json stage_patch(std::string_view branch, std::string_view path, std::span<const std::uint8_t> patch,
+                   std::string_view expected_plan, TextDiffOptions = {}, OperationOptions = {}) const;
   // Compare a frozen file against the index's original baseline, including
   // stale/unborn indexes. Does not read the working directory.
   Json diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions = {},

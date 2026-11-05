@@ -729,3 +729,5 @@ SYRNCK_MESSAGE("text patch context does not match source", "Le contexte du patch
 SYRNCK_MESSAGE("text patch contains no changes", "Le patch textuel ne contient aucun changement")
 SYRNCK_MESSAGE("text patch contains an empty unterminated line", "Le patch contient une ligne vide sans fin de ligne")
 SYRNCK_MESSAGE("text patch exceeds hunk limit", "Le patch dépasse le nombre maximal de hunks")
+SYRNCK_MESSAGE("native patch source file is absent", "Le fichier source du patch est absent")
+SYRNCK_MESSAGE("native patch staging is blocked; inspect native add-patch-plan", "La préparation du patch est bloquée ; consultez native add-patch-plan")

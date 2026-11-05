@@ -1,6 +1,12 @@
 #pragma once
 #include "native_workspace.hpp"
 namespace syrnck {
+struct NativeStoredText {
+  Json entry;
+  std::string content;
+};
+NativeStoredText read_native_stored_text(const Store &, const std::optional<std::string> &, std::string_view,
+                                         TextDiffOptions, OperationOptions);
 struct NativeRevisionDiff {
   Json report;
   std::string source, target;

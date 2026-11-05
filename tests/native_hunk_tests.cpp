@@ -269,6 +269,9 @@ void blocked_states(const fs::path &project) {
   require(blocked(reset, "pending_checkout"), "pending checkout did not block hunk reset");
   const auto lines = store.plan_stage_lines(project, "main", "code.cpp");
   const auto reset_lines = store.plan_reset_lines("main", "code.cpp");
+  const std::string patch = "--- a/code.cpp\n+++ b/code.cpp\n@@ -1 +1 @@\n-line 0\n+patched line 0\n";
+  const auto patch_plan = store.plan_stage_patch("main", "code.cpp", bytes(patch));
+  require(blocked(patch_plan, "pending_checkout"), "pending checkout did not block native patch");
   require(blocked(lines, "pending_checkout") && blocked(reset_lines, "pending_checkout"),
           "pending checkout did not block line selection");
   before = physical(store);
@@ -276,6 +279,7 @@ void blocked_states(const fs::path &project) {
   fails([&] { store.reset_hunks("main", "code.cpp", identity(reset), {1}); });
   fails([&] { store.stage_lines(project, "main", "code.cpp", identity(lines), {1}); });
   fails([&] { store.reset_lines("main", "code.cpp", identity(reset_lines), {1}); });
+  fails([&] { store.stage_patch("main", "code.cpp", bytes(patch), identity(patch_plan)); });
   require(physical(store) == before, "hunk staging modified a pending checkout");
   store.recover_checkout(true);
 }

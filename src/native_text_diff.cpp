@@ -67,6 +67,18 @@ std::string working_bytes(const NativeFile &file, OperationOptions options) {
   return result;
 }
 } // namespace
+NativeStoredText read_native_stored_text(const Store &store, const std::optional<std::string> &revision,
+                                         std::string_view path, TextDiffOptions limits,
+                                         OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  limits.validate();
+  validate_path(path);
+  auto value = side(store, revision, path, options);
+  require(!value.entry.is_null(), "native patch source file is absent");
+  require(value.size <= limits.max_file_bytes, "text patch source exceeds file budget");
+  load(store, value, options);
+  return {std::move(value.entry), std::move(value.content)};
+}
 NativeRevisionDiff read_native_revision_diff(const Store &store, const std::optional<std::string> &source,
                                              const std::optional<std::string> &target, std::string_view path,
                                              TextDiffOptions limits, OperationOptions options) {

@@ -14,11 +14,8 @@ struct HunkPlan {
   Json snapshot, report;
   NativeWorkingDiff working;
 };
-HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view branch,
-                 std::string_view path, TextDiffOptions limits, OperationOptions options,
-                 bool by_line = false) {
+HunkPlan state(const Store &store, std::string_view branch, std::string_view path, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  limits.validate();
   native_branch_name(branch);
   validate_path(path);
   HunkPlan plan;
@@ -44,6 +41,13 @@ HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view
             : std::optional{ObjectKey{Kind::revision, plan.snapshot["parents"][0].get<std::string>()}};
     plan.archive = "archive/stage-index/" + plan.index->id;
   }
+  return plan;
+}
+HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view branch,
+                 std::string_view path, TextDiffOptions limits, OperationOptions options,
+                 bool by_line = false) {
+  limits.validate();
+  auto plan = state(store, branch, path, options);
   Json report;
   if (directory) {
     plan.working = read_native_working_diff(store, *directory,
@@ -162,6 +166,48 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
     append(lines[cursor++]);
   return result;
 }
+Json publish(const Store &store, HunkPlan &plan, std::string_view chosen, OperationOptions options,
+             bool verify_working) {
+  auto ingestion = store.settings().ingest_options();
+  ingestion.stop = options.stop;
+  ingestion.progress = [&](const ProgressEvent &event) {
+    auto contextual = event;
+    contextual.path = plan.path;
+    report_progress(options, contextual);
+  };
+  std::istringstream input{std::string(chosen)};
+  const auto manifest = store.ingest(input, {}, ingestion).first;
+  auto snapshot = std::move(plan.snapshot);
+  snapshot["parents"] = plan.head ? Json::array({plan.head->id}) : Json::array();
+  snapshot["message"] = "Syrnck staging v1: " + plan.branch;
+  snapshot["timestamp"] = 0;
+  snapshot["files"][plan.path]["manifest"] = manifest;
+  throw_if_cancelled(options.stop);
+  const auto candidate = store.put(Kind::revision, bytes(snapshot.dump())).first;
+  if (verify_working)
+    verify_native_working_diff(store, plan.working, options);
+  const auto selection = native_branch_lookup(plan.refs, "workspace/HEAD");
+  std::vector<RefUpdate> updates{{"heads/" + plan.branch, plan.head, plan.head},
+                                 {"staging/" + plan.branch, plan.index, candidate},
+                                 {"workspace/HEAD", selection, selection}};
+  if (plan.index)
+    updates.push_back({plan.archive, native_branch_lookup(plan.refs, plan.archive), plan.index});
+  plan.report["state"] = "applied";
+  plan.report["previous_index"] = nullable(plan.index);
+  plan.report["index"] = candidate.id;
+  plan.report["result_manifest"] = manifest;
+  plan.report["result_file_hash"] = hash(bytes(chosen));
+  require(plan.report.dump().size() <= max_object_size, "native text selection plan exceeds 16 MiB");
+  auto publication = options;
+  publication.progress = [&](const ProgressEvent &event) {
+    report_progress(options, event);
+    if (verify_working && event.phase == ProgressPhase::publishing && event.path == "refs")
+      verify_native_working_diff(store, plan.working, {options.stop});
+  };
+  require(store.compare_update_refs(updates, publication),
+          "native staging references changed; retry operation");
+  return std::move(plan.report);
+}
 Json apply(const Store &store, const fs::path *directory, std::string_view branch, std::string_view path,
            std::string_view expected, const std::vector<std::size_t> &hunks, TextDiffOptions limits,
            OperationOptions options, bool by_line = false) {
@@ -198,46 +244,67 @@ Json apply(const Store &store, const fs::path *directory, std::string_view branc
     selected = std::move(retained);
   }
   const auto chosen = select(plan, selected, limits, options, by_line);
-  auto ingestion = store.settings().ingest_options();
-  ingestion.stop = options.stop;
-  ingestion.progress = [&](const ProgressEvent &event) {
-    auto contextual = event;
-    contextual.path = path;
-    report_progress(options, contextual);
-  };
-  std::istringstream input(chosen);
-  const auto manifest = store.ingest(input, {}, ingestion).first;
-  auto snapshot = std::move(plan.snapshot);
-  snapshot["parents"] = plan.head ? Json::array({plan.head->id}) : Json::array();
-  snapshot["message"] = "Syrnck staging v1: " + plan.branch;
-  snapshot["timestamp"] = 0;
-  snapshot["files"][plan.path]["manifest"] = manifest;
-  throw_if_cancelled(options.stop);
-  const auto candidate = store.put(Kind::revision, bytes(snapshot.dump())).first;
-  if (directory)
-    verify_native_working_diff(store, plan.working, options);
-  const auto selection = native_branch_lookup(plan.refs, "workspace/HEAD");
-  std::vector<RefUpdate> updates{{"heads/" + plan.branch, plan.head, plan.head},
-                                 {"staging/" + plan.branch, plan.index, candidate},
-                                 {"workspace/HEAD", selection, selection}};
-  if (plan.index)
-    updates.push_back({plan.archive, native_branch_lookup(plan.refs, plan.archive), plan.index});
-  plan.report["state"] = "applied";
-  plan.report["previous_index"] = nullable(plan.index);
-  plan.report["index"] = candidate.id;
   plan.report["selected"] = hunks;
-  plan.report["result_manifest"] = manifest;
-  plan.report["result_file_hash"] = hash(bytes(chosen));
-  require(plan.report.dump().size() <= max_object_size, "native text selection plan exceeds 16 MiB");
-  auto publication = options;
-  publication.progress = [&](const ProgressEvent &event) {
-    report_progress(options, event);
-    if (directory && event.phase == ProgressPhase::publishing && event.path == "refs")
-      verify_native_working_diff(store, plan.working, {options.stop});
-  };
-  require(store.compare_update_refs(updates, publication),
-          "native staging references changed; retry operation");
-  return std::move(plan.report);
+  return publish(store, plan, chosen, options, directory != nullptr);
+}
+struct PatchPlan {
+  HunkPlan state;
+  TextPatchResult result;
+};
+PatchPlan prepare_patch(const Store &store, std::string_view branch, std::string_view path,
+                        std::span<const std::uint8_t> patch, TextDiffOptions limits,
+                        OperationOptions options) {
+  limits.validate();
+  require(patch.size() <= limits.max_output_bytes, "text patch input exceeds byte budget");
+  PatchPlan plan{state(store, branch, path, options), {}};
+  const auto source = read_native_stored_text(
+      store, plan.state.source ? std::optional{plan.state.source->id} : std::nullopt, path, limits, options);
+  plan.result = apply_text_patch(bytes(source.content), patch, path, limits, options);
+  const auto result_hash = hash(bytes(plan.result.content));
+  Json blockers = Json::array();
+  if (store.checkout_status()["pending"].get<bool>())
+    blockers.push_back(Json{{"reason", "pending_checkout"}});
+  if (plan.state.head != plan.state.base)
+    blockers.push_back(Json{{"reason", "stale_staging"}});
+  if (result_hash == source.entry["file_hash"].get<std::string>())
+    blockers.push_back(Json{{"reason", "no_text_changes"}});
+  if (plan.state.index) {
+    const auto archive = native_branch_lookup(plan.state.refs, plan.state.archive);
+    if (archive && archive != plan.state.index)
+      blockers.push_back(Json{{"reason", "archive_conflict"}, {"reference", plan.state.archive}});
+  }
+  auto &report = plan.state.report;
+  report = Json{{"version", 1},
+                {"operation", "stage-patch"},
+                {"branch", branch},
+                {"path", path},
+                {"head", nullable(plan.state.head)},
+                {"index", nullable(plan.state.index)},
+                {"base", nullable(plan.state.base)},
+                {"stale", plan.state.head != plan.state.base},
+                {"source_revision", nullable(plan.state.source)},
+                {"source", source.entry},
+                {"patch_bytes", patch.size()},
+                {"patch_hash", hash(patch)},
+                {"result", Json{{"size", plan.result.content.size()},
+                                {"file_hash", result_hash},
+                                {"hunks", plan.result.hunks},
+                                {"additions", plan.result.additions},
+                                {"deletions", plan.result.deletions}}},
+                {"objects_verified", true},
+                {"executable_preserved", true},
+                {"archive", plan.state.index ? Json(plan.state.archive) : Json{}},
+                {"text_options", Json{{"context", limits.context},
+                                      {"max_file_bytes", limits.max_file_bytes},
+                                      {"max_lines", limits.max_lines},
+                                      {"max_work", limits.max_work},
+                                      {"max_output_bytes", limits.max_output_bytes}}},
+                {"ready", blockers.empty()},
+                {"blockers", std::move(blockers)}};
+  const auto encoded = report.dump();
+  require(encoded.size() + 100 <= max_object_size, "native text selection plan exceeds 16 MiB");
+  report["plan_id"] = object_id(Kind::chunk, bytes(encoded));
+  return plan;
 }
 } // namespace
 Json Store::plan_stage_hunks(const fs::path &directory, std::string_view branch, std::string_view path,
@@ -275,5 +342,21 @@ Json Store::reset_lines(std::string_view branch, std::string_view path, std::str
                         const std::vector<std::size_t> &lines, TextDiffOptions limits,
                         OperationOptions options) const {
   return apply(*this, nullptr, branch, path, expected, lines, limits, options, true);
+}
+Json Store::plan_stage_patch(std::string_view branch, std::string_view path,
+                             std::span<const std::uint8_t> patch, TextDiffOptions limits,
+                             OperationOptions options) const {
+  return prepare_patch(*this, branch, path, patch, limits, options).state.report;
+}
+Json Store::stage_patch(std::string_view branch, std::string_view path, std::span<const std::uint8_t> patch,
+                        std::string_view expected, TextDiffOptions limits, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  validate_id(expected);
+  auto plan = prepare_patch(*this, branch, path, patch, limits, options);
+  require(plan.state.report["plan_id"].get<std::string>() == expected,
+          "native text selection plan changed; refresh the plan");
+  require(plan.state.report["ready"].get<bool>(),
+          "native patch staging is blocked; inspect native add-patch-plan");
+  return publish(*this, plan.state, plan.result.content, options, false);
 }
 } // namespace syrnck
