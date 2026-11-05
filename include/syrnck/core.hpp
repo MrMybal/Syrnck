@@ -498,6 +498,10 @@ public:
                                  std::string_view expected_revision, std::string_view source,
                                  NativeReplayKind, std::string_view message, const NativeResolutionSet &,
                                  std::optional<std::uint32_t> mainline = {}, OperationOptions = {}) const;
+  Json replay_directory_with_options(const fs::path &, std::string_view branch,
+                                     std::string_view expected_revision, std::string_view source,
+                                     NativeReplayKind, std::string_view message, const NativeReplayOptions &,
+                                     OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

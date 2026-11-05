@@ -17,6 +17,9 @@ void planning(const fs::path &root, std::optional<Key> key, unsigned layout, Nat
   const auto before = f.physical();
   require(f.store.plan_replay(root, "main", source, kind)["ready"] == false,
           "replay text merge became implicit");
+  require(f.store.plan_replay_with_options(root, "main", source, kind, {}) ==
+              f.store.plan_replay(root, "main", source, kind),
+          "unconfigured replay changed legacy behavior");
   NativeReplayOptions settings;
   settings.text_merge.emplace();
   const auto plan = prepare_native_replay(f.store, root, "main", source, kind, {}, true, {}, nullptr,
@@ -95,6 +98,93 @@ void mainlines(const fs::path &root) {
   settings.text_merge->max_lines = 0;
   fails([&] { f.store.plan_replay_with_options(root, "main", source, NativeReplayKind::revert, settings); });
 }
+void application(const fs::path &root, std::optional<Key> key, unsigned layout, NativeReplayKind kind) {
+  Fixture f(root, key);
+  const bool inverse = kind == NativeReplayKind::revert;
+  const auto original = f.file("a\r\nb\r\nc"), changed = f.file("a\r\nb\r\nC"),
+             our_file = f.file(inverse ? "A\r\nb\r\nC" : "A\r\nb\r\nc", true);
+  const auto base = f.revision(Json{{"code.cpp", original}});
+  const auto source = f.revision(Json{{"code.cpp", changed}}, Json::array({base}));
+  const auto current = f.revision(Json{{"code.cpp", our_file}}, Json::array({inverse ? source : base}));
+  f.install(current);
+  f.store.set_ref("heads/source", {Kind::revision, source});
+  f.pack(layout);
+  NativeReplayOptions settings;
+  settings.text_merge.emplace();
+  const auto expected = inverse ? "A\r\nb\r\nc" : "A\r\nb\r\nC";
+  const auto plan = f.store.plan_replay_with_options(root, "main", source, kind, settings, true);
+  const auto manifest = plan["text_merge"]["files"][0]["target"]["manifest"].get<std::string>();
+  const auto before = f.physical();
+  fails([&] {
+    f.store.replay_directory_with_options(root, "main", base, source, kind, "wrong head", settings);
+  });
+  auto empty = settings;
+  empty.resolutions = NativeResolutionSet::parse(plan["resolution_context"]);
+  empty.resolutions->files["code.cpp"] = {NativeResolutionChoice::current};
+  fails([&] { f.store.replay_directory_with_options(root, "main", current, source, kind, "empty", empty); });
+  std::stop_source stopped;
+  fails([&] {
+    f.store.replay_directory_with_options(root, "main", current, source, kind, "cancel before chunks",
+                                          settings, {stopped.get_token(), [&](const ProgressEvent &event) {
+                                                       if (event.phase == ProgressPhase::ingesting)
+                                                         stopped.request_stop();
+                                                     }});
+  });
+  require(f.physical() == before, "rejected or cancelled replay published objects");
+  f.write("code.cpp", "dirty working bytes");
+  const auto dirty = f.physical();
+  fails(
+      [&] { f.store.replay_directory_with_options(root, "main", current, source, kind, "dirty", settings); });
+  require(f.physical() == dirty && !f.store.contains({Kind::manifest, manifest}),
+          "blocked text replay wrote a candidate");
+  f.install(current);
+  const auto result =
+      f.store.replay_directory_with_options(root, "main", current, source, kind, "replayed text", settings);
+  const auto next = result["target"].get<std::string>();
+  require(text(read_bytes(root / "code.cpp")) == expected &&
+              f.store.metadata(Kind::revision, next)["parents"] == Json::array({current}) &&
+              f.store.metadata(Kind::revision, next)["files"]["code.cpp"]["manifest"] == manifest &&
+              f.store.refs().at("heads/source").id == source,
+          "text replay changed ancestry, source or bytes");
+  f.store.remove_ref("heads/source");
+  f.store.gc(true);
+  std::ostringstream output;
+  f.store.reconstruct(manifest, output);
+  require(output.str() == expected && f.store.metadata(Kind::revision, current)["files"].contains("code.cpp"),
+          "GC lost text replay or its parent");
+  // Cherry-pick keeps its complete result without retaining source ancestry.
+  if (!inverse)
+    require(!f.store.contains({Kind::revision, source}), "fixture retained an unrelated replay source");
+}
+void recovery(const fs::path &root, NativeReplayKind kind, bool abort) {
+  Fixture f(root);
+  const bool inverse = kind == NativeReplayKind::revert;
+  const auto base = f.revision(Json{{"code.cpp", f.file("a\nb\nc\n")}});
+  const auto source = f.revision(Json{{"code.cpp", f.file("a\nb\nC\n")}}, Json::array({base}));
+  const auto current = f.revision(Json{{"code.cpp", f.file(inverse ? "A\nb\nC\n" : "A\nb\nc\n")}},
+                                  Json::array({inverse ? source : base}));
+  f.install(current);
+  f.store.set_ref("heads/source", {Kind::revision, source});
+  NativeReplayOptions settings;
+  settings.text_merge.emplace();
+  std::stop_source stopped;
+  fails([&] {
+    f.store.replay_directory_with_options(root, "main", current, source, kind, "recover text", settings,
+                                          {stopped.get_token(), [&](const ProgressEvent &event) {
+                                             if (event.phase == ProgressPhase::exporting && event.bytes)
+                                               stopped.request_stop();
+                                           }});
+  });
+  require(f.store.checkout_status()["pending"] == true, "text replay omitted its recovery journal");
+  f.store.recover_checkout(abort);
+  require(text(read_bytes(root / "code.cpp")) ==
+                  (abort ? (inverse ? "A\nb\nC\n" : "A\nb\nc\n") : (inverse ? "A\nb\nc\n" : "A\nb\nC\n")) &&
+              (f.store.refs().at("heads/main").id == current) == abort &&
+              f.store.refs().at("heads/source").id == source,
+          "text replay resume/abort lost bytes or source branch");
+  f.store.gc(true);
+  require(f.store.fsck() > 0, "text replay recovery damaged retained history");
+}
 } // namespace
 int main() {
   Temporary tmp;
@@ -110,10 +200,18 @@ int main() {
           planning(tmp.path / (std::to_string(encrypted) + '-' + std::to_string(layout) + '-' +
                                std::to_string(static_cast<int>(kind))),
                    key, layout, kind);
+          application(tmp.path / ("apply-" + std::to_string(encrypted) + '-' + std::to_string(layout) + '-' +
+                                  std::to_string(static_cast<int>(kind))),
+                      key, layout, kind);
         }
     mainlines(tmp.path / "mainline");
-    std::cout << "Read-only bounded text cherry-pick/revert plans, exact inverse direction, explicit "
-                 "precedence and mainlines\n";
+    for (auto kind : {NativeReplayKind::cherry_pick, NativeReplayKind::revert})
+      for (bool abort : {false, true})
+        recovery(tmp.path /
+                     ("recover-" + std::to_string(static_cast<int>(kind)) + '-' + std::to_string(abort)),
+                 kind, abort);
+    std::cout << "Bounded text cherry-pick/revert plans and application, inverse direction, explicit "
+                 "precedence, mainlines, retained results and recovery\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
     return 1;
