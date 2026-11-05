@@ -49,3 +49,47 @@ reenter the Store.
 Tests reconstruct target bytes from hunks, check minimum edit counts against an
 independent quadratic LCS oracle, and cover Unicode, mixed line endings, missing
 final newlines, repeated lines, each budget and interruption.
+
+## Compare a native file between revisions
+
+```text
+syrnck native diff-text SOURCE TARGET Source/Player.cpp
+syrnck native diff-text HEAD release Source/Player.cpp --context 5 --unified
+```
+
+Selectors follow the usual native HEAD/branch/tag rules. The C++ equivalent is
+`store.diff_revision_file(source_id, target_id, path, limits, operation)`; either
+optional revision can be null to represent an empty snapshot. The path must be
+an exact safe repository path, present on at least one side. Absence represents
+an added/removed file, independently of whether its content is empty.
+
+The JSON envelope contains `path`, `source_revision`, `target_revision`, nullable
+`source`/`target` file summaries (manifest, size, file hash and executable flag),
+`equal`, `content_changed`, `executable_changed`, `manifest_changed`,
+`objects_verified`, and the nested `diff` result described above. Envelope
+`equal` compares presence, logical content and executable mode. Nested
+`diff.equal` compares bytes only: an empty-file addition has envelope `equal:
+false` and nested `equal: true`. Different chunking can change a manifest while
+preserving logical equality.
+
+Both file sizes are checked before reading either file's chunks. A `file_limit`
+report is metadata-only and has `objects_verified: false`. Otherwise, both
+complete files are reconstructed and their whole-file hashes are verified,
+including for binary/equal files or later line/work/output limits. Missing or
+corrupt payloads fail the operation rather than yielding a patch. Only this
+path's payloads are read; unrelated files and revision parents are not traversed.
+The wrapper report is additionally capped at 16 MiB, including metadata/path.
+
+Default output is canonical JSON independent of the interface language. A
+successful JSON inspection exits 0, including explicit binary/limited reports.
+`--unified` renders text hunks with `a/` / `b/` paths, `/dev/null` for a missing
+side and exact missing-final-newline markers. It fails before stdout output for
+binary/limited input. An empty hunk list produces empty unified output.
+Mode-only changes, alternate manifests and empty-file creation/removal require
+the JSON metadata; unified output represents text content only. It is not a
+complete native revision patch or a native patch-application command.
+
+`--context 0..100`, `--progress` and `--progress-json` are supported; the other
+budgets currently use C++ defaults in the CLI. Owned errors/help are available
+in English and French. Tests apply emitted textual patches with Git and compare
+the resulting bytes, including Unicode/space-containing paths and CRLF.

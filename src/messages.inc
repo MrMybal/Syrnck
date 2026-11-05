@@ -667,3 +667,7 @@ SYRNCK_MESSAGE("text diff file budget must be in 1..4194304 bytes", "Le budget d
 SYRNCK_MESSAGE("text diff line limit must be in 1..100000", "La limite de lignes du diff textuel doit être comprise entre 1 et 100000")
 SYRNCK_MESSAGE("text diff work budget must be in 1..268435456", "Le budget de calcul du diff textuel doit être compris entre 1 et 268435456")
 SYRNCK_MESSAGE("text diff output budget must be in 1024..8388608 bytes", "Le budget de sortie du diff textuel doit être compris entre 1024 et 8388608 octets")
+
+SYRNCK_MESSAGE("native text diff path is absent from both snapshots", "Le chemin du diff textuel est absent des deux snapshots")
+SYRNCK_MESSAGE("native text diff report exceeds 16 MiB", "Le rapport de diff textuel dépasse 16 Mio")
+SYRNCK_MESSAGE("native text diff cannot render binary or limited input; use JSON output", "Le diff textuel ne peut pas afficher une entrée binaire ou limitée ; utilisez la sortie JSON")

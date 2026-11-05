@@ -80,6 +80,8 @@ The verified object cache defaults to 64 MiB and 8,192 fingerprints. Every hit s
 
 Packing explicitly enables physical storage v2 for a single pack, or v3 for multiple packs. New stores remain v1 until packing; logical IDs and encrypted envelopes stay unchanged. Older readers reject unsupported physical formats. See [pack publication and recovery](docs/PACKS.md), [paged indexes](docs/INDEXES.md), and [reproducible measurements](docs/PERFORMANCE.md), currently documented in French.
 
+`native diff-text SOURCE TARGET PATH` compares a verified file as bounded UTF-8 line hunks; `--unified` renders its text changes. Binary/limited results are explicit. See [text differences and limits](docs/TEXT_DIFF.md).
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

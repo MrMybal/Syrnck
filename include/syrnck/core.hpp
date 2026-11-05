@@ -324,6 +324,10 @@ public:
                         OperationOptions = {}) const;
   // Current file entries only: no parent traversal or chunk payload reads.
   Json compare_revisions(std::string_view source, std::string_view target, OperationOptions = {}) const;
+  // One exact path, with verified complete file bytes. A null revision is an
+  // empty snapshot. Oversized files are reported before any chunk is read.
+  Json diff_revision_file(const std::optional<std::string> &source, const std::optional<std::string> &target,
+                          std::string_view path, TextDiffOptions = {}, OperationOptions = {}) const;
   // Branch-local immutable staging snapshot. Paths are repository-relative
   // files/directory prefixes, or "." for the entire selected workspace.
   std::string stage_directory(const fs::path &, std::string_view branch,

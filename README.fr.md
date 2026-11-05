@@ -22,6 +22,8 @@ Deux modes consomment la même bibliothèque : **Git**, pour conserver son écos
 
 Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège les objets **au repos** ; le serveur accède au contenu. Le serveur HTTP écoute en loopback et se publie derrière un proxy HTTPS. Le chiffrement de bout en bout et la compatibilité réseau Syncthing restent à développer.
 
+`native diff-text SOURCE CIBLE CHEMIN` compare un fichier vérifié par groupes de lignes UTF-8 bornés ; `--unified` affiche les changements textuels. Les fichiers binaires et limites dépassées sont explicites. Voir [les différences textuelles et leurs limites](docs/TEXT_DIFF.md).
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include "cli_control.hpp"
+#include "cli_text_diff.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -201,6 +202,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native switch-plan BRANCHE [--directory .] [--verify]
   native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
+  native diff-text SOURCE CIBLE CHEMIN [--context 3] [--unified]
   native branch NOM RÉVISION
   native branches [--after NOM] [--limit 100] [--verify]
   native branch-delete-plan NOM [--archive-index] [--verify]
@@ -263,7 +265,7 @@ Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -328,6 +330,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native switch-plan BRANCH [--directory .] [--verify]
   native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
+  native diff-text SOURCE TARGET PATH [--context 3] [--unified]
   native branch NAME REVISION
   native branches [--after NAME] [--limit 100] [--verify]
   native branch-delete-plan NAME [--archive-index] [--verify]
@@ -390,7 +393,7 @@ Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
 Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -611,8 +614,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
       (command == "native" &&
-       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
-        sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
+       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+        sub == "add" || sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
         sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
         sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
@@ -971,6 +974,21 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
+    } else if (sub == "diff-text") {
+      TextDiffOptions limits;
+      if (const auto context = args.option("--context")) {
+        const auto value = integer(*context);
+        require(value <= 100, "text diff context must be in 0..100");
+        limits.context = static_cast<std::size_t>(value);
+      }
+      const bool unified = args.flag("--unified");
+      args.count(3);
+      const auto report = store.diff_revision_file(resolve(args.values[0]), resolve(args.values[1]),
+                                                   args.values[2], limits, {control->token(), observe});
+      if (unified)
+        std::cout << cli::unified_text(report);
+      else
+        print(report);
     } else if (sub == "diff") {
       args.count(2);
       print(store.compare_revisions(resolve(args.values[0]), resolve(args.values[1]),

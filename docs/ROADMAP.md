@@ -119,7 +119,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Restauration de branches archivées, au nom d'origine ou sous un nouveau nom : tête/index publiés ensemble sans remplacer les destinations existantes, sélections/bases/modes conservés, archives persistantes et tests d'arrêts forcés.
 - [x] Tags natifs simples/annotés, noms immuables par l'API, inspection paginée bornée, suppression archivée avec cible attendue et restauration atomiques ; rétention après GC et sélecteurs de révision HEAD/branche/tag avec ambiguïtés explicites.
 - [x] Moteur C++ de diff textuel UTF-8 borné : hunks déterministes, fins de ligne exactes, budgets de calcul/mémoire/sortie, classification binaire et validation par oracle LCS indépendant.
-- [ ] Sélection de hunks et intégration du diff textuel aux révisions/index.
+- [x] Diff textuel ciblé entre révisions natives : reconstruction/hashes vérifiés du seul chemin, métadonnées de mode/représentation, JSON et sortie unifiée appliquée par Git dans les tests ; lecture seule, en clair/chiffré et sur trois stockages.
+- [ ] Sélection de hunks et intégration du diff textuel aux index préparés.
 - [x] Plan de rejeu d'un index périmé sur la tête courante : sélections figées, base vide initiale, conflits par fichier/namespace, représentations préparées, contrôle des archives et vérification optionnelle, sans lire le workspace ni écrire d'objets.
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.
