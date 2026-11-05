@@ -93,3 +93,32 @@ complete native revision patch or a native patch-application command.
 budgets currently use C++ defaults in the CLI. Owned errors/help are available
 in English and French. Tests apply emitted textual patches with Git and compare
 the resulting bytes, including Unicode/space-containing paths and CRLF.
+
+## Inspect frozen staged changes
+
+```text
+syrnck native diff-text --staged Source/Player.cpp
+syrnck native diff-text --staged Source/Player.cpp --branch feature --unified
+```
+
+`store.diff_staged_file(branch, path, limits, operation)` compares that path in
+the staging index to its original baseline. Without an index, it compares the
+head against itself. An initially unborn index has an empty source snapshot.
+Stale indexes keep their original base: the engine never substitutes the current
+head or reads the working directory. Later unsaved/unprepared changes do not
+affect the result. Prepared deletions use a missing target.
+
+The envelope adds `comparison: staged`, `branch`, nullable `base`, `head` and
+`index`, and `stale`. The index's internal branch marker, timestamp and parent
+shape are validated before comparison, using the ordinary staging reader.
+Branch selection defaults to native HEAD in the CLI; `--branch` overrides it.
+Options, integrity checks, JSON/unified behavior and cancellation follow the
+revision comparison contract above. The command does not consume/rebase the
+index, alter references or read working files. A path absent from both frozen
+snapshots is an error, even if a working file now exists there.
+
+Staging integration tests cover unborn/fresh/stale state, prepared deletion,
+branch overrides, later dirty files, binary/size limits and immutable Store
+contents. C++ coverage uses plaintext/encrypted stores and loose/single-pack/
+multi-pack layouts. Line/hunk selection and patch application remain future
+work; this milestone is read-only inspection.

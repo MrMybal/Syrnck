@@ -203,6 +203,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native diff-text SOURCE CIBLE CHEMIN [--context 3] [--unified]
+  native diff-text --staged CHEMIN [--branch NOM] [--context 3] [--unified]
   native branch NOM RÉVISION
   native branches [--after NOM] [--limit 100] [--verify]
   native branch-delete-plan NOM [--archive-index] [--verify]
@@ -331,6 +332,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native diff-text SOURCE TARGET PATH [--context 3] [--unified]
+  native diff-text --staged PATH [--branch NAME] [--context 3] [--unified]
   native branch NAME REVISION
   native branches [--after NAME] [--limit 100] [--verify]
   native branch-delete-plan NAME [--archive-index] [--verify]
@@ -982,9 +984,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         limits.context = static_cast<std::size_t>(value);
       }
       const bool unified = args.flag("--unified");
-      args.count(3);
-      const auto report = store.diff_revision_file(resolve(args.values[0]), resolve(args.values[1]),
-                                                   args.values[2], limits, {control->token(), observe});
+      const bool staged = args.flag("--staged");
+      Json report;
+      if (staged) {
+        const auto branch = selected_branch();
+        args.count(1);
+        report = store.diff_staged_file(branch, args.values[0], limits, {control->token(), observe});
+      } else {
+        args.count(3);
+        report = store.diff_revision_file(resolve(args.values[0]), resolve(args.values[1]), args.values[2],
+                                          limits, {control->token(), observe});
+      }
       if (unified)
         std::cout << cli::unified_text(report);
       else

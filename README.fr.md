@@ -24,6 +24,8 @@ Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège le
 
 `native diff-text SOURCE CIBLE CHEMIN` compare un fichier vérifié par groupes de lignes UTF-8 bornés ; `--unified` affiche les changements textuels. Les fichiers binaires et limites dépassées sont explicites. Voir [les différences textuelles et leurs limites](docs/TEXT_DIFF.md).
 
+`native diff-text --staged CHEMIN [--branch NOM]` compare les octets préparés figés à leur base d’origine, y compris pour un index initial ou périmé. Les changements ultérieurs du dossier sont exclus ; `--unified` est également disponible.
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

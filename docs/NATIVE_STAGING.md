@@ -152,3 +152,7 @@ unborn and independent branches, stale indexes, path transitions, selective/full
 reset, reopen/GC/packing, cancellation at scan/ingest/verify/publication, source
 mutation and callback exceptions. Process-kill tests exercise staging writes,
 atomic branch/index publication and reset with the production recovery reader.
+
+## Inspect prepared text
+
+Use `native diff-text --staged PATH [--branch NAME] [--unified]` for a verified, bounded line diff against the frozen index’s original base. Stale indexes keep their baseline and later working-file changes are not read. See [text diff contracts and limits](TEXT_DIFF.md). Hunk selection remains future work.

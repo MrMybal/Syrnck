@@ -82,6 +82,58 @@ class NativeTextDiff(unittest.TestCase):
         self.assertFalse(report["objects_verified"])
         self.call("native", "diff-text", first, second, "large.cpp", "--unified", ok=False)
 
+    def test_frozen_staging_ignores_later_working_changes_and_preserves_stale_base(self):
+        path = self.root / "code.cpp"
+        path.write_bytes(b"old\n")
+        first = self.commit("base")
+        self.call("native", "branch", "feature", first)
+        path.write_bytes(b"prepared\n")
+        index = self.call("native", "add", path.name, "--branch", "feature").stdout.decode().strip()
+        path.write_bytes(b"later working bytes\n")
+        before = self.snapshot()
+        report = json.loads(self.call("native", "diff-text", "--staged", path.name, "--branch", "feature").stdout)
+        self.assertEqual(report["base"], first)
+        self.assertEqual(report["index"], index)
+        self.assertFalse(report["stale"])
+        self.assertEqual(report, json.loads(self.call("--lang", "fr", "native", "diff-text", "--staged", path.name, "--branch", "feature").stdout))
+        patch = self.call("native", "diff-text", "--staged", path.name, "--branch", "feature", "--unified").stdout
+        self.apply_patch(patch, path.name, b"old\n", b"prepared\n")
+        self.assertNotIn(b"later working", patch)
+        self.assertEqual(before, self.snapshot())
+        main = json.loads(self.call("native", "diff-text", "--staged", path.name).stdout)
+        self.assertIsNone(main["index"])
+        self.assertTrue(main["equal"])
+        second = self.commit("main advances")
+        # Advance the head through the generic pin API, leaving the frozen
+        # index on its original baseline to exercise stale inspection.
+        self.call("pin", "heads/feature", "revision", second)
+        stale = json.loads(self.call("native", "diff-text", "--staged", path.name, "--branch", "feature").stdout)
+        self.assertTrue(stale["stale"])
+        self.assertEqual(stale["base"], first)
+        self.assertEqual(stale["head"], second)
+        self.assertEqual(stale["diff"], report["diff"])
+        self.assertEqual(path.read_bytes(), b"later working bytes\n")
+
+    def test_initial_staging_and_prepared_deletion(self):
+        path = self.root / "initial.cpp"
+        path.write_bytes(b"initial\n")
+        self.call("native", "add", path.name)
+        report = json.loads(self.call("native", "diff-text", "--staged", path.name).stdout)
+        self.assertIsNone(report["base"])
+        self.assertIsNone(report["source"])
+        self.assertFalse(report["stale"])
+        self.apply_patch(self.call("native", "diff-text", "--staged", path.name, "--unified").stdout,
+                         path.name, None, b"initial\n")
+        self.call("native", "commit", "--staged", "-m", "initial")
+        path.unlink()
+        self.call("native", "add", path.name)
+        before = self.snapshot()
+        removed = json.loads(self.call("native", "diff-text", "--staged", path.name).stdout)
+        self.assertIsNone(removed["target"])
+        self.apply_patch(self.call("native", "diff-text", "--staged", path.name, "--unified").stdout,
+                         path.name, b"initial\n", None)
+        self.assertEqual(before, self.snapshot())
+
 
 if __name__ == "__main__":
     unittest.main()

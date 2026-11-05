@@ -15,7 +15,7 @@ syrnck native commit -m "Snapshot" --progress-json
 syrnck get MANIFEST restored.uasset --progress
 ```
 
-`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export`, `git clean/smudge/filter-process`,
+`put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export`, `git clean/smudge/filter-process`,
 `native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
 `native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive`,
 `native branch-restore-plan/branch-restore`,
@@ -220,3 +220,5 @@ Process-kill recovery remains a separate mechanism described in
 [crash recovery](CRASH_RECOVERY.md). Object, pointer and C ABI formats remain
 unchanged; upload and read leases negotiate HTTP extensions. C++ callers should rebuild
 against the updated headers.
+
+[Text differences](TEXT_DIFF.md) are read-only and bounded. `native diff-text SOURCE TARGET PATH` reconstructs and verifies only the requested file; `--staged` compares frozen entries to their original base without reading working files. Oversized inputs are reported before payload reads. Binary/budget results are explicit JSON; unified output refuses these results before stdout. Cancellation and observer failures preserve Store/workspace data.

@@ -137,6 +137,35 @@ int main() {
         require(logical["content_changed"] == false && logical["executable_changed"] == true &&
                     logical["manifest_changed"] == true && logical["diff"]["hunks"].empty(),
                 "mode/representation lost");
+        auto frozen = store.metadata(Kind::revision, next.id);
+        frozen["message"] = "Syrnck staging v1: feature";
+        const auto index = store.put(Kind::revision, bytes(frozen.dump())).first;
+        store.set_ref("heads/feature", next);
+        store.set_ref("staging/feature", index);
+        const auto staged_before = physical(store.root());
+        const auto staged = store.diff_staged_file("feature", "src/Édit.cpp");
+        require(staged["comparison"] == "staged" && staged["base"] == old.id && staged["head"] == next.id &&
+                    staged["index"] == index.id && staged["stale"] == true && staged["diff"] == diff["diff"],
+                "stale staging did not use its frozen base");
+        require(store.diff_staged_file("main", "src/Édit.cpp")["equal"] == true,
+                "branch without index did not compare head against itself");
+        TextDiffOptions stage_limit;
+        stage_limit.max_file_bytes = 1;
+        require(store.diff_staged_file("feature", "src/Édit.cpp", stage_limit)["diff"]["reason"] ==
+                    "file_limit",
+                "staged diff ignored input budget");
+        require(physical(store.root()) == staged_before, "staged text diff changed the Store");
+        frozen["parents"] = Json::array();
+        frozen["message"] = "Syrnck staging v1: initial";
+        const auto initial = store.put(Kind::revision, bytes(frozen.dump())).first;
+        store.set_ref("staging/initial", initial);
+        const auto initial_diff = store.diff_staged_file("initial", "src/Édit.cpp");
+        require(initial_diff["base"].is_null() && initial_diff["source"].is_null() &&
+                    initial_diff["stale"] == false && initial_diff["diff"]["deletions"] == 0,
+                "initial staging baseline differs");
+        store.set_ref("staging/wrong-marker", initial);
+        fails([&] { store.diff_staged_file("wrong-marker", "src/Édit.cpp"); },
+              "invalid native staging snapshot");
       }
     std::cout << "Verified targeted revision text diffs, all storage variants, payload integrity and "
                  "read-only behavior\n";

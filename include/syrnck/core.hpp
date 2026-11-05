@@ -335,6 +335,10 @@ public:
   std::string stage_directory(const fs::path &, std::string_view branch,
                               const std::vector<std::string> &paths, IngestOptions) const;
   Json staged_status(std::string_view branch, OperationOptions = {}) const;
+  // Compare a frozen file against the index's original baseline, including
+  // stale/unborn indexes. Does not read the working directory.
+  Json diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions = {},
+                        OperationOptions = {}) const;
   // Read-only branch -> staging -> working-directory comparisons.
   Json workspace_status(const fs::path &, std::string_view branch, OperationOptions = {}) const;
   // Conservative read-only preflight, including ignored/untracked obstructions.

@@ -130,6 +130,16 @@ int main() {
     }
     require(compare_text(bytes(left), bytes(right), limits)["reason"] == "trace_limit",
             "trace limit ignored");
+    std::string large_source, large_target;
+    for (int i = 0; i < 50000; ++i) {
+      const auto line = std::to_string(i) + '\n';
+      large_source += line;
+      large_target += i == 1000 || i == 48000 ? "changed " + line : line;
+    }
+    const auto sparse = compare_text(bytes(large_source), bytes(large_target));
+    require(sparse["status"] == "text" && sparse["hunks"].size() == 2 && sparse["additions"] == 2 &&
+                sparse["deletions"] == 2 && sparse.dump().size() < 4096,
+            "sparse edits in a large source exceeded default budgets");
     limits.context = 101;
     fails([&] { compare_text({}, {}, limits); }, "text diff context must be in 0..100");
     std::stop_source stop;

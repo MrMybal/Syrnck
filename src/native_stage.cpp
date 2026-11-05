@@ -170,6 +170,23 @@ Json Store::staged_status(std::string_view branch, OperationOptions options) con
               {"counts", std::move(difference["counts"])},
               {"changes", std::move(difference["changes"])}};
 }
+Json Store::diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions limits,
+                             OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  limits.validate();
+  validate_path(path);
+  const Stage stage(*this, branch);
+  auto report =
+      diff_revision_file(id(stage.base), id(stage.index ? stage.index : stage.head), path, limits, options);
+  report["comparison"] = "staged";
+  report["branch"] = branch;
+  report["base"] = nullable_id(stage.base);
+  report["head"] = nullable_id(stage.head);
+  report["index"] = nullable_id(stage.index);
+  report["stale"] = stage.head != stage.base;
+  require(report.dump().size() <= max_object_size, "native text diff report exceeds 16 MiB");
+  return report;
+}
 std::optional<std::string> Store::reset_stage(std::string_view branch, const std::vector<std::string> &paths,
                                               OperationOptions options) const {
   throw_if_cancelled(options.stop);
