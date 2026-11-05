@@ -211,6 +211,12 @@ struct NativeReplayOptions {
 struct NativeRebaseOptions {
   std::size_t max_commits = 1000;
   std::optional<NativeRebaseResolutionSet> resolutions{};
+  // One shared text budget covers the entire range, including virtual results.
+  std::optional<TextDiffOptions> text_merge{};
+};
+struct NativeStageRebaseOptions {
+  std::optional<NativeResolutionSet> resolutions{};
+  std::optional<TextDiffOptions> text_merge{};
 };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
@@ -511,6 +517,8 @@ public:
   Json plan_rebase_stage(std::string_view branch, bool verify_objects = false, OperationOptions = {}) const;
   Json plan_rebase_stage_resolved(std::string_view branch, const NativeResolutionSet &,
                                   bool verify_objects = false, OperationOptions = {}) const;
+  Json plan_rebase_stage_with_options(std::string_view branch, const NativeStageRebaseOptions &,
+                                      bool verify_objects = false, OperationOptions = {}) const;
   // Verify retained bytes, archive the old index and replace it in one expected
   // branch/index reference transaction. The branch and working files do not move.
   Json rebase_stage(std::string_view branch, std::string_view expected_revision,
@@ -518,6 +526,9 @@ public:
   Json rebase_stage_resolved(std::string_view branch, std::string_view expected_revision,
                              std::string_view expected_index, const NativeResolutionSet &,
                              OperationOptions = {}) const;
+  Json rebase_stage_with_options(std::string_view branch, std::string_view expected_revision,
+                                 std::string_view expected_index, const NativeStageRebaseOptions &,
+                                 OperationOptions = {}) const;
   // Branch resets preserve working files. Soft preserves prepared entries on
   // the new baseline; mixed archives and clears the index. Old roots publish
   // atomically with the expected branch/index transition.

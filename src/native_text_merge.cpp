@@ -71,9 +71,14 @@ std::optional<NativeSnapshotFile> NativeTextMergeBatch::merge(std::string_view p
       } else {
         input_bytes_ += cost;
         auto read = [&](const NativeSnapshotFile &file) {
-          std::ostringstream output(std::ios::binary);
-          store_.reconstruct(file.manifest, output, options);
-          auto content = std::move(output).str();
+          std::string content;
+          if (const auto found = generated.find(file.manifest); found != generated.end()) {
+            content = found->second;
+          } else {
+            std::ostringstream output(std::ios::binary);
+            store_.reconstruct(file.manifest, output, options);
+            content = std::move(output).str();
+          }
           require(content.size() == file.content.size && hash(bytes(content)) == file.content.hash,
                   "reconstructed file hash mismatch");
           return content;
@@ -112,7 +117,7 @@ std::optional<NativeSnapshotFile> NativeTextMergeBatch::merge(std::string_view p
   rows_.push_back(std::move(row));
   return result;
 }
-Json NativeTextMergeBatch::report() const {
+Json NativeTextMergeBatch::summary() const {
   return Json{{"enabled", true},
               {"max_files", max_files},
               {"max_total_bytes", max_total_bytes},
@@ -123,7 +128,13 @@ Json NativeTextMergeBatch::report() const {
               {"attempted_files", attempted_},
               {"input_bytes", input_bytes_},
               {"result_bytes", result_bytes_},
-              {"generated_manifests", generated.size()},
-              {"files", rows_}};
+              {"generated_manifests", generated.size()}};
+}
+Json NativeTextMergeBatch::report(std::size_t first) const {
+  auto value = summary();
+  value["files"] = Json::array();
+  for (auto i = first; i < rows_.size(); ++i)
+    value["files"].push_back(rows_[i]);
+  return value;
 }
 } // namespace syrnck

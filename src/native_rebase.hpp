@@ -5,6 +5,7 @@ struct NativeRebasePlan {
   std::string head, target;
   NativeSnapshot files;
   Json report;
+  NativeGeneratedText generated{};
 };
 using NativeRebaseSink = std::function<void(const Json &, const std::string &)>;
 NativeRebasePlan prepare_native_rebase(const Store &, const fs::path &, std::string_view branch,

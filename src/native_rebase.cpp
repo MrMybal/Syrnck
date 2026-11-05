@@ -22,6 +22,9 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                                        const NativeRebaseOptions &settings, bool verify_objects,
                                        OperationOptions options, const NativeRebaseSink &sink) {
   throw_if_cancelled(options.stop);
+  std::optional<NativeTextMergeBatch> text;
+  if (settings.text_merge)
+    text.emplace(store, *settings.text_merge);
   require(settings.max_commits >= 1 && settings.max_commits <= 100000,
           "native rebase commit limit must be in 1..100000");
   validate_id(base);
@@ -103,7 +106,8 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
             require_native_resolution_context(*resolution, "rebase", plan.target, source, parent, parent);
           }
         }
-        auto combined = merge_native_files(store, original, current, incoming, options, resolution);
+        auto combined = merge_native_files(store, original, current, incoming, options, resolution, nullptr,
+                                           text ? &*text : nullptr);
         extra_roots.insert(combined.extra_roots.begin(), combined.extra_roots.end());
         Json row{{"source", source},
                  {"head", plan.target},
@@ -113,6 +117,8 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                  {"conflicts", std::move(combined.conflicts)},
                  {"resolved", std::move(combined.resolved)},
                  {"resolution_context", step_context.json()}};
+        if (text)
+          row["text_merge"] = std::move(combined.text_merge);
         if (row["conflicts"].empty()) {
           const auto next = candidate(revision, plan.target, combined.files, options);
           const auto encoded = next.dump();
@@ -169,6 +175,10 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                      {"resolution_context", context.json()},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
+  if (text) {
+    plan.report["text_merge"] = text->summary();
+    plan.generated = std::move(text->generated);
+  }
   require(plan.report.dump().size() <= max_object_size, "native rebase report exceeds 16 MiB");
   report_progress(options, {ProgressPhase::planning, {}, completed, range.size(), true});
   return plan;

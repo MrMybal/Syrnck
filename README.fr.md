@@ -155,6 +155,8 @@ logiques et trafic des corps d'objets.
 
 `native rebase-plan BASE --onto RÉVISION` prépare le rejeu de la plage linéaire explicite `(BASE, HEAD]` sur une autre base. Les nouveaux IDs sont calculés sans stocker de candidats ; messages et dates sont conservés, et le premier conflit ou obstacle du dossier est signalé. Voir le [rebase linéaire natif](docs/NATIVE_REBASE.md).
 
+`rebase-plan`/`rebase --text-merge` fusionnent les changements textuels indépendants à travers les étapes virtuelles, avec un budget commun à toute la plage. Les versions intermédiaires restent reconstructibles après GC. Voir la [fusion textuelle du rebase](docs/NATIVE_REBASE.md#optional-bounded-text-composition).
+
 `native rebase BASE --onto RÉVISION --expect ANCIEN_ID` crée la chaîne de candidats vérifiée puis applique son snapshot final via le checkout récupérable. L'ancien historique reste archivé après GC ; les branches et tags sources sont conservés. Voir [l'application du rebase et sa reprise](docs/NATIVE_REBASE.md#apply-and-recover).
 
 Le rebase accepte aussi `--resolutions FICHIER_JSON` : une série de choix explicites par fichier liée à la tête initiale, aux deux bases et à chaque étape virtuelle. Des choix incomplets ou périmés bloquent toute l'opération. Voir la [résolution des conflits du rebase](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
@@ -162,6 +164,8 @@ Le rebase accepte aussi `--resolutions FICHIER_JSON` : une série de choix expli
 `native rebase-index-plan --verify` prépare le rejeu d'un index figé périmé sur la tête courante de sa branche, sans lire les fichiers de travail ni écrire de candidats. Voir le [rebase de l'index natif](docs/NATIVE_STAGE_REBASE.md).
 
 `native rebase-index --expect ID_TÊTE --expect-index ID_INDEX` publie ce résultat atomiquement, en conservant l'ancien index et sa base après GC. Les fichiers de travail et la branche sélectionnée restent intacts.
+
+Les commandes de rejeu d’index acceptent aussi `--text-merge` : les changements textuels figés se combinent avec la tête courante sans lire le texte du workspace. Les résolutions explicites restent prioritaires. Voir la [fusion textuelle de l’index](docs/NATIVE_STAGE_REBASE.md#optional-bounded-text-composition).
 
 Les deux commandes acceptent `--resolutions FICHIER_JSON` : des choix par fichier liés à la tête, à l'index figé et à sa base d'origine. Les manifestes/modes personnalisés sont vérifiés avant publication ; des choix incomplets ou périmés ne peuvent pas remplacer l'index.
 

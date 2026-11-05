@@ -5,8 +5,10 @@ namespace syrnck {
 struct NativeStageRebasePlan {
   std::string target;
   Json candidate, report;
+  NativeGeneratedText generated{};
 };
 NativeStageRebasePlan prepare_native_stage_rebase(const Store &, const NativeRewriteState &,
                                                   bool verify_objects, OperationOptions,
-                                                  const NativeResolutionSet * = nullptr);
+                                                  const NativeResolutionSet * = nullptr,
+                                                  const TextDiffOptions * = nullptr);
 } // namespace syrnck

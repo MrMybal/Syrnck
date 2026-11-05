@@ -211,8 +211,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native add-hunks-plan CHEMIN [--branch NOM] [--directory .]
   native add-hunks CHEMIN --expect-plan ID --hunks 1,3 [--branch NOM]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
-  native rebase-index-plan [--branch BRANCHE] [--verify]
-  native rebase-index [--branch BRANCHE] [--expect ID] [--expect-index ID]
+  native rebase-index-plan [--branch BRANCHE] [--verify] [--text-merge]
+  native rebase-index [--branch BRANCHE] [--expect ID] [--expect-index ID] [--text-merge]
     --resolutions FICHIER_JSON : choix liés à la tête, à l'index et à sa base.
   native reset [CHEMIN...] [--branch BRANCHE]
   native reset-plan RÉVISION --soft|--mixed [--branch BRANCHE] [--verify]
@@ -260,7 +260,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                     [--branch BRANCHE] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
-  native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .]
+  native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
     --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
@@ -355,8 +355,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native add-hunks-plan PATH [--branch NAME] [--directory .]
   native add-hunks PATH --expect-plan ID --hunks 1,3 [--branch NAME]
   native staged [--branch BRANCH]    Inspect staged changes
-  native rebase-index-plan [--branch BRANCH] [--verify]
-  native rebase-index [--branch BRANCH] [--expect ID] [--expect-index ID]
+  native rebase-index-plan [--branch BRANCH] [--verify] [--text-merge]
+  native rebase-index [--branch BRANCH] [--expect ID] [--expect-index ID] [--text-merge]
     --resolutions JSON_FILE: choices bound to the head, index and its baseline.
   native reset [PATH...] [--branch BRANCH]
   native reset-plan REVISION --soft|--mixed [--branch BRANCH] [--verify]
@@ -404,7 +404,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                     [--branch BRANCH] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
-  native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .]
+  native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
     --resolutions JSON_FILE: per-step choices bound to the head and both bases.
@@ -973,12 +973,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const bool verify = planning && args.flag("--verify");
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto expected_index = planning ? std::optional<std::string>{} : args.option("--expect-index");
-      const auto resolutions = resolutions_input();
+      NativeStageRebaseOptions settings;
+      settings.resolutions = resolutions_input();
+      if (args.flag("--text-merge"))
+        settings.text_merge = text_diff_options(args);
       args.count(0);
       if (planning) {
-        const auto plan = resolutions ? store.plan_rebase_stage_resolved(branch, *resolutions, verify,
-                                                                         {control->token(), observe})
-                                      : store.plan_rebase_stage(branch, verify, {control->token(), observe});
+        const auto plan =
+            store.plan_rebase_stage_with_options(branch, settings, verify, {control->token(), observe});
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
@@ -987,9 +989,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(index != all.end() && index->second.kind == Kind::revision, "no native staging snapshot");
       const auto head = expected ? *expected : resolve("heads/" + branch);
       const auto snapshot = expected_index ? *expected_index : index->second.id;
-      print(resolutions ? store.rebase_stage_resolved(branch, head, snapshot, *resolutions,
-                                                      {control->token(), observe})
-                        : store.rebase_stage(branch, head, snapshot, {control->token(), observe}));
+      print(store.rebase_stage_with_options(branch, head, snapshot, settings, {control->token(), observe}));
     } else if (sub == "reset" || sub == "reset-plan") {
       const auto branch = selected_branch();
       const bool soft = args.flag("--soft"), mixed = args.flag("--mixed"), planning = sub == "reset-plan";
@@ -1318,6 +1318,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(onto.has_value(), "native rebase requires --onto");
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
+      NativeRebaseOptions settings;
+      if (args.flag("--text-merge"))
+        settings.text_merge = text_diff_options(args);
       std::optional<NativeRebaseResolutionSet> resolutions;
       if (const auto file = args.option("--resolutions")) {
         throw_if_cancelled(control->token());
@@ -1327,7 +1330,6 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const bool verify = planning && args.flag("--verify");
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       args.count(1);
-      NativeRebaseOptions settings;
       settings.max_commits = static_cast<std::size_t>(limit);
       settings.resolutions = std::move(resolutions);
       const auto base = resolve(args.values[0]), target = resolve(*onto);

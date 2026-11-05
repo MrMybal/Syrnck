@@ -144,11 +144,15 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 Rebase also accepts `--resolutions JSON_FILE`: a series of explicit file choices bound to the original head, both bases and each virtual replay step. Partial or stale choices block the whole operation. See [rebase conflict resolution](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
 
+Add `--text-merge` to `rebase-plan`/`rebase` to compose independent UTF-8 edits across virtual steps. A shared budget covers the complete range; generated intermediate versions remain reconstructible after GC. See [bounded text rebase](docs/NATIVE_REBASE.md#optional-bounded-text-composition).
+
 `native rebase-index-plan --verify` previews replaying a stale frozen staging index onto its current branch head, without reading working files or storing candidates. See [native staging rebase](docs/NATIVE_STAGE_REBASE.md).
 
 `native rebase-index --expect HEAD_ID --expect-index INDEX_ID` publishes that prepared result atomically, retaining the former index and baseline through GC. Working files and branch selection remain untouched.
 
 Both staging rebase commands accept `--resolutions JSON_FILE`, with explicit file choices bound to the branch head, frozen index and its original base. Custom manifests/modes are verified before publication; partial or stale choices cannot replace the index.
+
+`rebase-index-plan`/`rebase-index --text-merge` also compose frozen text changes onto the current head, without reading working text. New manifests, the candidate index and the old index archive retain complete versions. See [text staging replay](docs/NATIVE_STAGE_REBASE.md#optional-bounded-text-composition).
 
 `native branches --verify` lists bounded pages of branch heads and frozen staging state, auditing the displayed histories. `native branch NAME REVISION` now creates a fully verified head atomically and refuses existing heads, orphan indexes or active checkouts. See [native branches](docs/NATIVE_BRANCHES.md#branch-inventory-and-verified-creation).
 

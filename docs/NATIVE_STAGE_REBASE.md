@@ -16,8 +16,9 @@ syrnck native rebase-index-plan --branch feature
 The recorded staging parent is the baseline, the current branch head is current,
 and the complete frozen index is incoming. Independent file and executable-mode
 changes combine through the shared three-way file merger. Content, add/delete,
-case and file/directory collisions block the result. There is no automatic text
-merge or rename detection. A pending checkout/switch journal also blocks the plan.
+case and file/directory collisions block the result. Optional text composition is
+described below; rename detection remains future work. A pending checkout/switch
+journal also blocks the plan.
 
 The branch must have a head and an index. An index prepared before the first
 branch commit can be replayed with an empty baseline after a head exists. There
@@ -47,7 +48,9 @@ with JSON on stdout. Invalid or missing inputs produce diagnostics.
 
 Plans do not write candidate objects or references. `--verify` additionally audits
 both complete retained closures, including historical reconstructed file hashes.
-Metadata-only plans do not audit block payloads. Reports and candidate revision
+Without text composition, metadata-only plans do not audit block payloads.
+Text-enabled plans reconstruct eligible unresolved content files and verify their
+hashes even without `--verify`. Reports and candidate revision
 metadata have the existing 16 MiB bounds; snapshots are still flat file maps.
 The report includes an empty `resolution_context` and accepted `resolved` rows.
 
@@ -152,3 +155,47 @@ for independent replay, resolved conflicts, a clean result and an initial empty
 baseline, in plain/encrypted Stores. Fresh production readers audit the retained
 data and check that working files and branch tips are unchanged. These test
 process termination, not power-loss durability.
+
+## Optional bounded text composition
+
+```text
+syrnck native rebase-index-plan --text-merge --verify
+syrnck native rebase-index --text-merge --expect HEAD_ID --expect-index INDEX_ID
+```
+
+`--text-merge` composes independent UTF-8 edits between the recorded staging base,
+current head and frozen index. It never reads working text; later dirty bytes stay
+untouched. Explicit `--resolutions` choices take priority. Remaining binary,
+overlapping, add/delete and namespace conflicts block the entire publication.
+Line endings and missing final newlines are preserved, and executable mode is
+combined independently.
+
+The [native text batch limits](NATIVE_MERGE.md#opt-in-text-composition) apply:
+64 attempts and 16 MiB total input plus clean result bytes, with the usual
+`--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes` per-file
+limits. Budget flags require `--text-merge`. Reports add `text_merge`, including
+status/reason/coordinates and proposed manifest metadata per attempted path.
+They include no merged plaintext. An already fresh index preserves its exact ID
+and reports zero text attempts.
+
+Planning reconstructs only eligible unresolved content files, verifies their
+hashes, and predicts canonical CDC manifest IDs without writing objects. Apply
+verifies all retained inputs before materializing generated data and creating the
+candidate. The old index archive and new staging reference publish in one expected
+head/index transaction. A conflict publishes neither. Cancellation before that
+transaction can leave complete unreferenced objects while references and working
+files remain unchanged. The archived old index and its base remain reconstructible
+after GC; a later staged commit retains the complete merged snapshot.
+
+```cpp
+syrnck::NativeStageRebaseOptions settings;
+settings.text_merge.emplace();
+auto plan = store.plan_rebase_stage_with_options("feature", settings, true);
+auto result = store.rebase_stage_with_options("feature", expected_head,
+                                               expected_index, settings);
+```
+
+The named options methods preserve compatibility with existing plain/resolved
+entry points. Tests cover dirty working files, exact preview/application IDs,
+fresh indexes, explicit choices, byte/work limits, packed/encrypted storage,
+retention and subsequent staged commits.

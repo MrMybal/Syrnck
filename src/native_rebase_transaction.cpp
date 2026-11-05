@@ -17,6 +17,8 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
   const auto mode = plan.report["mode"].get<std::string>();
   const auto target = plan.target;
   const auto count = plan.report["commits"].size();
+  materialize_native_text(*this, plan.generated, options);
+  plan.generated.clear();
   plan.files.clear();
   plan.report = Json{};
   Json result;

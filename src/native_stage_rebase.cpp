@@ -36,8 +36,11 @@ Json snapshot(const NativeRewriteState &state, const NativeSnapshot &files, Oper
 } // namespace
 NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const NativeRewriteState &state,
                                                   bool verify_objects, OperationOptions options,
-                                                  const NativeResolutionSet *resolutions) {
+                                                  const NativeResolutionSet *resolutions,
+                                                  const TextDiffOptions *text_limits) {
   throw_if_cancelled(options.stop);
+  if (text_limits)
+    text_limits->validate();
   require(state.index.has_value(), "no native staging snapshot");
   const NativeResolutionSet context{"rebase-index",   state.head.id,    state.index->id,
                                     state.index_base, state.index_base, {}};
@@ -57,11 +60,13 @@ NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const Nati
   if (changed) {
     const auto baseline =
         state.index_base ? read_native_snapshot(store, *state.index_base, options) : NativeSnapshot{};
-    combined = merge_native_files(store, baseline, current, incoming, options, resolutions);
+    combined = merge_native_files(store, baseline, current, incoming, options, resolutions, text_limits);
     preserve_representations(baseline, current, incoming, combined.files, options, resolutions);
   } else {
     require(!resolutions || resolutions->files.empty(), "native resolution path has no conflict");
     combined.files = std::move(incoming);
+    if (text_limits)
+      combined.text_merge = NativeTextMergeBatch(store, *text_limits).report();
   }
   if (!combined.conflicts.empty())
     blockers.push_back(Json{{"reason", "index_conflict"}});
@@ -103,6 +108,9 @@ NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const Nati
                      {"resolved", std::move(combined.resolved)},
                      {"resolution_context", context.json()},
                      {"blockers", std::move(blockers)}};
+  if (text_limits)
+    plan.report["text_merge"] = std::move(combined.text_merge);
+  plan.generated = std::move(combined.generated);
   require(plan.report.dump().size() <= max_object_size, "native staging rebase report exceeds 16 MiB");
   report_progress(options, {ProgressPhase::planning, {}, 1, 1, true});
   return plan;
@@ -116,10 +124,18 @@ Json Store::plan_rebase_stage_resolved(std::string_view branch, const NativeReso
   const NativeRewriteState state(*this, branch, options);
   return prepare_native_stage_rebase(*this, state, verify_objects, options, &resolutions).report;
 }
+Json Store::plan_rebase_stage_with_options(std::string_view branch, const NativeStageRebaseOptions &settings,
+                                           bool verify_objects, OperationOptions options) const {
+  const NativeRewriteState state(*this, branch, options);
+  return prepare_native_stage_rebase(*this, state, verify_objects, options,
+                                     settings.resolutions ? &*settings.resolutions : nullptr,
+                                     settings.text_merge ? &*settings.text_merge : nullptr)
+      .report;
+}
 namespace {
 Json apply(const Store &store, std::string_view branch, std::string_view expected,
-           std::string_view expected_index, OperationOptions options,
-           const NativeResolutionSet *resolutions) {
+           std::string_view expected_index, OperationOptions options, const NativeResolutionSet *resolutions,
+           const TextDiffOptions *text_limits = nullptr) {
   throw_if_cancelled(options.stop);
   validate_id(expected);
   validate_id(expected_index);
@@ -127,12 +143,16 @@ Json apply(const Store &store, std::string_view branch, std::string_view expecte
   require(state.head.id == expected, "native staging rebase tip changed; refresh the plan");
   require(state.index && state.index->id == expected_index,
           "native staging rebase index changed; refresh the plan");
-  auto plan = prepare_native_stage_rebase(store, state, true, options, resolutions);
+  auto plan = prepare_native_stage_rebase(store, state, true, options, resolutions, text_limits);
   require(plan.report["ready"].get<bool>(),
           "native staging rebase is blocked; inspect native rebase-index-plan");
   const bool changed = plan.report["changed"].get<bool>();
+  plan.report["previous_index"] = state.index->id;
+  plan.report["index"] = plan.target;
+  plan.report["state"] = changed ? "applied" : "unchanged";
   if (changed) {
     throw_if_cancelled(options.stop);
+    materialize_native_text(store, plan.generated, options);
     const auto next = store.put(Kind::revision, bytes(plan.candidate.dump())).first;
     require(next.id == plan.target, "native staging rebase candidate changed; refresh the plan");
     const auto archive = plan.report["archive"].get<std::string>();
@@ -142,9 +162,6 @@ Json apply(const Store &store, std::string_view branch, std::string_view expecte
                                       options),
             "native staging references changed; retry operation");
   }
-  plan.report["previous_index"] = state.index->id;
-  plan.report["index"] = plan.target;
-  plan.report["state"] = changed ? "applied" : "unchanged";
   return plan.report;
 }
 } // namespace
@@ -156,5 +173,13 @@ Json Store::rebase_stage_resolved(std::string_view branch, std::string_view expe
                                   std::string_view expected_index, const NativeResolutionSet &resolutions,
                                   OperationOptions options) const {
   return apply(*this, branch, expected, expected_index, options, &resolutions);
+}
+Json Store::rebase_stage_with_options(std::string_view branch, std::string_view expected,
+                                      std::string_view expected_index,
+                                      const NativeStageRebaseOptions &settings,
+                                      OperationOptions options) const {
+  return apply(*this, branch, expected, expected_index, options,
+               settings.resolutions ? &*settings.resolutions : nullptr,
+               settings.text_merge ? &*settings.text_merge : nullptr);
 }
 } // namespace syrnck

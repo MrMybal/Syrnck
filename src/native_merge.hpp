@@ -18,7 +18,7 @@ void require_native_resolution_context(const NativeResolutionSet &, std::string_
 NativeFileMergeResult merge_native_files(const Store &, const NativeSnapshot &base,
                                          const NativeSnapshot &current, const NativeSnapshot &incoming,
                                          OperationOptions, const NativeResolutionSet * = nullptr,
-                                         const TextDiffOptions * = nullptr);
+                                         const TextDiffOptions * = nullptr, NativeTextMergeBatch * = nullptr);
 struct NativeMergePlan {
   std::string head;
   std::optional<std::string> base;

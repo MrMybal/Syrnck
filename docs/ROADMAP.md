@@ -139,7 +139,9 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.
 - [x] Fusion textuelle automatique opt-in dans le merge natif C++ : choix explicites prioritaires, plafonds par fichier/ensemble, manifestes virtuels sans écriture, application récupérable et rétention après GC.
 - [x] CLI anglais/français `merge-plan/merge --text-merge`, budgets par invocation, publication de l’ensemble et campagne d’arrêts forcés sur blocs/manifestes/révisions, checkout, reprise et annulation en clair/chiffré.
-- [ ] Fusion textuelle automatique dans rebase et le rejeu d’index, détection des renommages et synthèse récursive des bases multiples.
+- [x] Fusion textuelle automatique opt-in du rebase linéaire : cache virtuel partagé entre étapes, budgets globaux, IDs exacts, vérification complète avant matérialisation et conservation des versions intermédiaires après GC.
+- [x] Fusion textuelle automatique du rejeu d’index : API C++ et CLI bilingue, choix explicites prioritaires, aucune lecture du workspace, publication atomique de l’index et de son archive, commit ultérieur et rétention.
+- [ ] Détection des renommages et synthèse récursive des bases multiples.
 - [x] Plans C++ de fusion textuelle pour cherry-pick et revert : options communes, direction inverse et parent principal exacts, résolutions prioritaires et candidats virtuels sans écriture.
 - [x] Application C++ de cherry-pick/revert textuels : tête attendue, aucun candidat sur conflit/résultat vide/workspace bloqué, publication récupérable, annulation/reprise et reconstruction après GC indépendamment de l’ascendance source.
 - [x] CLI anglais/français de cherry-pick/revert `--text-merge`, budgets, résolutions explicites et tests de publication de l’ensemble ; arrêts forcés sur objets générés, deux fichiers, références, reprise et annulation en clair/chiffré.

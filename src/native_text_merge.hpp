@@ -19,6 +19,10 @@ public:
   std::optional<NativeSnapshotFile> merge(std::string_view path, const NativeSnapshotFile &base,
                                           const NativeSnapshotFile &current,
                                           const NativeSnapshotFile &incoming, OperationOptions);
-  Json report() const;
+  std::size_t rows() const {
+    return rows_.size();
+  }
+  Json summary() const;
+  Json report(std::size_t first = 0) const;
 };
 } // namespace syrnck

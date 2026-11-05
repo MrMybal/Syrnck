@@ -21,8 +21,8 @@ Commits replay oldest first with the shared three-way file merger. Each original
 parent is the baseline, the previous virtual result is current, and the original
 commit is incoming. Independent file/content/mode changes combine. Content,
 add/delete and portable namespace conflicts stop planning at the first conflicted
-commit. No later commit is treated as applied. Automatic text merge and rename
-detection remain future work.
+commit. No later commit is treated as applied. Optional text composition is
+described below; rename detection remains future work.
 
 A merge inside the selected range is a `merge_in_range` blocker; a merge at the
 excluded boundary is allowed. Reaching a root before BASE gives
@@ -53,7 +53,8 @@ Store. Each candidate preserves the source message/timestamp and uses the comput
 file map and single new parent. Previewing again gives the same IDs for the same
 inputs. `--verify` additionally audits complete original-head/base/onto closures
 and reconstructed file hashes. Metadata-only planning does not audit block payloads.
-Each step also returns its empty `resolution_context` and accepted `resolved` rows;
+Text-enabled plans also reconstruct the eligible conflicted files, even without
+`--verify`. Each step returns its empty `resolution_context` and accepted `resolved` rows;
 the report's top-level context is a template for the resolution series below.
 
 Reports and each candidate's flat revision metadata are limited to 16 MiB. The
@@ -172,6 +173,56 @@ step.files["Content/Map.uasset"] = {syrnck::NativeResolutionChoice::incoming};
 choices.steps[step.source] = step;
 settings.resolutions = choices;
 ```
+
+## Optional bounded text composition
+
+```text
+syrnck native rebase-plan OLD_BASE --onto upstream --text-merge --verify
+syrnck native rebase OLD_BASE --onto upstream --text-merge --expect OLD_TIP_ID
+```
+
+`--text-merge` attempts UTF-8 three-way composition of remaining content conflicts
+after explicit file choices. It preserves exact line endings, missing final
+newlines and independent executable changes. Binary files, overlapping edits,
+add/delete conflicts and namespace collisions remain blocking. No conflict markers
+or partial history are published. Empty replayed commits remain in the chain.
+
+The [text merge limits](NATIVE_MERGE.md#opt-in-text-composition) apply, including
+`--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes`. One batch
+covers the **whole range**: at most 64 file attempts and 16 MiB of input plus clean
+result bytes. Reading a previous virtual result consumes input budget again.
+Limits do not reset between commits. Budget exhaustion blocks the whole operation.
+Budget flags require `--text-merge`.
+
+The top-level `text_merge` contains cumulative counters and limits. Each step's
+`text_merge.files` contains only that step's attempts, with statuses, reasons,
+conflict coordinates and proposed manifest metadata; its counters are cumulative.
+Reports contain no merged plaintext. Explicit choices have priority and consume
+no automatic text attempt. Keep `--text-merge`, budgets and earlier choices when
+using later virtual-step resolution contexts, because changing a preceding result
+changes the expected virtual parent.
+
+Planning keeps generated content in a bounded memory cache, so a later step can
+merge an earlier result without storing it. Exact CDC manifest IDs and revision
+IDs remain reproducible. Apply first verifies the complete plan and workspace,
+then materializes **all** generated manifests, including intermediate versions,
+before writing the candidate chain and starting recoverable checkout. Earlier
+steps never publish if a later step conflicts. Cancellation before the journal
+can leave complete unreferenced objects; the branch and workspace stay unchanged.
+The new chain retains every intermediate result through GC, and the checkout
+archive retains the complete original history.
+
+```cpp
+syrnck::NativeRebaseOptions settings;
+settings.text_merge.emplace();
+auto plan = store.plan_rebase(project, "feature", old_base, new_base, settings, true);
+auto result = store.rebase_directory(project, "feature", expected_head,
+                                     old_base, new_base, settings);
+```
+
+Tests cover successive virtual results for the same file, explicit precedence,
+range-wide limits, late conflicts without writes, encrypted/packed storage,
+retained intermediate versions and recoverable application.
 
 Tests cover all five choices, successive conflicts, stale top-level/virtual-step
 contexts, strict JSON decoding, custom manifest/mode retention and missing custom
