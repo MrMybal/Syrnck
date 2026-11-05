@@ -94,12 +94,18 @@ def cases():
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         atomic(replay, ("revision",))
-    for merge in ("merge", "merge-fast-forward", "merge-resolved"):
+    for merge in ("merge", "merge-fast-forward", "merge-resolved", "merge-text"):
         result.extend((merge if operation == "checkout" else merge + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         if merge != "merge-fast-forward":
             atomic(merge, ("revision",))
+        if merge == "merge-text":
+            atomic(merge, ("chunk", "manifest"))
+            atomic(merge, ("checkout-prepared",), 2)
+            for kind in ("checkout-backup", "export-file"):
+                result.extend((merge, phase, kind, 2)
+                              for phase in ("move.before", "move.published", "move.durable"))
     for rewrite in ("reset-soft", "reset-soft-index", "reset-mixed", "reset-mixed-index", "squash", "squash-root"):
         atomic(rewrite, ("refs",))
         if rewrite.startswith("reset-soft") or rewrite.startswith("squash"):
@@ -177,6 +183,7 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
+                        (operation.startswith("merge-text") and target == root.parent / "code.cpp") or
                         ((operation in ("checkout", "checkout-abort", "switch", "switch-abort", "cherry-pick", "cherry-pick-abort", "revert", "revert-abort") or operation.startswith(("merge", "rebase"))) and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")

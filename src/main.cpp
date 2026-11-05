@@ -256,7 +256,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log [--branch BRANCHE] [--limit 50]
   native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
-  native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories]
+  native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCHE] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
@@ -400,7 +400,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log [--branch BRANCH] [--limit 50]
   native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
     Ancestry relations and every best common ancestor.
-  native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories]
+  native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCH] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
@@ -1288,6 +1288,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
       settings.resolutions = resolutions_input();
+      if (args.flag("--text-merge"))
+        settings.text_merge = text_diff_options(args);
       settings.allow_unrelated_histories = args.flag("--allow-unrelated-histories");
       settings.no_fast_forward = args.flag("--no-ff");
       settings.fast_forward_only = args.flag("--ff-only");

@@ -71,6 +71,20 @@ trace and serialized output limits also apply. Skipped or limited files keep
 their original conflict and report the reason; the operation never chooses a
 partial result to satisfy a budget.
 
+The CLI exposes the same opt-in for both plan and apply:
+
+```text
+syrnck native merge-plan feature --text-merge --verify
+syrnck native merge feature --text-merge --expect OLD_TIP_ID
+syrnck native merge-plan feature --text-merge --max-file-bytes 2097152 --max-work 33554432
+```
+
+`--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes` set the
+per-file text budgets and require `--text-merge`. Plan and apply should use the
+same settings; apply always recomputes against the expected current head.
+English/French diagnostics and progress use the existing language and stderr
+controls. JSON fields and reason codes stay language-independent.
+
 The plan's `text_merge` object reports limits, attempt/byte counts, generated
 manifest count and per-path status/ranges/target metadata. Disabled mode uses
 `null`. Reports omit merged plaintext. Ready workspace actions refer to exact
@@ -86,6 +100,12 @@ before journal publication can leave unreferenced generated objects, with no
 branch/workspace change; normal GC can collect them. Once a journal exists,
 resume/abort uses its retained candidate without needing to rerun text merge.
 Cancellation and observer exceptions preserve these boundaries.
+
+The crash campaign includes forced process termination during new chunk,
+manifest and revision writes, checkout preparation/moves, atomic reference
+publication and recovery/abort, in clear and encrypted stores. The fixture's
+merged manifest is predicted independently and absent before application; fresh
+processes verify exact reconstructed text and both retained parent histories.
 
 ## Reports and validation
 

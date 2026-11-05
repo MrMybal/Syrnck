@@ -129,6 +129,76 @@ class NativeTextMerge(unittest.TestCase):
         revision = json.loads(self.call("inspect", "revision", applied["target"]).stdout)
         self.assertEqual(revision["parents"], [head, source])
 
+    def merge_plan(self, source, *args, ready=True):
+        run = subprocess.run([workflows.CLI, "--store", str(self.store), "native", "merge-plan", source, *map(str, args)],
+                             cwd=self.root, env=self.env, capture_output=True, timeout=15)
+        self.assertEqual(run.returncode, 0 if ready else 1, run.stderr.decode("utf-8", "replace"))
+        report = json.loads(run.stdout)
+        self.assertEqual(report["ready"], ready)
+        return report
+
+    def test_opt_in_automatic_merge_plan_apply_precedence_and_retention(self):
+        first, head, source, name = self.versions(b"a\r\nb\r\nc", b"A\r\nb\r\nc", b"a\r\nb\r\nC")
+        before = self.snapshot()
+        self.merge_plan(source, ready=False)
+        plan = self.merge_plan("feature", "--text-merge", "--verify")
+        self.assertEqual(plan["text_merge"]["files"][0]["status"], "clean")
+        self.assertEqual(plan["text_merge"]["generated_manifests"], 1)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.merge_plan(source, "--text-merge", "--verify", "--lang", "fr"), plan)
+        choices = plan["resolution_context"]
+        choices["files"] = {name: {"choice": "current"}}
+        document = self.store / "choices.json"
+        document.write_text(json.dumps(choices), encoding="utf-8")
+        manual = self.merge_plan(source, "--text-merge", "--resolutions", document)
+        self.assertEqual(manual["text_merge"]["attempted_files"], 0)
+        self.assertEqual(manual["resolved"][0]["choice"], "current")
+        self.call("native", "merge", source, "--text-merge", "--expect", first, ok=False)
+        applied = json.loads(self.call("--lang", "fr", "native", "merge", source, "--text-merge",
+                                       "--expect", head, "--progress-json").stdout)
+        self.assertEqual((self.root / name).read_bytes(), b"A\r\nb\r\nC")
+        self.call("gc", "--delete")
+        self.call("native", "export", applied["target"], "automatic-copy")
+        self.assertEqual((self.root / "automatic-copy" / name).read_bytes(), b"A\r\nb\r\nC")
+        revision = json.loads(self.call("inspect", "revision", applied["target"]).stdout)
+        self.assertEqual(revision["parents"], [head, source])
+        self.assertEqual(json.loads(self.call("native", "branches").stdout)["branches"][0]["revision"], source)
+
+    def test_automatic_overlap_and_budget_failures_never_publish(self):
+        first, head, source, name = self.versions(b"base\n", b"ours\n", b"theirs\n", "code.cpp")
+        before = self.snapshot()
+        blocked = self.merge_plan(source, "--text-merge", ready=False)
+        self.assertEqual(blocked["text_merge"]["files"][0]["status"], "conflict")
+        limited = self.merge_plan(source, "--text-merge", "--max-work", "1", ready=False)
+        self.assertEqual(limited["text_merge"]["files"][0]["reason"], "work_limit")
+        self.call("native", "merge", source, "--text-merge", ok=False)
+        self.call("native", "merge-plan", source, "--text-merge", "--max-lines", "0", ok=False)
+        self.call("native", "merge-plan", source, "--max-work", "1", ok=False)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual((self.root / name).read_bytes(), b"ours\n")
+
+    def test_one_clean_and_one_conflicting_path_remain_an_atomic_block(self):
+        code = self.root / "code.cpp"
+        conflict = self.root / "conflict.cpp"
+        code.write_bytes(b"a\nb\nc\n")
+        conflict.write_bytes(b"base\n")
+        first = self.commit("base")
+        code.write_bytes(b"a\nb\nC\n")
+        conflict.write_bytes(b"theirs\n")
+        source = self.commit("source")
+        self.call("native", "branch", "feature", source)
+        self.call("native", "checkout", first)
+        code.write_bytes(b"A\nb\nc\n")
+        conflict.write_bytes(b"ours\n")
+        self.commit("current")
+        before = self.snapshot()
+        plan = self.merge_plan(source, "--text-merge", ready=False)
+        self.assertEqual([row["status"] for row in plan["text_merge"]["files"]], ["clean", "conflict"])
+        self.assertIsNone(plan["workspace"])
+        self.call("native", "merge", source, "--text-merge", ok=False)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(code.read_bytes(), b"A\nb\nc\n")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,7 +26,7 @@ std::string target_kind(const fs::path &path) {
     return "restore";
   if (name == "exported")
     return "export";
-  if (name == "asset.bin" || name == "second.bin" || name == "empty")
+  if (name == "asset.bin" || name == "second.bin" || name == "empty" || name == "code.cpp")
     return "export-file";
   if (path.extension() == ".syp")
     return "pack";
@@ -140,13 +140,15 @@ bool replay_abort(std::string_view operation) {
 bool merge_operation(std::string_view operation) {
   return operation == "merge" || operation == "merge-abort" || operation == "merge-fast-forward" ||
          operation == "merge-fast-forward-abort" || operation == "merge-resolved" ||
-         operation == "merge-resolved-abort";
+         operation == "merge-resolved-abort" || operation == "merge-text" || operation == "merge-text-abort";
 }
 bool merge_abort(std::string_view operation) {
   return merge_operation(operation) && operation.ends_with("-abort");
 }
 NativeMergeOptions merge_settings(const Json &info) {
   NativeMergeOptions settings;
+  if (info["operation"].get<std::string>().starts_with("merge-text"))
+    settings.text_merge.emplace();
   if (info["operation"].get<std::string>().starts_with("merge-resolved")) {
     settings.resolutions = NativeResolutionSet{"merge",
                                                parse_key(info["old_revision"]).id,
@@ -198,6 +200,18 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   if (merge_operation(operation) && !operation.starts_with("merge-fast-forward")) {
     merge_base = put_revision(store, ingest(store, operation.starts_with("merge-resolved") ? 2 : 0));
     tip = put_revision(store, old, merge_base);
+  }
+  if (operation.starts_with("merge-text")) {
+    auto with_code = [&](const ObjectKey &revision, unsigned mask, const std::optional<ObjectKey> &parent) {
+      std::istringstream input(hunk_text(mask, false));
+      const auto manifest = store.ingest(input).first;
+      auto value = store.metadata(Kind::revision, revision.id);
+      value["files"]["code.cpp"] = Json{{"manifest", manifest}, {"executable", false}};
+      value["parents"] = parent ? Json::array({parent->id}) : Json::array();
+      return store.put(Kind::revision, bytes(value.dump())).first;
+    };
+    merge_base = with_code(*merge_base, 0, {});
+    tip = with_code(tip, 1, merge_base);
   }
   if (operation == "revert" || operation == "revert-abort")
     tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
@@ -351,7 +365,17 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   }
   if (merge_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
-    const auto source = put_revision(store, ingest(store, 1), merge_base ? merge_base : std::optional{tip});
+    auto source = put_revision(store, ingest(store, 1), merge_base ? merge_base : std::optional{tip});
+    if (operation.starts_with("merge-text")) {
+      std::istringstream input(hunk_text(2, false));
+      auto value = store.metadata(Kind::revision, source.id);
+      value["files"]["code.cpp"] = Json{{"manifest", store.ingest(input).first}, {"executable", false}};
+      source = store.put(Kind::revision, bytes(value.dump())).first;
+      atomic_write(root.parent_path() / "code.cpp", bytes(hunk_text(1, false)), false);
+      info["text_result_manifest"] = hunk_manifest(hunk_text(3, false));
+      check(!store.contains({Kind::manifest, info["text_result_manifest"].get<std::string>()}),
+            "text merge seed materialized its candidate");
+    }
     store.set_ref("pins/merge-source", source);
     info["merge_source"] = key_json(source);
     if (merge_base)
@@ -827,6 +851,29 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
           check(head["parents"] == Json::array({old.id, source.id}) &&
                     head["message"] == "Merged crash fixture",
                 "merge lost a parent or its message");
+      }
+      if (op.starts_with("merge-text")) {
+        const auto code = root.parent_path() / "code.cpp";
+        if (fs::exists(code))
+          check(text(read_bytes(code)) == hunk_text(1, false) ||
+                    text(read_bytes(code)) == hunk_text(3, false),
+                "text checkout published incomplete working bytes");
+        else {
+          check(status["pending"].get<bool>(), "text checkout lost a file without a journal");
+          const auto backup = path_from_utf8(status["data_directory"].get<std::string>()) / "old/1.bin";
+          check(fs::exists(backup) && text(read_bytes(backup)) == hunk_text(1, false),
+                "text checkout lost its source backup");
+        }
+        if (refs.at("heads/main") != old) {
+          check(head["files"]["code.cpp"]["manifest"] == info["text_result_manifest"],
+                "text merge published a different manifest");
+          std::ostringstream text_file;
+          store.reconstruct(info["text_result_manifest"].get<std::string>(), text_file);
+          check(text_file.str() == hunk_text(3, false), "text merge lost reconstructed bytes");
+        }
+        if (resumed)
+          check(text(read_bytes(code)) == hunk_text(merge_abort(op) ? 1 : 3, false),
+                "text checkout recovery lost exact bytes");
       }
     }
   }

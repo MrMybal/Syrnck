@@ -138,6 +138,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.
 - [x] Fusion textuelle automatique opt-in dans le merge natif C++ : choix explicites prioritaires, plafonds par fichier/ensemble, manifestes virtuels sans écriture, application récupérable et rétention après GC.
+- [x] CLI anglais/français `merge-plan/merge --text-merge`, budgets par invocation, publication de l’ensemble et campagne d’arrêts forcés sur blocs/manifestes/révisions, checkout, reprise et annulation en clair/chiffré.
 - [ ] Fusion textuelle automatique dans cherry-pick/revert/rebase et le rejeu d’index, détection des renommages et synthèse récursive des bases multiples.
 - [x] Plan de merge natif : branche à jour, avance rapide, fusion par fichier sur base commune, bases multiples explicites et option d'historiques sans lien ; moteur partagé avec le rejeu et contrôle du dossier sans écriture.
 - [x] Application récupérable du merge natif : avance rapide exacte, commit à deux parents, no-ff/ff-only, tête attendue, reprise/annulation et conservation des deux historiques après GC.
