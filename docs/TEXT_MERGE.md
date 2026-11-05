@@ -53,3 +53,34 @@ the function does not write objects or files.
 Tests cover independent compositions, side symmetry, overlapping groups and
 their coordinates, exact line endings, empty/binary inputs, budgets and
 cancellation. The existing text diff oracle also checks the shared edit search.
+
+## Merge one stored path
+
+`store.merge_revision_file(base_id, current_id, incoming_id, path, limits,
+operation)` previews the same composition using three explicit native snapshots.
+It does not select a graph merge base. The caller supplies that base, which can
+come from a native merge/replay plan.
+
+The envelope contains the three revision IDs, nullable `base`, `current` and
+`incoming` file summaries (manifest, size, file hash and executable flag),
+`ready`, `objects_verified`, `result_executable`, `blockers` and `merge`.
+Only a clean result is ready and supplies a result mode. Executable bits merge
+independently: an unchanged current mode takes the incoming mode, otherwise the
+current mode is retained. Different manifest representations do not change
+logical text equality.
+
+All three paths must exist. An absent path produces `file_presence` in `blockers`
+and `merge: null`, so deletion is never confused with empty content. All three
+sizes are checked before any chunks are read; oversized input produces
+`file_limit` and `merge: null`. Both cases have `objects_verified: false`.
+Otherwise the complete requested files and their whole-file hashes are verified,
+and `merge` contains the core report. Binary, conflict and later budget results
+remain non-ready, with the core reason copied into `blockers`. Missing or corrupt
+payloads throw rather than becoming a merge result.
+
+Verification covers the requested files, not other paths or revision ancestors.
+The operation does not read the working directory, write objects or update
+references. The envelope has a separate 16 MiB hard ceiling; the nested core
+report obeys `max_output_bytes`. Tests run in clear/encrypted stores with loose,
+single-pack and multi-pack layouts, including incomplete stores, corrupt file
+hashes, missing payloads, cancellation and physical read-only checks.

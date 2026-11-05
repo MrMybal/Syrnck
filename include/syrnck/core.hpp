@@ -341,6 +341,10 @@ public:
   // empty snapshot. Oversized files are reported before any chunk is read.
   Json diff_revision_file(const std::optional<std::string> &source, const std::optional<std::string> &target,
                           std::string_view path, TextDiffOptions = {}, OperationOptions = {}) const;
+  // Read-only content merge at one existing path in three explicit snapshots.
+  // Only requested payloads are verified; this does not infer graph ancestry.
+  Json merge_revision_file(std::string_view base, std::string_view current, std::string_view incoming,
+                           std::string_view path, TextDiffOptions = {}, OperationOptions = {}) const;
   // Targeted working-file comparison. Null source means an empty snapshot;
   // ignored/obstructed paths fail rather than appearing as deletions.
   Json diff_working_file(const fs::path &directory, const std::optional<std::string> &source,

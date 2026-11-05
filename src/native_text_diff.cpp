@@ -122,6 +122,53 @@ Json Store::diff_revision_file(const std::optional<std::string> &source,
                                TextDiffOptions limits, OperationOptions options) const {
   return read_native_revision_diff(*this, source, target, path, limits, options).report;
 }
+Json Store::merge_revision_file(std::string_view base, std::string_view current, std::string_view incoming,
+                                std::string_view path, TextDiffOptions limits,
+                                OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  limits.validate();
+  validate_path(path);
+  auto original = side(*this, std::string(base), path, options);
+  auto ours = side(*this, std::string(current), path, options);
+  auto theirs = side(*this, std::string(incoming), path, options);
+  Json report{{"version", 1},
+              {"path", path},
+              {"base_revision", base},
+              {"current_revision", current},
+              {"incoming_revision", incoming},
+              {"base", original.entry},
+              {"current", ours.entry},
+              {"incoming", theirs.entry},
+              {"ready", false},
+              {"objects_verified", false},
+              {"result_executable", Json{}},
+              {"blockers", Json::array()},
+              {"merge", Json{}}};
+  if (original.entry.is_null() || ours.entry.is_null() || theirs.entry.is_null()) {
+    report["blockers"].push_back("file_presence");
+  } else if (original.size > limits.max_file_bytes || ours.size > limits.max_file_bytes ||
+             theirs.size > limits.max_file_bytes) {
+    report["blockers"].push_back("file_limit");
+  } else {
+    load(*this, original, options);
+    load(*this, ours, options);
+    load(*this, theirs, options);
+    report["objects_verified"] = true;
+    report["merge"] =
+        merge_text(bytes(original.content), bytes(ours.content), bytes(theirs.content), limits, options);
+    if (report["merge"]["status"] == "clean") {
+      report["ready"] = true;
+      report["result_executable"] = ours.entry["executable"] == original.entry["executable"]
+                                        ? theirs.entry["executable"]
+                                        : ours.entry["executable"];
+    } else {
+      report["blockers"].push_back(report["merge"]["reason"]);
+    }
+  }
+  require(report.dump().size() <= max_object_size, "native text merge report exceeds 16 MiB");
+  report_progress(options, {ProgressPhase::planning, path, 1, 1, true});
+  return report;
+}
 NativeWorkingDiff read_native_working_diff(const Store &store, const fs::path &directory,
                                            const std::optional<std::string> &source, std::string_view path,
                                            TextDiffOptions limits, OperationOptions options) {

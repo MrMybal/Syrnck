@@ -135,6 +135,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.
 - [ ] HEAD détaché, workspaces multiples et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
+- [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [ ] Application automatique de la fusion textuelle aux opérations natives, détection des renommages et synthèse récursive des bases multiples.
 - [x] Plan de merge natif : branche à jour, avance rapide, fusion par fichier sur base commune, bases multiples explicites et option d'historiques sans lien ; moteur partagé avec le rejeu et contrôle du dossier sans écriture.
 - [x] Application récupérable du merge natif : avance rapide exacte, commit à deux parents, no-ff/ff-only, tête attendue, reprise/annulation et conservation des deux historiques après GC.

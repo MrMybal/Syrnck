@@ -734,3 +734,4 @@ SYRNCK_MESSAGE("native patch staging is blocked; inspect native add-patch-plan",
 SYRNCK_MESSAGE("native patch command requires --patch FILE", "La commande de patch exige --patch FICHIER")
 SYRNCK_MESSAGE("native add-patch requires --expect-plan", "native add-patch exige --expect-plan")
 SYRNCK_PREFIX("cannot inspect native checkout entry: ", "Impossible d’inspecter une entrée du dossier natif : ")
+SYRNCK_MESSAGE("native text merge report exceeds 16 MiB", "Le rapport de fusion textuelle dépasse 16 Mio")
