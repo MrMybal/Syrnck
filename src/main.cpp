@@ -213,6 +213,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
+    --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
@@ -257,6 +258,7 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
+              native rebase-plan/rebase,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -326,6 +328,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
+    --resolutions JSON_FILE: per-step choices bound to the head and both bases.
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
@@ -370,6 +373,7 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
+              native rebase-plan/rebase,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -1025,11 +1029,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(onto.has_value(), "native rebase requires --onto");
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
+      std::optional<NativeRebaseResolutionSet> resolutions;
+      if (const auto file = args.option("--resolutions")) {
+        throw_if_cancelled(control->token());
+        const auto data = read_bytes(path_from_utf8(*file), max_object_size);
+        resolutions = NativeRebaseResolutionSet::decode(data);
+      }
       const bool verify = planning && args.flag("--verify");
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       args.count(1);
       NativeRebaseOptions settings;
       settings.max_commits = static_cast<std::size_t>(limit);
+      settings.resolutions = std::move(resolutions);
       const auto base = resolve(args.values[0]), target = resolve(*onto);
       if (planning) {
         const auto plan =

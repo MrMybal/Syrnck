@@ -53,6 +53,8 @@ Store. Each candidate preserves the source message/timestamp and uses the comput
 file map and single new parent. Previewing again gives the same IDs for the same
 inputs. `--verify` additionally audits complete original-head/base/onto closures
 and reconstructed file hashes. Metadata-only planning does not audit block payloads.
+Each step also returns its empty `resolution_context` and accepted `resolved` rows;
+the report's top-level context is a template for the resolution series below.
 
 Reports and each candidate's flat revision metadata are limited to 16 MiB. The
 planner retains a bounded ID list/report and the current decoded snapshots, rather
@@ -123,3 +125,57 @@ Tests compare preview/application IDs, ordered parents and preserved messages/da
 empty commits/ranges, retained historical bytes after GC, unchanged upstream refs,
 wrong expected tips, missing historical blocks, cancellation, reopen/resume and
 abort across plain/encrypted and loose/packed Stores.
+
+## Resolve conflicts by step
+
+Both commands accept `--resolutions JSON_FILE`. Copy the plan's top-level
+`resolution_context` into that file, then append the conflicted step's
+`resolution_context` to its `steps` array and fill that entry's `files` choices.
+Replan with the same BASE/ONTO arguments. Keep earlier choices when adding a
+later step's context; the top-level template always starts with an empty array.
+
+```text
+syrnck native rebase-plan OLD_BASE --onto upstream --resolutions choices.json --verify
+syrnck native rebase OLD_BASE --onto upstream --resolutions choices.json --expect OLD_TIP_ID
+```
+
+The wrapper has exactly `version: 1`, original branch `head`, excluded `base`,
+`onto` and `steps`. Each step uses the shared [file resolution schema](NATIVE_RESOLUTIONS.md)
+with `operation: rebase`, original commit `source`, its original parent as both
+`base` and `parent`, and its current virtual parent as `head`. For the first step,
+that virtual head is ONTO; later heads are the preceding candidate IDs. Use the
+returned contexts, including every exact ID, rather than constructing them by hand.
+
+Choices select `current`, `incoming`, `base`, `remove`, or an imported custom
+`file` manifest and executable mode. They apply to complete entries and are
+limited to the original step's conflicts. Namespace collisions are checked again
+after choices. A partial series remains blocked and writes no candidates or
+working files. Rebase retains a now-empty step as a commit with its original
+message/date. Custom payloads are audited with `--verify` and always before apply.
+Pin imported manifests if GC may run before a completed application retains them.
+
+Changing the original head, BASE or ONTO rejects the wrapper. Changing an earlier
+choice changes subsequent virtual IDs, so later stale contexts are rejected too.
+Sources outside the selected range, duplicate source steps, duplicate JSON keys,
+unknown fields and malformed entry choices are errors. Choices for later steps
+are validated when replay reaches them; no conflicted prefix is published.
+
+The whole document is bounded to 16 MiB, 100,000 steps and a total of 100,000 file
+choices. Raw decoding additionally limits nesting to 64 and total object fields
+to 1,100,010. Existing single-operation decoders keep their own limits. The C++
+series stores steps by original source ID:
+
+```cpp
+auto choices = syrnck::NativeRebaseResolutionSet::parse(plan["resolution_context"]);
+auto step = syrnck::NativeResolutionSet::parse(plan["steps"][0]["resolution_context"]);
+step.files["Content/Map.uasset"] = {syrnck::NativeResolutionChoice::incoming};
+choices.steps[step.source] = step;
+settings.resolutions = choices;
+```
+
+Tests cover all five choices, successive conflicts, stale top-level/virtual-step
+contexts, strict JSON decoding, custom manifest/mode retention and missing custom
+payloads. Process-kill cases cover two-candidate creation, conflict-free and
+explicitly resolved replay, empty-range checkout and abort through publication
+and file-move boundaries in plain/encrypted Stores. These exercise process
+termination with the OS running, not power-loss durability.

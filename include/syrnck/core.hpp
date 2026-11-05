@@ -166,8 +166,17 @@ struct NativeMergeOptions {
   bool fast_forward_only = false;
   std::optional<NativeResolutionSet> resolutions{};
 };
+struct NativeRebaseResolutionSet {
+  std::string head, base, onto;
+  std::map<std::string, NativeResolutionSet> steps;
+  void validate() const;
+  Json json() const;
+  static NativeRebaseResolutionSet parse(const Json &);
+  static NativeRebaseResolutionSet decode(std::span<const std::uint8_t>);
+};
 struct NativeRebaseOptions {
   std::size_t max_commits = 1000;
+  std::optional<NativeRebaseResolutionSet> resolutions{};
 };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.

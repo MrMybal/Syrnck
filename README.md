@@ -122,6 +122,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native rebase BASE --onto REVISION --expect OLD_ID` creates the verified candidate chain and applies its final snapshot through the recoverable checkout journal. The complete old history stays archived through GC; source branches and tags remain unchanged. See [rebase application and recovery](docs/NATIVE_REBASE.md#apply-and-recover).
 
+Rebase also accepts `--resolutions JSON_FILE`: a series of explicit file choices bound to the original head, both bases and each virtual replay step. Partial or stale choices block the whole operation. See [rebase conflict resolution](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

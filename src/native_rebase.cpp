@@ -27,6 +27,12 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
   validate_id(base);
   validate_id(onto);
   const NativeRewriteState state(store, branch, options);
+  if (settings.resolutions) {
+    settings.resolutions->validate();
+    require(settings.resolutions->head == state.head.id && settings.resolutions->base == base &&
+                settings.resolutions->onto == onto,
+            "native rebase resolution context changed; refresh the plan");
+  }
   const auto selected = store.native_head();
   require(selected["directory"].is_null() ||
               utf8(fs::canonical(directory)) == selected["directory"].get<std::string>(),
@@ -48,6 +54,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
     const auto revision = store.metadata(Kind::revision, id);
     const auto &parents = revision["parents"];
     if (parents.size() != 1) {
+      seen.erase(id);
       blockers.push_back(Json{{"reason", parents.empty() ? "base_not_on_linear_history" : "merge_in_range"},
                               {"revision", id}});
       break;
@@ -59,9 +66,19 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
   }
   std::reverse(range.begin(), range.end());
   const std::string_view mode = base == onto ? "up_to_date" : state.head.id == base ? "move" : "rebase";
+  const NativeRebaseResolutionSet context{state.head.id, std::string(base), std::string(onto), {}};
+  if (settings.resolutions) {
+    require(mode != "up_to_date" || settings.resolutions->steps.empty(),
+            "native rebase resolutions have no replay");
+    for (const auto &[source, step] : settings.resolutions->steps) {
+      (void)step;
+      require(seen.contains(source), "native rebase resolution source is outside the range");
+    }
+  }
   NativeRebasePlan plan{state.head.id, std::string(onto), {}, {}};
   Json steps = Json::array(), workspace;
   std::size_t budget = 4096, completed = 0;
+  std::set<ObjectKey> extra_roots;
   for (const auto &source : range)
     budget += source.size() + 3;
   require(budget <= max_object_size, "native rebase report exceeds 16 MiB");
@@ -75,14 +92,27 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
       for (const auto &source : range) {
         throw_if_cancelled(options.stop);
         auto incoming = read_native_snapshot(store, source, options);
-        auto combined = merge_native_files(store, original, current, incoming, options);
         const auto revision = store.metadata(Kind::revision, source);
+        const auto parent = revision["parents"][0].get<std::string>();
+        const NativeResolutionSet step_context{"rebase", plan.target, source, parent, parent, {}};
+        const NativeResolutionSet *resolution = nullptr;
+        if (settings.resolutions) {
+          const auto found = settings.resolutions->steps.find(source);
+          if (found != settings.resolutions->steps.end()) {
+            resolution = &found->second;
+            require_native_resolution_context(*resolution, "rebase", plan.target, source, parent, parent);
+          }
+        }
+        auto combined = merge_native_files(store, original, current, incoming, options, resolution);
+        extra_roots.insert(combined.extra_roots.begin(), combined.extra_roots.end());
         Json row{{"source", source},
                  {"head", plan.target},
                  {"parent", revision["parents"][0]},
                  {"empty", combined.changes.empty()},
                  {"changes", std::move(combined.changes)},
-                 {"conflicts", std::move(combined.conflicts)}};
+                 {"conflicts", std::move(combined.conflicts)},
+                 {"resolved", std::move(combined.resolved)},
+                 {"resolution_context", step_context.json()}};
         if (row["conflicts"].empty()) {
           const auto next = candidate(revision, plan.target, combined.files, options);
           const auto encoded = next.dump();
@@ -113,10 +143,13 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
     if (blockers.empty())
       workspace = plan_native_checkout_files(store, directory, branch, plan.files, options);
   }
-  if (verify_objects)
-    (void)store.closure(
-        {state.head, {Kind::revision, std::string(onto)}, {Kind::revision, std::string(base)}}, true,
-        options.stop, options.progress);
+  if (verify_objects) {
+    extra_roots.insert(state.head);
+    extra_roots.insert({Kind::revision, std::string(onto)});
+    extra_roots.insert({Kind::revision, std::string(base)});
+    (void)store.closure(std::vector<ObjectKey>(extra_roots.begin(), extra_roots.end()), true, options.stop,
+                        options.progress);
+  }
   const bool ready = blockers.empty() && workspace["ready"].get<bool>();
   plan.report = Json{{"version", 1},
                      {"operation", "rebase"},
@@ -133,6 +166,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                      {"result_files", blockers.empty() ? Json(plan.files.size()) : Json{}},
                      {"ready", ready},
                      {"objects_verified", verify_objects},
+                     {"resolution_context", context.json()},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
   require(plan.report.dump().size() <= max_object_size, "native rebase report exceeds 16 MiB");

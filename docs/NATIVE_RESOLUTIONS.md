@@ -1,6 +1,6 @@
 # Native conflict resolutions
 
-Native merge, cherry-pick and revert share explicit file-level conflict choices.
+Native merge, cherry-pick, revert and rebase share explicit file-level conflict choices.
 Their plan commands remain read-only. Supplying choices does not bypass topology,
 object verification, clean tracked files or checkout recovery requirements.
 
@@ -106,6 +106,9 @@ until application. Automatic text merge, rename detection and an interactive
 conflict editor remain future work. Recovery after application starts uses
 `native checkout-status` and `native checkout-recover [--abort]`; it finishes or
 rolls back the recorded candidate without needing the original JSON document.
+Rebase accepts a wrapper binding the original head, excluded base and onto revision,
+with per-step contexts in its `steps` array; see the
+[rebase resolution workflow](NATIVE_REBASE.md#resolve-conflicts-by-step).
 Revision and checkout-journal formats are unchanged. See
 [merge recovery](NATIVE_MERGE.md#apply-and-recover) and
 [replay retention](NATIVE_REPLAY.md#interruption-abort-and-retention).

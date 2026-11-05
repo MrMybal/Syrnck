@@ -111,6 +111,29 @@ NativeMergeOptions merge_settings(const Json &info) {
   }
   return settings;
 }
+bool rebase_operation(std::string_view op) {
+  return op == "rebase" || op == "rebase-abort" || op == "rebase-resolved" || op == "rebase-resolved-abort" ||
+         op == "rebase-move" || op == "rebase-move-abort";
+}
+bool rebase_abort(std::string_view op) {
+  return rebase_operation(op) && op.ends_with("-abort");
+}
+NativeRebaseOptions rebase_settings(const Store &store, const Json &info) {
+  NativeRebaseOptions settings;
+  if (info["operation"].get<std::string>().starts_with("rebase-resolved")) {
+    const auto base = parse_key(info["rebase_base"]).id, onto = parse_key(info["rebase_onto"]).id;
+    const auto first = store.plan_rebase(store.root().parent_path(), "main", base, onto);
+    settings.resolutions = NativeRebaseResolutionSet::parse(first["resolution_context"]);
+    auto step = NativeResolutionSet::parse(first["steps"][0]["resolution_context"]);
+    step.files["asset.bin"] = {NativeResolutionChoice::current};
+    settings.resolutions->steps[step.source] = step;
+    const auto partial = store.plan_rebase(store.root().parent_path(), "main", base, onto, settings);
+    step = NativeResolutionSet::parse(partial["steps"][1]["resolution_context"]);
+    step.files["asset.bin"] = {NativeResolutionChoice::base};
+    settings.resolutions->steps[step.source] = step;
+  }
+  return settings;
+}
 bool rewrite_operation(std::string_view op) {
   return op == "reset-soft" || op == "reset-soft-index" || op == "reset-mixed" || op == "reset-mixed-index" ||
          op == "squash" || op == "squash-root";
@@ -126,6 +149,16 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   }
   if (operation == "revert" || operation == "revert-abort")
     tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
+  std::optional<ObjectKey> rebase_base;
+  if (rebase_operation(operation)) {
+    rebase_base = tip;
+    if (!operation.starts_with("rebase-move")) {
+      rebase_base = put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 2 : 0));
+      const auto first =
+          put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 1 : 0), rebase_base);
+      tip = put_revision(store, old, first);
+    }
+  }
   if (rewrite_operation(operation)) {
     auto parent = put_revision(store, ingest(store, 1));
     if (operation == "squash")
@@ -154,6 +187,18 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (rebase_operation(operation)) {
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
+    const auto onto =
+        put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 3 : 1), rebase_base);
+    store.set_ref("pins/rebase-onto", onto);
+    info["rebase_base"] = key_json(*rebase_base);
+    info["rebase_onto"] = key_json(onto);
+    const auto plan =
+        store.plan_rebase(root.parent_path(), "main", rebase_base->id, onto.id, rebase_settings(store, info));
+    check(plan["ready"] == true, "rebase crash fixture is not ready");
+    info["rebase_target"] = plan["target"];
+  }
   if (rewrite_operation(operation)) {
     const auto parent = store.metadata(Kind::revision, tip.id)["parents"][0].get<std::string>();
     info["rewrite_target"] = key_json({Kind::revision, parent});
@@ -249,6 +294,15 @@ void perform(Store &store, const Json &info) {
       else
         store.amend_message("main", old.id, "Amended crash fixture");
     }
+  } else if (rebase_operation(op)) {
+    if (rebase_abort(op))
+      store.recover_checkout(true);
+    else if (store.checkout_status()["pending"].get<bool>())
+      store.recover_checkout();
+    else if (store.refs().at("heads/main") == parse_key(info["old_revision"]))
+      store.rebase_directory(store.root().parent_path(), "main", parse_key(info["old_revision"]).id,
+                             parse_key(info["rebase_base"]).id, parse_key(info["rebase_onto"]).id,
+                             rebase_settings(store, info));
   } else if (merge_operation(op)) {
     if (merge_abort(op))
       store.recover_checkout(true);
@@ -417,7 +471,7 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       check(tagged == (op != "tag-delete"), "tag operation did not resume");
   }
   if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort" ||
-      replay_operation(op) || merge_operation(op)) {
+      replay_operation(op) || merge_operation(op) || rebase_operation(op)) {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";
     if (fs::exists(working))
@@ -432,12 +486,14 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       check(!status["pending"].get<bool>() && fs::exists(working) &&
                 text(read_bytes(working)) == content(op == "checkout" || op == "switch" ||
                                                              (replay_operation(op) && !replay_abort(op)) ||
-                                                             (merge_operation(op) && !merge_abort(op))
+                                                             (merge_operation(op) && !merge_abort(op)) ||
+                                                             (rebase_operation(op) && !rebase_abort(op))
                                                          ? 1
                                                          : 0),
             "checkout recovery did not finish");
       check(current.str() == content(op == "checkout" || (replay_operation(op) && !replay_abort(op)) ||
-                                             (merge_operation(op) && !merge_abort(op))
+                                             (merge_operation(op) && !merge_abort(op)) ||
+                                             (rebase_operation(op) && !rebase_abort(op))
                                          ? 1
                                          : 0),
             "checkout recovery moved the wrong branch");
@@ -452,6 +508,27 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
             "switch published HEAD apart from its committed journal");
       if (resumed)
         check(committed == (op == "switch"), "switch recovery selected the wrong HEAD");
+    }
+    if (rebase_operation(op)) {
+      check(refs.at("pins/rebase-onto") == parse_key(info["rebase_onto"]), "rebase changed its onto pin");
+      if (refs.at("heads/main") != old) {
+        check(refs.at("heads/main").id == info["rebase_target"].get<std::string>(),
+              "rebase published another virtual target");
+        if (!op.starts_with("rebase-move")) {
+          auto next = refs.at("heads/main").id;
+          auto source = old.id;
+          for (unsigned step = 0; step < 2; ++step) {
+            const auto value = store.metadata(Kind::revision, next),
+                       original = store.metadata(Kind::revision, source);
+            check(value["message"] == original["message"] && value["timestamp"] == original["timestamp"] &&
+                      value["parents"].size() == 1,
+                  "rebase lost source metadata or linear ancestry");
+            next = value["parents"][0].get<std::string>();
+            source = original["parents"][0].get<std::string>();
+          }
+          check(next == parse_key(info["rebase_onto"]).id, "rebase chain lost its onto revision");
+        }
+      }
     }
     if (replay_operation(op) && refs.at("heads/main") != old)
       check(head["parents"] == Json::array({old.id}) && head["message"] == "Replayed crash fixture",
@@ -577,14 +654,19 @@ int entry(int argc, char **argv) {
         } sentinel{root.parent_path() / "unwound.txt"};
         if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort" ||
             replay_abort(info["operation"].get<std::string>()) ||
-            merge_abort(info["operation"].get<std::string>())) {
+            merge_abort(info["operation"].get<std::string>()) ||
+            rebase_abort(info["operation"].get<std::string>())) {
           std::stop_source stop;
           try {
             const OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
                                              if (event.phase == ProgressPhase::exporting && event.bytes > 0)
                                                stop.request_stop();
                                            }};
-            if (merge_abort(info["operation"].get<std::string>()))
+            if (rebase_abort(info["operation"].get<std::string>()))
+              store.rebase_directory(root.parent_path(), "main", parse_key(info["old_revision"]).id,
+                                     parse_key(info["rebase_base"]).id, parse_key(info["rebase_onto"]).id,
+                                     rebase_settings(store, info), options);
+            else if (merge_abort(info["operation"].get<std::string>()))
               store.merge_directory(root.parent_path(), "main", parse_key(info["old_revision"]).id,
                                     parse_key(info["merge_source"]).id, "Merged crash fixture",
                                     merge_settings(info), options);

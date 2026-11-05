@@ -77,6 +77,7 @@ NativeResolutionSet from_tree(const nlohmann::json &value) {
 class Keys final : public nlohmann::json_sax<nlohmann::json> {
   std::vector<std::optional<std::set<std::string>>> stack_;
   std::size_t fields_ = 0;
+  std::size_t maximum_;
   bool start(bool object) {
     require(stack_.size() < 64, "invalid native resolution document");
     stack_.push_back(object ? std::optional<std::set<std::string>>{std::in_place} : std::nullopt);
@@ -84,6 +85,7 @@ class Keys final : public nlohmann::json_sax<nlohmann::json> {
   }
 
 public:
+  explicit Keys(std::size_t maximum = 400010) : maximum_(maximum) {}
   bool null() override {
     return true;
   }
@@ -109,7 +111,7 @@ public:
     return start(true);
   }
   bool key(string_t &key) override {
-    require(++fields_ <= 400010, "native resolution field limit exceeded");
+    require(++fields_ <= maximum_, "native resolution field limit exceeded");
     require(!stack_.empty() && stack_.back() && stack_.back()->insert(key).second,
             "duplicate native resolution field");
     return true;
@@ -129,9 +131,29 @@ public:
     return false;
   }
 };
+NativeRebaseResolutionSet rebase_from_tree(const nlohmann::json &value) {
+  require(value.is_object() && value.size() == 5 && value.contains("version") &&
+              value["version"].is_number_integer() && value["version"] == 1 && value.contains("head") &&
+              value["head"].is_string() && value.contains("base") && value["base"].is_string() &&
+              value.contains("onto") && value["onto"].is_string() && value.contains("steps") &&
+              value["steps"].is_array() && value["steps"].size() <= 100000,
+          "invalid native rebase resolution document");
+  NativeRebaseResolutionSet result{value["head"].get<std::string>(),
+                                   value["base"].get<std::string>(),
+                                   value["onto"].get<std::string>(),
+                                   {}};
+  for (const auto &row : value["steps"]) {
+    auto step = from_tree(row);
+    const auto source = step.source;
+    require(result.steps.emplace(source, std::move(step)).second, "duplicate native rebase resolution step");
+  }
+  result.validate();
+  return result;
+}
 } // namespace
 void NativeResolutionSet::validate() const {
-  require(operation == "merge" || operation == "cherry-pick" || operation == "revert",
+  require(operation == "merge" || operation == "cherry-pick" || operation == "revert" ||
+              operation == "rebase",
           "invalid native resolution operation");
   validate_id(head);
   validate_id(source);
@@ -176,5 +198,40 @@ NativeResolutionSet NativeResolutionSet::decode(std::span<const std::uint8_t> da
   Keys guard;
   require(nlohmann::json::sax_parse(data.begin(), data.end(), &guard), "invalid native resolution document");
   return from_tree(nlohmann::json::parse(data.begin(), data.end()));
+}
+void NativeRebaseResolutionSet::validate() const {
+  validate_id(head);
+  validate_id(base);
+  validate_id(onto);
+  require(steps.size() <= 100000, "native rebase resolution step limit exceeded");
+  std::size_t total = 512, paths = 0;
+  for (const auto &[source, step] : steps) {
+    require(source == step.source && step.operation == "rebase", "invalid native rebase resolution document");
+    step.validate();
+    require(step.files.size() <= 100000 - paths, "native resolution path limit exceeded");
+    paths += step.files.size();
+    const auto size = step.json().dump().size() + 1;
+    require(size <= max_object_size - total, "native resolution document exceeds 16 MiB");
+    total += size;
+  }
+}
+Json NativeRebaseResolutionSet::json() const {
+  validate();
+  Json entries = Json::array();
+  for (const auto &[source, step] : steps) {
+    (void)source;
+    entries.push_back(step.json());
+  }
+  return Json{{"version", 1}, {"head", head}, {"base", base}, {"onto", onto}, {"steps", std::move(entries)}};
+}
+NativeRebaseResolutionSet NativeRebaseResolutionSet::parse(const Json &value) {
+  return rebase_from_tree(nlohmann::json(value));
+}
+NativeRebaseResolutionSet NativeRebaseResolutionSet::decode(std::span<const std::uint8_t> data) {
+  require(data.size() <= max_object_size, "native resolution document exceeds 16 MiB");
+  Keys guard(1100010);
+  require(nlohmann::json::sax_parse(data.begin(), data.end(), &guard),
+          "invalid native rebase resolution document");
+  return rebase_from_tree(nlohmann::json::parse(data.begin(), data.end()));
 }
 } // namespace syrnck

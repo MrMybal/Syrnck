@@ -27,6 +27,36 @@ class NativeRebase(unittest.TestCase):
         head = self.commit("second")
         return root, onto, first, head
 
+    def test_bound_resolution_series_and_duplicate_json_rejection(self):
+        asset = self.root / "asset.bin"
+        asset.write_bytes(b"base")
+        root = self.commit("base")
+        asset.write_bytes(b"onto")
+        onto = self.commit("onto")
+        self.call("native", "branch", "upstream", onto)
+        self.call("native", "checkout", root)
+        asset.write_bytes(b"source")
+        head = self.commit("source")
+        blocked = self.plan("rebase-plan", root, "--onto", onto, ready=False)
+        choices = blocked["resolution_context"]
+        step = blocked["steps"][0]["resolution_context"]
+        step["files"] = {"asset.bin": {"choice": "incoming"}}
+        choices["steps"] = [step]
+        document = self.store / "resolutions.json"
+        text = json.dumps(choices)
+        document.write_text(text, encoding="utf-8")
+        before = self.snapshot()
+        ready = self.plan("rebase-plan", root, "--onto", onto, "--resolutions", document, "--verify")
+        self.assertEqual(self.snapshot(), before)
+        document.write_text(text[:-1] + ',"head":"' + head + '"}', encoding="utf-8")
+        self.call("--lang", "fr", "native", "rebase-plan", root, "--onto", onto,
+                  "--resolutions", document, ok=False)
+        document.write_text(text, encoding="utf-8")
+        result = json.loads(self.call("native", "rebase", root, "--onto", onto, "--resolutions", document).stdout)
+        self.assertEqual(result["target"], ready["target"])
+        self.assertEqual(asset.read_bytes(), b"source")
+        self.call("native", "rebase", root, "--onto", onto, "--resolutions", document, ok=False)
+
     def test_application_matches_virtual_ids_retains_source_and_retries(self):
         root, onto, first, head = self.setup_range()
         preview = self.plan("rebase-plan", root, "--onto", onto, "--verify")
