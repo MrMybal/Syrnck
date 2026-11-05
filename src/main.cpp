@@ -195,6 +195,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native tag-delete NOM --expect RÉVISION
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCHE] [--limit 50]
+  native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
+    Relations d'ascendance et tous les meilleurs ancêtres communs.
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch BRANCHE]
   git install [DOSSIER] [--encrypted]
@@ -281,6 +283,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native tag-delete NAME --expect REVISION
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCH] [--limit 50]
+  native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
+    Ancestry relations and every best common ancestor.
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch BRANCH]
   git install [DIRECTORY] [--encrypted]
@@ -528,11 +532,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
-                               sub == "add" || sub == "staged" || sub == "reset" || sub == "checkout-plan" ||
-                               sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" ||
-                               sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" ||
-                               sub == "tag-delete" || sub == "tag-archive" || sub == "tag-restore")) ||
+      (command == "native" &&
+       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
+        sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
+        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
+        sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
+        sub == "tag-restore" || sub == "ancestry")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -838,6 +843,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "tag-restore") {
       args.count(1);
       print(store.restore_native_tag(args.values[0], {control->token(), observe}));
+    } else if (sub == "ancestry") {
+      const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
+      const auto links = integer(args.option("--max-links").value_or("1000000"));
+      require(revisions >= 1 && revisions <= 1000000, "native graph revision limit must be in 1..1000000");
+      require(links <= 10000000, "native graph parent link limit must be in 0..10000000");
+      args.count(2);
+      print(store.native_ancestry(resolve(args.values[0]), resolve(args.values[1]),
+                                  {static_cast<std::size_t>(revisions), static_cast<std::size_t>(links)},
+                                  {control->token(), observe}));
     } else if (sub == "log") {
       auto branch = selected_branch();
       auto limit = integer(args.option("--limit").value_or("50"));

@@ -118,6 +118,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [ ] Sélection de hunks, diff textuel et rebase automatique d'un index périmé.
 - [ ] HEAD détaché, workspaces multiples et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
 - [ ] Merge à trois voies, base commune, conflits de texte, conflits binaires et renommages.
+- [x] Parcours itératif borné du graphe de révisions, relations d'ascendance et tous les meilleurs ancêtres communs, y compris les merges croisés ; lecture seule sans lire les blocs de fichiers.
 - [x] Amendement du dernier commit natif par dossier, index préparé ou message seul ; parents conservés, tête attendue et publication atomique branche/archive/index, reconstruction après GC et arrêts forcés.
 - [ ] Rebase, cherry-pick, revert, reset, stash et squash.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.

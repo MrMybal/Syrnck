@@ -135,6 +135,10 @@ struct OperationOptions {
   std::stop_token stop{};
   ProgressCallback progress{};
 };
+struct NativeGraphLimits {
+  std::size_t max_revisions = 100000;
+  std::size_t max_parent_links = 1000000;
+};
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
   // At most 2 * workers distinct blocks may await publication, independently
@@ -308,6 +312,10 @@ public:
   // Exact ID, HEAD, heads/NAME, tags/NAME, or an unambiguous bare branch/tag.
   // Resolves a revision's metadata only; complete closure verification is separate.
   std::string resolve_native_revision(std::string_view selector, OperationOptions = {}) const;
+  // Complete, bounded metadata-only traversal. Reports every best common
+  // ancestor, including multiple bases in a criss-cross history.
+  Json native_ancestry(std::string_view source, std::string_view target, NativeGraphLimits = {},
+                       OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

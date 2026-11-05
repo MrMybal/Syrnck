@@ -100,6 +100,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native commit --amend -m MESSAGE` replaces the tip while preserving its parents and atomically archiving the old revision. Add `--staged` to use prepared bytes or `--message-only` to reuse the existing snapshot; `--expect ID` guards the exact old tip. Archives retain their complete file blocks through GC. See [native amendment, retention and interruption recovery](docs/NATIVE_AMEND.md).
 
+`native ancestry SOURCE TARGET` reports ancestry in both directions and every best common ancestor, including criss-cross histories, using a bounded read-only graph traversal. See [native revision ancestry](docs/NATIVE_HISTORY.md).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).
