@@ -594,3 +594,5 @@ SYRNCK_MESSAGE("native replay requires an empty staging index", "le rejeu natif 
 SYRNCK_MESSAGE("native replay has conflicts; inspect the replay plan", "le rejeu natif présente des conflits ; inspectez son plan")
 SYRNCK_MESSAGE("native replay has no changes", "le rejeu natif ne comporte aucun changement")
 SYRNCK_MESSAGE("native replay is blocked; inspect the replay plan", "le rejeu natif est bloqué ; inspectez son plan")
+SYRNCK_MESSAGE("native merge base must be a best common ancestor", "la base du merge natif doit être un meilleur ancêtre commun")
+SYRNCK_MESSAGE("native merge report exceeds 16 MiB", "le rapport de merge natif dépasse 16 Mio")

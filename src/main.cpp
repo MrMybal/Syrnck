@@ -197,6 +197,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log [--branch BRANCHE] [--limit 50]
   native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
+  native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories]
+                    [--branch BRANCHE] [--directory .] [--verify]
+                    [--max-revisions 100000] [--max-links 1000000]
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
     [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
@@ -291,6 +294,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log [--branch BRANCH] [--limit 50]
   native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
     Ancestry relations and every best common ancestor.
+  native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories]
+                    [--branch BRANCH] [--directory .] [--verify]
+                    [--max-revisions 100000] [--max-links 1000000]
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
     [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
@@ -550,7 +556,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
         sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
-        sub == "cherry-pick" || sub == "revert")) ||
+        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -883,6 +889,25 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto tip = expected ? *expected : resolve("heads/" + branch);
       print(store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
                                    {control->token(), observe}));
+    } else if (sub == "merge-plan") {
+      const auto directory = workspace();
+      const auto branch = selected_branch();
+      const auto verify = args.flag("--verify");
+      NativeMergeOptions settings;
+      settings.allow_unrelated_histories = args.flag("--allow-unrelated-histories");
+      const auto base = args.option("--base");
+      const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
+      const auto links = integer(args.option("--max-links").value_or("1000000"));
+      require(revisions >= 1 && revisions <= 1000000, "native graph revision limit must be in 1..1000000");
+      require(links <= 10000000, "native graph parent link limit must be in 0..10000000");
+      settings.limits = {static_cast<std::size_t>(revisions), static_cast<std::size_t>(links)};
+      args.count(1);
+      if (base)
+        settings.base = resolve(*base);
+      const auto plan = store.plan_merge(directory, branch, resolve(args.values[0]), settings, verify,
+                                         {control->token(), observe});
+      print(plan);
+      return plan["ready"].get<bool>() ? 0 : 1;
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));
