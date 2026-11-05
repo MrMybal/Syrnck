@@ -40,6 +40,8 @@ Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège le
 
 `native merge-plan feature --text-merge` active la fusion textuelle automatique bornée dans un merge natif. Appliquez avec `native merge feature --text-merge --expect ANCIENNE_TÊTE` ; les résolutions explicites restent prioritaires et tout conflit restant bloque le merge complet. L’aperçu calcule les futurs manifestes sans écrire d’objets. Voir [la fusion automatique native](docs/NATIVE_MERGE.md#opt-in-text-composition).
 
+`native cherry-pick-plan`/`revert-plan` et leurs commandes d’application acceptent aussi `--text-merge`. Revert retire le changement choisi en conservant les modifications textuelles ultérieures indépendantes. Les résultats restent des révisions complètes à un parent, avec checkout récupérable et rétention après GC. Voir [le rejeu textuel borné](docs/NATIVE_REPLAY.md#optional-bounded-text-composition).
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

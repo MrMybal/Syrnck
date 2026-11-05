@@ -126,6 +126,28 @@ Once published, the resulting file's manifest directly retains all of its blocks
 reconstructing it does not require the unrelated source's original history.
 Retain a source branch/tag/pin when that history should also survive GC.
 
+The CLI exposes the same opt-in, including explicit resolution documents:
+
+```text
+syrnck native cherry-pick-plan feature --text-merge --verify
+syrnck native cherry-pick feature --text-merge --expect OLD_TIP_ID -m "Apply fix"
+syrnck native revert-plan SOURCE_ID --text-merge --max-work 33554432
+syrnck native revert SOURCE_ID --text-merge --expect OLD_TIP_ID -m "Undo fix"
+```
+
+`--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes` set
+per-file budgets and require `--text-merge`. Mainline, resolutions, expected head,
+required message, progress and English/French diagnostics retain their normal
+meaning. Use the same options for plan and application. Any remaining conflict,
+including a budget refusal, blocks all generated files in that replay.
+
+Tests compare both APIs with the default entry points, exercise both replay
+directions on loose/single-pack/multi-pack stores in clear and encrypted form,
+and verify single-parent metadata, explicit precedence, recovery, abort and GC.
+The forced-process-termination campaign covers new chunk/manifest/revision writes,
+both changed files' preparation and moves, reference publication and recovery.
+The generated manifest is independently predicted and absent from each seed.
+
 ## Apply a planned change
 
 ```text

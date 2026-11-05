@@ -120,6 +120,13 @@ ObjectKey put_revision(const Store &store, const ObjectKey &manifest,
                        const std::optional<ObjectKey> &parent = {}) {
   return store.put(Kind::revision, bytes(revision(manifest, parent).dump())).first;
 }
+ObjectKey put_text_revision(const Store &store, const ObjectKey &manifest, unsigned mask,
+                            const std::optional<ObjectKey> &parent = {}) {
+  auto value = revision(manifest, parent);
+  std::istringstream input(hunk_text(mask, false));
+  value["files"]["code.cpp"] = Json{{"manifest", store.ingest(input).first}, {"executable", false}};
+  return store.put(Kind::revision, bytes(value.dump())).first;
+}
 fs::path loose(const Store &store, const ObjectKey &key) {
   return store.root() / "objects" / kind_name(key.kind) / key.id.substr(0, 2) / key.id;
 }
@@ -132,10 +139,24 @@ Store open(const fs::path &root, const Json &info) {
 }
 bool replay_operation(std::string_view operation) {
   return operation == "cherry-pick" || operation == "cherry-pick-abort" || operation == "revert" ||
-         operation == "revert-abort";
+         operation == "revert-abort" || operation == "cherry-pick-text" ||
+         operation == "cherry-pick-text-abort" || operation == "revert-text" ||
+         operation == "revert-text-abort";
 }
 bool replay_abort(std::string_view operation) {
-  return operation == "cherry-pick-abort" || operation == "revert-abort";
+  return replay_operation(operation) && operation.ends_with("-abort");
+}
+bool text_replay_operation(std::string_view operation) {
+  return operation.starts_with("cherry-pick-text") || operation.starts_with("revert-text");
+}
+NativeReplayKind replay_kind(std::string_view operation) {
+  return operation.starts_with("revert") ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
+}
+NativeReplayOptions replay_settings(std::string_view operation) {
+  NativeReplayOptions settings;
+  if (text_replay_operation(operation))
+    settings.text_merge.emplace();
+  return settings;
 }
 bool merge_operation(std::string_view operation) {
   return operation == "merge" || operation == "merge-abort" || operation == "merge-fast-forward" ||
@@ -215,6 +236,15 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   }
   if (operation == "revert" || operation == "revert-abort")
     tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
+  std::optional<ObjectKey> replay_text_base, replay_text_source;
+  if (operation.starts_with("cherry-pick-text")) {
+    replay_text_base = put_text_revision(store, old, 0);
+    tip = put_text_revision(store, old, 1, replay_text_base);
+  } else if (operation.starts_with("revert-text")) {
+    replay_text_base = put_text_revision(store, ingest(store, 1), 0);
+    replay_text_source = put_text_revision(store, old, 2, replay_text_base);
+    tip = put_text_revision(store, old, 3, replay_text_source);
+  }
   std::optional<ObjectKey> rebase_base;
   if (rebase_operation(operation)) {
     rebase_base = tip;
@@ -383,7 +413,16 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   }
   if (replay_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
-    const auto source = operation.starts_with("revert") ? tip : put_revision(store, ingest(store, 1), tip);
+    const auto source = operation.starts_with("revert") ? replay_text_source.value_or(tip)
+                        : replay_text_base ? put_text_revision(store, ingest(store, 1), 2, replay_text_base)
+                                           : put_revision(store, ingest(store, 1), tip);
+    if (text_replay_operation(operation)) {
+      const bool inverse = operation.starts_with("revert");
+      atomic_write(root.parent_path() / "code.cpp", bytes(hunk_text(inverse ? 3 : 1, false)), false);
+      info["text_result_manifest"] = hunk_manifest(hunk_text(inverse ? 1 : 3, false));
+      check(!store.contains({Kind::manifest, info["text_result_manifest"].get<std::string>()}),
+            "text replay seed materialized its candidate");
+    }
     store.set_ref("pins/replay-source", source);
     info["replay_source"] = key_json(source);
   }
@@ -528,10 +567,10 @@ void perform(Store &store, const Json &info) {
     else if (store.checkout_status()["pending"].get<bool>())
       store.recover_checkout();
     else if (store.refs().at("heads/main") == parse_key(info.at("old_revision")))
-      store.replay_directory(store.root().parent_path(), "main", parse_key(info.at("old_revision")).id,
-                             parse_key(info.at("replay_source")).id,
-                             op == "revert" ? NativeReplayKind::revert : NativeReplayKind::cherry_pick,
-                             "Replayed crash fixture");
+      store.replay_directory_with_options(store.root().parent_path(), "main",
+                                          parse_key(info.at("old_revision")).id,
+                                          parse_key(info.at("replay_source")).id, replay_kind(op),
+                                          "Replayed crash fixture", replay_settings(op));
   } else if (op.starts_with("stage-rebase")) {
     const auto previous = parse_key(info["old_index"]);
     if (store.refs().at("staging/main") == previous) {
@@ -838,9 +877,38 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
         }
       }
     }
-    if (replay_operation(op) && refs.at("heads/main") != old)
-      check(head["parents"] == Json::array({old.id}) && head["message"] == "Replayed crash fixture",
-            "replay recovery changed ancestry or commit message");
+    if (replay_operation(op)) {
+      check(refs.at("pins/replay-source") == parse_key(info["replay_source"]),
+            "replay changed its source pin");
+      if (refs.at("heads/main") != old)
+        check(head["parents"] == Json::array({old.id}) && head["message"] == "Replayed crash fixture",
+              "replay recovery changed ancestry or commit message");
+      if (text_replay_operation(op)) {
+        const unsigned old_mask = op.starts_with("revert") ? 3 : 1,
+                       next_mask = op.starts_with("revert") ? 1 : 3;
+        const auto code = root.parent_path() / "code.cpp";
+        if (fs::exists(code))
+          check(text(read_bytes(code)) == hunk_text(old_mask, false) ||
+                    text(read_bytes(code)) == hunk_text(next_mask, false),
+                "text replay published incomplete working bytes");
+        else {
+          check(status["pending"].get<bool>(), "text replay lost a file without a journal");
+          const auto backup = path_from_utf8(status["data_directory"].get<std::string>()) / "old/1.bin";
+          check(fs::exists(backup) && text(read_bytes(backup)) == hunk_text(old_mask, false),
+                "text replay lost its source backup");
+        }
+        if (refs.at("heads/main") != old) {
+          check(head["files"]["code.cpp"]["manifest"] == info["text_result_manifest"],
+                "text replay published a different manifest");
+          std::ostringstream merged;
+          store.reconstruct(info["text_result_manifest"].get<std::string>(), merged);
+          check(merged.str() == hunk_text(next_mask, false), "text replay lost reconstructed bytes");
+        }
+        if (resumed)
+          check(text(read_bytes(code)) == hunk_text(replay_abort(op) ? old_mask : next_mask, false),
+                "text replay recovery lost exact bytes");
+      }
+    }
     if (merge_operation(op)) {
       const auto source = parse_key(info["merge_source"]);
       check(refs.at("pins/merge-source") == source, "merge changed its source pin");
@@ -1002,11 +1070,10 @@ int entry(int argc, char **argv) {
                                     parse_key(info["merge_source"]).id, "Merged crash fixture",
                                     merge_settings(info), options);
             else if (replay_abort(info["operation"].get<std::string>()))
-              store.replay_directory(root.parent_path(), "main", parse_key(info.at("old_revision")).id,
-                                     parse_key(info.at("replay_source")).id,
-                                     info["operation"] == "revert-abort" ? NativeReplayKind::revert
-                                                                         : NativeReplayKind::cherry_pick,
-                                     "Replayed crash fixture", {}, options);
+              store.replay_directory_with_options(
+                  root.parent_path(), "main", parse_key(info.at("old_revision")).id,
+                  parse_key(info.at("replay_source")).id, replay_kind(info["operation"].get<std::string>()),
+                  "Replayed crash fixture", replay_settings(info["operation"].get<std::string>()), options);
             else if (info["operation"] == "switch-abort")
               store.switch_directory(root.parent_path(), "feature", options);
             else

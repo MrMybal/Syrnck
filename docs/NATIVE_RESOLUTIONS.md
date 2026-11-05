@@ -106,9 +106,10 @@ can discard them. IDs are lowercase 64-character hexadecimal values.
 
 Resolution documents do not create persistent conflict state, modify tracked
 files or retain their input objects. Keep the necessary branch/tag/pin roots
-until application. [Native merge](NATIVE_MERGE.md#opt-in-text-composition) can
+until application. Native [merge](NATIVE_MERGE.md#opt-in-text-composition) and
+[cherry-pick/revert](NATIVE_REPLAY.md#optional-bounded-text-composition) can
 explicitly enable bounded text composition after user choices. Automatic text
-integration into the other operations, rename detection and an interactive
+integration into rebase/staging rebase, rename detection and an interactive
 conflict editor remain future work. Recovery after application starts uses
 `native checkout-status` and `native checkout-recover [--abort]`; it finishes or
 rolls back the recorded candidate without needing the original JSON document.

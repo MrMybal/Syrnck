@@ -18,6 +18,11 @@ ENV = {key: value for key, value in os.environ.items()
        if key.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced",
           "atomic.published", "atomic.durable")
+REPLAY_OPERATIONS = ("cherry-pick", "revert", "cherry-pick-text", "revert-text")
+
+
+def replay_operation(operation):
+    return operation.removesuffix("-abort") in REPLAY_OPERATIONS
 
 
 def cases():
@@ -89,11 +94,17 @@ def cases():
     atomic("tag-create", ("chunk", "refs"))
     atomic("tag-delete", ("chunk", "refs"))
     atomic("tag-restore", ("refs",))
-    for replay in ("cherry-pick", "revert"):
+    for replay in REPLAY_OPERATIONS:
         result.extend((replay if operation == "checkout" else replay + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         atomic(replay, ("revision",))
+        if replay.endswith("-text"):
+            atomic(replay, ("chunk", "manifest"))
+            atomic(replay, ("checkout-prepared",), 2)
+            for kind in ("checkout-backup", "export-file"):
+                result.extend((replay, phase, kind, 2)
+                              for phase in ("move.before", "move.published", "move.durable"))
     for merge in ("merge", "merge-fast-forward", "merge-resolved", "merge-text"):
         result.extend((merge if operation == "checkout" else merge + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
@@ -183,8 +194,8 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
-                        (operation.startswith("merge-text") and target == root.parent / "code.cpp") or
-                        ((operation in ("checkout", "checkout-abort", "switch", "switch-abort", "cherry-pick", "cherry-pick-abort", "revert", "revert-abort") or operation.startswith(("merge", "rebase"))) and target == root.parent / "asset.bin") or
+                        (operation.startswith(("merge-text", "cherry-pick-text", "revert-text")) and target == root.parent / "code.cpp") or
+                        ((operation in ("checkout", "checkout-abort", "switch", "switch-abort") or replay_operation(operation) or operation.startswith(("merge", "rebase"))) and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")
         if kind == "config":
@@ -276,8 +287,8 @@ class CrashRecovery(unittest.TestCase):
             unrelated = lambda refs: {name: key for name, key in refs.items()
                                       if not name.startswith(("tags/", "tag-metadata/", "archive/tags/"))}
             self.assertEqual(unrelated(checked["refs"]), unrelated(info["refs"]))
-        elif operation in ("checkout", "checkout-abort", "cherry-pick", "cherry-pick-abort", "revert", "revert-abort") or operation.startswith(("merge", "rebase")):
-            changed = (operation in ("checkout", "cherry-pick", "revert") or (operation.startswith(("merge", "rebase")) and not operation.endswith("-abort"))) and (
+        elif operation in ("checkout", "checkout-abort") or replay_operation(operation) or operation.startswith(("merge", "rebase")):
+            changed = not operation.endswith("-abort") and (
                 (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
                 phase in ("checkout.committed", "checkout.cleaned"))
             self.assertEqual(checked["refs"]["heads/main"] != info["old_revision"], changed)

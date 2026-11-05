@@ -98,6 +98,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native merge-plan feature --text-merge` enables bounded automatic text composition inside a native merge. Apply with `native merge feature --text-merge --expect OLD_TIP_ID`; explicit resolutions take priority and any remaining conflict blocks the complete merge. Plans prepare exact future manifest IDs without writing objects. See [automatic native text composition](docs/NATIVE_MERGE.md#opt-in-text-composition).
 
+`native cherry-pick-plan`/`revert-plan` and their application commands also accept `--text-merge`. Revert removes only the selected delta while preserving later independent text changes. Results remain complete single-parent revisions with recoverable checkout and GC retention. See [bounded text replay](docs/NATIVE_REPLAY.md#optional-bounded-text-composition).
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

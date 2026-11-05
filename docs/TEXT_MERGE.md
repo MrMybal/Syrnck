@@ -104,10 +104,11 @@ JSON fields and merged bytes are language independent.
 the normal text budgets. `--progress` and `--progress-json` report on stderr;
 the operation supports the existing cooperative CLI cancellation.
 
-This command is an explicit preview. Native `merge` can also enable
-[bounded automatic text composition](NATIVE_MERGE.md#opt-in-text-composition).
-Cherry-pick, revert and rebase still use their existing file-level decisions. A reviewed clean
-text result can be applied through a custom file resolution:
+This command is an explicit preview. Native [merge](NATIVE_MERGE.md#opt-in-text-composition)
+and [cherry-pick/revert](NATIVE_REPLAY.md#optional-bounded-text-composition) can also
+enable bounded automatic text composition. Rebase still uses its existing
+file-level decisions. A reviewed clean text result can be applied through a
+custom file resolution:
 
 1. Run the native operation's plan and retain its exact `resolution_context`.
    For a merge, pass its `base`, `head` and `source` IDs to `merge-text`.

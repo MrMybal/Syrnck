@@ -265,11 +265,11 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
     --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
-  native cherry-pick-plan RÉVISION [--mainline N] [--verify]
-  native revert-plan RÉVISION [--mainline N] [--verify]
+  native cherry-pick-plan RÉVISION [--mainline N] [--verify] [--text-merge]
+  native revert-plan RÉVISION [--mainline N] [--verify] [--text-merge]
     [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
-  native cherry-pick RÉVISION -m MESSAGE [--mainline N] [--expect ID]
-  native revert RÉVISION -m MESSAGE [--mainline N] [--expect ID]
+  native cherry-pick RÉVISION -m MESSAGE [--mainline N] [--expect ID] [--text-merge]
+  native revert RÉVISION -m MESSAGE [--mainline N] [--expect ID] [--text-merge]
     [--branch BRANCHE] [--directory .] ; nouveau commit et checkout récupérable.
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch BRANCHE]
@@ -409,11 +409,11 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
     --resolutions JSON_FILE: per-step choices bound to the head and both bases.
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
-  native cherry-pick-plan REVISION [--mainline N] [--verify]
-  native revert-plan REVISION [--mainline N] [--verify]
+  native cherry-pick-plan REVISION [--mainline N] [--verify] [--text-merge]
+  native revert-plan REVISION [--mainline N] [--verify] [--text-merge]
     [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
-  native cherry-pick REVISION -m MESSAGE [--mainline N] [--expect ID]
-  native revert REVISION -m MESSAGE [--mainline N] [--expect ID]
+  native cherry-pick REVISION -m MESSAGE [--mainline N] [--expect ID] [--text-merge]
+  native revert REVISION -m MESSAGE [--mainline N] [--expect ID] [--text-merge]
     [--branch BRANCH] [--directory .]; new commit and recoverable checkout.
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch BRANCH]
@@ -1255,30 +1255,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       require(planning || message.has_value(), "--message is required");
-      const auto resolutions = resolutions_input();
-      std::optional<std::uint32_t> mainline;
+      NativeReplayOptions settings;
+      settings.resolutions = resolutions_input();
+      if (args.flag("--text-merge"))
+        settings.text_merge = text_diff_options(args);
       if (const auto value = args.option("--mainline")) {
         const auto n = integer(*value);
         require(n >= 1 && n <= UINT32_MAX, "native replay mainline must be in 1..4294967295");
-        mainline = static_cast<std::uint32_t>(n);
+        settings.mainline = static_cast<std::uint32_t>(n);
       }
       args.count(1);
       const auto kind = sub.starts_with("revert") ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
       const auto source = resolve(args.values[0]);
       if (planning) {
-        auto plan = resolutions ? store.plan_replay_resolved(directory, branch, source, kind, *resolutions,
-                                                             mainline, verify, {control->token(), observe})
-                                : store.plan_replay(directory, branch, source, kind, mainline, verify,
-                                                    {control->token(), observe});
+        auto plan = store.plan_replay_with_options(directory, branch, source, kind, settings, verify,
+                                                   {control->token(), observe});
         const bool ready = plan["ready"].get<bool>();
         print(plan);
         return ready ? 0 : 1;
       }
       const auto tip = expected ? *expected : resolve("heads/" + branch);
-      print(resolutions ? store.replay_directory_resolved(directory, branch, tip, source, kind, *message,
-                                                          *resolutions, mainline, {control->token(), observe})
-                        : store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
-                                                 {control->token(), observe}));
+      print(store.replay_directory_with_options(directory, branch, tip, source, kind, *message, settings,
+                                                {control->token(), observe}));
     } else if (sub == "merge-plan" || sub == "merge") {
       const bool planning = sub == "merge-plan";
       const auto directory = workspace();
