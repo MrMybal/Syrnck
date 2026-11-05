@@ -596,3 +596,7 @@ SYRNCK_MESSAGE("native replay has no changes", "le rejeu natif ne comporte aucun
 SYRNCK_MESSAGE("native replay is blocked; inspect the replay plan", "le rejeu natif est bloqué ; inspectez son plan")
 SYRNCK_MESSAGE("native merge base must be a best common ancestor", "la base du merge natif doit être un meilleur ancêtre commun")
 SYRNCK_MESSAGE("native merge report exceeds 16 MiB", "le rapport de merge natif dépasse 16 Mio")
+SYRNCK_MESSAGE("choose either --no-ff or --ff-only", "choisissez --no-ff ou --ff-only")
+SYRNCK_MESSAGE("native merge tip changed; inspect the branch and retry", "la tête du merge natif a changé ; inspectez la branche et relancez l'opération")
+SYRNCK_MESSAGE("native merge requires an empty staging index", "le merge natif nécessite un index de staging vide")
+SYRNCK_MESSAGE("native merge is blocked; inspect native merge-plan", "le merge natif est bloqué ; inspectez native merge-plan")

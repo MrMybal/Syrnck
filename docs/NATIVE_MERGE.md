@@ -1,4 +1,4 @@
-# Native merge planning
+# Native merge
 
 `native merge-plan` computes the topology and complete proposed file snapshot
 without changing objects, references or working files. It shares file-level
@@ -68,3 +68,63 @@ auto plan = store.plan_merge(project, "main", source_id, settings, true, operati
 Planning supports cooperative cancellation and English/French progress/errors.
 JSON fields and reason codes are language-independent. Callbacks must not reenter
 the Store. Native merge is not exposed through the C ABI or Go binding yet.
+
+## Apply and recover
+
+```text
+syrnck native merge feature --expect OLD_TIP_ID -m "Merge feature"
+syrnck native merge release --ff-only
+syrnck native merge feature --no-ff -m "Record feature integration"
+```
+
+Apply recomputes the plan, always verifies both input closures and reconstructed
+file hashes, and requires the exact target tip inspected by the caller. The CLI
+captures it under the Store lock when `--expect` is omitted. `--expect` accepts
+an exact ID. The optional message defaults to `Merge SOURCE_ID`.
+
+Up-to-date returns `state: unchanged` without writing objects or refs. Fast-forward
+checks out the exact source revision without creating a new commit. Divergence
+creates an ordinary v1 revision with parents `[old_target, source]` and the supplied
+message/current UTC timestamp. A same-tree divergent history still creates this
+two-parent commit. Source branches/tags and symbolic HEAD do not move.
+
+`--no-ff` requests a two-parent commit even when a fast-forward is possible.
+`--ff-only` refuses divergence with the `fast_forward_required` blocker. These
+flags are mutually exclusive and work in both plan and apply. They do not bypass
+base selection, unrelated-history opt-in, file conflicts or workspace preflight.
+
+After preparing the candidate, apply uses the existing checkout journal, file
+backups, atomic branch/archive/receipt publication and explicit recovery:
+
+```text
+syrnck native checkout-status
+syrnck native checkout-recover
+syrnck native checkout-recover --abort
+```
+
+Abort is available before branch publication; afterwards recovery only finishes
+cleanup. An active journal blocks GC and new native history mutations. Candidate
+metadata written before a failed/cancelled journal publication can remain
+unreferenced. Opening the Store never applies workspace recovery automatically.
+The [checkout data and durability limits](NATIVE_CHECKOUT.md) apply, including
+plaintext private prepared files/backups in encrypted Stores.
+
+Both histories remain reachable through the new two-parent commit after a
+divergent merge. Fast-forward already contains the old target in its ancestry.
+Checkout archives additionally retain previous heads. These roots preserve old
+file blocks through destructive GC. Reverting a merge uses the existing
+`native revert MERGE_ID --mainline N -m MESSAGE` operation.
+
+The direct result adds `operation: merge`, `mode`, `previous_revision`,
+`merged_revision` and `base` to the checkout result. Recovery reports the generic
+checkout journal identity and its recorded target; these response labels do not
+change the journal format. Native revision v1 is unchanged.
+
+```cpp
+auto applied = store.merge_directory(project, "main", expected_id, source_id,
+                                      "Merge feature", settings, operation);
+```
+
+Tests cover exact fast-forward manifests, no-ff/ff-only, up-to-date no-op,
+same-tree divergence, two-parent retention after GC, unchanged source refs,
+interruption, reopen/resume, rollback and mainline revert of a new merge.

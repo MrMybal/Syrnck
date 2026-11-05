@@ -123,6 +123,8 @@ logiques et trafic des corps d'objets.
 
 `native merge-plan RÉVISION` distingue une branche à jour, une avance rapide et un merge divergent, choisit une base commune unique et affiche les conflits de fichiers et du dossier. Plusieurs bases ou des historiques sans lien exigent un choix explicite. Voir la [préparation du merge natif](docs/NATIVE_MERGE.md).
 
+`native merge RÉVISION` applique le résultat via le checkout récupérable : avance rapide exacte ou commit ayant les deux historiques pour parents. `--ff-only`, `--no-ff` et `--expect ID` contrôlent l'intégration ; les anciennes versions restent conservées après GC. Voir [l'application du merge et sa reprise](docs/NATIVE_MERGE.md#apply-and-recover).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

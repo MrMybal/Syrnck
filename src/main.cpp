@@ -199,7 +199,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
   native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories]
                     [--branch BRANCHE] [--directory .] [--verify]
-                    [--max-revisions 100000] [--max-links 1000000]
+                    [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
+  native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
     [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
@@ -296,7 +297,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
     Ancestry relations and every best common ancestor.
   native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories]
                     [--branch BRANCH] [--directory .] [--verify]
-                    [--max-revisions 100000] [--max-links 1000000]
+                    [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
+  native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
     [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
@@ -556,7 +558,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
         sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
-        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan")) ||
+        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -889,12 +891,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto tip = expected ? *expected : resolve("heads/" + branch);
       print(store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
                                    {control->token(), observe}));
-    } else if (sub == "merge-plan") {
+    } else if (sub == "merge-plan" || sub == "merge") {
+      const bool planning = sub == "merge-plan";
       const auto directory = workspace();
       const auto branch = selected_branch();
-      const auto verify = args.flag("--verify");
+      const auto verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
       settings.allow_unrelated_histories = args.flag("--allow-unrelated-histories");
+      settings.no_fast_forward = args.flag("--no-ff");
+      settings.fast_forward_only = args.flag("--ff-only");
       const auto base = args.option("--base");
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));
@@ -904,10 +911,16 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(1);
       if (base)
         settings.base = resolve(*base);
-      const auto plan = store.plan_merge(directory, branch, resolve(args.values[0]), settings, verify,
-                                         {control->token(), observe});
-      print(plan);
-      return plan["ready"].get<bool>() ? 0 : 1;
+      const auto source = resolve(args.values[0]);
+      if (planning) {
+        const auto plan =
+            store.plan_merge(directory, branch, source, settings, verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      print(store.merge_directory(directory, branch, tip, source, message.value_or("Merge " + source),
+                                  settings, {control->token(), observe}));
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));

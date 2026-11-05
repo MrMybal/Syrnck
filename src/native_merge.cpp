@@ -5,6 +5,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                                      std::string_view source, const NativeMergeOptions &settings,
                                      bool verify_objects, OperationOptions options) {
   throw_if_cancelled(options.stop);
+  require(!settings.no_fast_forward || !settings.fast_forward_only, "choose either --no-ff or --ff-only");
   validate_ref("heads/" + std::string(branch));
   validate_id(source);
   if (settings.base)
@@ -32,7 +33,10 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     blockers.push_back(Json{{"reason", "multiple_merge_bases"}});
   }
   const bool up_to_date = graph["target_is_ancestor"].get<bool>();
-  const bool forward = !up_to_date && graph["source_is_ancestor"].get<bool>();
+  const bool forward_possible = graph["source_is_ancestor"].get<bool>();
+  const bool forward = !up_to_date && forward_possible && !settings.no_fast_forward;
+  if (settings.fast_forward_only && !up_to_date && !forward_possible)
+    blockers.push_back(Json{{"reason", "fast_forward_required"}});
   const std::string_view mode = up_to_date ? "up_to_date" : forward ? "fast_forward" : "merge";
   NativeFileMergeResult combined;
   Json workspace;
@@ -67,6 +71,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"visited_revisions", graph["visited_revisions"]},
                      {"parent_links", graph["parent_links"]},
                      {"allow_unrelated_histories", settings.allow_unrelated_histories},
+                     {"no_fast_forward", settings.no_fast_forward},
+                     {"fast_forward_only", settings.fast_forward_only},
                      {"ready", ready},
                      {"objects_verified", verify_objects},
                      {"result_files", blockers.empty() ? Json(plan.files.size()) : Json{}},

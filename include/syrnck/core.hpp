@@ -144,6 +144,8 @@ struct NativeMergeOptions {
   std::optional<std::string> base{};
   bool allow_unrelated_histories = false;
   NativeGraphLimits limits{};
+  bool no_fast_forward = false;
+  bool fast_forward_only = false;
 };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
@@ -326,6 +328,10 @@ public:
   // Multiple best bases require an explicit selection; unrelated roots opt in.
   Json plan_merge(const fs::path &, std::string_view branch, std::string_view source,
                   const NativeMergeOptions & = {}, bool verify_objects = false, OperationOptions = {}) const;
+  // Verified no-op, fast-forward or two-parent merge through the checkout journal.
+  Json merge_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
+                       std::string_view source, std::string_view message, const NativeMergeOptions & = {},
+                       OperationOptions = {}) const;
   // Read-only file-level three-way replay plus the existing clean-workspace
   // checkout preflight. Merge revisions require an explicit 1-based mainline.
   Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,

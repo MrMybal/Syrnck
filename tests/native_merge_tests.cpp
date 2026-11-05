@@ -81,6 +81,115 @@ void planning(const fs::path &path, std::optional<Key> key, unsigned physical) {
   fails([&] { f.store.plan_merge(path, "main", right, settings); });
   require(f.store.fsck() > 0, "merge planning damaged storage");
 }
+void application(const fs::path &path, std::optional<Key> key, unsigned physical) {
+  std::string current, source, merged;
+  {
+    Fixture f(path, key);
+    const auto a = f.file("original"), b = f.file("incoming"), own = f.file("our independent work");
+    const auto base = f.revision(Json{{"asset", a}});
+    current = f.revision(Json{{"asset", a}, {"own", own}}, Json::array({base}));
+    source = f.revision(Json{{"asset", b}}, Json::array({base}));
+    f.install(current);
+    f.store.set_ref("heads/feature", {Kind::revision, source});
+    f.pack(physical);
+    const auto before = f.physical();
+    require(f.store.merge_directory(path, "main", current, base, "noop")["state"] == "unchanged" &&
+                f.physical() == before,
+            "up-to-date merge wrote data");
+    fails([&] { f.store.merge_directory(path, "main", base, source, "wrong tip"); });
+    NativeMergeOptions only;
+    only.fast_forward_only = true;
+    require(f.store.plan_merge(path, "main", source, only)["blockers"][0]["reason"] ==
+                "fast_forward_required",
+            "fast-forward-only did not block divergence");
+    fails([&] { f.store.merge_directory(path, "main", current, source, "ff only", only); });
+    require(f.physical() == before, "rejected merge changed data");
+    const auto result = f.store.merge_directory(path, "main", current, source, "merge branches");
+    merged = result["target"].get<std::string>();
+    require(result["state"] == "committed" && result["mode"] == "merge" &&
+                f.store.metadata(Kind::revision, merged)["parents"] == Json::array({current, source}) &&
+                text(read_bytes(path / "asset")) == "incoming" &&
+                text(read_bytes(path / "own")) == "our independent work" &&
+                f.store.refs().at("heads/feature").id == source,
+            "merge did not retain both parent histories or independent files");
+    for (const auto &[name, value] : f.store.refs()) {
+      (void)value;
+      if (name != "heads/main")
+        f.store.remove_ref(name);
+    }
+    f.store.gc(true);
+    require(f.store.metadata(Kind::revision, source)["parents"] == Json::array({base}) &&
+                f.store.metadata(Kind::revision, current)["files"].contains("own"),
+            "GC lost either merge parent");
+    std::stop_source stop;
+    fails([&] {
+      f.store.replay_directory(path, "main", merged, merged, NativeReplayKind::revert, "undo merge", 1,
+                               {stop.get_token(), [&](const ProgressEvent &event) {
+                                  if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                    stop.request_stop();
+                                }});
+    });
+    require(f.store.checkout_status()["pending"] == true, "merge revert did not leave a resumable journal");
+  }
+  {
+    Store store(path / ".syrnck", key);
+    const auto recovered = store.recover_checkout();
+    require(recovered["state"] == "committed" && text(read_bytes(path / "asset")) == "original" &&
+                text(read_bytes(path / "own")) == "our independent work",
+            "merge revert recovery lost files");
+    // A reverted merge remains an ancestor; explicitly return to its original
+    // target for this independent abort scenario.
+    store.checkout_directory(path, "main", current);
+    std::stop_source stop;
+    fails([&] {
+      store.merge_directory(path, "main", current, source, "aborted merge", {},
+                            {stop.get_token(), [&](const ProgressEvent &event) {
+                               if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                 stop.request_stop();
+                             }});
+    });
+    require(store.checkout_status()["pending"] == true && store.refs().at("heads/main").id == current,
+            "interrupted merge published before completion");
+  }
+  Store store(path / ".syrnck", key);
+  require(store.recover_checkout(true)["state"] == "aborted" && store.refs().at("heads/main").id == current &&
+              text(read_bytes(path / "asset")) == "original" &&
+              text(read_bytes(path / "own")) == "our independent work",
+          "merge rollback changed committed files");
+  store.gc(true);
+  require(store.fsck() > 0, "merge rollback damaged storage");
+}
+void forward_modes(const fs::path &path) {
+  Fixture f(path);
+  const auto base_file = f.file("same content", false, 3), recoded = f.file("same content", false, 7);
+  const auto base = f.revision(Json{{"asset", base_file}});
+  const auto source = f.revision(Json{{"asset", recoded}}, Json::array({base}));
+  f.install(base);
+  NativeMergeOptions settings;
+  settings.fast_forward_only = true;
+  auto result = f.store.merge_directory(path, "main", base, source, "ignored ff message", settings);
+  require(result["mode"] == "fast_forward" && result["target"] == source &&
+              f.store.metadata(Kind::revision, source)["files"]["asset"] == recoded,
+          "fast-forward failed to adopt exact manifest representation");
+  f.install(base);
+  settings = {};
+  settings.no_fast_forward = true;
+  result = f.store.merge_directory(path, "main", base, source, "explicit merge", settings);
+  require(result["mode"] == "merge" && result["target"] != source &&
+              f.store.metadata(Kind::revision, result["target"].get<std::string>())["parents"] ==
+                  Json::array({base, source}),
+          "no-ff failed to create a two-parent revision");
+  settings.fast_forward_only = true;
+  fails([&] { f.store.plan_merge(path, "main", source, settings); });
+  const auto twin = f.revision(Json{{"asset", base_file}}, Json::array({base}));
+  f.install(twin);
+  const auto other = f.revision(Json{{"asset", base_file}}, Json::array({base}));
+  result = f.store.merge_directory(path, "main", twin, other, "topology only");
+  require(result["mode"] == "merge" &&
+              f.store.metadata(Kind::revision, result["target"].get<std::string>())["parents"] ==
+                  Json::array({twin, other}),
+          "same-tree divergence was discarded");
+}
 } // namespace
 int main() {
   Temporary temp;
@@ -93,7 +202,10 @@ int main() {
           key->fill(59);
         }
         planning(temp.path / (std::to_string(encrypted) + '-' + std::to_string(physical)), key, physical);
+        application(temp.path / ("apply-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
+                    physical);
       }
+    forward_modes(temp.path / "forward");
     std::cout << "native merge topology, bases, conflicts and read-only planning passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
