@@ -1,4 +1,4 @@
-#include "internal.hpp"
+#include "text_edits.hpp"
 #include <algorithm>
 #include <utf8proc.h>
 namespace syrnck {
@@ -11,25 +11,6 @@ void TextDiffOptions::validate() const {
   require(max_output_bytes >= 1024 && max_output_bytes <= 8 * 1024 * 1024,
           "text diff output budget must be in 1024..8388608 bytes");
 }
-namespace {
-struct Limited {
-  const char *reason;
-};
-struct Work {
-  std::size_t remaining;
-  const OperationOptions &options;
-  void use(std::size_t n = 1) {
-    throw_if_cancelled(options.stop);
-    if (n > remaining)
-      throw Limited{"work_limit"};
-    remaining -= n;
-  }
-  bool equal(std::string_view a, std::string_view b) {
-    use(a.size() == b.size() ? a.size() + 1 : 1);
-    return a == b;
-  }
-};
-} // namespace
 bool is_utf8_text(std::span<const std::uint8_t> input, OperationOptions options) {
   for (std::size_t pos = 0; pos < input.size();) {
     if (pos % 4096 == 0)
@@ -44,8 +25,7 @@ bool is_utf8_text(std::span<const std::uint8_t> input, OperationOptions options)
   }
   return true;
 }
-namespace {
-using Lines = std::vector<std::string_view>;
+namespace text_detail {
 Lines split(std::span<const std::uint8_t> input, std::size_t limit, OperationOptions options) {
   Lines lines;
   const std::string_view value(reinterpret_cast<const char *>(input.data()), input.size());
@@ -60,10 +40,6 @@ Lines split(std::span<const std::uint8_t> input, std::size_t limit, OperationOpt
   }
   return lines;
 }
-struct Edit {
-  char kind;
-  std::string_view line;
-};
 std::vector<Edit> edits(const Lines &left, const Lines &right, Work &work) {
   std::size_t prefix = 0, suffix = 0;
   while (prefix < left.size() && prefix < right.size() && work.equal(left[prefix], right[prefix]))
@@ -203,9 +179,10 @@ Json hunks(const std::vector<Edit> &edits, TextDiffOptions limits, OperationOpti
   }
   return result;
 }
-} // namespace
+} // namespace text_detail
 Json compare_text(std::span<const std::uint8_t> source, std::span<const std::uint8_t> target,
                   TextDiffOptions limits, OperationOptions options) {
+  using namespace text_detail;
   throw_if_cancelled(options.stop);
   limits.validate();
   Json report{{"version", 1},

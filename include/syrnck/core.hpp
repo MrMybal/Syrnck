@@ -147,6 +147,11 @@ struct TextDiffOptions {
 };
 Json compare_text(std::span<const std::uint8_t> source, std::span<const std::uint8_t> target,
                   TextDiffOptions = {}, OperationOptions = {});
+// Conservative three-way line merge. Only status=clean includes content;
+// conflicts, binary inputs and exceeded budgets never expose a partial result.
+// Both edit searches share max_work; max_output_bytes bounds the complete JSON.
+Json merge_text(std::span<const std::uint8_t> base, std::span<const std::uint8_t> current,
+                std::span<const std::uint8_t> incoming, TextDiffOptions = {}, OperationOptions = {});
 struct TextPatchResult {
   std::string content;
   std::size_t hunks = 0, additions = 0, deletions = 0;
