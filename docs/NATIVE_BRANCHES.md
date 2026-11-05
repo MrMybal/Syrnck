@@ -69,6 +69,71 @@ publication uses the exclusive Store lock and expected absent slots. Cancellatio
 missing retained bytes or observer failure before publication preserves existing
 references and working files. No callbacks run after the commit point.
 
+## Archived branch deletion
+
+```text
+syrnck native branch-delete-plan feature/topic --archive-index --verify
+syrnck native branch-delete feature/topic --expect TIP_ID --archive-index --expect-index INDEX_ID
+syrnck native branch-archives --limit 100 --verify
+syrnck native branch-archive ARCHIVE_ID --verify
+```
+
+Deletion removes an inactive branch's `heads/NAME` and optional `staging/NAME`
+references in the same transaction that publishes a retained archive. Its complete
+tip history and every frozen index entry/baseline stay reconstructible after GC.
+The selected symbolic branch is protected, even when another branch points to the
+same revision. A pending checkout/switch blocks all branch mutations. Working
+files and HEAD selection remain unchanged, including dirty or untracked files.
+
+An index, including a clean or stale one, requires `--archive-index`. Without that
+option the plan reports `staging_present`. The CLI requires an exact `--expect`
+tip ID, and optionally `--expect-index`; when archiving an index without that
+second option, it captures the current index under the Store lock. The C++ API
+takes the expected optional index: null requires an absent slot, and an ID
+authorizes archiving exactly that snapshot. Changed tip/index values fail before
+publication. There is no automatic dropping of unmerged versions: deletion retains
+the entire archived history, without requiring an ancestor relationship.
+
+The read-only plan reports `branch`, a proposed `archive` ID, `archive_existing`,
+`archive_index`, `ready`, `objects_verified` and `blockers`. A ready plan exits 0;
+a blocked plan exits 1 with JSON on stdout. Invalid arguments or missing required
+metadata produce diagnostics. The application adds `state: deleted`. Original
+branch/index fields and `archive_existing` describe the inputs to that operation.
+Application always audits complete retained file data before creating an archive
+record. Metadata-only plans do not audit block payloads; `--verify` does.
+
+Archive identity is deterministic from the original name, tip and optional index.
+Repeating deletion of that exact state reuses the same complete retained archive.
+An existing partial or conflicting root group blocks deletion. Cancellation or
+observer failure before publication preserves the previous references; preparing
+an archive can leave complete unreferenced metadata. Inspect the branch and archive
+before retrying an interrupted application. The operation uses the ordinary atomic
+reference writer and does not need a working-file journal.
+
+Each archive has an ordinary chunk record with canonical JSON `version: 1`,
+`type: native-branch-archive`, `name`, `revision` and nullable `index`:
+
+| Reference | Retained object |
+| --- | --- |
+| `archive/branches/ARCHIVE_ID/record` | Archive descriptor chunk |
+| `archive/branches/ARCHIVE_ID/target` | Original revision and its full history |
+| `archive/branches/ARCHIVE_ID/index` | Optional original staging snapshot and baseline |
+
+The browser validates descriptor identity, exact root groups and branch-bound
+staging metadata. `branch-archives` returns bounded pages sorted by archive ID,
+with an exclusive `next_after` ID cursor, `has_more` and `objects_verified`.
+`--limit` is 1..1000. Each row identifies its `archive` and original `name`, with
+the same revision/index summary as the branch inventory, excluding `current`.
+`branch-archive` returns one such row in its `archive` field. `--verify` audits
+all displayed roots. Index baselines remain exactly as recorded, including stale
+and initially unborn preparations. Archives have no automatic expiry. Generic
+root removal can release their retention; keep required archives through GC.
+
+Branch archives use this dedicated browser. The ordinary `native archives`
+command continues to list revision archives such as checkout, reset and amend.
+Storage/object formats are unchanged; the descriptor and its explicit dependency
+roots use existing chunk/revision/reference mechanisms.
+
 ## CLI defaults and workspace identity
 
 When omitted, `--branch` resolves the current branch for native commit (ordinary
@@ -168,6 +233,9 @@ binaries for native workspace commands after enabling it.
 auto head = store.native_head();
 auto branches = store.native_branches({}, 100, true, operation);
 auto created = store.create_native_branch("feature", revision_id, operation);
+auto deletion = store.plan_delete_native_branch("feature", true, true, operation);
+auto removed = store.delete_native_branch("feature", expected_tip, expected_index, operation);
+auto saved = store.native_branch_archive(removed["archive"].get<std::string>(), true, operation);
 auto plan = store.plan_switch(project, "feature", true, operation);
 auto switched = store.switch_directory(project, "feature", operation);
 ```

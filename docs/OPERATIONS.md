@@ -17,7 +17,7 @@ syrnck get MANIFEST restored.uasset --progress
 
 `put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export`, `git clean/smudge/filter-process`,
 `native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
-`native branch/branches`,
+`native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive`,
 `native ancestry/cherry-pick-plan/revert-plan/cherry-pick/revert/merge-plan/merge`,
 `native reset-plan/squash-plan/squash/archives/archive-show`,
 `native rebase-plan/rebase/rebase-index-plan/rebase-index`,

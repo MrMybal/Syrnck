@@ -341,6 +341,18 @@ public:
   Json plan_switch(const fs::path &, std::string_view branch, bool verify_objects = false,
                    OperationOptions = {}) const;
   Json switch_directory(const fs::path &, std::string_view branch, OperationOptions = {}) const;
+  // Branch deletion preserves its tip and optional index in a retained archive.
+  // Selected branches and active checkouts cannot be deleted. A supplied index
+  // ID both authorizes archiving it and guards that exact frozen snapshot.
+  Json plan_delete_native_branch(std::string_view name, bool archive_index = false,
+                                 bool verify_objects = false, OperationOptions = {}) const;
+  Json delete_native_branch(std::string_view name, std::string_view expected_revision,
+                            const std::optional<std::string> &expected_index = {},
+                            OperationOptions = {}) const;
+  Json native_branch_archives(const std::optional<std::string> &after = {}, std::size_t limit = 100,
+                              bool verify_objects = false, OperationOptions = {}) const;
+  Json native_branch_archive(std::string_view archive_id, bool verify_objects = false,
+                             OperationOptions = {}) const;
   // Native release labels are immutable through this API. Deletion archives
   // their target and optional annotation atomically; archives remain retained.
   Json native_tags(const std::optional<std::string> &after = {}, std::size_t limit = 100,

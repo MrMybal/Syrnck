@@ -203,6 +203,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
   native branches [--after NOM] [--limit 100] [--verify]
+  native branch-delete-plan NOM [--archive-index] [--verify]
+  native branch-delete NOM --expect ID [--archive-index] [--expect-index ID]
+  native branch-archives [--after ID] [--limit 100] [--verify]
+  native branch-archive ID [--verify]
   native tag NOM [RÉVISION] [-m MESSAGE]   Nommer une version (HEAD par défaut)
   native tags [--after NOM] [--limit 100] | tag-show NOM [--verify]
   native tag-delete NOM --expect RÉVISION
@@ -260,7 +264,7 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
-              native branch/branches,
+              native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -323,6 +327,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
   native branches [--after NAME] [--limit 100] [--verify]
+  native branch-delete-plan NAME [--archive-index] [--verify]
+  native branch-delete NAME --expect ID [--archive-index] [--expect-index ID]
+  native branch-archives [--after ID] [--limit 100] [--verify]
+  native branch-archive ID [--verify]
   native tag NAME [REVISION] [-m MESSAGE]   Label a version (defaults to HEAD)
   native tags [--after NAME] [--limit 100] | tag-show NAME [--verify]
   native tag-delete NAME --expect REVISION
@@ -380,7 +388,7 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
-              native branch/branches,
+              native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -605,7 +613,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
         sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
-        sub == "branch" || sub == "branches")) ||
+        sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
+        sub == "branch-archives" || sub == "branch-archive")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -970,6 +979,41 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(0);
       print(
           store.native_branches(after, static_cast<std::size_t>(limit), verify, {control->token(), observe}));
+    } else if (sub == "branch-delete-plan" || sub == "branch-delete") {
+      const bool planning = sub == "branch-delete-plan";
+      const bool archive_index = args.flag("--archive-index");
+      const bool verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      auto index = planning ? std::optional<std::string>{} : args.option("--expect-index");
+      require(planning || expected.has_value(), "--expect is required for native branch deletion");
+      require(!index || archive_index, "--expect-index requires --archive-index");
+      args.count(1);
+      if (planning) {
+        const auto plan = store.plan_delete_native_branch(args.values[0], archive_index, verify,
+                                                          {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      if (archive_index && !index) {
+        const auto all = store.refs();
+        if (const auto found = all.find("staging/" + args.values[0]); found != all.end()) {
+          require(found->second.kind == Kind::revision, "invalid native staging snapshot");
+          index = found->second.id;
+        }
+      }
+      print(store.delete_native_branch(args.values[0], *expected, index, {control->token(), observe}));
+    } else if (sub == "branch-archives") {
+      const auto after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "native branch page limit must be in 1..1000");
+      const bool verify = args.flag("--verify");
+      args.count(0);
+      print(store.native_branch_archives(after, static_cast<std::size_t>(limit), verify,
+                                         {control->token(), observe}));
+    } else if (sub == "branch-archive") {
+      const bool verify = args.flag("--verify");
+      args.count(1);
+      print(store.native_branch_archive(args.values[0], verify, {control->token(), observe}));
     } else if (sub == "tag") {
       const auto message = args.option("--message", "-m");
       args.count(args.values.size() -

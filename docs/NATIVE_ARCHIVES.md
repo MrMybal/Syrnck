@@ -23,7 +23,9 @@ syrnck native archive-show archive/squash/OLD_ID --verify
 | `detached` | `archive/OLD_ID` | Original tip retained by history detachment |
 
 Tag deletion records use the existing `native tag-archive` / `tag-restore`
-workflow and are excluded. Custom/unknown archive namespaces are excluded; `refs`
+workflow and are excluded. Branch deletion records use
+[`native branch-archives` / `branch-archive`](NATIVE_BRANCHES.md#archived-branch-deletion)
+and are also excluded. Custom/unknown archive namespaces are excluded; `refs`
 remains the generic complete reference inventory. The browser checks owned archive
 names, revision target kinds and ID identity. Checkout names identify a transaction
 rather than the target revision. A manually corrupted owned archive is an error.
