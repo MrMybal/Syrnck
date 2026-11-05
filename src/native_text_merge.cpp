@@ -23,6 +23,9 @@ std::string native_text_manifest(std::string_view content, OperationOptions opti
   return object_id(Kind::manifest, bytes(value.dump()));
 }
 void materialize_native_text(const Store &store, const NativeGeneratedText &files, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  if (files.empty())
+    return;
   auto ingestion = store.settings().ingest_options();
   ingestion.stop = options.stop;
   for (const auto &[manifest, content] : files) {

@@ -43,8 +43,49 @@ staging and active recovery. A topology-only divergent merge can be ready even
 with no changed file bytes. Up-to-date plans also use this conservative preflight.
 Explicit file choices and custom manifests can resolve conflicts with
 `--resolutions JSON_FILE`; see [native resolutions](NATIVE_RESOLUTIONS.md).
-Automatic text merging, rename detection and recursive base synthesis remain
-future work.
+Bounded text merging can be enabled explicitly as described below. Rename
+detection and recursive base synthesis remain future work.
+
+## Opt-in text composition
+
+The C++ `NativeMergeOptions::text_merge` optional enables text composition with
+the supplied `TextDiffOptions`. Leaving it empty preserves the default file-level
+decisions and metadata-only input inspection. Explicit `resolutions` are applied
+first; only remaining `content` conflicts are candidates for automatic text merge.
+Add/add, delete/modify, binary data, overlapping edits and namespace conflicts
+remain blocking. This does not change fast-forward representation or topology.
+
+```cpp
+syrnck::NativeMergeOptions settings;
+settings.text_merge.emplace(); // Default text limits, explicit opt-in.
+auto preview = store.plan_merge(project, "main", source_id, settings, true, operation);
+auto result = store.merge_directory(project, "main", expected_tip, source_id,
+                                    "Merge feature", settings, operation);
+```
+
+Each candidate's complete three inputs are reconstructed and hash-verified even
+without full-history verification. File-size and batch byte ceilings are checked
+before payload reads. At most 64 content conflicts are attempted, with a 16 MiB
+aggregate charge for verified inputs plus clean results. Per-file work, line,
+trace and serialized output limits also apply. Skipped or limited files keep
+their original conflict and report the reason; the operation never chooses a
+partial result to satisfy a budget.
+
+The plan's `text_merge` object reports limits, attempt/byte counts, generated
+manifest count and per-path status/ranges/target metadata. Disabled mode uses
+`null`. Reports omit merged plaintext. Ready workspace actions refer to exact
+predicted manifest IDs which need not exist in the Store yet. Planning does not
+create any objects, including when one file composes and another remains blocked.
+See [virtual file preparation](TEXT_MERGE.md#virtual-file-preparation).
+
+Apply first recomputes the full plan, verifies input histories and checks all
+workspace blockers. Only then does it materialize generated chunks/manifests,
+requiring exact agreement with predicted IDs, and create the two-parent revision.
+The existing recoverable checkout then publishes the complete result. Failure
+before journal publication can leave unreferenced generated objects, with no
+branch/workspace change; normal GC can collect them. Once a journal exists,
+resume/abort uses its retained candidate without needing to rerun text merge.
+Cancellation and observer exceptions preserve these boundaries.
 
 ## Reports and validation
 

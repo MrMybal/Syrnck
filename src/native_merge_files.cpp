@@ -52,7 +52,8 @@ void require_native_resolution_context(const NativeResolutionSet &resolutions, s
 }
 NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapshot &original,
                                          const NativeSnapshot &current, const NativeSnapshot &incoming,
-                                         OperationOptions options, const NativeResolutionSet *resolutions) {
+                                         OperationOptions options, const NativeResolutionSet *resolutions,
+                                         const TextDiffOptions *text_limits) {
   NativeFileMergeResult result;
   std::set<std::string> paths;
   for (const auto *files : std::array<const NativeSnapshot *, 3>{&original, &incoming, &current})
@@ -167,6 +168,28 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
   } else {
     for (const auto &row : conflicts)
       final_budget.append(final_conflicts, row);
+  }
+  if (text_limits) {
+    NativeTextMergeBatch batch(store, *text_limits);
+    Json remaining = Json::array();
+    for (const auto &row : final_conflicts) {
+      throw_if_cancelled(options.stop);
+      bool resolved = false;
+      if (row["reason"] == "content") {
+        const auto path = row["path"].get<std::string>();
+        const auto merged = batch.merge(path, *lookup(original, path), *lookup(current, path),
+                                        *lookup(incoming, path), options);
+        if (merged) {
+          result.files.insert_or_assign(path, *merged);
+          resolved = true;
+        }
+      }
+      if (!resolved)
+        remaining.push_back(row);
+    }
+    final_conflicts = std::move(remaining);
+    result.text_merge = batch.report();
+    result.generated = std::move(batch.generated);
   }
   std::size_t snapshot_bytes = 2;
   for (const auto &[path, entry] : result.files) {

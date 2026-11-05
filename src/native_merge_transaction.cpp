@@ -24,6 +24,7 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
     result = Json{{"version", 1}, {"pending", false}, {"state", "unchanged"}, {"target", target}};
   } else {
     if (mode == "merge") {
+      materialize_native_text(*this, plan.generated, options);
       Json files = Json::object();
       auto &entries = files.get_ref<Json::object_t &>();
       entries.reserve(plan.files.size());

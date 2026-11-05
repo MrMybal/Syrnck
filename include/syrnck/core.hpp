@@ -190,6 +190,9 @@ struct NativeMergeOptions {
   bool no_fast_forward = false;
   bool fast_forward_only = false;
   std::optional<NativeResolutionSet> resolutions{};
+  // Opt in to bounded automatic text composition of unresolved content conflicts.
+  // The shared native batch also caps attempts at 64 and inputs/results at 16 MiB.
+  std::optional<TextDiffOptions> text_merge{};
 };
 struct NativeRebaseResolutionSet {
   std::string head, base, onto;

@@ -5,6 +5,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                                      std::string_view source, const NativeMergeOptions &settings,
                                      bool verify_objects, OperationOptions options) {
   throw_if_cancelled(options.stop);
+  if (settings.text_merge)
+    settings.text_merge->validate();
   require(!settings.no_fast_forward || !settings.fast_forward_only, "choose either --no-ff or --ff-only");
   validate_ref("heads/" + std::string(branch));
   validate_id(source);
@@ -55,7 +57,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
       const auto incoming = read_native_snapshot(store, source, options);
       const auto original = plan.base ? read_native_snapshot(store, *plan.base, options) : NativeSnapshot{};
       combined = merge_native_files(store, original, current, incoming, options,
-                                    settings.resolutions ? &*settings.resolutions : nullptr);
+                                    settings.resolutions ? &*settings.resolutions : nullptr,
+                                    settings.text_merge ? &*settings.text_merge : nullptr);
       // Fast-forward adopts the exact source revision, including its manifests.
       if (forward)
         combined.files = incoming;
@@ -63,6 +66,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     if (combined.conflicts.empty())
       workspace = plan_native_checkout_files(store, directory, branch, combined.files, options);
   }
+  if (settings.text_merge && combined.text_merge.is_null())
+    combined.text_merge = NativeTextMergeBatch(store, *settings.text_merge).report();
   if (verify_objects) {
     auto roots = combined.extra_roots;
     roots.push_back(head->second);
@@ -71,6 +76,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   }
   const bool ready = blockers.empty() && combined.conflicts.empty() && workspace["ready"].get<bool>();
   plan.files = std::move(combined.files);
+  plan.generated = std::move(combined.generated);
   plan.report = Json{{"version", 1},
                      {"operation", "merge"},
                      {"branch", branch},
@@ -90,6 +96,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"changes", std::move(combined.changes)},
                      {"conflicts", std::move(combined.conflicts)},
                      {"resolved", std::move(combined.resolved)},
+                     {"text_merge", std::move(combined.text_merge)},
                      {"resolution_context", blockers.empty() ? context.json() : Json{}},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
