@@ -48,6 +48,7 @@ def cases():
     atomic("branch-restore-as", ("revision", "refs"))
     for operation in ("stage-rebase", "stage-rebase-resolved", "stage-rebase-empty", "stage-rebase-unborn"):
         atomic(operation, ("revision", "refs"))
+    atomic("stage-rebase-text", ("chunk", "manifest", "revision", "refs"))
     atomic("amend", ("chunk", "manifest", "revision", "refs"))
     atomic("amend-staged", ("revision", "refs"))
     atomic("amend-message", ("revision", "refs"))
@@ -121,13 +122,20 @@ def cases():
         atomic(rewrite, ("refs",))
         if rewrite.startswith("reset-soft") or rewrite.startswith("squash"):
             atomic(rewrite, ("revision",))
-    for rebase in ("rebase", "rebase-resolved", "rebase-move"):
+    for rebase in ("rebase", "rebase-resolved", "rebase-move", "rebase-text"):
         result.extend((rebase if operation == "checkout" else rebase + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         if rebase != "rebase-move":
             for occurrence in (1, 2):
                 atomic(rebase, ("revision",), occurrence)
+        if rebase == "rebase-text":
+            for occurrence in (1, 2):
+                atomic(rebase, ("chunk", "manifest"), occurrence)
+            atomic(rebase, ("checkout-prepared",), 2)
+            for kind in ("checkout-backup", "export-file"):
+                result.extend((rebase, phase, kind, 2)
+                              for phase in ("move.before", "move.published", "move.durable"))
     return result
 
 
@@ -194,7 +202,7 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
-                        (operation.startswith(("merge-text", "cherry-pick-text", "revert-text")) and target == root.parent / "code.cpp") or
+                        (operation.startswith(("merge-text", "cherry-pick-text", "revert-text", "rebase-text")) and target == root.parent / "code.cpp") or
                         ((operation in ("checkout", "checkout-abort", "switch", "switch-abort") or replay_operation(operation) or operation.startswith(("merge", "rebase"))) and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")

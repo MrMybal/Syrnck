@@ -16,13 +16,13 @@ crash by throwing an exception or unwinding the stack.
 | --- | --- |
 | Revision publication | Parallel ingestion, chunk/manifest/revision writes and reference replacement; previous revision and archive remain reconstructible |
 | Native staging | Selected chunk/manifest/snapshot writes, atomic branch/index commit and index reset; prepared bytes survive, with either the old head plus index or the new head without index |
-| Native staging rebase | Candidate/reference writes for independent replay, explicit conflict resolution, clean results and initial empty baselines; the former index archive and replacement publish together, without changing the branch or dirty working files |
+| Native staging rebase | Candidate/reference writes for independent replay, explicit conflict resolution, clean results and initial empty baselines; text composition also covers generated chunk/manifest writes; the former index archive and replacement publish together, without changing the branch or dirty working files |
 | Native branch lifecycle | Branch creation, deletion with/without a frozen index and restoration under original/new names; archive-record and renamed-index writes, atomic head/index/archive publication, retained historical data and unchanged symbolic HEAD/dirty working files |
 | Native amendment | Directory chunk/manifest writes and all three modes' revision/reference publication; branch, previous-tip archive and staged-index consumption publish together, preserving parents and retained bytes |
 | Native branch reset and squash | Soft/mixed reset with/without prepared bytes, partial/root squash, candidate staging/revision writes and atomic branch/index/history/index-archive publication; dirty working files remain untouched and retained data survives retry and GC |
 | Native cherry-pick, revert and abort | Candidate revision writes and the checkout journal/prepared-file/move/publication/rollback boundaries; replay creates a child of the old tip and retains old file bytes through resume, abort and GC |
 | Native merge and abort | Ordinary and explicitly resolved two-parent candidates, exact fast-forward, the checkout publication/move/rollback boundaries and both-parent retention through recovery and GC |
-| Native rebase and abort | Two-candidate linear chains, resolved conflicts and empty-range moves; first/second candidate writes, checkout journal/move/publication/rollback boundaries, stable planned IDs and unchanged onto roots |
+| Native rebase and abort | Two-candidate linear chains, resolved conflicts, successive virtual text compositions and empty-range moves; first/second generated chunk/manifest/candidate writes, both prepared files and moves, checkout journal/publication/rollback boundaries, stable planned IDs and unchanged onto roots |
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
 | Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
@@ -74,6 +74,16 @@ controls. The complete 2,252-case campaign has not been rerun for these addition
 This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
 automatically in those configured builds.
+
+A focused Windows x64 Release run on 6 November 2026 passed all **236 new text
+rebase/index process-kill combinations**, plus 6 existing rebase/index/commit
+checkpoints (**242 total**), production-isolation and release/lock controls.
+The linear fixture composes the same text file in two successive virtual steps;
+fresh production readers verify both intermediate and final generated manifests,
+the source history, the two-file checkout and resume/abort bytes. The index
+fixture verifies generated text, atomic old-index archival and unchanged dirty
+working files. Cases run with plaintext and encrypted objects. This focused run
+does not claim a new complete-campaign, other-platform or power-loss result.
 
 Exports may leave `.syrnck-export-<32 hex>` sibling directories after a hard
 kill. Recovery verifies the published tree if present; a retry prepares a fresh

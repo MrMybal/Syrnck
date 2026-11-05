@@ -63,7 +63,7 @@ std::string hunk_text(unsigned mask, bool prepared) {
   for (unsigned n = 0; n < 25; ++n) {
     if (n == 0 && prepared)
       text += "prepared ";
-    if ((n == 2 && (mask & 1)) || (n == 22 && (mask & 2)))
+    if ((n == 2 && (mask & 1)) || (n == 22 && (mask & 2)) || (n == 12 && (mask & 4)))
       text += "changed ";
     text += "line " + std::to_string(n) + '\n';
   }
@@ -183,13 +183,15 @@ NativeMergeOptions merge_settings(const Json &info) {
 }
 bool rebase_operation(std::string_view op) {
   return op == "rebase" || op == "rebase-abort" || op == "rebase-resolved" || op == "rebase-resolved-abort" ||
-         op == "rebase-move" || op == "rebase-move-abort";
+         op == "rebase-move" || op == "rebase-move-abort" || op == "rebase-text" || op == "rebase-text-abort";
 }
 bool rebase_abort(std::string_view op) {
   return rebase_operation(op) && op.ends_with("-abort");
 }
 NativeRebaseOptions rebase_settings(const Store &store, const Json &info) {
   NativeRebaseOptions settings;
+  if (info["operation"].get<std::string>().starts_with("rebase-text"))
+    settings.text_merge.emplace();
   if (info["operation"].get<std::string>().starts_with("rebase-resolved")) {
     const auto base = parse_key(info["rebase_base"]).id, onto = parse_key(info["rebase_onto"]).id;
     const auto first = store.plan_rebase(store.root().parent_path(), "main", base, onto);
@@ -248,7 +250,11 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   std::optional<ObjectKey> rebase_base;
   if (rebase_operation(operation)) {
     rebase_base = tip;
-    if (!operation.starts_with("rebase-move")) {
+    if (operation.starts_with("rebase-text")) {
+      rebase_base = put_text_revision(store, old, 0);
+      const auto first = put_text_revision(store, old, 2, rebase_base);
+      tip = put_text_revision(store, old, 6, first);
+    } else if (!operation.starts_with("rebase-move")) {
       rebase_base = put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 2 : 0));
       const auto first =
           put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 1 : 0), rebase_base);
@@ -342,7 +348,34 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     }
     atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), true);
   }
-  if (operation.starts_with("stage-rebase")) {
+  if (operation == "stage-rebase-text") {
+    const auto baseline = put_text_revision(store, old, 0);
+    const auto prepared = ingest(store, 1);
+    auto value = revision(prepared, baseline);
+    std::istringstream input(hunk_text(2, false));
+    value["files"]["code.cpp"] = Json{{"manifest", store.ingest(input).first}, {"executable", false}};
+    value["message"] = "Syrnck staging v1: main";
+    const auto index = store.put(Kind::revision, bytes(value.dump())).first;
+    tip = put_text_revision(store, old, 1, baseline);
+    store.set_ref("heads/main", tip);
+    store.set_ref("archive/baseline", tip);
+    store.set_ref("staging/main", index);
+    info["old_revision"] = key_json(tip);
+    info["old_index"] = key_json(index);
+    info["text_result_manifest"] = hunk_manifest(hunk_text(3, false));
+    auto expected = revision(prepared)["files"];
+    expected["code.cpp"] = Json{{"manifest", info["text_result_manifest"]}, {"executable", false}};
+    info["stage_expected_files"] = std::move(expected);
+    NativeStageRebaseOptions settings;
+    settings.text_merge.emplace();
+    const auto plan = store.plan_rebase_stage_with_options("main", settings);
+    check(plan["ready"] == true &&
+              !store.contains({Kind::manifest, info["text_result_manifest"].get<std::string>()}),
+          "text staging crash seed wrote its candidate");
+    info["stage_target"] = plan["target"];
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), false);
+    atomic_write(root.parent_path() / "code.cpp", bytes("dirty frozen work"), false);
+  } else if (operation.starts_with("stage-rebase")) {
     const bool unborn = operation == "stage-rebase-unborn";
     const auto baseline = operation == "stage-rebase" || unborn ? tip : put_revision(store, ingest(store, 2));
     const auto prepared = ingest(store, operation == "stage-rebase-empty" ? 0 : 1);
@@ -373,7 +406,18 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   if (rebase_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
     const auto onto =
-        put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 3 : 1), rebase_base);
+        operation.starts_with("rebase-text")
+            ? put_text_revision(store, ingest(store, 1), 1, rebase_base)
+            : put_revision(store, ingest(store, operation.starts_with("rebase-resolved") ? 3 : 1),
+                           rebase_base);
+    if (operation.starts_with("rebase-text")) {
+      atomic_write(root.parent_path() / "code.cpp", bytes(hunk_text(6, false)), false);
+      info["text_result_manifest"] = hunk_manifest(hunk_text(7, false));
+      info["text_intermediate_manifest"] = hunk_manifest(hunk_text(3, false));
+      check(!store.contains({Kind::manifest, info["text_result_manifest"].get<std::string>()}) &&
+                !store.contains({Kind::manifest, info["text_intermediate_manifest"].get<std::string>()}),
+            "text rebase crash seed already contains generated text");
+    }
     store.set_ref("pins/rebase-onto", onto);
     info["rebase_base"] = key_json(*rebase_base);
     info["rebase_onto"] = key_json(onto);
@@ -574,7 +618,11 @@ void perform(Store &store, const Json &info) {
   } else if (op.starts_with("stage-rebase")) {
     const auto previous = parse_key(info["old_index"]);
     if (store.refs().at("staging/main") == previous) {
-      if (op == "stage-rebase-resolved")
+      if (op == "stage-rebase-text") {
+        NativeStageRebaseOptions settings;
+        settings.text_merge.emplace();
+        store.rebase_stage_with_options("main", parse_key(info["old_revision"]).id, previous.id, settings);
+      } else if (op == "stage-rebase-resolved")
         store.rebase_stage_resolved("main", parse_key(info["old_revision"]).id, previous.id,
                                     stage_choices(store));
       else
@@ -735,6 +783,15 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     check(text(read_bytes(root.parent_path() / "asset.bin")) == content(4),
           "staging rebase touched dirty working bytes");
+    if (op == "stage-rebase-text") {
+      check(text(read_bytes(root.parent_path() / "code.cpp")) == "dirty frozen work",
+            "text staging rebase read or changed working text");
+      if (changed) {
+        std::ostringstream output;
+        store.reconstruct(info["text_result_manifest"].get<std::string>(), output);
+        check(output.str() == hunk_text(3, false), "rebased index lost generated text");
+      }
+    }
     if (resumed)
       check(changed, "staging rebase did not resume");
   }
@@ -875,6 +932,36 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
           }
           check(next == parse_key(info["rebase_onto"]).id, "rebase chain lost its onto revision");
         }
+      }
+      if (op.starts_with("rebase-text")) {
+        const auto code = root.parent_path() / "code.cpp";
+        if (fs::exists(code))
+          check(text(read_bytes(code)) == hunk_text(6, false) ||
+                    text(read_bytes(code)) == hunk_text(7, false),
+                "text rebase published incomplete working text");
+        else {
+          check(status["pending"].get<bool>(), "text rebase lost a file without a journal");
+          const auto backup = path_from_utf8(status["data_directory"].get<std::string>()) / "old/1.bin";
+          check(fs::exists(backup) && text(read_bytes(backup)) == hunk_text(6, false),
+                "text rebase lost its source backup");
+        }
+        if (refs.at("heads/main") != old) {
+          check(head["files"]["code.cpp"]["manifest"] == info["text_result_manifest"],
+                "text rebase published another generated manifest");
+          const auto previous = store.metadata(Kind::revision, head["parents"][0].get<std::string>());
+          check(previous["files"]["code.cpp"]["manifest"] == info["text_intermediate_manifest"],
+                "text rebase lost its intermediate manifest");
+          for (const auto mask : {3U, 7U}) {
+            std::ostringstream output;
+            store.reconstruct(
+                info[mask == 3 ? "text_intermediate_manifest" : "text_result_manifest"].get<std::string>(),
+                output);
+            check(output.str() == hunk_text(mask, false), "text rebase lost intermediate or final bytes");
+          }
+        }
+        if (resumed)
+          check(text(read_bytes(code)) == hunk_text(rebase_abort(op) ? 6 : 7, false),
+                "text rebase recovery lost exact bytes");
       }
     }
     if (replay_operation(op)) {
