@@ -15,6 +15,53 @@ class NativeMerge(unittest.TestCase):
     commit = base.NativeWorkflows.commit
     replay_plan = history.NativeHistory.replay_plan
 
+    def test_bound_resolution_documents_and_custom_replay_files(self):
+        asset = self.root / "asset.bin"
+        asset.write_bytes(b"base")
+        first = self.commit("base")
+        asset.write_bytes(b"incoming")
+        source = self.commit("feature")
+        self.call("native", "branch", "feature", source)
+        self.call("native", "checkout", first)
+        asset.write_bytes(b"ours")
+        current = self.commit("ours")
+        blocked = self.replay_plan("merge-plan", source, ready=False)
+        choices = blocked["resolution_context"]
+        choices["files"] = {"asset.bin": {"choice": "incoming"}}
+        document = self.store / "choices.json"
+        good = json.dumps(choices, indent=2)
+        document.write_text(good, encoding="utf-8")
+        before = self.snapshot()
+        resolved = self.replay_plan("merge-plan", source, "--resolutions", document, "--verify")
+        self.assertEqual(resolved["resolved"][0]["choice"], "incoming")
+        self.assertEqual(resolved["conflicts"], [])
+        self.assertEqual(self.snapshot(), before)
+        document.write_text(good[:-1] + ',"head":"' + current + '"}', encoding="utf-8")
+        error = self.call("--lang", "fr", "native", "merge-plan", source,
+                          "--resolutions", document, ok=False).stderr.decode("utf-8")
+        self.assertIn("champ de résolution native dupliqué", error)
+        document.write_text(good, encoding="utf-8")
+        merged = json.loads(self.call("native", "merge", source, "--resolutions", document).stdout)
+        self.assertEqual(asset.read_bytes(), b"incoming")
+        before = self.snapshot()
+        self.call("native", "merge", source, "--expect", merged["target"], "--resolutions", document, ok=False)
+        self.assertEqual(self.snapshot(), before)
+        self.call("native", "checkout", current)
+        custom = self.store / "combined.bin"
+        custom.write_bytes(b"manual combination")
+        imported = json.loads(self.call("put", custom).stdout)
+        replay = self.replay_plan("cherry-pick-plan", source, ready=False)["resolution_context"]
+        replay["files"] = {"asset.bin": {"choice": "file", "manifest": imported["manifest"], "executable": False}}
+        document.write_text(json.dumps(replay), encoding="utf-8")
+        self.replay_plan("cherry-pick-plan", source, "--resolutions", document, "--verify")
+        picked = json.loads(self.call("native", "cherry-pick", source, "--resolutions", document,
+                                     "-m", "Manual resolution").stdout)
+        self.assertEqual(picked["previous_revision"], current)
+        self.assertEqual(asset.read_bytes(), b"manual combination")
+        self.call("gc", "--delete")
+        self.call("native", "export", picked["target"], self.root / "custom-copy")
+        self.assertEqual((self.root / "custom-copy/asset.bin").read_bytes(), b"manual combination")
+
     def test_merge_application_preserves_both_histories_and_source_branch(self):
         asset = self.root / "asset.bin"
         asset.write_bytes(b"original")

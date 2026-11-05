@@ -9,5 +9,5 @@ struct NativeReplayPlan {
 NativeReplayPlan prepare_native_replay(const Store &, const fs::path &, std::string_view branch,
                                        std::string_view source, NativeReplayKind,
                                        std::optional<std::uint32_t> mainline, bool verify_objects,
-                                       OperationOptions);
+                                       OperationOptions, const NativeResolutionSet * = nullptr);
 } // namespace syrnck

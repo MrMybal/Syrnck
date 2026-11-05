@@ -201,6 +201,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                     [--branch BRANCHE] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
+    Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
     [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
@@ -299,6 +300,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                     [--branch BRANCH] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
+    Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
     [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
@@ -721,6 +723,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     auto resolve = [&](std::string_view selector) {
       return store.resolve_native_revision(selector, {control ? control->token() : std::stop_token{}});
     };
+    auto resolutions_input = [&]() -> std::optional<NativeResolutionSet> {
+      if (const auto path = args.option("--resolutions")) {
+        throw_if_cancelled(control->token());
+        const auto data = read_bytes(path_from_utf8(*path), max_object_size);
+        return NativeResolutionSet::decode(data);
+      }
+      return {};
+    };
     if (sub == "commit") {
       const auto staged = args.flag("--staged");
       const auto amend = args.flag("--amend");
@@ -872,6 +882,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       require(planning || message.has_value(), "--message is required");
+      const auto resolutions = resolutions_input();
       std::optional<std::uint32_t> mainline;
       if (const auto value = args.option("--mainline")) {
         const auto n = integer(*value);
@@ -882,15 +893,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto kind = sub.starts_with("revert") ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
       const auto source = resolve(args.values[0]);
       if (planning) {
-        auto plan =
-            store.plan_replay(directory, branch, source, kind, mainline, verify, {control->token(), observe});
+        auto plan = resolutions ? store.plan_replay_resolved(directory, branch, source, kind, *resolutions,
+                                                             mainline, verify, {control->token(), observe})
+                                : store.plan_replay(directory, branch, source, kind, mainline, verify,
+                                                    {control->token(), observe});
         const bool ready = plan["ready"].get<bool>();
         print(plan);
         return ready ? 0 : 1;
       }
       const auto tip = expected ? *expected : resolve("heads/" + branch);
-      print(store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
-                                   {control->token(), observe}));
+      print(resolutions ? store.replay_directory_resolved(directory, branch, tip, source, kind, *message,
+                                                          *resolutions, mainline, {control->token(), observe})
+                        : store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
+                                                 {control->token(), observe}));
     } else if (sub == "merge-plan" || sub == "merge") {
       const bool planning = sub == "merge-plan";
       const auto directory = workspace();
@@ -899,6 +914,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
+      settings.resolutions = resolutions_input();
       settings.allow_unrelated_histories = args.flag("--allow-unrelated-histories");
       settings.no_fast_forward = args.flag("--no-ff");
       settings.fast_forward_only = args.flag("--ff-only");

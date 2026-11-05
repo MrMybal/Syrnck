@@ -27,15 +27,17 @@ content and executable-mode changes on the same existing file can combine.
 
 Different concurrent file contents produce `content` conflicts. Other reasons
 are `add_add`, `delete_modify` and `modify_delete`. Conflicting text or binary
-content requires explicit resolution; automatic text merging and rename detection
-remain future work. Independent additions are also
+content can be resolved with `--resolutions JSON_FILE`; see the shared
+[resolution schema and workflow](NATIVE_RESOLUTIONS.md). Automatic text merging
+and rename detection remain future work. Independent additions are also
 checked together for portable `case_collision` and `file_directory_collision`.
 
 The report contains the operation, branch, expected `head`, selected `source`,
 `parent`/`mainline`, `ready`, `empty`, `objects_verified`, `result_files`, proposed
-`changes`, and `conflicts`. Changed entries include complete manifest/hash/size/mode
+`changes`, `conflicts`, accepted `resolved` choices and `resolution_context`.
+Changed entries include complete manifest/hash/size/mode
 summaries. Conflict entries show baseline, current and incoming summaries; path
-collision entries identify the other path. Conflicts prevent application of the
+collision entries identify the other path. Unresolved conflicts prevent application of the
 entire result, including otherwise compatible files.
 
 When snapshot conflicts are absent, `workspace` contains the ordinary
@@ -48,7 +50,7 @@ no partial candidate is treated as a valid checkout destination.
 
 `--verify` additionally verifies both input histories' complete closures and
 reconstructed file hashes. Without it, the planner reads revision/manifest
-metadata and hashes working files, but does not verify incoming block payloads.
+metadata and hashes working files, but does not verify incoming/custom block payloads.
 These read-only queries can still detect missing required metadata.
 
 The compact serialized report is limited to 16 MiB. Candidate file metadata also
@@ -88,7 +90,7 @@ auto applied = store.replay_directory(project, "main", expected_id, source_id,
 ```
 
 Apply recomputes the plan and always verifies both input closures and file hashes.
-It rejects conflicts, empty results, pending checkout/switch recovery and any
+It rejects unresolved conflicts, empty results, pending checkout/switch recovery and any
 existing staging index. The clean-tracked checkout policy applies to all current
 files and destination paths; there is no force mode. A new ordinary v1 revision
 uses the supplied message, current UTC timestamp and exactly one parent: the

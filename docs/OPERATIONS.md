@@ -17,7 +17,7 @@ syrnck get MANIFEST restored.uasset --progress
 
 `put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export`, `git clean/smudge/filter-process`,
 `native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
-`native ancestry/cherry-pick-plan/revert-plan/cherry-pick/revert`,
+`native ancestry/cherry-pick-plan/revert-plan/cherry-pick/revert/merge-plan/merge`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -96,6 +96,14 @@ reads working files. Before publication, cancellation or observer failure keeps
 both branch and index unchanged; preparation may leave unreachable objects.
 The final `publishing` event identifies `refs`. Branch movement and index removal
 publish together, with no cancellation or observer call after that boundary.
+
+[Native merge](NATIVE_MERGE.md) and [replay](NATIVE_REPLAY.md) plan without writing
+objects or files; `--verify` audits their input closures and any custom resolution
+manifests. Apply recomputes a verified plan and uses the recoverable checkout
+executor. Cancellation before journal publication preserves branch/workspace;
+afterwards inspect/resume/abort the journal as for checkout. Explicit
+[resolution documents](NATIVE_RESOLUTIONS.md) bind the inputs and selected parent;
+partial choices never publish a partial snapshot.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

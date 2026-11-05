@@ -22,9 +22,37 @@ public:
     rows.push_back(std::move(row));
   }
 };
+void namespace_conflicts(const NativeSnapshot &files, Json &conflicts, ReportBudget &budget,
+                         const OperationOptions &options) {
+  std::map<std::string, std::string> folded;
+  for (const auto &[path, entry] : files) {
+    (void)entry;
+    throw_if_cancelled(options.stop);
+    const auto [found, added] = folded.emplace(portable_fold(path), path);
+    if (!added)
+      budget.append(conflicts, Json{{"path", path}, {"reason", "case_collision"}, {"other", found->second}});
+  }
+  for (const auto &[fold, path] : folded) {
+    throw_if_cancelled(options.stop);
+    for (auto n = fold.find('/'); n != fold.npos; n = fold.find('/', n + 1))
+      if (const auto found = folded.find(fold.substr(0, n)); found != folded.end())
+        budget.append(conflicts,
+                      Json{{"path", path}, {"reason", "file_directory_collision"}, {"other", found->second}});
+  }
+}
 } // namespace
-NativeFileMergeResult merge_native_files(const NativeSnapshot &original, const NativeSnapshot &current,
-                                         const NativeSnapshot &incoming, OperationOptions options) {
+void require_native_resolution_context(const NativeResolutionSet &resolutions, std::string_view operation,
+                                       std::string_view head, std::string_view source,
+                                       const std::optional<std::string> &base,
+                                       const std::optional<std::string> &parent) {
+  resolutions.validate();
+  require(resolutions.operation == operation && resolutions.head == head && resolutions.source == source &&
+              resolutions.base == base && resolutions.parent == parent,
+          "native resolution context changed; refresh the plan");
+}
+NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapshot &original,
+                                         const NativeSnapshot &current, const NativeSnapshot &incoming,
+                                         OperationOptions options, const NativeResolutionSet *resolutions) {
   NativeFileMergeResult result;
   std::set<std::string> paths;
   for (const auto *files : std::array<const NativeSnapshot *, 3>{&original, &incoming, &current})
@@ -36,7 +64,6 @@ NativeFileMergeResult merge_native_files(const NativeSnapshot &original, const N
   Json changes = Json::array(), conflicts = Json::array();
   ReportBudget budget;
   std::uint64_t completed = 0;
-  std::size_t snapshot_bytes = 2;
   for (const auto &path : paths) {
     throw_if_cancelled(options.stop);
     const auto *base = lookup(original, path), *ours = lookup(current, path),
@@ -72,44 +99,96 @@ NativeFileMergeResult merge_native_files(const NativeSnapshot &original, const N
                                     {"current", summary(ours)},
                                     {"incoming", summary(theirs)}});
       chosen = ours;
-    } else if (!equal(ours, chosen)) {
-      budget.append(changes, Json{{"path", path},
-                                  {"action", !ours     ? "create"
-                                             : !chosen ? "remove"
-                                                       : "replace"},
-                                  {"current", summary(ours)},
-                                  {"target", summary(chosen)}});
     }
-    if (chosen) {
-      const auto size =
-          Json(path).dump().size() + 2 +
-          Json{{"manifest", chosen->manifest}, {"executable", chosen->executable}}.dump().size();
-      require(size <= max_object_size - 4096 - snapshot_bytes, "native replay snapshot exceeds 16 MiB");
-      snapshot_bytes += size;
+    if (chosen)
       result.files.emplace_hint(result.files.end(), path, *chosen);
-    }
     if (++completed % 256 == 0)
       report_progress(options, {ProgressPhase::planning, path, completed, paths.size()});
   }
-  // Independent additions can make an individually valid pair of snapshots
-  // collide in the combined portable namespace. Report these before checkout.
-  std::map<std::string, std::string> folded;
-  for (const auto &[path, entry] : result.files) {
-    (void)entry;
-    throw_if_cancelled(options.stop);
-    const auto [found, added] = folded.emplace(portable_fold(path), path);
-    if (!added)
-      budget.append(conflicts, Json{{"path", path}, {"reason", "case_collision"}, {"other", found->second}});
+  namespace_conflicts(result.files, conflicts, budget, options);
+  Json final_conflicts = Json::array();
+  ReportBudget final_budget;
+  if (resolutions && !resolutions->files.empty()) {
+    std::set<std::string> allowed;
+    for (const auto &row : conflicts) {
+      allowed.insert(row["path"].get<std::string>());
+      if (row.contains("other"))
+        allowed.insert(row["other"].get<std::string>());
+    }
+    std::set<ObjectKey> roots;
+    for (const auto &[path, resolution] : resolutions->files) {
+      throw_if_cancelled(options.stop);
+      require(allowed.contains(path), "native resolution path has no conflict");
+      const NativeSnapshotFile *chosen = nullptr;
+      std::optional<NativeSnapshotFile> custom;
+      switch (resolution.choice) {
+      case NativeResolutionChoice::current:
+        chosen = lookup(current, path);
+        break;
+      case NativeResolutionChoice::incoming:
+        chosen = lookup(incoming, path);
+        break;
+      case NativeResolutionChoice::base:
+        chosen = lookup(original, path);
+        break;
+      case NativeResolutionChoice::remove:
+        break;
+      case NativeResolutionChoice::file: {
+        const auto value = store.metadata(Kind::manifest, resolution.manifest);
+        custom =
+            NativeSnapshotFile{resolution.manifest,
+                               {value["size"].get<std::uint64_t>(), value["file_hash"].get<std::string>()},
+                               resolution.executable};
+        chosen = &*custom;
+        roots.insert({Kind::manifest, resolution.manifest});
+        break;
+      }
+      default:
+        throw Error("invalid native resolution choice");
+      }
+      if (chosen)
+        result.files.insert_or_assign(path, *chosen);
+      else
+        result.files.erase(path);
+      final_budget.append(result.resolved,
+                          Json{{"path", path},
+                               {"choice", resolution.choice == NativeResolutionChoice::current    ? "current"
+                                          : resolution.choice == NativeResolutionChoice::incoming ? "incoming"
+                                          : resolution.choice == NativeResolutionChoice::base     ? "base"
+                                          : resolution.choice == NativeResolutionChoice::remove   ? "remove"
+                                                                                                  : "file"},
+                               {"target", summary(chosen)}});
+    }
+    for (const auto &row : conflicts)
+      if (!row.contains("other") && !resolutions->files.contains(row["path"].get<std::string>()))
+        final_budget.append(final_conflicts, row);
+    namespace_conflicts(result.files, final_conflicts, final_budget, options);
+    result.extra_roots.assign(roots.begin(), roots.end());
+  } else {
+    for (const auto &row : conflicts)
+      final_budget.append(final_conflicts, row);
   }
-  for (const auto &[fold, path] : folded) {
+  std::size_t snapshot_bytes = 2;
+  for (const auto &[path, entry] : result.files) {
     throw_if_cancelled(options.stop);
-    for (auto n = fold.find('/'); n != fold.npos; n = fold.find('/', n + 1))
-      if (const auto found = folded.find(fold.substr(0, n)); found != folded.end())
-        budget.append(conflicts,
-                      Json{{"path", path}, {"reason", "file_directory_collision"}, {"other", found->second}});
+    const auto size = Json(path).dump().size() + 2 +
+                      Json{{"manifest", entry.manifest}, {"executable", entry.executable}}.dump().size();
+    require(size <= max_object_size - 4096 - snapshot_bytes, "native replay snapshot exceeds 16 MiB");
+    snapshot_bytes += size;
+  }
+  for (const auto &path : paths) {
+    throw_if_cancelled(options.stop);
+    const auto *ours = lookup(current, path), *chosen = lookup(result.files, path);
+    if (!equal(ours, chosen))
+      final_budget.append(changes, Json{{"path", path},
+                                        {"action", !ours     ? "create"
+                                                   : !chosen ? "remove"
+                                                             : "replace"},
+                                        {"current", summary(ours)},
+                                        {"target", summary(chosen)}});
   }
   result.changes = std::move(changes);
-  result.conflicts = std::move(conflicts);
+  result.conflicts = std::move(final_conflicts);
   result.processed = completed;
   result.paths = paths.size();
   return result;

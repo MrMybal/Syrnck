@@ -90,10 +90,36 @@ bool replay_operation(std::string_view operation) {
 bool replay_abort(std::string_view operation) {
   return operation == "cherry-pick-abort" || operation == "revert-abort";
 }
+bool merge_operation(std::string_view operation) {
+  return operation == "merge" || operation == "merge-abort" || operation == "merge-fast-forward" ||
+         operation == "merge-fast-forward-abort" || operation == "merge-resolved" ||
+         operation == "merge-resolved-abort";
+}
+bool merge_abort(std::string_view operation) {
+  return merge_operation(operation) && operation.ends_with("-abort");
+}
+NativeMergeOptions merge_settings(const Json &info) {
+  NativeMergeOptions settings;
+  if (info["operation"].get<std::string>().starts_with("merge-resolved")) {
+    settings.resolutions = NativeResolutionSet{"merge",
+                                               parse_key(info["old_revision"]).id,
+                                               parse_key(info["merge_source"]).id,
+                                               parse_key(info["merge_base"]).id,
+                                               {},
+                                               {}};
+    settings.resolutions->files["asset.bin"] = {NativeResolutionChoice::incoming};
+  }
+  return settings;
+}
 void prepare(const fs::path &root, bool encrypted, const std::string &operation) {
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
   auto tip = put_revision(store, old);
+  std::optional<ObjectKey> merge_base;
+  if (merge_operation(operation) && !operation.starts_with("merge-fast-forward")) {
+    merge_base = put_revision(store, ingest(store, operation.starts_with("merge-resolved") ? 2 : 0));
+    tip = put_revision(store, old, merge_base);
+  }
   if (operation == "revert" || operation == "revert-abort")
     tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
   if (operation == "export") {
@@ -118,6 +144,14 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (merge_operation(operation)) {
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
+    const auto source = put_revision(store, ingest(store, 1), merge_base ? merge_base : std::optional{tip});
+    store.set_ref("pins/merge-source", source);
+    info["merge_source"] = key_json(source);
+    if (merge_base)
+      info["merge_base"] = key_json(*merge_base);
+  }
   if (replay_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
     const auto source = operation.starts_with("revert") ? tip : put_revision(store, ingest(store, 1), tip);
@@ -185,6 +219,14 @@ void perform(Store &store, const Json &info) {
       else
         store.amend_message("main", old.id, "Amended crash fixture");
     }
+  } else if (merge_operation(op)) {
+    if (merge_abort(op))
+      store.recover_checkout(true);
+    else if (store.checkout_status()["pending"].get<bool>())
+      store.recover_checkout();
+    else if (store.refs().at("heads/main") == parse_key(info.at("old_revision")))
+      store.merge_directory(store.root().parent_path(), "main", parse_key(info["old_revision"]).id,
+                            parse_key(info["merge_source"]).id, "Merged crash fixture", merge_settings(info));
   } else if (replay_operation(op)) {
     if (replay_abort(op))
       store.recover_checkout(true);
@@ -305,7 +347,7 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       check(tagged == (op != "tag-delete"), "tag operation did not resume");
   }
   if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort" ||
-      replay_operation(op)) {
+      replay_operation(op) || merge_operation(op)) {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";
     if (fs::exists(working))
@@ -318,12 +360,16 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     if (resumed) {
       check(!status["pending"].get<bool>() && fs::exists(working) &&
-                text(read_bytes(working)) ==
-                    content(op == "checkout" || op == "switch" || (replay_operation(op) && !replay_abort(op))
-                                ? 1
-                                : 0),
+                text(read_bytes(working)) == content(op == "checkout" || op == "switch" ||
+                                                             (replay_operation(op) && !replay_abort(op)) ||
+                                                             (merge_operation(op) && !merge_abort(op))
+                                                         ? 1
+                                                         : 0),
             "checkout recovery did not finish");
-      check(current.str() == content(op == "checkout" || (replay_operation(op) && !replay_abort(op)) ? 1 : 0),
+      check(current.str() == content(op == "checkout" || (replay_operation(op) && !replay_abort(op)) ||
+                                             (merge_operation(op) && !merge_abort(op))
+                                         ? 1
+                                         : 0),
             "checkout recovery moved the wrong branch");
     }
     if (op == "switch" || op == "switch-abort") {
@@ -340,6 +386,18 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     if (replay_operation(op) && refs.at("heads/main") != old)
       check(head["parents"] == Json::array({old.id}) && head["message"] == "Replayed crash fixture",
             "replay recovery changed ancestry or commit message");
+    if (merge_operation(op)) {
+      const auto source = parse_key(info["merge_source"]);
+      check(refs.at("pins/merge-source") == source, "merge changed its source pin");
+      if (refs.at("heads/main") != old) {
+        if (op.starts_with("merge-fast-forward"))
+          check(refs.at("heads/main") == source, "fast-forward created another revision");
+        else
+          check(head["parents"] == Json::array({old.id, source.id}) &&
+                    head["message"] == "Merged crash fixture",
+                "merge lost a parent or its message");
+      }
+    }
   }
   if (op == "stage-add" || op == "stage-commit" || op == "stage-reset") {
     const bool indexed = refs.contains("staging/main");
@@ -448,14 +506,19 @@ int entry(int argc, char **argv) {
           }
         } sentinel{root.parent_path() / "unwound.txt"};
         if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort" ||
-            replay_abort(info["operation"].get<std::string>())) {
+            replay_abort(info["operation"].get<std::string>()) ||
+            merge_abort(info["operation"].get<std::string>())) {
           std::stop_source stop;
           try {
             const OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
                                              if (event.phase == ProgressPhase::exporting && event.bytes > 0)
                                                stop.request_stop();
                                            }};
-            if (replay_abort(info["operation"].get<std::string>()))
+            if (merge_abort(info["operation"].get<std::string>()))
+              store.merge_directory(root.parent_path(), "main", parse_key(info["old_revision"]).id,
+                                    parse_key(info["merge_source"]).id, "Merged crash fixture",
+                                    merge_settings(info), options);
+            else if (replay_abort(info["operation"].get<std::string>()))
               store.replay_directory(root.parent_path(), "main", parse_key(info.at("old_revision")).id,
                                      parse_key(info.at("replay_source")).id,
                                      info["operation"] == "revert-abort" ? NativeReplayKind::revert

@@ -4,10 +4,17 @@ namespace syrnck {
 struct NativeFileMergeResult {
   NativeSnapshot files;
   Json changes = Json::array(), conflicts = Json::array();
+  Json resolved = Json::array();
+  std::vector<ObjectKey> extra_roots;
   std::size_t processed = 0, paths = 0;
 };
-NativeFileMergeResult merge_native_files(const NativeSnapshot &base, const NativeSnapshot &current,
-                                         const NativeSnapshot &incoming, OperationOptions);
+void require_native_resolution_context(const NativeResolutionSet &, std::string_view operation,
+                                       std::string_view head, std::string_view source,
+                                       const std::optional<std::string> &base,
+                                       const std::optional<std::string> &parent = {});
+NativeFileMergeResult merge_native_files(const Store &, const NativeSnapshot &base,
+                                         const NativeSnapshot &current, const NativeSnapshot &incoming,
+                                         OperationOptions, const NativeResolutionSet * = nullptr);
 struct NativeMergePlan {
   std::string head;
   std::optional<std::string> base;

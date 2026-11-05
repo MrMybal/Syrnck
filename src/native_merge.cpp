@@ -38,6 +38,13 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   if (settings.fast_forward_only && !up_to_date && !forward_possible)
     blockers.push_back(Json{{"reason", "fast_forward_required"}});
   const std::string_view mode = up_to_date ? "up_to_date" : forward ? "fast_forward" : "merge";
+  require(!settings.resolutions || blockers.empty(),
+          "native resolutions require an unblocked merge topology");
+  const NativeResolutionSet context{"merge", plan.head, std::string(source), plan.base, {}, {}};
+  if (settings.resolutions) {
+    require_native_resolution_context(*settings.resolutions, "merge", plan.head, source, plan.base);
+    require(mode == "merge" || settings.resolutions->files.empty(), "native resolution path has no conflict");
+  }
   NativeFileMergeResult combined;
   Json workspace;
   if (blockers.empty()) {
@@ -47,7 +54,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     } else {
       const auto incoming = read_native_snapshot(store, source, options);
       const auto original = plan.base ? read_native_snapshot(store, *plan.base, options) : NativeSnapshot{};
-      combined = merge_native_files(original, current, incoming, options);
+      combined = merge_native_files(store, original, current, incoming, options,
+                                    settings.resolutions ? &*settings.resolutions : nullptr);
       // Fast-forward adopts the exact source revision, including its manifests.
       if (forward)
         combined.files = incoming;
@@ -55,9 +63,12 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     if (combined.conflicts.empty())
       workspace = plan_native_checkout_files(store, directory, branch, combined.files, options);
   }
-  if (verify_objects)
-    (void)store.closure({head->second, {Kind::revision, std::string(source)}}, true, options.stop,
-                        options.progress);
+  if (verify_objects) {
+    auto roots = combined.extra_roots;
+    roots.push_back(head->second);
+    roots.push_back({Kind::revision, std::string(source)});
+    (void)store.closure(roots, true, options.stop, options.progress);
+  }
   const bool ready = blockers.empty() && combined.conflicts.empty() && workspace["ready"].get<bool>();
   plan.files = std::move(combined.files);
   plan.report = Json{{"version", 1},
@@ -78,6 +89,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"result_files", blockers.empty() ? Json(plan.files.size()) : Json{}},
                      {"changes", std::move(combined.changes)},
                      {"conflicts", std::move(combined.conflicts)},
+                     {"resolved", std::move(combined.resolved)},
+                     {"resolution_context", blockers.empty() ? context.json() : Json{}},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
   require(plan.report.dump().size() <= max_object_size, "native merge report exceeds 16 MiB");

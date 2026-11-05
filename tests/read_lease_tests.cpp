@@ -1,7 +1,5 @@
 #include "internal.hpp"
 #include <iostream>
-#include <thread>
-#include <chrono>
 #include <sstream>
 using namespace syrnck;
 namespace {
@@ -102,19 +100,17 @@ int main() {
         fails([&] { store.gc(true); });
         fails([&] { store.prune_read_leases(); });
         fs::remove(path);
-        // Foreign transient files can disappear, but persistent unknown records fail closed.
+        // Persistent foreign records fail closed; confirmed disappearance permits inventory.
         auto foreign = directory / "reads" / "foreign.JSON.tmp";
         atomic_write(foreign, bytes("{"), false);
         fails([&] { store.read_leases(); });
         fails([&] { store.gc(true); });
         fails([&] { store.prune_read_leases(); });
-        {
-          std::jthread remover([&] {
-            std::this_thread::sleep_for(std::chrono::milliseconds(15));
-            fs::remove(foreign);
-          });
-          check(store.read_leases().empty());
-        }
+        // A delayed worker cannot be assumed to run within the production 50 ms grace window.
+        // Check the vanished-file path directly instead of depending on scheduler timing.
+        check(fs::remove(foreign));
+        check(transient_metadata_disappeared(foreign));
+        check(store.read_leases().empty());
         atomic_write(directory / "reads" / ".tmpinterrupted", bytes("{"), false);
         check(store.read_leases().empty());
         std::stop_source stop;

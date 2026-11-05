@@ -103,7 +103,7 @@ logiques et trafic des corps d'objets.
 
 `native status` compare le contenu du dossier de travail à une branche ou une révision native sans importer les fichiers. `native diff SOURCE CIBLE` compare les métadonnées de deux snapshots, avec distinction du contenu, du mode et du manifeste. Voir les [contrats et limites des comparaisons natives](docs/NATIVE_COMPARISON.md).
 
-`native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). Les patches textuels et le merge restent à développer.
+`native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). La sélection de patches textuels reste à développer.
 
 `native status --combined` sépare les changements préparés des modifications locales suivantes. `native checkout-plan RÉVISION` indique les actions proposées et les obstacles, y compris les collisions avec des fichiers ignorés, les liens, les variantes de casse et le staging en attente. `--verify` vérifie aussi toute la fermeture stockée de la cible. Voir l'[inspection du workspace natif](docs/NATIVE_WORKSPACE.md).
 
@@ -124,6 +124,8 @@ logiques et trafic des corps d'objets.
 `native merge-plan RÉVISION` distingue une branche à jour, une avance rapide et un merge divergent, choisit une base commune unique et affiche les conflits de fichiers et du dossier. Plusieurs bases ou des historiques sans lien exigent un choix explicite. Voir la [préparation du merge natif](docs/NATIVE_MERGE.md).
 
 `native merge RÉVISION` applique le résultat via le checkout récupérable : avance rapide exacte ou commit ayant les deux historiques pour parents. `--ff-only`, `--no-ff` et `--expect ID` contrôlent l'intégration ; les anciennes versions restent conservées après GC. Voir [l'application du merge et sa reprise](docs/NATIVE_MERGE.md#apply-and-recover).
+
+`--resolutions FICHIER_JSON` fournit les choix explicites aux merges, cherry-picks, reverts et à leurs plans : version courante, entrante, base, suppression ou manifeste personnalisé importé. Le document exige les révisions et le parent sélectionné attendus ; les conflits restants bloquent toute l'opération. Voir les [résolutions de conflits natives](docs/NATIVE_RESOLUTIONS.md).
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 

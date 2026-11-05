@@ -41,20 +41,25 @@ When snapshot conflicts are absent, the existing clean-tracked checkout prefligh
 checks working files, ignored/untracked obstructions, protected paths, links,
 staging and active recovery. A topology-only divergent merge can be ready even
 with no changed file bytes. Up-to-date plans also use this conservative preflight.
-Text merging, rename detection and recursive base synthesis remain future work.
+Explicit file choices and custom manifests can resolve conflicts with
+`--resolutions JSON_FILE`; see [native resolutions](NATIVE_RESOLUTIONS.md).
+Automatic text merging, rename detection and recursive base synthesis remain
+future work.
 
 ## Reports and validation
 
 The JSON report contains `mode`, `head`, `source`, selected `base`, all
 `merge_bases`, graph traversal counts, `ready`, `objects_verified`, `result_files`,
-proposed `changes`, file `conflicts`, topology `blockers` and `workspace` preflight.
+proposed `changes`, file `conflicts`, accepted `resolved` choices,
+`resolution_context`, topology `blockers` and `workspace` preflight.
 With topology blockers, `result_files` and `workspace` are null. With file
 conflicts, `workspace` is null. Otherwise its target ID is null because the plan
 does not write a candidate revision. A ready plan exits 0; a blocked plan exits 1
 with JSON on stdout. Invalid input or missing metadata produces a diagnostic.
 
 `--verify` additionally verifies both input histories' complete closures and
-reconstructed file hashes. Without it, stored revision/manifest metadata is read
+reconstructed file hashes, including custom resolution manifests. Without it,
+stored revision/manifest metadata is read
 and working files are hashed, but incoming file block payloads are not audited.
 Compact reports and candidate metadata are bounded as for replay. Memory scales
 with the bounded ancestry graph, snapshots and report.
@@ -128,3 +133,5 @@ auto applied = store.merge_directory(project, "main", expected_id, source_id,
 Tests cover exact fast-forward manifests, no-ff/ff-only, up-to-date no-op,
 same-tree divergence, two-parent retention after GC, unchanged source refs,
 interruption, reopen/resume, rollback and mainline revert of a new merge.
+Process-kill tests exercise ordinary, exact fast-forward and explicitly resolved
+merges, including abort and reconstruction after GC in plain/encrypted Stores.

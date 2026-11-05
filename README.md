@@ -14,7 +14,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 
 | Component | Available functionality |
 | --- | --- |
-| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/recoverable checkout/snapshot diff/tags/archived amendment, revisions, retention and GC |
+| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/recoverable checkout/merge/replay/snapshot diff/tags/archived amendment, revisions, retention and GC |
 | `syrnck_git` | Git filters, asset catalogs, retention inventory/protection, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
@@ -88,7 +88,7 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native status` hashes working files against a native branch or exact revision without ingesting them. `native diff SOURCE TARGET` compares snapshot metadata, including content, mode and manifest changes. See [native comparison contracts and limits](docs/NATIVE_COMPARISON.md).
 
-`native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Text patches and merge remain future work.
+`native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Text patch selection remains future work.
 
 `native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).
 
@@ -109,6 +109,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 `native merge-plan REVISION` distinguishes an up-to-date branch, fast-forward and divergent merge, selects a unique best common ancestor, and previews file conflicts and workspace blockers. Multiple bases require an explicit choice; unrelated histories require explicit opt-in. See [native merge topology and preflight](docs/NATIVE_MERGE.md).
 
 `native merge REVISION` applies that result through the recoverable checkout journal: exact fast-forward or a commit with both histories as parents. `--ff-only`, `--no-ff` and `--expect ID` control integration; previous file versions remain retained after GC. See [merge application and recovery](docs/NATIVE_MERGE.md#apply-and-recover).
+
+`--resolutions JSON_FILE` supplies explicit conflict choices to merge, cherry-pick, revert and their plans: current, incoming, base, removal or a custom imported manifest. Documents bind the exact revisions and selected parent; unresolved conflicts still block the complete operation. See [native conflict resolutions](docs/NATIVE_RESOLUTIONS.md).
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

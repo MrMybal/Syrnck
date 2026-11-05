@@ -140,12 +140,30 @@ struct NativeGraphLimits {
   std::size_t max_parent_links = 1000000;
 };
 enum class NativeReplayKind { cherry_pick, revert };
+enum class NativeResolutionChoice { current, incoming, base, remove, file };
+struct NativeFileResolution {
+  NativeResolutionChoice choice = NativeResolutionChoice::current;
+  std::string manifest{};
+  bool executable = false;
+};
+struct NativeResolutionSet {
+  std::string operation, head, source;
+  std::optional<std::string> base{};
+  std::optional<std::string> parent{};
+  std::map<std::string, NativeFileResolution> files;
+  void validate() const;
+  Json json() const;
+  static NativeResolutionSet parse(const Json &);
+  // Bounded, duplicate-key rejecting decoder for editable JSON documents.
+  static NativeResolutionSet decode(std::span<const std::uint8_t>);
+};
 struct NativeMergeOptions {
   std::optional<std::string> base{};
   bool allow_unrelated_histories = false;
   NativeGraphLimits limits{};
   bool no_fast_forward = false;
   bool fast_forward_only = false;
+  std::optional<NativeResolutionSet> resolutions{};
 };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
@@ -337,11 +355,19 @@ public:
   Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,
                    std::optional<std::uint32_t> mainline = {}, bool verify_objects = false,
                    OperationOptions = {}) const;
+  Json plan_replay_resolved(const fs::path &, std::string_view branch, std::string_view source,
+                            NativeReplayKind, const NativeResolutionSet &,
+                            std::optional<std::uint32_t> mainline = {}, bool verify_objects = false,
+                            OperationOptions = {}) const;
   // Verify both inputs, create a child of the expected head and apply it through
   // the recoverable checkout journal. Conflicts/empty results never publish.
   Json replay_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
                         std::string_view source, NativeReplayKind, std::string_view message,
                         std::optional<std::uint32_t> mainline = {}, OperationOptions = {}) const;
+  Json replay_directory_resolved(const fs::path &, std::string_view branch,
+                                 std::string_view expected_revision, std::string_view source,
+                                 NativeReplayKind, std::string_view message, const NativeResolutionSet &,
+                                 std::optional<std::uint32_t> mainline = {}, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
