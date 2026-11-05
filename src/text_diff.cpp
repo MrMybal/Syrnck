@@ -29,7 +29,8 @@ struct Work {
     return a == b;
   }
 };
-bool is_text(std::span<const std::uint8_t> input, OperationOptions options) {
+} // namespace
+bool is_utf8_text(std::span<const std::uint8_t> input, OperationOptions options) {
   for (std::size_t pos = 0; pos < input.size();) {
     if (pos % 4096 == 0)
       throw_if_cancelled(options.stop);
@@ -43,6 +44,7 @@ bool is_text(std::span<const std::uint8_t> input, OperationOptions options) {
   }
   return true;
 }
+namespace {
 using Lines = std::vector<std::string_view>;
 Lines split(std::span<const std::uint8_t> input, std::size_t limit, OperationOptions options) {
   Lines lines;
@@ -222,7 +224,7 @@ Json compare_text(std::span<const std::uint8_t> source, std::span<const std::uin
       throw Limited{"file_limit"};
     report_progress(options, {ProgressPhase::planning, {}, 0});
     report["equal"] = std::ranges::equal(source, target);
-    if (!is_text(source, options) || !is_text(target, options)) {
+    if (!is_utf8_text(source, options) || !is_utf8_text(target, options)) {
       report["status"] = "binary";
       report["reason"] = "non_text_input";
     } else {

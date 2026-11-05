@@ -32,6 +32,7 @@ inline std::string text(std::span<const std::uint8_t> s) {
   return {reinterpret_cast<const char *>(s.data()), s.size()};
 }
 Json parse_json(std::span<const std::uint8_t>);
+bool is_utf8_text(std::span<const std::uint8_t>, OperationOptions);
 Refs parse_refs(std::span<const std::uint8_t>, std::string_view invalid_document);
 Json encode_refs(const Refs &);
 std::string ascii_lower(std::string s);

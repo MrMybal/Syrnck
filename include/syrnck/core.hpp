@@ -147,6 +147,14 @@ struct TextDiffOptions {
 };
 Json compare_text(std::span<const std::uint8_t> source, std::span<const std::uint8_t> target,
                   TextDiffOptions = {}, OperationOptions = {});
+struct TextPatchResult {
+  std::string content;
+  std::size_t hunks = 0, additions = 0, deletions = 0;
+};
+// Exact single-file unified patch, with matching labels and no offset/fuzz.
+// max_output_bytes bounds patch input; other text limits bound source/result/work.
+TextPatchResult apply_text_patch(std::span<const std::uint8_t> source, std::span<const std::uint8_t> patch,
+                                 std::string_view path, TextDiffOptions = {}, OperationOptions = {});
 struct NativeGraphLimits {
   std::size_t max_revisions = 100000;
   std::size_t max_parent_links = 1000000;
