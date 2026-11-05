@@ -79,6 +79,11 @@ def cases():
     atomic("tag-create", ("chunk", "refs"))
     atomic("tag-delete", ("chunk", "refs"))
     atomic("tag-restore", ("refs",))
+    for replay in ("cherry-pick", "revert"):
+        result.extend((replay if operation == "checkout" else replay + "-abort", phase, kind, occurrence)
+                      for operation, phase, kind, occurrence in list(result)
+                      if operation in ("checkout", "checkout-abort"))
+        atomic(replay, ("revision",))
     return result
 
 
@@ -145,7 +150,7 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
-                        (operation in ("checkout", "checkout-abort", "switch", "switch-abort") and target == root.parent / "asset.bin") or
+                        (operation in ("checkout", "checkout-abort", "switch", "switch-abort", "cherry-pick", "cherry-pick-abort", "revert", "revert-abort") and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")
         if kind == "config":
@@ -180,8 +185,8 @@ class CrashRecovery(unittest.TestCase):
             unrelated = lambda refs: {name: key for name, key in refs.items()
                                       if not name.startswith(("tags/", "tag-metadata/", "archive/tags/"))}
             self.assertEqual(unrelated(checked["refs"]), unrelated(info["refs"]))
-        elif operation in ("checkout", "checkout-abort"):
-            changed = operation == "checkout" and (
+        elif operation in ("checkout", "checkout-abort", "cherry-pick", "cherry-pick-abort", "revert", "revert-abort"):
+            changed = operation in ("checkout", "cherry-pick", "revert") and (
                 (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
                 phase in ("checkout.committed", "checkout.cleaned"))
             self.assertEqual(checked["refs"]["heads/main"] != info["old_revision"], changed)

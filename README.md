@@ -104,6 +104,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native cherry-pick-plan REVISION` and `native revert-plan REVISION` compute file-level three-way replay, report conflicts and run the clean-workspace preflight without writing objects or files. Merge revisions require an explicit mainline parent. See [native replay decisions and limits](docs/NATIVE_REPLAY.md).
 
+`native cherry-pick REVISION -m MESSAGE` and `native revert REVISION -m MESSAGE` create a child commit and apply its files through the recoverable checkout journal. They preserve independent changes, refuse unresolved file conflicts, and retain old versions through history and archives. `--expect ID` guards the old target tip; interrupted application supports resume or abort. See [replay application and recovery](docs/NATIVE_REPLAY.md#apply-a-planned-change).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

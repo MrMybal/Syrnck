@@ -200,6 +200,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
     [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
+  native cherry-pick RÉVISION -m MESSAGE [--mainline N] [--expect ID]
+  native revert RÉVISION -m MESSAGE [--mainline N] [--expect ID]
+    [--branch BRANCHE] [--directory .] ; nouveau commit et checkout récupérable.
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch BRANCHE]
   git install [DOSSIER] [--encrypted]
@@ -291,6 +294,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
     [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
+  native cherry-pick REVISION -m MESSAGE [--mainline N] [--expect ID]
+  native revert REVISION -m MESSAGE [--mainline N] [--expect ID]
+    [--branch BRANCH] [--directory .]; new commit and recoverable checkout.
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch BRANCH]
   git install [DIRECTORY] [--encrypted]
@@ -543,7 +549,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
         sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
         sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
-        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan")) ||
+        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
+        sub == "cherry-pick" || sub == "revert")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -849,10 +856,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "tag-restore") {
       args.count(1);
       print(store.restore_native_tag(args.values[0], {control->token(), observe}));
-    } else if (sub == "cherry-pick-plan" || sub == "revert-plan") {
+    } else if (sub == "cherry-pick-plan" || sub == "revert-plan" || sub == "cherry-pick" || sub == "revert") {
+      const bool planning = sub.ends_with("-plan");
       const auto directory = workspace();
       const auto branch = selected_branch();
-      const auto verify = args.flag("--verify");
+      const auto verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
+      require(planning || message.has_value(), "--message is required");
       std::optional<std::uint32_t> mainline;
       if (const auto value = args.option("--mainline")) {
         const auto n = integer(*value);
@@ -860,12 +871,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         mainline = static_cast<std::uint32_t>(n);
       }
       args.count(1);
-      const auto kind = sub == "revert-plan" ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
-      auto plan = store.plan_replay(directory, branch, resolve(args.values[0]), kind, mainline, verify,
-                                    {control->token(), observe});
-      const bool ready = plan["ready"].get<bool>();
-      print(plan);
-      return ready ? 0 : 1;
+      const auto kind = sub.starts_with("revert") ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
+      const auto source = resolve(args.values[0]);
+      if (planning) {
+        auto plan =
+            store.plan_replay(directory, branch, source, kind, mainline, verify, {control->token(), observe});
+        const bool ready = plan["ready"].get<bool>();
+        print(plan);
+        return ready ? 0 : 1;
+      }
+      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      print(store.replay_directory(directory, branch, tip, source, kind, *message, mainline,
+                                   {control->token(), observe}));
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));

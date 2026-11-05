@@ -119,6 +119,8 @@ logiques et trafic des corps d'objets.
 
 `native cherry-pick-plan RÉVISION` et `native revert-plan RÉVISION` calculent le rejeu à trois voies par fichier, signalent les conflits et contrôlent le dossier sans écrire d'objet ou de fichier. Les merges exigent le choix explicite du parent principal. Voir les [décisions et limites du rejeu natif](docs/NATIVE_REPLAY.md).
 
+`native cherry-pick RÉVISION -m MESSAGE` et `native revert RÉVISION -m MESSAGE` créent un commit enfant et appliquent ses fichiers via le checkout récupérable. Les changements indépendants et les anciennes versions sont conservés ; les conflits non résolus bloquent l'opération. `--expect ID` exige la tête attendue et une application interrompue peut être reprise ou annulée. Voir [l'application du rejeu et sa récupération](docs/NATIVE_REPLAY.md#apply-a-planned-change).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

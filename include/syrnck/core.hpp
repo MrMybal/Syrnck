@@ -322,6 +322,11 @@ public:
   Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,
                    std::optional<std::uint32_t> mainline = {}, bool verify_objects = false,
                    OperationOptions = {}) const;
+  // Verify both inputs, create a child of the expected head and apply it through
+  // the recoverable checkout journal. Conflicts/empty results never publish.
+  Json replay_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
+                        std::string_view source, NativeReplayKind, std::string_view message,
+                        std::optional<std::uint32_t> mainline = {}, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

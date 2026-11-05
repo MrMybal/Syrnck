@@ -83,10 +83,19 @@ Store open(const fs::path &root, const Json &info) {
   return Store(root, secret(info.at("encrypted").get<bool>()), false,
                {.decoded_cache_bytes = 0, .verified_cache_entries = 0, .pack_index_cache_bytes = 0});
 }
+bool replay_operation(std::string_view operation) {
+  return operation == "cherry-pick" || operation == "cherry-pick-abort" || operation == "revert" ||
+         operation == "revert-abort";
+}
+bool replay_abort(std::string_view operation) {
+  return operation == "cherry-pick-abort" || operation == "revert-abort";
+}
 void prepare(const fs::path &root, bool encrypted, const std::string &operation) {
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
   auto tip = put_revision(store, old);
+  if (operation == "revert" || operation == "revert-abort")
+    tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
   if (operation == "export") {
     auto value = revision(old);
     std::istringstream empty;
@@ -109,6 +118,12 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (replay_operation(operation)) {
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
+    const auto source = operation.starts_with("revert") ? tip : put_revision(store, ingest(store, 1), tip);
+    store.set_ref("pins/replay-source", source);
+    info["replay_source"] = key_json(source);
+  }
   if (operation == "checkout" || operation == "checkout-abort" || operation == "switch" ||
       operation == "switch-abort") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
@@ -170,6 +185,16 @@ void perform(Store &store, const Json &info) {
       else
         store.amend_message("main", old.id, "Amended crash fixture");
     }
+  } else if (replay_operation(op)) {
+    if (replay_abort(op))
+      store.recover_checkout(true);
+    else if (store.checkout_status()["pending"].get<bool>())
+      store.recover_checkout();
+    else if (store.refs().at("heads/main") == parse_key(info.at("old_revision")))
+      store.replay_directory(store.root().parent_path(), "main", parse_key(info.at("old_revision")).id,
+                             parse_key(info.at("replay_source")).id,
+                             op == "revert" ? NativeReplayKind::revert : NativeReplayKind::cherry_pick,
+                             "Replayed crash fixture");
   } else if (op == "stage-add") {
     store.stage_directory(store.root().parent_path(), "main", {"asset.bin"});
   } else if (op == "stage-commit") {
@@ -279,7 +304,8 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     if (resumed)
       check(tagged == (op != "tag-delete"), "tag operation did not resume");
   }
-  if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort") {
+  if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort" ||
+      replay_operation(op)) {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";
     if (fs::exists(working))
@@ -292,9 +318,13 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     if (resumed) {
       check(!status["pending"].get<bool>() && fs::exists(working) &&
-                text(read_bytes(working)) == content(op == "checkout" || op == "switch" ? 1 : 0),
+                text(read_bytes(working)) ==
+                    content(op == "checkout" || op == "switch" || (replay_operation(op) && !replay_abort(op))
+                                ? 1
+                                : 0),
             "checkout recovery did not finish");
-      check(current.str() == content(op == "checkout" ? 1 : 0), "checkout recovery moved the wrong branch");
+      check(current.str() == content(op == "checkout" || (replay_operation(op) && !replay_abort(op)) ? 1 : 0),
+            "checkout recovery moved the wrong branch");
     }
     if (op == "switch" || op == "switch-abort") {
       check(refs.at("heads/main") == old && refs.at("heads/feature") == parse_key(info.at("new_revision")),
@@ -307,6 +337,9 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       if (resumed)
         check(committed == (op == "switch"), "switch recovery selected the wrong HEAD");
     }
+    if (replay_operation(op) && refs.at("heads/main") != old)
+      check(head["parents"] == Json::array({old.id}) && head["message"] == "Replayed crash fixture",
+            "replay recovery changed ancestry or commit message");
   }
   if (op == "stage-add" || op == "stage-commit" || op == "stage-reset") {
     const bool indexed = refs.contains("staging/main");
@@ -414,14 +447,21 @@ int entry(int argc, char **argv) {
             std::ofstream(path, std::ios::binary) << "destructor ran";
           }
         } sentinel{root.parent_path() / "unwound.txt"};
-        if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort") {
+        if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort" ||
+            replay_abort(info["operation"].get<std::string>())) {
           std::stop_source stop;
           try {
             const OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
                                              if (event.phase == ProgressPhase::exporting && event.bytes > 0)
                                                stop.request_stop();
                                            }};
-            if (info["operation"] == "switch-abort")
+            if (replay_abort(info["operation"].get<std::string>()))
+              store.replay_directory(root.parent_path(), "main", parse_key(info.at("old_revision")).id,
+                                     parse_key(info.at("replay_source")).id,
+                                     info["operation"] == "revert-abort" ? NativeReplayKind::revert
+                                                                         : NativeReplayKind::cherry_pick,
+                                     "Replayed crash fixture", {}, options);
+            else if (info["operation"] == "switch-abort")
               store.switch_directory(root.parent_path(), "feature", options);
             else
               store.checkout_directory(root.parent_path(), "main", parse_key(info.at("new_revision")).id,

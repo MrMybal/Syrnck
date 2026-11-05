@@ -185,6 +185,10 @@ void conflicts(const fs::path &project) {
               conflict(plan, "delete-modify", "delete_modify") &&
               conflict(plan, "modify-delete", "modify_delete") && physical(project) == before,
           "file conflicts were silently resolved or wrote data");
+  fails([&] {
+    store.replay_directory(project, "main", current, incoming, NativeReplayKind::cherry_pick, "conflicted");
+  });
+  require(physical(project) == before, "conflicted replay changed data");
   const auto empty = revision(store, Json::object());
   const auto case_current = revision(store, Json{{"Name", file(a)}}, Json::array({empty}));
   const auto case_incoming = revision(store, Json{{"name", file(b)}}, Json::array({empty}));
@@ -216,7 +220,117 @@ void missing_payload(const fs::path &project) {
           "metadata planning read incoming payloads");
   const auto before = physical(project);
   fails([&] { store.plan_replay(project, "main", incoming, NativeReplayKind::cherry_pick, {}, true); });
+  fails([&] {
+    store.replay_directory(project, "main", store.refs().at("heads/main").id, incoming,
+                           NativeReplayKind::cherry_pick, "missing bytes");
+  });
   require(physical(project) == before, "verified planning failure changed files");
+}
+void transactions(const fs::path &project, std::optional<Key> key, unsigned layout) {
+  std::string source, initial, picked, reverted;
+  {
+    Store store(project / ".syrnck", key, true);
+    const auto a = manifest(store, std::string(8193, 'a')), b = manifest(store, std::string(8193, 'b'));
+    const auto keep = manifest(store, "independent work");
+    const auto base = revision(store, Json{{"asset.bin", file(a)}});
+    source = revision(store, Json{{"asset.bin", file(b)}}, Json::array({base}));
+    initial = revision(store, Json{{"asset.bin", file(a)}, {"keep", file(keep)}}, Json::array({base}));
+    install(store, project, initial);
+    store.set_ref("heads/feature", {Kind::revision, source});
+    store.create_native_tag("before", initial);
+    if (layout == 1)
+      store.pack();
+    if (layout == 2)
+      store.pack({512 * 1024 * 1024, 3});
+    const auto before = physical(project);
+    fails([&] {
+      store.replay_directory(project, "main", source, source, NativeReplayKind::cherry_pick, "wrong tip");
+    });
+    fails([&] {
+      store.replay_directory(project, "main", "HEAD", source, NativeReplayKind::cherry_pick, "bad ID");
+    });
+    std::stop_source stop;
+    fails([&] {
+      store.replay_directory(project, "main", initial, source, NativeReplayKind::cherry_pick, "cancelled", {},
+                             {stop.get_token(), [&](const ProgressEvent &) { stop.request_stop(); }});
+    });
+    require(physical(project) == before, "preparation failure changed stored or working files");
+    store.stage_directory(project, "main", {"asset.bin"});
+    const auto staged = physical(project);
+    fails([&] {
+      store.replay_directory(project, "main", initial, source, NativeReplayKind::cherry_pick,
+                             "staging exists");
+    });
+    require(physical(project) == staged, "replay consumed an existing staging index");
+    store.reset_stage("main");
+    const auto result =
+        store.replay_directory(project, "main", initial, source, NativeReplayKind::cherry_pick, "picked");
+    picked = result["target"].get<std::string>();
+    const auto committed = store.metadata(Kind::revision, picked);
+    require(result["state"] == "committed" && result["operation"] == "cherry-pick" &&
+                result["replayed_revision"] == source && committed["parents"] == Json::array({initial}) &&
+                committed["message"] == "picked" &&
+                text(read_bytes(project / "asset.bin")) == std::string(8193, 'b') &&
+                text(read_bytes(project / "keep")) == "independent work" &&
+                store.refs().at("heads/feature").id == source &&
+                store.resolve_native_revision("tags/before") == initial,
+            "replay lost history, independent files or source refs");
+    const auto published = physical(project);
+    fails([&] {
+      store.replay_directory(project, "main", picked, source, NativeReplayKind::cherry_pick, "empty");
+    });
+    require(physical(project) == published, "empty replay wrote files");
+    std::stop_source interrupted;
+    fails([&] {
+      store.replay_directory(project, "main", picked, source, NativeReplayKind::revert, "reverted", {},
+                             {interrupted.get_token(), [&](const ProgressEvent &event) {
+                                if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                  interrupted.request_stop();
+                              }});
+    });
+    require(store.checkout_status()["pending"] == true && store.refs().at("heads/main").id == picked,
+            "interrupted replay lost its journal or published early");
+    fails([&] { store.gc(true); });
+    fails([&] {
+      store.replay_directory(project, "main", picked, source, NativeReplayKind::revert, "pending");
+    });
+  }
+  {
+    Store store(project / ".syrnck", key);
+    const auto result = store.recover_checkout();
+    reverted = result["target"].get<std::string>();
+    require(result["state"] == "committed" &&
+                store.metadata(Kind::revision, reverted)["parents"] == Json::array({picked}) &&
+                store.metadata(Kind::revision, reverted)["message"] == "reverted" &&
+                text(read_bytes(project / "asset.bin")) == std::string(8193, 'a') &&
+                text(read_bytes(project / "keep")) == "independent work",
+            "replay recovery lost inverse or independent changes");
+    std::stop_source interrupted;
+    fails([&] {
+      store.replay_directory(project, "main", reverted, source, NativeReplayKind::cherry_pick, "aborted", {},
+                             {interrupted.get_token(), [&](const ProgressEvent &event) {
+                                if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                  interrupted.request_stop();
+                              }});
+    });
+  }
+  {
+    Store store(project / ".syrnck", key);
+    require(store.recover_checkout(true)["state"] == "aborted" &&
+                store.refs().at("heads/main").id == reverted &&
+                text(read_bytes(project / "asset.bin")) == std::string(8193, 'a') &&
+                store.checkout_status()["pending"] == false,
+            "aborted replay changed committed history or files");
+    store.gc(true);
+    require(store.fsck() > 0 && store.metadata(Kind::revision, picked)["parents"] == Json::array({initial}) &&
+                store.metadata(Kind::revision, reverted)["parents"] == Json::array({picked}),
+            "GC lost replay ancestry");
+    std::ostringstream archived;
+    store.reconstruct(
+        store.metadata(Kind::revision, picked)["files"]["asset.bin"]["manifest"].get<std::string>(),
+        archived);
+    require(archived.str() == std::string(8193, 'b'), "GC lost reverted file blocks");
+  }
 }
 } // namespace
 int main() {
@@ -237,6 +351,8 @@ int main() {
           key->fill(53);
         }
         scenario(root / (std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
+        transactions(root / ("transaction-" + std::to_string(encrypted) + '-' + std::to_string(layout)), key,
+                     layout);
       }
     conflicts(root / "conflicts");
     missing_payload(root / "missing");

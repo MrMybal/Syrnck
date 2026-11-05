@@ -33,6 +33,10 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
           "invalid native replay kind");
   validate_ref("heads/" + std::string(branch));
   validate_id(source_id);
+  const auto selected_head = store.native_head();
+  require(selected_head["directory"].is_null() ||
+              utf8(fs::canonical(directory)) == selected_head["directory"].get<std::string>(),
+          "native HEAD belongs to another workspace");
   const auto refs = store.refs();
   const auto head = refs.find("heads/" + std::string(branch));
   require(head != refs.end() && head->second.kind == Kind::revision, "unknown native branch");

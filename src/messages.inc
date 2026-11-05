@@ -589,3 +589,8 @@ SYRNCK_MESSAGE("native replay of a merge requires --mainline", "le rejeu natif d
 SYRNCK_MESSAGE("native replay mainline is outside the parent list", "le parent principal du rejeu natif est hors de la liste des parents")
 SYRNCK_MESSAGE("native replay snapshot exceeds 16 MiB", "le snapshot du rejeu natif dépasse 16 Mio")
 SYRNCK_MESSAGE("native replay mainline must be in 1..4294967295", "le parent principal du rejeu natif doit être compris entre 1 et 4294967295")
+SYRNCK_MESSAGE("native replay tip changed; inspect the branch and retry", "la tête du rejeu natif a changé ; inspectez la branche et relancez l'opération")
+SYRNCK_MESSAGE("native replay requires an empty staging index", "le rejeu natif nécessite un index de staging vide")
+SYRNCK_MESSAGE("native replay has conflicts; inspect the replay plan", "le rejeu natif présente des conflits ; inspectez son plan")
+SYRNCK_MESSAGE("native replay has no changes", "le rejeu natif ne comporte aucun changement")
+SYRNCK_MESSAGE("native replay is blocked; inspect the replay plan", "le rejeu natif est bloqué ; inspectez son plan")

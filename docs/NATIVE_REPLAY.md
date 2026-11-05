@@ -1,4 +1,4 @@
-# Native cherry-pick and revert planning
+# Native cherry-pick and revert
 
 The replay planner applies a selected commit's file-level delta to a branch
 snapshot. Cherry-pick applies parent -> source; revert applies source -> parent.
@@ -26,8 +26,9 @@ preserve the current manifest. A change on only one side is selected. Independen
 content and executable-mode changes on the same existing file can combine.
 
 Different concurrent file contents produce `content` conflicts. Other reasons
-are `add_add`, `delete_modify` and `modify_delete`. There is no automatic text
-merge, binary overwrite or rename detection. Independent additions are also
+are `add_add`, `delete_modify` and `modify_delete`. Conflicting text or binary
+content requires explicit resolution; automatic text merging and rename detection
+remain future work. Independent additions are also
 checked together for portable `case_collision` and `file_directory_collision`.
 
 The report contains the operation, branch, expected `head`, selected `source`,
@@ -66,3 +67,78 @@ auto inverse = store.plan_replay(project, "main", merge_id,
 Callbacks must not reenter the Store. Progress and cooperative cancellation use
 the existing English/French interface; report fields and conflict reason codes
 are language-independent. C ABI and Go replay bindings remain future work.
+
+## Apply a planned change
+
+```text
+syrnck native cherry-pick SOURCE_ID -m "Apply the asset fix" --expect OLD_TIP_ID
+syrnck native revert SOURCE_ID -m "Undo the asset fix"
+syrnck native revert MERGE_ID --mainline 2 -m "Undo the selected merge delta"
+```
+
+`-m`/`--message` is required, as for ordinary native commits. Branch/directory
+defaults and selectors match the planner. `--expect`, when supplied, must be an
+exact lowercase 64-character old tip ID. Otherwise the CLI captures the selected
+branch tip while holding the exclusive Store lock. The API always requires it:
+
+```cpp
+auto applied = store.replay_directory(project, "main", expected_id, source_id,
+                                      syrnck::NativeReplayKind::cherry_pick,
+                                      "Apply selected changes", {}, operation);
+```
+
+Apply recomputes the plan and always verifies both input closures and file hashes.
+It rejects conflicts, empty results, pending checkout/switch recovery and any
+existing staging index. The clean-tracked checkout policy applies to all current
+files and destination paths; there is no force mode. A new ordinary v1 revision
+uses the supplied message, current UTC timestamp and exactly one parent: the
+previous target-branch tip. Cherry-pick does not add the source as a merge parent.
+Merge input needs the selected mainline; the result still has one parent.
+
+The engine then applies this immutable candidate through the existing recoverable
+checkout journal. Working files change before the atomic branch/archive/receipt
+publication; the branch remains at the old tip until every required file is
+verified. The old tip, its history and file blocks remain reconstructible through
+the new parent chain and checkout archive. Symbolic HEAD and the source's branch
+or tags do not move. To preserve an unrelated source's complete original history,
+keep its own branch, tag or pin; replay imports a delta rather than its ancestry.
+
+The result uses the checkout receipt fields, including `target`, `state` and
+`archive`, with `operation`, `replayed_revision`, `previous_revision` and
+`mainline` added to the direct command response. A recovered journal reports its
+generic checkout identity and recorded target, without these response-only labels.
+There is no revision-format or journal-format change.
+
+## Interruption, abort and retention
+
+Before a journal exists, cancellation/failure preserves the old branch and
+workspace. Candidate preparation may leave an unreferenced immutable revision.
+After journal publication, interruption requires the existing explicit workflow:
+
+```text
+syrnck native checkout-status
+syrnck native checkout-recover
+# Or, before branch publication:
+syrnck native checkout-recover --abort
+```
+
+Resume finishes the recorded candidate without recomputing the original replay.
+Abort restores original working files while retaining the old branch. Once the
+branch has published, recovery can only finish cleanup. Opening the Store does
+not modify working files, and GC is blocked while a journal is active. Inspect
+the resulting head before retrying a completed command: an old `--expect` then
+fails instead of creating another commit. Empty replays are rejected rather
+than creating an empty commit.
+
+Completed new revisions and their parent history survive destructive GC. An
+aborted, unpublished candidate may be collected after its temporary pins are
+removed. Checkout archives and receipts have no automatic expiry. Private
+prepared files and backups are plaintext even with encrypted object storage;
+see [checkout recovery and data limits](NATIVE_CHECKOUT.md).
+
+Tests exercise root and ordinary commit replay, merge-parent selection, all
+file-level conflict categories, independent later changes, wrong expected tips,
+staging/pending refusal, missing blocks, cancellation, reopen/resume/abort and
+reconstruction after GC. Process-kill tests cover both operations and their
+rollback through candidate writes, journal transitions, prepared-file publication,
+working-file moves and atomic branch/archive publication in plain/encrypted Stores.
