@@ -1,4 +1,4 @@
-#include "native_workspace.hpp"
+#include "native_text_diff.hpp"
 #include <fstream>
 #include <sstream>
 namespace syrnck {
@@ -105,26 +105,27 @@ Json Store::diff_revision_file(const std::optional<std::string> &source,
   report_progress(options, {ProgressPhase::planning, path, 1, 1, true});
   return report;
 }
-Json Store::diff_working_file(const fs::path &directory, const std::optional<std::string> &source,
-                              std::string_view path, TextDiffOptions limits, OperationOptions options) const {
+NativeWorkingDiff read_native_working_diff(const Store &store, const fs::path &directory,
+                                           const std::optional<std::string> &source, std::string_view path,
+                                           TextDiffOptions limits, OperationOptions options) {
   throw_if_cancelled(options.stop);
   limits.validate();
   validate_path(path);
   const auto base = fs::canonical(directory);
-  auto before = side(*this, source, path, options);
-  const auto file = inspect_native_file(base, root(), path, options);
+  auto before = side(store, source, path, options);
+  const auto file = inspect_native_file(base, store.root(), path, options);
   require(!before.entry.is_null() || file, "native text diff path is absent from both snapshots");
   const auto size = file ? file->size : 0;
   const bool oversized = before.size > limits.max_file_bytes || size > limits.max_file_bytes;
   std::string content;
   if (!oversized)
-    load(*this, before, options);
-  require(same_file(file, inspect_native_file(base, root(), path, options)),
+    load(store, before, options);
+  require(same_file(file, inspect_native_file(base, store.root(), path, options)),
           "file changed during native text diff; retry operation");
   if (file && !oversized)
     content = working_bytes(*file, options);
   require(fs::canonical(directory) == base &&
-              same_file(file, inspect_native_file(base, root(), path, options)),
+              same_file(file, inspect_native_file(base, store.root(), path, options)),
           "file changed during native text diff; retry operation");
   Json target;
   if (file) {
@@ -174,6 +175,23 @@ Json Store::diff_working_file(const fs::path &directory, const std::optional<std
               {"diff", std::move(difference)}};
   require(report.dump().size() <= max_object_size, "native text diff report exceeds 16 MiB");
   report_progress(options, {ProgressPhase::planning, path, 1, 1, true});
-  return report;
+  return {std::move(report),
+          std::move(before.content),
+          std::move(content),
+          std::string(path),
+          directory,
+          base,
+          file};
+}
+Json Store::diff_working_file(const fs::path &directory, const std::optional<std::string> &source,
+                              std::string_view path, TextDiffOptions limits, OperationOptions options) const {
+  return read_native_working_diff(*this, directory, source, path, limits, options).report;
+}
+void verify_native_working_diff(const Store &store, const NativeWorkingDiff &capture,
+                                OperationOptions options) {
+  require(fs::canonical(capture.requested) == capture.directory &&
+              same_file(capture.file,
+                        inspect_native_file(capture.directory, store.root(), capture.path, options)),
+          "file changed during native text diff; retry operation");
 }
 } // namespace syrnck

@@ -343,6 +343,13 @@ public:
   std::string stage_directory(const fs::path &, std::string_view branch,
                               const std::vector<std::string> &paths, IngestOptions) const;
   Json staged_status(std::string_view branch, OperationOptions = {}) const;
+  // Numbered text hunks against the frozen index/head. Applying an exact plan
+  // retains the previous index and changes only selected text, never working files.
+  Json plan_stage_hunks(const fs::path &, std::string_view branch, std::string_view path,
+                        TextDiffOptions = {}, OperationOptions = {}) const;
+  Json stage_hunks(const fs::path &, std::string_view branch, std::string_view path,
+                   std::string_view expected_plan, const std::vector<std::size_t> &hunks,
+                   TextDiffOptions = {}, OperationOptions = {}) const;
   // Compare a frozen file against the index's original baseline, including
   // stale/unborn indexes. Does not read the working directory.
   Json diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions = {},

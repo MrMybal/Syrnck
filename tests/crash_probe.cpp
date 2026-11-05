@@ -58,6 +58,28 @@ std::string block(std::uint64_t seed) {
 std::string content(std::size_t version) {
   return block(0) + block(10 + version) + block(20 + version) + block(0) + block(2);
 }
+std::string hunk_text(unsigned mask, bool prepared) {
+  std::string text;
+  for (unsigned n = 0; n < 25; ++n) {
+    if (n == 0 && prepared)
+      text += "prepared ";
+    if ((n == 2 && (mask & 1)) || (n == 22 && (mask & 2)))
+      text += "changed ";
+    text += "line " + std::to_string(n) + '\n';
+  }
+  return text;
+}
+std::string hunk_manifest(std::string_view text) {
+  // Independent format oracle: this fixture is below the default CDC minimum,
+  // so it has exactly one chunk. Do not materialize candidate objects in seeds.
+  const auto value = Json{
+      {"version", 1},
+      {"size", text.size()},
+      {"file_hash", hash(bytes(text))},
+      {"chunking", Chunking{}.json()},
+      {"blocks", Json::array({Json{{"id", object_id(Kind::chunk, bytes(text))}, {"size", text.size()}}})}};
+  return object_id(Kind::manifest, bytes(value.dump()));
+}
 ObjectKey ingest(const Store &store, std::size_t version, std::size_t workers = 1) {
   std::istringstream input(content(version));
   return {Kind::manifest, store.ingest(input, Chunking::fixed_size(1024), {.workers = workers}).first};
@@ -192,6 +214,36 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (operation == "stage-hunks" || operation == "stage-hunks-index") {
+    std::istringstream original(hunk_text(0, false));
+    const auto code = store.ingest(original).first;
+    auto value = store.metadata(Kind::revision, tip.id);
+    value["parents"] = Json::array({tip.id});
+    value["files"]["code.cpp"] = Json{{"manifest", code}, {"executable", true}};
+    tip = store.put(Kind::revision, bytes(value.dump())).first;
+    store.set_ref("heads/main", tip);
+    store.set_ref("archive/baseline", tip);
+    info["old_revision"] = key_json(tip);
+    const bool indexed = operation == "stage-hunks-index";
+    if (indexed) {
+      std::istringstream prepared(hunk_text(0, true));
+      value["files"]["code.cpp"]["manifest"] = store.ingest(prepared).first;
+      value["files"]["asset.bin"]["manifest"] = ingest(store, 1).id;
+      value["parents"] = Json::array({tip.id});
+      value["message"] = "Syrnck staging v1: main";
+      const auto index = store.put(Kind::revision, bytes(value.dump())).first;
+      store.set_ref("staging/main", index);
+      info["old_index"] = key_json(index);
+    }
+    atomic_write(root.parent_path() / "code.cpp", bytes(hunk_text(3, indexed)), false);
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), false);
+    value["parents"] = Json::array({tip.id});
+    value["message"] = "Syrnck staging v1: main";
+    value["timestamp"] = 0;
+    value["files"]["code.cpp"]["manifest"] = hunk_manifest(hunk_text(1, indexed));
+    info["hunk_target"] = key_json({Kind::revision, object_id(Kind::revision, bytes(value.dump()))});
+    info["hunk_expected_files"] = value["files"];
+  }
   if (operation.starts_with("branch-")) {
     const std::string name = "feature/topic";
     info["branch_name"] = name;
@@ -331,7 +383,16 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
 }
 void perform(Store &store, const Json &info) {
   auto op = info.at("operation").get<std::string>();
-  if (op.starts_with("branch-")) {
+  if (op == "stage-hunks" || op == "stage-hunks-index") {
+    const auto expected = parse_key(info["hunk_target"]);
+    const auto refs = store.refs();
+    if (!refs.contains("staging/main") || refs.at("staging/main") != expected) {
+      const auto plan = store.plan_stage_hunks(store.root().parent_path(), "main", "code.cpp");
+      check(plan["ready"] == true && plan["diff"]["hunks"].size() == 2, "hunk crash plan is not ready");
+      store.stage_hunks(store.root().parent_path(), "main", "code.cpp", plan["plan_id"].get<std::string>(),
+                        {1});
+    }
+  } else if (op.starts_with("branch-")) {
     const auto name = info["branch_name"].get<std::string>();
     const auto target = parse_key(info["branch_target"]);
     if (op == "branch-create") {
@@ -477,6 +538,36 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op == "stage-hunks" || op == "stage-hunks-index") {
+    const auto expected = parse_key(info["hunk_target"]);
+    const bool indexed = op == "stage-hunks-index";
+    const bool changed = refs.contains("staging/main") && refs.at("staging/main") == expected;
+    check(refs.at("heads/main") == old &&
+              text(read_bytes(root.parent_path() / "code.cpp")) == hunk_text(3, indexed) &&
+              text(read_bytes(root.parent_path() / "asset.bin")) == content(4),
+          "hunk staging moved head or working files");
+    if (indexed) {
+      const auto previous = parse_key(info["old_index"]);
+      const auto archive = "archive/stage-index/" + previous.id;
+      check(refs.contains(archive) == changed && (!changed || refs.at(archive) == previous),
+            "hunk selection published apart from its previous index archive");
+      if (!changed)
+        check(refs.at("staging/main") == previous, "hunk staging published another index");
+    } else {
+      check(refs.contains("staging/main") == changed, "initial hunk staging published another index");
+    }
+    if (changed) {
+      const auto value = store.metadata(Kind::revision, expected.id);
+      check(value["files"] == info["hunk_expected_files"] && value["parents"] == Json::array({old.id}) &&
+                value["timestamp"] == 0 && value["message"] == "Syrnck staging v1: main",
+            "hunk staging lost frozen entries, modes, parent or expected identity");
+      std::ostringstream code;
+      store.reconstruct(value["files"]["code.cpp"]["manifest"].get<std::string>(), code);
+      check(code.str() == hunk_text(1, indexed), "hunk staging included an unselected text edit");
+    }
+    if (resumed)
+      check(changed, "hunk staging did not resume");
+  }
   if (op.starts_with("branch-")) {
     const auto name = info["branch_name"].get<std::string>();
     const auto destination =

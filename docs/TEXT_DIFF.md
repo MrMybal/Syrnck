@@ -123,8 +123,8 @@ snapshots is an error, even if a working file now exists there.
 Staging integration tests cover unborn/fresh/stale state, prepared deletion,
 branch overrides, later dirty files, binary/size limits and immutable Store
 contents. C++ coverage uses plaintext/encrypted stores and loose/single-pack/
-multi-pack layouts. Line/hunk selection and patch application remain future
-work; this milestone is read-only inspection.
+multi-pack layouts. Diff commands are read-only inspection. [Numbered hunk selection](NATIVE_HUNKS.md)
+can prepare selected changes; external patch application remains future work.
 
 ## Compare a working file
 

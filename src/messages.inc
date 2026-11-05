@@ -687,3 +687,17 @@ SYRNCK_MESSAGE("native text diff ignore rule exceeds 4096 bytes", "Une règle ig
 SYRNCK_MESSAGE("choose either --staged or --working", "Choisissez --staged ou --working")
 
 SYRNCK_MESSAGE("text diff budget exceeds platform size limit", "Le budget du diff textuel dépasse la limite de taille de la plateforme")
+
+SYRNCK_MESSAGE("native hunk plan exceeds 16 MiB", "Le plan de sélection des hunks dépasse 16 Mio")
+SYRNCK_MESSAGE("native hunk result exceeds file budget", "Le résultat des hunks dépasse le budget du fichier")
+SYRNCK_MESSAGE("invalid native hunk range", "Plage de hunk natif invalide")
+SYRNCK_MESSAGE("native hunk source changed; refresh the plan", "La source des hunks a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native hunk selection must not be empty", "La sélection des hunks ne doit pas être vide")
+SYRNCK_MESSAGE("native hunk numbers must be unique and positive", "Les numéros de hunk doivent être uniques et positifs")
+SYRNCK_MESSAGE("native hunk plan changed; refresh the plan", "Le plan des hunks a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native hunk staging is blocked; inspect native add-hunks-plan", "La préparation des hunks est bloquée ; consultez native add-hunks-plan")
+SYRNCK_MESSAGE("native hunk number is out of range", "Le numéro de hunk est hors limites")
+
+SYRNCK_MESSAGE("native hunk selection exceeds 100000 numbers", "La sélection des hunks dépasse 100000 numéros")
+
+SYRNCK_MESSAGE("native add-hunks requires --expect-plan and --hunks", "native add-hunks exige --expect-plan et --hunks")

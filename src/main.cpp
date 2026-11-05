@@ -112,6 +112,28 @@ IngestOptions ingestion_options(Args &args, const Store &store) {
   }
   return options;
 }
+TextDiffOptions text_diff_options(Args &args) {
+  TextDiffOptions limits;
+  if (const auto context = args.option("--context")) {
+    const auto value = integer(*context);
+    require(value <= 100, "text diff context must be in 0..100");
+    limits.context = static_cast<std::size_t>(value);
+  }
+  auto budget = [&](std::string_view name, std::size_t &field) {
+    if (const auto value = args.option(name)) {
+      const auto count = integer(*value);
+      require(count <= std::numeric_limits<std::size_t>::max(),
+              "text diff budget exceeds platform size limit");
+      field = static_cast<std::size_t>(count);
+    }
+  };
+  budget("--max-file-bytes", limits.max_file_bytes);
+  budget("--max-lines", limits.max_lines);
+  budget("--max-work", limits.max_work);
+  budget("--max-output-bytes", limits.max_output_bytes);
+  limits.validate();
+  return limits;
+}
 net::TransferOptions transfer_options(Args &args) {
   net::TransferOptions limits;
   if (auto compression = args.option("--compression")) {
@@ -178,6 +200,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                        [--branch BRANCHE] [--expect ID] [--directory .]
     Archive l'ancien commit ; conserve ses parents. --expect exige l'ID exact.
   native add CHEMIN... [--branch BRANCHE] [--directory .]
+  native add-hunks-plan CHEMIN [--branch NOM] [--directory .]
+  native add-hunks CHEMIN --expect-plan ID --hunks 1,3 [--branch NOM]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
   native rebase-index-plan [--branch BRANCHE] [--verify]
   native rebase-index [--branch BRANCHE] [--expect ID] [--expect-index ID]
@@ -189,7 +213,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native squash-plan NOMBRE [--branch BRANCHE] [--verify]
   native squash NOMBRE -m MESSAGE [--branch BRANCHE] [--expect ID]
     Regroupe les derniers commits linéaires ; conserve le snapshot et l'ancien historique.
-  native archives [--kind reset|reset-index|rebase-index|squash|amend|checkout|detached]
+  native archives [--kind reset|reset-index|rebase-index|stage-index|squash|amend|checkout|detached]
                   [--after RÉFÉRENCE] [--limit 100] [--verify]
   native archive-show RÉFÉRENCE [--verify]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
@@ -269,7 +293,7 @@ Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-hunks-plan/add-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -310,6 +334,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                        [--branch BRANCH] [--expect ID] [--directory .]
     Archives the previous tip and preserves its parents. --expect requires an exact ID.
   native add PATH... [--branch BRANCH] [--directory .]
+  native add-hunks-plan PATH [--branch NAME] [--directory .]
+  native add-hunks PATH --expect-plan ID --hunks 1,3 [--branch NAME]
   native staged [--branch BRANCH]    Inspect staged changes
   native rebase-index-plan [--branch BRANCH] [--verify]
   native rebase-index [--branch BRANCH] [--expect ID] [--expect-index ID]
@@ -321,7 +347,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native squash-plan COUNT [--branch BRANCH] [--verify]
   native squash COUNT -m MESSAGE [--branch BRANCH] [--expect ID]
     Collapses linear tip commits, preserving the snapshot and archived history.
-  native archives [--kind reset|reset-index|rebase-index|squash|amend|checkout|detached]
+  native archives [--kind reset|reset-index|rebase-index|stage-index|squash|amend|checkout|detached]
                   [--after REFERENCE] [--limit 100] [--verify]
   native archive-show REFERENCE [--verify]
   native status [--branch BRANCH | --revision REVISION] [--directory .]
@@ -401,7 +427,7 @@ Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
 Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-hunks-plan/add-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -623,16 +649,16 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
-        sub == "add" || sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
-        sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
-        sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
-        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
-        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
-        sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
-        sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
-        sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
-        sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
-        sub == "branch-restore")) ||
+        sub == "add" || sub == "add-hunks-plan" || sub == "add-hunks" || sub == "staged" || sub == "reset" ||
+        sub == "reset-plan" || sub == "checkout-plan" || sub == "checkout" || sub == "checkout-recover" ||
+        sub == "switch-plan" || sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" ||
+        sub == "tag-delete" || sub == "tag-archive" || sub == "tag-restore" || sub == "ancestry" ||
+        sub == "cherry-pick-plan" || sub == "revert-plan" || sub == "cherry-pick" || sub == "revert" ||
+        sub == "merge-plan" || sub == "merge" || sub == "squash-plan" || sub == "squash" ||
+        sub == "archives" || sub == "archive-show" || sub == "rebase-plan" || sub == "rebase" ||
+        sub == "rebase-index-plan" || sub == "rebase-index" || sub == "branch" || sub == "branches" ||
+        sub == "branch-delete-plan" || sub == "branch-delete" || sub == "branch-archives" ||
+        sub == "branch-archive" || sub == "branch-restore-plan" || sub == "branch-restore")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -839,6 +865,34 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto directory = workspace();
       const auto branch = selected_branch();
       std::cout << store.stage_directory(directory, branch, args.paths(), options) << '\n';
+    } else if (sub == "add-hunks-plan" || sub == "add-hunks") {
+      const bool planning = sub == "add-hunks-plan";
+      const auto limits = text_diff_options(args);
+      const auto directory = workspace();
+      const auto branch = selected_branch();
+      if (planning) {
+        args.count(1);
+        const auto report =
+            store.plan_stage_hunks(directory, branch, args.values[0], limits, {control->token(), observe});
+        print(report);
+        return report["ready"].get<bool>() ? 0 : 1;
+      }
+      const auto expected = args.option("--expect-plan"), selection = args.option("--hunks");
+      require(expected && selection, "native add-hunks requires --expect-plan and --hunks");
+      args.count(1);
+      std::vector<std::size_t> hunks;
+      for (std::size_t pos = 0;;) {
+        const auto comma = selection->find(',', pos);
+        const auto value = integer(selection->substr(pos, comma == std::string::npos ? comma : comma - pos));
+        require(value >= 1 && value <= 100000, "native hunk number is out of range");
+        require(hunks.size() < 100000, "native hunk selection exceeds 100000 numbers");
+        hunks.push_back(static_cast<std::size_t>(value));
+        if (comma == std::string::npos)
+          break;
+        pos = comma + 1;
+      }
+      print(store.stage_hunks(directory, branch, args.values[0], *expected, hunks, limits,
+                              {control->token(), observe}));
     } else if (sub == "staged") {
       const auto branch = selected_branch();
       args.count(0);
@@ -983,25 +1037,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         return plan["ready"].get<bool>() ? 0 : 1;
       }
     } else if (sub == "diff-text") {
-      TextDiffOptions limits;
-      if (const auto context = args.option("--context")) {
-        const auto value = integer(*context);
-        require(value <= 100, "text diff context must be in 0..100");
-        limits.context = static_cast<std::size_t>(value);
-      }
-      auto budget = [&](std::string_view name, std::size_t &field) {
-        if (const auto value = args.option(name)) {
-          const auto count = integer(*value);
-          require(count <= std::numeric_limits<std::size_t>::max(),
-                  "text diff budget exceeds platform size limit");
-          field = static_cast<std::size_t>(count);
-        }
-      };
-      budget("--max-file-bytes", limits.max_file_bytes);
-      budget("--max-lines", limits.max_lines);
-      budget("--max-work", limits.max_work);
-      budget("--max-output-bytes", limits.max_output_bytes);
-      limits.validate();
+      const auto limits = text_diff_options(args);
       const bool unified = args.flag("--unified");
       const bool staged = args.flag("--staged");
       const bool working = args.flag("--working");

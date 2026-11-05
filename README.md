@@ -86,6 +86,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native diff-text --working PATH` compares a working file to the frozen index (or branch head), with `--revision SELECTOR` for an explicit base. Reads target one path, reject ignored/obstructed names, and detect observed file changes. See [working text differences](docs/TEXT_DIFF.md#compare-a-working-file).
 
+`native add-hunks-plan PATH` numbers the text changes of an existing file. `native add-hunks PATH --expect-plan ID --hunks 1,3` freezes only those hunks, preserves other preparations and archives the previous index through GC. See [partial text staging](docs/NATIVE_HUNKS.md).
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).
@@ -94,7 +96,7 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native status` hashes working files against a native branch or exact revision without ingesting them. `native diff SOURCE TARGET` compares snapshot metadata, including content, mode and manifest changes. See [native comparison contracts and limits](docs/NATIVE_COMPARISON.md).
 
-`native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Text patch selection remains future work.
+`native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Numbered text hunk selection is also available; see [partial staging](docs/NATIVE_HUNKS.md).
 
 `native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).
 

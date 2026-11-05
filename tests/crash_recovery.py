@@ -33,6 +33,8 @@ def cases():
     atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
     atomic("stage-commit", ("revision", "refs"))
     atomic("stage-reset", ("refs",))
+    for operation in ("stage-hunks", "stage-hunks-index"):
+        atomic(operation, ("chunk", "manifest", "revision", "refs"))
     atomic("branch-create", ("refs",))
     for operation in ("branch-delete", "branch-delete-index"):
         atomic(operation, ("chunk", "refs"))
@@ -191,6 +193,13 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation in ("stage-hunks", "stage-hunks-index"):
+            expected = dict(info["refs"])
+            if kind == "refs" and published:
+                expected["staging/main"] = info["hunk_target"]
+                if "old_index" in info:
+                    expected["archive/stage-index/" + info["old_index"]["id"]] = info["old_index"]
+            self.assertEqual(checked["refs"], expected)
         elif operation.startswith("branch-"):
             changed = kind == "refs" and published
             expected = dict(info["refs"])
