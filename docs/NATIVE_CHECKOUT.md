@@ -20,6 +20,10 @@ moves that branch, using its current snapshot as the workspace baseline.
 `native switch BRANCH` selects a different branch while preserving both heads.
 The Store must be strictly inside the canonical workspace directory.
 
+The CLI resolves [revision selectors](NATIVE_TAGS.md), including native tags,
+before preflight. C++ callers can resolve them explicitly with
+`resolve_native_revision()`; the checkout API itself retains revision-ID inputs.
+
 ## Starting and publishing
 
 The initial policy requires every tracked file to match its baseline by complete

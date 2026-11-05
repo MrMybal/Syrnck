@@ -187,6 +187,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
+  native tag NOM [RÉVISION] [-m MESSAGE]   Nommer une version (HEAD par défaut)
+  native tags [--after NOM] [--limit 100] | tag-show NOM [--verify]
+  native tag-delete NOM --expect RÉVISION
+  native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCHE] [--limit 50]
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch BRANCHE]
@@ -218,9 +222,11 @@ Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
+Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
+              native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -264,6 +270,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
+  native tag NAME [REVISION] [-m MESSAGE]   Label a version (defaults to HEAD)
+  native tags [--after NAME] [--limit 100] | tag-show NAME [--verify]
+  native tag-delete NAME --expect REVISION
+  native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCH] [--limit 50]
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch BRANCH]
@@ -295,9 +305,11 @@ Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
+Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
+              native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -510,10 +522,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" &&
-       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
-        sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
-        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch")) ||
+      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
+                               sub == "add" || sub == "staged" || sub == "reset" || sub == "checkout-plan" ||
+                               sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" ||
+                               sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" ||
+                               sub == "tag-delete" || sub == "tag-archive" || sub == "tag-restore")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -673,6 +686,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               "native HEAD belongs to another workspace");
       return directory;
     };
+    auto resolve = [&](std::string_view selector) {
+      return store.resolve_native_revision(selector, {control ? control->token() : std::stop_token{}});
+    };
     if (sub == "commit") {
       const auto staged = args.flag("--staged");
       auto branch = selected_branch();
@@ -712,6 +728,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(0);
       require(!(branch && revision), "choose either --branch or --revision");
       require(!(combined && revision), "combined native status cannot select an explicit revision");
+      if (revision)
+        *revision = resolve(*revision);
       if (combined) {
         const auto selected = branch ? *branch : store.native_head()["branch"].get<std::string>();
         print(store.workspace_status(directory, selected, {control->token(), observe}));
@@ -731,7 +749,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto directory = workspace();
       const auto branch = selected_branch();
       args.count(1);
-      print(store.checkout_directory(directory, branch, args.values[0], {control->token(), observe}));
+      print(
+          store.checkout_directory(directory, branch, resolve(args.values[0]), {control->token(), observe}));
     } else if (sub == "checkout-status") {
       const auto id = args.option("--id");
       args.count(0);
@@ -745,8 +764,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto branch = selected_branch();
       const auto verify = args.flag("--verify");
       args.count(1);
-      const auto plan =
-          store.plan_checkout(directory, branch, args.values[0], verify, {control->token(), observe});
+      const auto plan = store.plan_checkout(directory, branch, resolve(args.values[0]), verify,
+                                            {control->token(), observe});
       print(plan);
       return plan["ready"].get<bool>() ? 0 : 1;
     } else if (sub == "head") {
@@ -765,12 +784,41 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
     } else if (sub == "diff") {
       args.count(2);
-      print(store.compare_revisions(args.values[0], args.values[1], {control->token(), observe}));
+      print(store.compare_revisions(resolve(args.values[0]), resolve(args.values[1]),
+                                    {control->token(), observe}));
     } else if (sub == "branch") {
       args.count(2);
       auto name = "heads/" + args.values[0];
       require(!store.refs().contains(name), "branch already exists");
-      store.set_ref(name, {Kind::revision, args.values[1]});
+      store.set_ref(name, {Kind::revision, resolve(args.values[1])});
+    } else if (sub == "tag") {
+      const auto message = args.option("--message", "-m");
+      args.count(args.values.size() -
+                 (std::find(args.values.begin(), args.values.end(), "--") != args.values.end()));
+      require(args.values.size() == 1 || args.values.size() == 2,
+              "unexpected or missing arguments; use --help");
+      const auto revision = resolve(args.values.size() == 2 ? args.values[1] : "HEAD");
+      print(store.create_native_tag(args.values[0], revision, message, {control->token(), observe}));
+    } else if (sub == "tags") {
+      const auto after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "native tag page limit must be in 1..1000");
+      args.count(0);
+      print(store.native_tags(after, static_cast<std::size_t>(limit), {control->token(), observe}));
+    } else if (sub == "tag-show" || sub == "tag-archive") {
+      const auto verify = args.flag("--verify");
+      args.count(1);
+      print(sub == "tag-show"
+                ? store.native_tag(args.values[0], verify, {control->token(), observe})
+                : store.native_tag_archive(args.values[0], verify, {control->token(), observe}));
+    } else if (sub == "tag-delete") {
+      const auto expected = args.option("--expect");
+      args.count(1);
+      require(expected.has_value(), "--expect is required for native tag deletion");
+      print(store.delete_native_tag(args.values[0], *expected, {control->token(), observe}));
+    } else if (sub == "tag-restore") {
+      args.count(1);
+      print(store.restore_native_tag(args.values[0], {control->token(), observe}));
     } else if (sub == "log") {
       auto branch = selected_branch();
       auto limit = integer(args.option("--limit").value_or("50"));
@@ -790,7 +838,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
     } else if (sub == "export") {
       args.count(2);
-      store.export_revision(args.values[0], path_from_utf8(args.values[1]), {control->token(), observe});
+      store.export_revision(resolve(args.values[0]), path_from_utf8(args.values[1]),
+                            {control->token(), observe});
     } else if (sub == "detach-history") {
       auto branch = selected_branch();
       auto message = args.option("--message", "-m");

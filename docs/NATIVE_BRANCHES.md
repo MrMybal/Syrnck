@@ -32,6 +32,11 @@ checkout, log and history detachment. Explicit `--branch` keeps its existing
 meaning: operate on that named branch, without changing HEAD. Explicit
 `status --revision` selects the requested snapshot.
 
+Snapshot arguments also accept [native tags and revision selectors](NATIVE_TAGS.md).
+Branch switching still takes a literal branch name; a tag is restored with
+`native checkout tags/NAME`, which moves the selected branch and archives its
+previous head. It does not create detached HEAD state.
+
 `native head` reports English JSON fields in both interface languages:
 
 | Field | Meaning |

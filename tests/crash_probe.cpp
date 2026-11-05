@@ -123,6 +123,11 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     if (operation != "stage-add")
       store.stage_directory(root.parent_path(), "main", {"asset.bin"});
   }
+  if (operation == "tag-delete" || operation == "tag-restore") {
+    store.create_native_tag("release/v1", tip.id, "Tagged crash fixture");
+    if (operation == "tag-restore")
+      info["tag_archive"] = store.delete_native_tag("release/v1", tip.id)["archive"];
+  }
   if (operation == "append" || operation == "compact") {
     auto next = ingest(store, 1);
     auto next_tip = put_revision(store, next, tip);
@@ -175,6 +180,15 @@ void perform(Store &store, const Json &info) {
       store.switch_directory(store.root().parent_path(), "feature");
   } else if (op == "switch-abort") {
     store.recover_checkout(true);
+  } else if (op == "tag-create") {
+    if (!store.refs().contains("tags/release/v1"))
+      store.create_native_tag("release/v1", parse_key(info.at("old_revision")).id, "Tagged crash fixture");
+  } else if (op == "tag-delete") {
+    if (store.refs().contains("tags/release/v1"))
+      store.delete_native_tag("release/v1", parse_key(info.at("old_revision")).id);
+  } else if (op == "tag-restore") {
+    if (!store.refs().contains("tags/release/v1"))
+      store.restore_native_tag(info.at("tag_archive").get<std::string>());
   } else if (op == "detach") {
     store.detach_history("main", "Detached crash fixture");
   } else if (op == "append" || op == "compact") {
@@ -215,6 +229,29 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op == "tag-create" || op == "tag-delete" || op == "tag-restore") {
+    const bool tagged = refs.contains("tags/release/v1");
+    check(tagged == refs.contains("tag-metadata/release/v1"), "tag and annotation published separately");
+    if (tagged) {
+      const auto tag = store.native_tag("release/v1", true)["tag"];
+      check(tag["revision"] == old.id && tag["message"] == "Tagged crash fixture", "tag metadata changed");
+    }
+    unsigned archives = 0;
+    for (const auto &[name, key] : refs) {
+      (void)key;
+      if (name.starts_with("archive/tags/") && name.ends_with("/record")) {
+        const auto id = name.substr(13, 64);
+        const auto archive = store.native_tag_archive(id, true);
+        check(archive["tag"]["revision"] == old.id && archive["tag"]["message"] == "Tagged crash fixture",
+              "tag archive lost its target or annotation");
+        ++archives;
+      }
+    }
+    check(archives == (op == "tag-restore" || (op == "tag-delete" && !tagged) ? 1u : 0u),
+          "tag deletion archive published apart from removal");
+    if (resumed)
+      check(tagged == (op != "tag-delete"), "tag operation did not resume");
+  }
   if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort") {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";

@@ -16,6 +16,7 @@ syrnck get MANIFEST restored.uasset --progress
 ```
 
 `put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export`, `git clean/smudge/filter-process`,
+`native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -79,6 +80,14 @@ point. HEAD remains on the source branch until it publishes atomically with
 the committed journal; the two branch heads are checked and kept. Abort before
 publication retains the old selection. `native head` is read-only and accepts
 no progress options; `switch-plan` and `switch` support progress/cancellation.
+
+[Native tags](NATIVE_TAGS.md) support progress/cancellation for creation, paged
+listing, inspection, archived deletion and restoration. Mutations verify the
+complete retained closure before the `publishing` event at `refs`, then publish
+all tag/annotation/archive roots together. Cancellation before that point keeps
+the old references; new unreachable metadata may remain. No observer or stop
+check follows publication. Read-only reports default to metadata inspection;
+`--verify` adds complete target verification.
 
 [Native staging](NATIVE_STAGING.md) freezes selected files during `native add`;
 `staged` reads metadata and `reset` changes only the index. Staged commit never

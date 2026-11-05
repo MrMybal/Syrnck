@@ -117,6 +117,20 @@ syrnck native checkout-recover --abort --progress
 
 Les deux dernières commandes sont les alternatives de reprise ou d'annulation après une interruption. Les fichiers sont déplacés séquentiellement sous journal ; la branche, l'archive source et la rétention cible sont publiées ensemble une fois les fichiers vérifiés. Après publication, seule la fin du nettoyage est possible. Le GC et les écritures natives restent bloqués tant que l'opération est en attente. Les sauvegardes et fichiers préparés restent en clair, même si les objets sont chiffrés. Arrêter les éditeurs externes pendant l'opération. Voir les [limites, la rétention et les états de récupération du checkout](NATIVE_CHECKOUT.md).
 
+Pour nommer une version commitée et conserver son annotation :
+
+```text
+syrnck native tag release/v1 HEAD -m "Version de livraison"
+syrnck native tags --limit 100
+syrnck native tag-show release/v1 --verify
+syrnck native diff tags/release/v1 HEAD
+syrnck native tag-delete release/v1 --expect <identifiant-revision>
+syrnck native tag-archive <identifiant-archive> --verify
+syrnck native tag-restore <identifiant-archive>
+```
+
+La création vise HEAD par défaut et n'inclut aucune modification locale non commitée. Un nom existant est refusé. La suppression vérifie l'ID attendu puis archive la cible et l'annotation atomiquement ; le GC conserve cette version même après retrait des autres branches/tags. La restauration garde l'archive et refuse un nom déjà repris. Les commandes de snapshots acceptent les noms non ambigus ainsi que `HEAD`, `heads/NOM` et `tags/NOM`. Un nom partagé par une branche et un tag exige une forme explicite. Voir les [contrats des tags, de la pagination et des archives](NATIVE_TAGS.md).
+
 Pour raccourcir l'historique tout en gardant une archive :
 
 ```text

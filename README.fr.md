@@ -12,7 +12,7 @@ Deux modes consomment la même bibliothèque : **Git**, pour conserver son écos
 
 | Composant | Disponible |
 | --- | --- |
-| `syrnck_core` | FastCDC 2020 ou blocs fixes, BLAKE3, Zstd, packs indexés, reconstruction vérifiée, staging, checkout récupérable, révisions et GC |
+| `syrnck_core` | FastCDC 2020 ou blocs fixes, BLAKE3, Zstd, packs indexés, reconstruction vérifiée, staging, checkout récupérable, tags, révisions et GC |
 | `syrnck_git` | Filtres simples/résident, catalogues des assets, racines conservées, migration LFS hors ligne et hook pre-push optionnel |
 | `syrnck_git_net` | Push/pull groupés, catalogues immuables et hydratation des assets à la demande |
 | `syrnck_net` | API HTTP v1 authentifiée, comparaison et transfert des objets absents, publication par compare-and-swap |
@@ -110,6 +110,8 @@ logiques et trafic des corps d'objets.
 `native checkout RÉVISION` restaure un workspace suivi propre et déplace la branche sélectionnée, en archivant son ancienne tête et en conservant la cible. `native checkout-status` inspecte une interruption ; `native checkout-recover` reprend l'opération et `--abort` restaure les originaux avant publication. Les déplacements de fichiers sont séquentiels et récupérables grâce au journal. Les fichiers préparés et sauvegardes restent en clair même si les objets sont chiffrés. Il n'y a pas encore d'option force ou de nettoyage automatique des archives de checkout. Voir les [garanties, la rétention et la récupération du checkout](docs/NATIVE_CHECKOUT.md).
 
 `native head` affiche la branche courante ; les anciens stores sélectionnent implicitement `main`. `native switch-plan BRANCHE` prépare le changement et `native switch BRANCHE` restaure puis sélectionne cette branche existante en conservant les deux têtes. Commit, staging, status, log et checkout suivent cette sélection par défaut ; `--branch` la remplace pour l'opération. Le HEAD est publié atomiquement avec le journal. Voir la [sélection de branche native, les valeurs par défaut et la reprise](docs/NATIVE_BRANCHES.md).
+
+`native tag NOM [RÉVISION] [-m MESSAGE]` nomme une version commitée, par défaut HEAD, avec une annotation optionnelle. `native tags` affiche des pages bornées ; `tag-show --verify` vérifie la cible. `tag-delete NOM --expect ID` conserve une archive restaurable après GC, et `tag-restore ARCHIVE_ID` restaure le nom et son message. Les commandes de snapshots acceptent HEAD, les noms de branche/tag non ambigus et les formes explicites `heads/NOM` ou `tags/NOM`. Voir les [tags natifs, sélecteurs et archives conservées](docs/NATIVE_TAGS.md).
 
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 

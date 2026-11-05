@@ -73,6 +73,9 @@ def cases():
                   if operation in ("checkout", "checkout-abort"))
     for occurrence in (1, 2):
         atomic("switch", ("chunk",), occurrence)
+    atomic("tag-create", ("chunk", "refs"))
+    atomic("tag-delete", ("chunk", "refs"))
+    atomic("tag-restore", ("refs",))
     return result
 
 
@@ -155,6 +158,13 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation in ("tag-create", "tag-delete", "tag-restore"):
+            changed = kind == "refs" and published
+            tagged = "tags/release/v1" in checked["refs"]
+            self.assertEqual(tagged, not changed if operation == "tag-delete" else changed)
+            unrelated = lambda refs: {name: key for name, key in refs.items()
+                                      if not name.startswith(("tags/", "tag-metadata/", "archive/tags/"))}
+            self.assertEqual(unrelated(checked["refs"]), unrelated(info["refs"]))
         elif operation in ("checkout", "checkout-abort"):
             changed = operation == "checkout" and (
                 (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or

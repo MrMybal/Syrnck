@@ -74,6 +74,11 @@ parents. It can inspect metadata-only partial Stores. It does not prove that
 the referenced chunks or historical parents are available; use `fsck` for a
 complete integrity audit.
 
+The CLI accepts [native revision selectors](NATIVE_TAGS.md) for diff operands
+and `status --revision`: exact IDs, HEAD and unambiguous branch/tag names.
+Explicit `heads/NAME` and `tags/NAME` select a namespace. C++ comparison methods
+continue to receive IDs; resolution is available separately.
+
 The report contains `source`, `target`, `equal`, `source_files`, `target_files`,
 `counts` and sorted `changes`. Status names are `added`, `removed` and `modified`,
 with an `unchanged` count. Change summaries have the same fields as working

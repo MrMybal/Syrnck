@@ -294,6 +294,20 @@ public:
   Json plan_switch(const fs::path &, std::string_view branch, bool verify_objects = false,
                    OperationOptions = {}) const;
   Json switch_directory(const fs::path &, std::string_view branch, OperationOptions = {}) const;
+  // Native release labels are immutable through this API. Deletion archives
+  // their target and optional annotation atomically; archives remain retained.
+  Json native_tags(const std::optional<std::string> &after = {}, std::size_t limit = 100,
+                   OperationOptions = {}) const;
+  Json native_tag(std::string_view name, bool verify_objects = false, OperationOptions = {}) const;
+  Json create_native_tag(std::string_view name, std::string_view revision,
+                         const std::optional<std::string> &message = {}, OperationOptions = {}) const;
+  Json delete_native_tag(std::string_view name, std::string_view expected_revision,
+                         OperationOptions = {}) const;
+  Json native_tag_archive(std::string_view id, bool verify_objects = false, OperationOptions = {}) const;
+  Json restore_native_tag(std::string_view archive_id, OperationOptions = {}) const;
+  // Exact ID, HEAD, heads/NAME, tags/NAME, or an unambiguous bare branch/tag.
+  // Resolves a revision's metadata only; complete closure verification is separate.
+  std::string resolve_native_revision(std::string_view selector, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
