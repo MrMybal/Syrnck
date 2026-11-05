@@ -99,10 +99,10 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned layout) 
   TextDiffOptions different;
   different.context = 0;
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(preview), {1}, different); },
-        "native hunk plan changed; refresh the plan");
+        "native text selection plan changed; refresh the plan");
   write(code, body(3));
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(preview), {1}); },
-        "native hunk plan changed; refresh the plan");
+        "native text selection plan changed; refresh the plan");
   write(code, body(7));
   require(physical(store) == no_writes, "invalid hunk selection wrote Store data");
   for (const auto phase : {ProgressPhase::ingesting, ProgressPhase::publishing}) {
@@ -146,7 +146,7 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned layout) 
   const auto previous = store.stage_directory(project, "main", {"other.txt"});
   const auto saved = physical(store);
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(preview), {1}); },
-        "native hunk plan changed; refresh the plan");
+        "native text selection plan changed; refresh the plan");
   require(physical(store) == saved, "stale index preview wrote objects");
   const auto current = store.plan_stage_hunks(project, "main", "code.cpp");
   const auto applied = store.stage_hunks(project, "main", "code.cpp", identity(current), {2});
@@ -213,7 +213,7 @@ void newline_cases(const fs::path &project) {
           "bounded partial selection fixture differs");
   const auto untouched = physical(store);
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(bounded), {2}, budget); },
-        "native hunk result exceeds file budget");
+        "native text selection result exceeds file budget");
   require(physical(store) == untouched, "oversized selected result wrote objects");
   write(project / "code.cpp", body(0));
   store.stage_directory(project, "unborn", {"code.cpp"});
@@ -267,9 +267,15 @@ void blocked_states(const fs::path &project) {
   require(blocked(plan, "pending_checkout"), "pending checkout did not block hunk selection");
   const auto reset = store.plan_reset_hunks("main", "code.cpp");
   require(blocked(reset, "pending_checkout"), "pending checkout did not block hunk reset");
+  const auto lines = store.plan_stage_lines(project, "main", "code.cpp");
+  const auto reset_lines = store.plan_reset_lines("main", "code.cpp");
+  require(blocked(lines, "pending_checkout") && blocked(reset_lines, "pending_checkout"),
+          "pending checkout did not block line selection");
   before = physical(store);
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(plan), {1}); });
   fails([&] { store.reset_hunks("main", "code.cpp", identity(reset), {1}); });
+  fails([&] { store.stage_lines(project, "main", "code.cpp", identity(lines), {1}); });
+  fails([&] { store.reset_lines("main", "code.cpp", identity(reset_lines), {1}); });
   require(physical(store) == before, "hunk staging modified a pending checkout");
   store.recover_checkout(true);
 }

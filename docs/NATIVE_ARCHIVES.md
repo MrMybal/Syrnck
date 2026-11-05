@@ -17,7 +17,7 @@ syrnck native archive-show archive/squash/OLD_ID --verify
 | `reset` | `archive/reset/OLD_ID` | Former branch tip and its full history |
 | `reset-index` | `archive/reset-index/INDEX_ID` | Former prepared snapshot and its baseline history |
 | `rebase-index` | `archive/rebase-index/INDEX_ID` | Index before replay onto a new head, including its original baseline |
-| `stage-index` | `archive/stage-index/INDEX_ID` | Frozen index before adding or removing text hunks, including its original baseline |
+| `stage-index` | `archive/stage-index/INDEX_ID` | Frozen index before adding or removing text hunks/rows, including its original baseline |
 | `squash` | `archive/squash/OLD_ID` | Original chain, including intermediate file versions |
 | `amend` | `archive/amend/OLD_ID` | Former amended tip and its parents |
 | `checkout` | `archive/checkout/TRANSACTION_ID` | Source revision retained by completed checkout |

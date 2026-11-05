@@ -105,7 +105,7 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned layout) 
   TextDiffOptions different;
   different.context = 0;
   fails([&] { store.reset_hunks("main", "code.cpp", id(current), {1}, different); },
-        "native hunk plan changed; refresh the plan");
+        "native text selection plan changed; refresh the plan");
   require(physical(store) == before, "invalid reset wrote objects");
   for (const auto phase : {ProgressPhase::ingesting, ProgressPhase::publishing}) {
     const auto refs = store.refs();
@@ -136,7 +136,7 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned layout) 
   const auto applied = store.reset_hunks("main", "code.cpp", id(current), {2});
   const auto saved = physical(store);
   fails([&] { store.reset_hunks("main", "code.cpp", id(current), {1}); },
-        "native hunk plan changed; refresh the plan");
+        "native text selection plan changed; refresh the plan");
   require(physical(store) == saved, "stale plan wrote objects");
   store.gc(true);
   require(contents(store, index.id) == body(7), "GC removed archived index");
@@ -242,7 +242,7 @@ void different_line_counts(const fs::path &project) {
   require(plan["ready"] == true && plan["diff"]["hunks"].size() == 2, "bounded reset fixture differs");
   const auto before = physical(store);
   fails([&] { store.reset_hunks("main", "code.cpp", id(plan), {1}, limits); },
-        "native hunk result exceeds file budget");
+        "native text selection result exceeds file budget");
   require(before == physical(store), "oversized reset wrote objects");
 }
 void incomplete_closure(const fs::path &project) {

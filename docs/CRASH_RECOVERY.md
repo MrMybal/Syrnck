@@ -26,6 +26,7 @@ crash by throwing an exception or unwinding the stack.
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
 | Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
+| Native individual line selection | Partial add with/without an existing index and partial reset inside a hunk; selected-row chunk/manifest/index writes, atomic retention, untouched working files and exact independently computed result identities |
 | Native branch switch and abort | HEAD descriptor/journal writes, the same file-move boundaries, HEAD/receipt publication and rollback; both branch heads remain unchanged and HEAD publishes with the committed journal |
 | Native tags | Annotation/deletion-record writes and atomic tag/annotation/archive reference creation, deletion and restoration; the old or complete new root set retains target bytes |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
@@ -61,8 +62,11 @@ hard-link-boundary cases. Partial text staging adds 80 Windows combinations
 cases plus 2 commit checkpoints, production-isolation and release/lock controls.
 Partial text reset adds 40 more Windows combinations (2,052 configured total).
 A separate focused local run passed all 40 new reset cases plus 2 commit
-checkpoints, production-isolation and release/lock controls. The complete
-2,052-case campaign has not been rerun for these additions.
+checkpoints, production-isolation and release/lock controls. Individual line
+selection adds 120 Windows combinations (2,172 configured total). Its focused
+local run passed all 120 new cases, all 120 existing partial-hunk cases and
+2 commit checkpoints, plus production-isolation and release/lock controls.
+The complete 2,172-case campaign has not been rerun for these additions.
 This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
 automatically in those configured builds.

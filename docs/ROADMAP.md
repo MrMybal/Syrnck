@@ -125,7 +125,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Budgets de diff ajustables par invocation CLI pour les trois modes : octets par fichier, lignes, calcul et sortie, avec plafonds stricts, refus des valeurs invalides et aucun patch partiel.
 - [x] Sélection de hunks textuels numérotés pour fichiers existants : aperçu lié au contenu/branche/index/options, copie exacte des changements choisis, modes/autres préparations conservés, publication atomique et ancien index archivé avec ses blocs.
 - [x] Retrait sélectif des hunks déjà préparés : numérotation dans le sens base vers index, conservation des changements non choisis et des modes, indépendance des fichiers de travail, archivage atomique et reconstruction après GC/commit.
-- [ ] Édition/sélection de lignes à l’intérieur des hunks, interface interactive et application de patchs textuels externes.
+- [x] Sélection individuelle des lignes ajoutées/supprimées dans les hunks, à l’ajout et au retrait : numéros globaux liés au plan, fins de ligne exactes, refus des assemblages sans séparateur, conservation des modes/autres préparations et archivage atomique.
+- [ ] Édition libre du texte, interface interactive et application de patchs textuels externes.
 - [x] Plan de rejeu d'un index périmé sur la tête courante : sélections figées, base vide initiale, conflits par fichier/namespace, représentations préparées, contrôle des archives et vérification optionnelle, sans lire le workspace ni écrire d'objets.
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.

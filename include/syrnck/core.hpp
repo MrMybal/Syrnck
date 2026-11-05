@@ -356,6 +356,17 @@ public:
                         OperationOptions = {}) const;
   Json reset_hunks(std::string_view branch, std::string_view path, std::string_view expected_plan,
                    const std::vector<std::size_t> &hunks, TextDiffOptions = {}, OperationOptions = {}) const;
+  // Individual add/remove rows have global change_number IDs within an exact
+  // line plan. Refuses selections that join unterminated lines; no normalization.
+  Json plan_stage_lines(const fs::path &, std::string_view branch, std::string_view path,
+                        TextDiffOptions = {}, OperationOptions = {}) const;
+  Json stage_lines(const fs::path &, std::string_view branch, std::string_view path,
+                   std::string_view expected_plan, const std::vector<std::size_t> &lines,
+                   TextDiffOptions = {}, OperationOptions = {}) const;
+  Json plan_reset_lines(std::string_view branch, std::string_view path, TextDiffOptions = {},
+                        OperationOptions = {}) const;
+  Json reset_lines(std::string_view branch, std::string_view path, std::string_view expected_plan,
+                   const std::vector<std::size_t> &lines, TextDiffOptions = {}, OperationOptions = {}) const;
   // Compare a frozen file against the index's original baseline, including
   // stale/unborn indexes. Does not read the working directory.
   Json diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions = {},

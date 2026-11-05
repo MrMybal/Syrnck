@@ -688,19 +688,24 @@ SYRNCK_MESSAGE("choose either --staged or --working", "Choisissez --staged ou --
 
 SYRNCK_MESSAGE("text diff budget exceeds platform size limit", "Le budget du diff textuel dépasse la limite de taille de la plateforme")
 
-SYRNCK_MESSAGE("native hunk plan exceeds 16 MiB", "Le plan de sélection des hunks dépasse 16 Mio")
-SYRNCK_MESSAGE("native hunk result exceeds file budget", "Le résultat des hunks dépasse le budget du fichier")
+SYRNCK_MESSAGE("native text selection plan exceeds 16 MiB", "Le plan de sélection du texte dépasse 16 Mio")
+SYRNCK_MESSAGE("native text selection result exceeds file budget", "Le résultat de la sélection du texte dépasse le budget du fichier")
 SYRNCK_MESSAGE("invalid native hunk range", "Plage de hunk natif invalide")
-SYRNCK_MESSAGE("native hunk source changed; refresh the plan", "La source des hunks a changé ; actualisez le plan")
-SYRNCK_MESSAGE("native hunk selection must not be empty", "La sélection des hunks ne doit pas être vide")
-SYRNCK_MESSAGE("native hunk numbers must be unique and positive", "Les numéros de hunk doivent être uniques et positifs")
-SYRNCK_MESSAGE("native hunk plan changed; refresh the plan", "Le plan des hunks a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native text selection source changed; refresh the plan", "La source de la sélection du texte a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native text selection must not be empty", "La sélection du texte ne doit pas être vide")
+SYRNCK_MESSAGE("native text selection numbers must be unique and positive", "Les numéros de sélection doivent être uniques et positifs")
+SYRNCK_MESSAGE("native text selection plan changed; refresh the plan", "Le plan de sélection du texte a changé ; actualisez le plan")
 SYRNCK_MESSAGE("native hunk staging is blocked; inspect native add-hunks-plan", "La préparation des hunks est bloquée ; consultez native add-hunks-plan")
-SYRNCK_MESSAGE("native hunk number is out of range", "Le numéro de hunk est hors limites")
+SYRNCK_MESSAGE("native text selection number is out of range", "Le numéro de sélection est hors limites")
 
-SYRNCK_MESSAGE("native hunk selection exceeds 100000 numbers", "La sélection des hunks dépasse 100000 numéros")
+SYRNCK_MESSAGE("native text selection exceeds 100000 numbers", "La sélection du texte dépasse 100000 numéros")
 
 SYRNCK_MESSAGE("native add-hunks requires --expect-plan and --hunks", "native add-hunks exige --expect-plan et --hunks")
 
 SYRNCK_MESSAGE("native hunk reset is blocked; inspect native reset-hunks-plan", "Le retrait des hunks est bloqué ; consultez native reset-hunks-plan")
 SYRNCK_MESSAGE("native reset-hunks requires --expect-plan and --hunks", "native reset-hunks exige --expect-plan et --hunks")
+SYRNCK_MESSAGE("native line selection joins unterminated lines; select related changes together", "La sélection assemble des lignes sans fin de ligne ; sélectionnez les changements liés ensemble")
+SYRNCK_MESSAGE("native line staging is blocked; inspect native add-lines-plan", "La préparation des lignes est bloquée ; consultez native add-lines-plan")
+SYRNCK_MESSAGE("native line reset is blocked; inspect native reset-lines-plan", "Le retrait des lignes est bloqué ; consultez native reset-lines-plan")
+SYRNCK_MESSAGE("native add-lines requires --expect-plan and --lines", "native add-lines exige --expect-plan et --lines")
+SYRNCK_MESSAGE("native reset-lines requires --expect-plan and --lines", "native reset-lines exige --expect-plan et --lines")

@@ -15,7 +15,8 @@ struct HunkPlan {
   NativeWorkingDiff working;
 };
 HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view branch,
-                 std::string_view path, TextDiffOptions limits, OperationOptions options) {
+                 std::string_view path, TextDiffOptions limits, OperationOptions options,
+                 bool by_line = false) {
   throw_if_cancelled(options.stop);
   limits.validate();
   native_branch_name(branch);
@@ -75,10 +76,23 @@ HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view
     if (existing && existing != plan.index)
       blockers.push_back(Json{{"reason", "archive_conflict"}, {"reference", plan.archive}});
   }
-  std::size_t number = 0;
-  for (auto &hunk : report["diff"]["hunks"])
+  std::size_t number = 0, changes = 0;
+  for (auto &hunk : report["diff"]["hunks"]) {
     hunk["number"] = ++number;
-  report["operation"] = directory ? "stage-hunks" : "reset-hunks";
+    if (by_line)
+      for (auto &line : hunk["lines"])
+        if (line["kind"] != "context")
+          line["change_number"] = ++changes;
+  }
+  if (by_line) {
+    report["change_count"] = changes;
+    report["selection_unit"] = "line";
+    if (changes > 100000)
+      blockers.push_back(Json{{"reason", "selection_limit"}});
+    report["operation"] = directory ? "stage-lines" : "reset-lines";
+  } else {
+    report["operation"] = directory ? "stage-hunks" : "reset-hunks";
+  }
   report["branch"] = branch;
   report["head"] = nullable(plan.head);
   report["index"] = nullable(plan.index);
@@ -94,13 +108,13 @@ HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view
   report["ready"] = blockers.empty();
   report["blockers"] = std::move(blockers);
   const auto encoded = report.dump();
-  require(encoded.size() + 100 <= max_object_size, "native hunk plan exceeds 16 MiB");
+  require(encoded.size() + 100 <= max_object_size, "native text selection plan exceeds 16 MiB");
   report["plan_id"] = object_id(Kind::chunk, bytes(encoded));
   plan.report = std::move(report);
   return plan;
 }
 std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, TextDiffOptions limits,
-                   OperationOptions options) {
+                   OperationOptions options, bool by_line) {
   std::vector<std::string_view> lines;
   const std::string_view source(plan.source_text);
   for (std::size_t pos = 0; pos < source.size();) {
@@ -113,11 +127,14 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
   std::size_t cursor = 0;
   auto append = [&](std::string_view text) {
     throw_if_cancelled(options.stop);
-    require(text.size() <= limits.max_file_bytes - result.size(), "native hunk result exceeds file budget");
+    require(!by_line || text.empty() || result.empty() || result.back() == '\n',
+            "native line selection joins unterminated lines; select related changes together");
+    require(text.size() <= limits.max_file_bytes - result.size(),
+            "native text selection result exceeds file budget");
     result += text;
   };
   for (const auto &hunk : plan.report["diff"]["hunks"]) {
-    if (!selected.contains(hunk["number"].get<std::size_t>()))
+    if (!by_line && !selected.contains(hunk["number"].get<std::size_t>()))
       continue;
     const auto count = hunk["source_count"].get<std::size_t>();
     const auto start = hunk["source_start"].get<std::size_t>() - (count != 0);
@@ -130,10 +147,13 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
         text += '\n';
       if (line["kind"] != "add") {
         require(cursor < lines.size() && lines[cursor] == text,
-                "native hunk source changed; refresh the plan");
+                "native text selection source changed; refresh the plan");
         ++cursor;
       }
-      if (line["kind"] != "remove")
+      const bool chosen = !by_line || (line.contains("change_number") &&
+                                       selected.contains(line["change_number"].get<std::size_t>()));
+      if (line["kind"] == "context" || (line["kind"] == "add" && chosen) ||
+          (line["kind"] == "remove" && !chosen))
         append(text);
     }
     require(cursor == start + count, "invalid native hunk range");
@@ -144,32 +164,40 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
 }
 Json apply(const Store &store, const fs::path *directory, std::string_view branch, std::string_view path,
            std::string_view expected, const std::vector<std::size_t> &hunks, TextDiffOptions limits,
-           OperationOptions options) {
+           OperationOptions options, bool by_line = false) {
   throw_if_cancelled(options.stop);
   validate_id(expected);
-  require(!hunks.empty(), "native hunk selection must not be empty");
-  require(hunks.size() <= 100000, "native hunk selection exceeds 100000 numbers");
+  require(!hunks.empty(), "native text selection must not be empty");
+  require(hunks.size() <= 100000, "native text selection exceeds 100000 numbers");
   std::set<std::size_t> selected(hunks.begin(), hunks.end());
   require(selected.size() == hunks.size() && !selected.contains(0),
-          "native hunk numbers must be unique and positive");
-  auto plan = prepare(store, directory, branch, path, limits, options);
+          "native text selection numbers must be unique and positive");
+  auto plan = prepare(store, directory, branch, path, limits, options, by_line);
   require(plan.report["plan_id"].get<std::string>() == expected,
-          "native hunk plan changed; refresh the plan");
-  if (directory)
+          "native text selection plan changed; refresh the plan");
+  if (by_line && directory)
+    require(plan.report["ready"].get<bool>(),
+            "native line staging is blocked; inspect native add-lines-plan");
+  else if (by_line)
+    require(plan.report["ready"].get<bool>(),
+            "native line reset is blocked; inspect native reset-lines-plan");
+  else if (directory)
     require(plan.report["ready"].get<bool>(),
             "native hunk staging is blocked; inspect native add-hunks-plan");
   else
     require(plan.report["ready"].get<bool>(),
             "native hunk reset is blocked; inspect native reset-hunks-plan");
-  require(*selected.rbegin() <= plan.report["diff"]["hunks"].size(), "native hunk number is out of range");
+  const auto count =
+      by_line ? plan.report["change_count"].get<std::size_t>() : plan.report["diff"]["hunks"].size();
+  require(*selected.rbegin() <= count, "native text selection number is out of range");
   if (!directory) {
     std::set<std::size_t> retained;
-    for (std::size_t n = 1; n <= plan.report["diff"]["hunks"].size(); ++n)
+    for (std::size_t n = 1; n <= count; ++n)
       if (!selected.contains(n))
         retained.insert(n);
     selected = std::move(retained);
   }
-  const auto chosen = select(plan, selected, limits, options);
+  const auto chosen = select(plan, selected, limits, options, by_line);
   auto ingestion = store.settings().ingest_options();
   ingestion.stop = options.stop;
   ingestion.progress = [&](const ProgressEvent &event) {
@@ -200,7 +228,7 @@ Json apply(const Store &store, const fs::path *directory, std::string_view branc
   plan.report["selected"] = hunks;
   plan.report["result_manifest"] = manifest;
   plan.report["result_file_hash"] = hash(bytes(chosen));
-  require(plan.report.dump().size() <= max_object_size, "native hunk plan exceeds 16 MiB");
+  require(plan.report.dump().size() <= max_object_size, "native text selection plan exceeds 16 MiB");
   auto publication = options;
   publication.progress = [&](const ProgressEvent &event) {
     report_progress(options, event);
@@ -229,5 +257,23 @@ Json Store::reset_hunks(std::string_view branch, std::string_view path, std::str
                         const std::vector<std::size_t> &hunks, TextDiffOptions limits,
                         OperationOptions options) const {
   return apply(*this, nullptr, branch, path, expected, hunks, limits, options);
+}
+Json Store::plan_stage_lines(const fs::path &directory, std::string_view branch, std::string_view path,
+                             TextDiffOptions limits, OperationOptions options) const {
+  return prepare(*this, &directory, branch, path, limits, options, true).report;
+}
+Json Store::stage_lines(const fs::path &directory, std::string_view branch, std::string_view path,
+                        std::string_view expected, const std::vector<std::size_t> &lines,
+                        TextDiffOptions limits, OperationOptions options) const {
+  return apply(*this, &directory, branch, path, expected, lines, limits, options, true);
+}
+Json Store::plan_reset_lines(std::string_view branch, std::string_view path, TextDiffOptions limits,
+                             OperationOptions options) const {
+  return prepare(*this, nullptr, branch, path, limits, options, true).report;
+}
+Json Store::reset_lines(std::string_view branch, std::string_view path, std::string_view expected,
+                        const std::vector<std::size_t> &lines, TextDiffOptions limits,
+                        OperationOptions options) const {
+  return apply(*this, nullptr, branch, path, expected, lines, limits, options, true);
 }
 } // namespace syrnck

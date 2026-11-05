@@ -32,6 +32,8 @@ Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège le
 
 `native reset-hunks-plan CHEMIN` numérote les changements déjà préparés par rapport à leur base. `native reset-hunks CHEMIN --expect-plan ID --hunks 1,3` retire les hunks choisis, conserve les autres préparations et archive l’ancien index complet. Ces commandes utilisent les versions stockées sans lire les fichiers de travail.
 
+`native add-lines-plan CHEMIN` et `native add-lines CHEMIN --expect-plan ID --lines 1,3` sélectionnent chaque ligne ajoutée ou supprimée à l’intérieur d’un hunk. `native reset-lines-plan` / `native reset-lines` retirent des lignes préparées. Les fins de ligne exactes et l’ancien index sont conservés ; voir [la sélection par ligne](docs/NATIVE_LINES.md).
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

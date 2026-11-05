@@ -25,8 +25,9 @@ are additional. The complete preview/application report is capped at 16 MiB.
 The read-only plan compares the frozen index (or branch head without an index)
 to the observed working file. Its `diff.hunks` have one-based `number` fields.
 Context controls grouping; adjacent edits in one hunk are selected together.
-Numbers belong only to that exact plan. This does not select arbitrary lines,
-edit patch text or present an interactive prompt.
+Numbers belong only to that exact plan. [Individual changed rows](NATIVE_LINES.md)
+can also be selected with separate line commands. Neither form edits external
+patch text or presents an interactive prompt.
 
 The report includes the working diff, `operation: stage-hunks`, branch/head/index/
 base state, optional old-index `archive`, `text_options`, `ready`, `blockers` and
