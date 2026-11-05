@@ -644,3 +644,4 @@ SYRNCK_MESSAGE("native rebase resolution step limit exceeded", "limite d'étapes
 SYRNCK_MESSAGE("native rebase resolution context changed; refresh the plan", "le contexte de résolution du rebase natif a changé ; actualisez le plan")
 SYRNCK_MESSAGE("native rebase resolutions have no replay", "les résolutions du rebase natif ne correspondent à aucun rejeu")
 SYRNCK_MESSAGE("native rebase resolution source is outside the range", "la source de résolution du rebase natif est hors de la plage")
+SYRNCK_MESSAGE("native staging rebase report exceeds 16 MiB", "le rapport de rebase de l'index natif dépasse 16 Mio")

@@ -37,6 +37,7 @@ void visit_native_files(const fs::path &directory, const fs::path &store,
 Json ingest_native_file(const Store &, const NativeFile &, IngestOptions, std::string_view changed_message);
 Json compare_native_snapshots(const Store &, const std::optional<std::string> &source,
                               const std::optional<std::string> &target, OperationOptions);
+Json compare_native_file_maps(const NativeSnapshot &, const NativeSnapshot &, OperationOptions);
 Json plan_native_checkout_files(const Store &, const fs::path &, std::string_view branch,
                                 const NativeSnapshot &destination, OperationOptions);
 } // namespace syrnck

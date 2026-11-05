@@ -393,6 +393,9 @@ public:
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
                                          OperationOptions = {}) const;
+  // Replay frozen staging changes onto the current branch head without reading
+  // or changing working files. A ready plan contains a deterministic index ID.
+  Json plan_rebase_stage(std::string_view branch, bool verify_objects = false, OperationOptions = {}) const;
   // Branch resets preserve working files. Soft preserves prepared entries on
   // the new baseline; mixed archives and clears the index. Old roots publish
   // atomically with the expected branch/index transition.

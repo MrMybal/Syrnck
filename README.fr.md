@@ -139,6 +139,8 @@ logiques et trafic des corps d'objets.
 
 Le rebase accepte aussi `--resolutions FICHIER_JSON` : une série de choix explicites par fichier liée à la tête initiale, aux deux bases et à chaque étape virtuelle. Des choix incomplets ou périmés bloquent toute l'opération. Voir la [résolution des conflits du rebase](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
 
+`native rebase-index-plan --verify` prépare le rejeu d'un index figé périmé sur la tête courante de sa branche, sans lire les fichiers de travail ni écrire de candidats. Voir le [rebase de l'index natif](docs/NATIVE_STAGE_REBASE.md).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

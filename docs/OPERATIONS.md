@@ -19,7 +19,7 @@ syrnck get MANIFEST restored.uasset --progress
 `native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
 `native ancestry/cherry-pick-plan/revert-plan/cherry-pick/revert/merge-plan/merge`,
 `native reset-plan/squash-plan/squash/archives/archive-show`,
-`native rebase-plan/rebase`,
+`native rebase-plan/rebase/rebase-index-plan`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
