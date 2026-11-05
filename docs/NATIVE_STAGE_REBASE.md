@@ -49,6 +49,7 @@ Plans do not write candidate objects or references. `--verify` additionally audi
 both complete retained closures, including historical reconstructed file hashes.
 Metadata-only plans do not audit block payloads. Reports and candidate revision
 metadata have the existing 16 MiB bounds; snapshots are still flat file maps.
+The report includes an empty `resolution_context` and accepted `resolved` rows.
 
 ```cpp
 auto plan = store.plan_rebase_stage("feature", true, operation);
@@ -105,3 +106,49 @@ upstream additions, empty initial baselines, representation-only choices, dirty
 working files, exact expected IDs, fresh no-ops, publication cancellation and
 observer failures, staged recommit, archive inspection and GC. All storage
 variants use the same publication mechanism.
+
+## Resolve index conflicts
+
+Both commands accept `--resolutions JSON_FILE`, using the shared
+[file resolution schema](NATIVE_RESOLUTIONS.md). Copy the plan's
+`resolution_context` into a JSON file and fill its `files` map. Its operation is
+`rebase-index`, `head` is the current branch tip, `source` is the frozen index,
+and `base`/`parent` are both its recorded baseline (null for an initial index).
+All IDs must match when planning/application runs. Changed source indexes or
+branch tips require a new plan and choices.
+
+```text
+syrnck native rebase-index-plan --resolutions choices.json --verify
+syrnck native rebase-index --resolutions choices.json --expect HEAD_ID --expect-index INDEX_ID
+```
+
+Choices select a complete entry from `current` (the new branch head), `incoming`
+(the old prepared index), `base`, `remove`, or a custom `file` manifest with an
+explicit executable mode. Only original conflict paths may have choices.
+Namespace collisions are checked again after applying them. Incomplete choices
+remain blocked and publish nothing. Non-conflicting paths cannot be overridden
+through a resolution file. Empty choices on a fresh index keep its exact ID.
+
+Raw decoding rejects duplicate JSON fields, unknown fields, invalid paths/IDs and
+malformed choices, with the existing 16 MiB, 100,000-path and depth/field limits.
+Custom manifests are checked by metadata-only planning; `--verify` and application
+audit their payloads as well. Pin imported files if GC may run before application
+retains them. A successfully published index protects their blocks; a later staged
+commit retains the selected contents in the ordinary revision chain.
+
+```cpp
+auto choices = syrnck::NativeResolutionSet::parse(plan["resolution_context"]);
+choices.files["Content/Map.uasset"] = {syrnck::NativeResolutionChoice::incoming};
+auto preview = store.plan_rebase_stage_resolved("feature", choices, true, operation);
+auto result = store.rebase_stage_resolved("feature", expected_head, expected_index,
+                                          choices, operation);
+```
+
+Tests cover all five choices, stale context components, non-conflict overrides,
+file/directory collisions, strict CLI decoding, custom executable entries,
+missing custom blocks and a pending checkout on another branch. Process-kill
+cases cover candidate/reference publication
+for independent replay, resolved conflicts, a clean result and an initial empty
+baseline, in plain/encrypted Stores. Fresh production readers audit the retained
+data and check that working files and branch tips are unchanged. These test
+process termination, not power-loss durability.

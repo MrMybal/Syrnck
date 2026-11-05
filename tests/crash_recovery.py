@@ -33,6 +33,8 @@ def cases():
     atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
     atomic("stage-commit", ("revision", "refs"))
     atomic("stage-reset", ("refs",))
+    for operation in ("stage-rebase", "stage-rebase-resolved", "stage-rebase-empty", "stage-rebase-unborn"):
+        atomic(operation, ("revision", "refs"))
     atomic("amend", ("chunk", "manifest", "revision", "refs"))
     atomic("amend-staged", ("revision", "refs"))
     atomic("amend-message", ("revision", "refs"))
@@ -183,6 +185,20 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation.startswith("stage-rebase"):
+            changed = kind == "refs" and published
+            refs = checked["refs"]
+            previous = info["old_index"]
+            archive = "archive/rebase-index/" + previous["id"]
+            self.assertEqual(refs["heads/main"], info["old_revision"])
+            self.assertEqual(refs["staging/main"] != previous, changed)
+            self.assertEqual(archive in refs, changed)
+            if changed:
+                self.assertEqual(refs[archive], previous)
+                self.assertEqual(refs["staging/main"]["id"], info["stage_target"])
+            unrelated = lambda values: {name: key for name, key in values.items()
+                                         if name not in ("staging/main", archive)}
+            self.assertEqual(unrelated(refs), unrelated(info["refs"]))
         elif operation.startswith("reset-") or operation in ("squash", "squash-root"):
             changed = kind == "refs" and published
             refs = checked["refs"]

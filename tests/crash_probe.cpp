@@ -138,6 +138,11 @@ bool rewrite_operation(std::string_view op) {
   return op == "reset-soft" || op == "reset-soft-index" || op == "reset-mixed" || op == "reset-mixed-index" ||
          op == "squash" || op == "squash-root";
 }
+NativeResolutionSet stage_choices(const Store &store) {
+  auto choices = NativeResolutionSet::parse(store.plan_rebase_stage("main")["resolution_context"]);
+  choices.files["asset.bin"] = {NativeResolutionChoice::incoming};
+  return choices;
+}
 void prepare(const fs::path &root, bool encrypted, const std::string &operation) {
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
@@ -187,6 +192,34 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (operation.starts_with("stage-rebase")) {
+    const bool unborn = operation == "stage-rebase-unborn";
+    const auto baseline = operation == "stage-rebase" || unborn ? tip : put_revision(store, ingest(store, 2));
+    const auto prepared = ingest(store, operation == "stage-rebase-empty" ? 0 : 1);
+    auto value = revision(prepared, unborn ? std::optional<ObjectKey>{} : std::optional{baseline});
+    value["message"] = "Syrnck staging v1: main";
+    if (unborn) {
+      const auto entry = value["files"]["asset.bin"];
+      value["files"] = Json{{"prepared.bin", entry}};
+    }
+    const auto index = store.put(Kind::revision, bytes(value.dump())).first;
+    tip = put_revision(store, old, baseline);
+    store.set_ref("heads/main", tip);
+    store.set_ref("archive/baseline", tip);
+    store.set_ref("staging/main", index);
+    info["old_revision"] = key_json(tip);
+    info["old_index"] = key_json(index);
+    auto expected = revision(unborn ? old : prepared)["files"];
+    if (unborn)
+      expected["prepared.bin"] = value["files"]["prepared.bin"];
+    info["stage_expected_files"] = expected;
+    const auto plan = operation == "stage-rebase-resolved"
+                          ? store.plan_rebase_stage_resolved("main", stage_choices(store))
+                          : store.plan_rebase_stage("main");
+    check(plan["ready"] == true, "staging rebase crash fixture is not ready");
+    info["stage_target"] = plan["target"];
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), false);
+  }
   if (rebase_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
     const auto onto =
@@ -321,6 +354,15 @@ void perform(Store &store, const Json &info) {
                              parse_key(info.at("replay_source")).id,
                              op == "revert" ? NativeReplayKind::revert : NativeReplayKind::cherry_pick,
                              "Replayed crash fixture");
+  } else if (op.starts_with("stage-rebase")) {
+    const auto previous = parse_key(info["old_index"]);
+    if (store.refs().at("staging/main") == previous) {
+      if (op == "stage-rebase-resolved")
+        store.rebase_stage_resolved("main", parse_key(info["old_revision"]).id, previous.id,
+                                    stage_choices(store));
+      else
+        store.rebase_stage("main", parse_key(info["old_revision"]).id, previous.id);
+    }
   } else if (op == "stage-add") {
     store.stage_directory(store.root().parent_path(), "main", {"asset.bin"});
   } else if (op == "stage-commit") {
@@ -391,6 +433,27 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op.starts_with("stage-rebase")) {
+    const auto previous = parse_key(info["old_index"]);
+    const auto prepared = refs.at("staging/main");
+    const bool changed = prepared != previous;
+    const auto archive = "archive/rebase-index/" + previous.id;
+    check(refs.at("heads/main") == old && refs.contains(archive) == changed &&
+              (!changed || refs.at(archive) == previous),
+          "staging rebase published apart from its old index archive or changed the branch");
+    if (changed) {
+      const auto value = store.metadata(Kind::revision, prepared.id);
+      check(prepared.id == info["stage_target"].get<std::string>() &&
+                value["parents"] == Json::array({old.id}) && value["timestamp"] == 0 &&
+                value["message"] == "Syrnck staging v1: main" &&
+                value["files"] == info["stage_expected_files"],
+            "staging rebase lost its planned identity, parent or prepared entries");
+    }
+    check(text(read_bytes(root.parent_path() / "asset.bin")) == content(4),
+          "staging rebase touched dirty working bytes");
+    if (resumed)
+      check(changed, "staging rebase did not resume");
+  }
   if (rewrite_operation(op)) {
     const bool changed = refs.at("heads/main") != old;
     const auto name = "archive/" + std::string(op.starts_with("reset") ? "reset/" : "squash/") + old.id;

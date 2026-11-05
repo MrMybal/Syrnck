@@ -396,10 +396,15 @@ public:
   // Replay frozen staging changes onto the current branch head without reading
   // or changing working files. A ready plan contains a deterministic index ID.
   Json plan_rebase_stage(std::string_view branch, bool verify_objects = false, OperationOptions = {}) const;
+  Json plan_rebase_stage_resolved(std::string_view branch, const NativeResolutionSet &,
+                                  bool verify_objects = false, OperationOptions = {}) const;
   // Verify retained bytes, archive the old index and replace it in one expected
   // branch/index reference transaction. The branch and working files do not move.
   Json rebase_stage(std::string_view branch, std::string_view expected_revision,
                     std::string_view expected_index, OperationOptions = {}) const;
+  Json rebase_stage_resolved(std::string_view branch, std::string_view expected_revision,
+                             std::string_view expected_index, const NativeResolutionSet &,
+                             OperationOptions = {}) const;
   // Branch resets preserve working files. Soft preserves prepared entries on
   // the new baseline; mixed archives and clears the index. Old roots publish
   // atomically with the expected branch/index transition.

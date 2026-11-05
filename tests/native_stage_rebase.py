@@ -1,8 +1,10 @@
 """Stale native staging replay without reading or changing working files."""
 import json
+import subprocess
 import unittest
 
 import native_workflows as base
+import workflows
 
 
 class NativeStageRebase(unittest.TestCase):
@@ -12,6 +14,44 @@ class NativeStageRebase(unittest.TestCase):
     call = base.NativeWorkflows.call
     snapshot = base.NativeWorkflows.snapshot
     commit = base.NativeWorkflows.commit
+
+    def plan(self, *args, ready=True):
+        result = subprocess.run([workflows.CLI, "--store", str(self.store), "native", "rebase-index-plan",
+                                 *map(str, args)], cwd=self.root, env=self.env, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0 if ready else 1, result.stderr.decode("utf-8", "replace"))
+        report = json.loads(result.stdout)
+        self.assertEqual(report["ready"], ready)
+        return report
+
+    def test_resolved_conflict_strict_json_and_stale_context(self):
+        asset = self.root / "asset"
+        asset.write_bytes(b"base")
+        old = self.commit("base")
+        asset.write_bytes(b"upstream")
+        head = self.commit("head")
+        self.call("native", "checkout", old)
+        asset.write_bytes(b"prepared")
+        index = self.call("native", "add", "asset").stdout.decode().strip()
+        self.call("pin", "heads/main", "revision", head)
+        asset.write_bytes(b"later work")
+        blocked = self.plan(ready=False)
+        choices = blocked["resolution_context"]
+        choices["files"] = {"asset": {"choice": "incoming"}}
+        document = self.store / "choices.json"
+        encoded = json.dumps(choices)
+        document.write_text(encoded, encoding="utf-8")
+        before = self.snapshot()
+        plan = json.loads(self.call("native", "rebase-index-plan", "--resolutions", document, "--verify").stdout)
+        self.assertEqual(self.snapshot(), before)
+        self.assertTrue(plan["ready"])
+        document.write_text(encoded[:-1] + ',"source":"' + index + '"}', encoding="utf-8")
+        self.call("--lang", "fr", "native", "rebase-index-plan", "--resolutions", document, ok=False)
+        document.write_text(encoded, encoding="utf-8")
+        result = json.loads(self.call("native", "rebase-index", "--resolutions", document,
+                                      "--expect", head, "--expect-index", index).stdout)
+        self.assertEqual(result["target"], plan["target"])
+        self.assertEqual(asset.read_bytes(), b"later work")
+        self.call("native", "rebase-index", "--resolutions", document, ok=False)
 
     def test_read_only_plan_with_dirty_workspace(self):
         asset = self.root / "asset"

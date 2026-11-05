@@ -7,5 +7,6 @@ struct NativeStageRebasePlan {
   Json candidate, report;
 };
 NativeStageRebasePlan prepare_native_stage_rebase(const Store &, const NativeRewriteState &,
-                                                  bool verify_objects, OperationOptions);
+                                                  bool verify_objects, OperationOptions,
+                                                  const NativeResolutionSet * = nullptr);
 } // namespace syrnck

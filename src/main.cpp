@@ -180,6 +180,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
   native rebase-index-plan [--branch BRANCHE] [--verify]
   native rebase-index [--branch BRANCHE] [--expect ID] [--expect-index ID]
+    --resolutions FICHIER_JSON : choix liés à la tête, à l'index et à sa base.
   native reset [CHEMIN...] [--branch BRANCHE]
   native reset-plan RÉVISION --soft|--mixed [--branch BRANCHE] [--verify]
   native reset RÉVISION --soft|--mixed [--branch BRANCHE] [--expect ID]
@@ -297,6 +298,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native staged [--branch BRANCH]    Inspect staged changes
   native rebase-index-plan [--branch BRANCH] [--verify]
   native rebase-index [--branch BRANCH] [--expect ID] [--expect-index ID]
+    --resolutions JSON_FILE: choices bound to the head, index and its baseline.
   native reset [PATH...] [--branch BRANCH]
   native reset-plan REVISION --soft|--mixed [--branch BRANCH] [--verify]
   native reset REVISION --soft|--mixed [--branch BRANCH] [--expect ID]
@@ -815,18 +817,23 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const bool verify = planning && args.flag("--verify");
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto expected_index = planning ? std::optional<std::string>{} : args.option("--expect-index");
+      const auto resolutions = resolutions_input();
       args.count(0);
       if (planning) {
-        const auto plan = store.plan_rebase_stage(branch, verify, {control->token(), observe});
+        const auto plan = resolutions ? store.plan_rebase_stage_resolved(branch, *resolutions, verify,
+                                                                         {control->token(), observe})
+                                      : store.plan_rebase_stage(branch, verify, {control->token(), observe});
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
       const auto all = store.refs();
       const auto index = all.find("staging/" + branch);
       require(index != all.end() && index->second.kind == Kind::revision, "no native staging snapshot");
-      print(store.rebase_stage(branch, expected ? *expected : resolve("heads/" + branch),
-                               expected_index ? *expected_index : index->second.id,
-                               {control->token(), observe}));
+      const auto head = expected ? *expected : resolve("heads/" + branch);
+      const auto snapshot = expected_index ? *expected_index : index->second.id;
+      print(resolutions ? store.rebase_stage_resolved(branch, head, snapshot, *resolutions,
+                                                      {control->token(), observe})
+                        : store.rebase_stage(branch, head, snapshot, {control->token(), observe}));
     } else if (sub == "reset" || sub == "reset-plan") {
       const auto branch = selected_branch();
       const bool soft = args.flag("--soft"), mixed = args.flag("--mixed"), planning = sub == "reset-plan";
