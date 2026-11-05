@@ -128,7 +128,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Sélection individuelle des lignes ajoutées/supprimées dans les hunks, à l’ajout et au retrait : numéros globaux liés au plan, fins de ligne exactes, refus des assemblages sans séparateur, conservation des modes/autres préparations et archivage atomique.
 - [x] Moteur de patch unifié textuel strict : un fichier existant, chemins/contexte/plages exacts, fins de ligne conservées, budgets et refus des entrées tronquées, multi-fichiers ou binaires.
 - [x] Préparation C++ d’un patch externe contre l’index figé/la tête : aperçu lié aux octets/source/options, aucune lecture du workspace, publication atomique et archivage de l’ancien index avec ses blocs.
-- [ ] Interface CLI des patchs externes et validation par arrêts forcés.
+- [x] Interface CLI anglais/français des patchs externes avec aperçu attendu, budgets et progression ; interopérabilité Git/Syrnck, noms Unicode/espaces, fins de ligne et reprise après arrêts forcés avec/sans index antérieur.
 - [ ] Édition libre du texte et interface interactive.
 - [x] Plan de rejeu d'un index périmé sur la tête courante : sélections figées, base vide initiale, conflits par fichier/namespace, représentations préparées, contrôle des archives et vérification optionnelle, sans lire le workspace ni écrire d'objets.
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.

@@ -95,6 +95,8 @@ clear it with `native reset`, or use `native rebase-index-plan` and
 `native rebase-index` to replay its frozen changes onto an existing branch head.
 The latter archives the old index and preserves working files; conflicts block
 publication. See [staging rebase](NATIVE_STAGE_REBASE.md). [Numbered text hunks](NATIVE_HUNKS.md) or [individual changed rows](NATIVE_LINES.md) can be added or removed for existing files.
+
+[External unified patches](TEXT_PATCHES.md) can also be prepared against frozen files with a bound preview, strict context/positions and atomic previous-index retention, without working-file reads.
 Editable/interactive patches remain future work.
 
 ## Retention and publication

@@ -203,11 +203,21 @@ void missing_custom_payload(const fs::path &path) {
   fails([&] { store.merge_directory(path, "main", current, source, "missing custom", settings); });
   require(store.refs() == refs && store.objects() == before, "broken custom resolution published state");
 }
+void physical_inventory_guard(const fs::path &path) {
+  Fixture f(path);
+  f.write("working.tmp", "working file");
+  atomic_write(path / ".syrnck/persistent.tmp", bytes("persistent metadata"), true);
+  const auto inventory = f.physical();
+  require(inventory.at(utf8(fs::path("working.tmp"))) == hash(bytes("working file")) &&
+              inventory.at(utf8(fs::path(".syrnck/persistent.tmp"))) == hash(bytes("persistent metadata")),
+          "physical inventory ignored working or persistent temporary files");
+}
 } // namespace
 int main() {
   Temporary temp;
   try {
     schema();
+    physical_inventory_guard(temp.path / "inventory");
     for (bool encrypted : {false, true})
       for (unsigned physical = 0; physical != 3; ++physical) {
         std::optional<Key> key;

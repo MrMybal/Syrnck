@@ -60,9 +60,24 @@ struct Fixture {
   }
   std::map<std::string, std::string> physical() const {
     std::map<std::string, std::string> result;
-    for (const auto &entry : fs::recursive_directory_iterator(project))
-      if (entry.is_regular_file() && entry.path().filename() != "store.lock")
-        result.emplace(utf8(entry.path().lexically_relative(project)), hash(read_bytes(entry.path())));
+    for (const auto &entry : fs::recursive_directory_iterator(project)) {
+      const auto relative = entry.path().lexically_relative(project);
+      // Local filesystem tools can expose a short-lived deletion backup in the
+      // store. Match production's observed-disappearance rule, never canonical
+      // objects or working files; persistent unknown files remain in the audit.
+      const bool foreign_temp =
+          !relative.empty() && *relative.begin() == ".syrnck" && entry.path().extension() == ".tmp";
+      if (foreign_temp && transient_metadata_disappeared(entry.path()))
+        continue;
+      if (entry.is_regular_file() && entry.path().filename() != "store.lock") {
+        try {
+          result.emplace(utf8(relative), hash(read_bytes(entry.path())));
+        } catch (const Error &) {
+          if (!foreign_temp || !transient_metadata_disappeared(entry.path()))
+            throw;
+        }
+      }
+    }
     return result;
   }
   void pack(unsigned physical) const {

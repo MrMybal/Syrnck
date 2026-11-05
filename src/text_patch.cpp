@@ -26,6 +26,11 @@ std::string_view syntax(std::string_view line) {
     line.remove_suffix(1);
   return line;
 }
+std::string_view label(std::string_view line) {
+  if (line.ends_with('\t'))
+    line.remove_suffix(1); // Git terminates labels containing spaces with TAB.
+  return line;
+}
 void index_header(std::string_view line) {
   require(line.starts_with("index "), "unsupported text patch header");
   line.remove_prefix(6);
@@ -101,9 +106,10 @@ TextPatchResult apply_text_patch(std::span<const std::uint8_t> source, std::span
       header = syntax(reader.take());
     }
   }
+  header = label(header);
   require(header == "--- a/" + std::string(path) || header == "--- " + std::string(path),
           "text patch path does not match selected file");
-  header = syntax(reader.take());
+  header = label(syntax(reader.take()));
   require(header == "+++ b/" + std::string(path) || header == "+++ " + std::string(path),
           "text patch path does not match selected file");
   TextPatchResult result;

@@ -92,6 +92,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native add-lines-plan PATH` and `native add-lines PATH --expect-plan ID --lines 1,3` select individual added/removed rows within a hunk. `native reset-lines-plan` / `native reset-lines` remove prepared rows. Both preserve exact newline bytes and archive the previous index; see [individual line selection](docs/NATIVE_LINES.md).
 
+`native add-patch-plan PATH --patch FILE` previews an external unified text patch against the frozen index/head. `native add-patch PATH --patch FILE --expect-plan ID` prepares its exact result with atomic old-index retention, without reading working files. See [strict text patches](docs/TEXT_PATCHES.md) for supported Git/native patches and bounds.
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

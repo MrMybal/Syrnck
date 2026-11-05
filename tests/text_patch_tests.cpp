@@ -56,6 +56,12 @@ void malformed() {
   const auto git = "diff --git a/code.cpp b/code.cpp\nindex 1234567..abcdef0 100644\n" + patch;
   require(apply_text_patch(bytes("old\n"), bytes(git), "code.cpp").content == "new\n",
           "Git preamble rejected");
+  require(
+      apply_text_patch(bytes("old\n"),
+                       bytes("--- a/source file.cpp\t\n+++ b/source file.cpp\t\n@@ -1 +1 @@\n-old\n+new\n"),
+                       "source file.cpp")
+              .content == "new\n",
+      "Git label terminator rejected");
   require(apply_text_patch(bytes("old\n"), bytes(prefix + "@@ -1 +1 @@ section\n-old\n+new\n"), "code.cpp")
                   .content == "new\n",
           "section heading rejected");

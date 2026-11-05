@@ -23,7 +23,11 @@ bool inside(const fs::path &path, const fs::path &root) {
 bool native_link_like(const fs::path &path, const fs::file_status &status) {
 #ifdef _WIN32
   const auto attributes = GetFileAttributesW(path.c_str());
-  require(attributes != INVALID_FILE_ATTRIBUTES, "cannot inspect native checkout entry");
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    const auto error = GetLastError();
+    const auto detail = utf8(path) + " [" + std::to_string(error) + "]";
+    throw Error("cannot inspect native checkout entry: " + detail);
+  }
   if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
     return true;
 #else

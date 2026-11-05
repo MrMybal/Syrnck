@@ -72,11 +72,15 @@ std::string hunk_text(unsigned mask, bool prepared) {
 bool line_operation(std::string_view op) {
   return op == "stage-lines" || op == "stage-lines-index" || op == "reset-lines";
 }
+bool patch_operation(std::string_view op) {
+  return op == "stage-patch" || op == "stage-patch-index";
+}
 bool partial_text_operation(std::string_view op) {
-  return op == "stage-hunks" || op == "stage-hunks-index" || op == "reset-hunks" || line_operation(op);
+  return op == "stage-hunks" || op == "stage-hunks-index" || op == "reset-hunks" || line_operation(op) ||
+         patch_operation(op);
 }
 bool partial_index(std::string_view op) {
-  return op != "stage-hunks" && op != "stage-lines";
+  return op != "stage-hunks" && op != "stage-lines" && op != "stage-patch";
 }
 std::string partial_result(std::string_view op) {
   const bool indexed = partial_index(op);
@@ -264,6 +268,8 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     value["files"]["code.cpp"]["manifest"] = hunk_manifest(partial_result(operation));
     info["hunk_target"] = key_json({Kind::revision, object_id(Kind::revision, bytes(value.dump()))});
     info["hunk_expected_files"] = value["files"];
+    if (patch_operation(operation))
+      info["patch"] = "--- a/code.cpp\n+++ b/code.cpp\n@@ -3 +3 @@\n-line 2\n+changed line 2\n";
   }
   if (operation.starts_with("branch-")) {
     const std::string name = "feature/topic";
@@ -409,14 +415,22 @@ void perform(Store &store, const Json &info) {
     const auto refs = store.refs();
     if (!refs.contains("staging/main") || refs.at("staging/main") != expected) {
       Json plan;
-      if (line_operation(op))
+      if (patch_operation(op))
+        plan =
+            store.plan_stage_patch("main", "code.cpp", bytes(info["patch"].get_ref<const std::string &>()));
+      else if (line_operation(op))
         plan = op == "reset-lines" ? store.plan_reset_lines("main", "code.cpp")
                                    : store.plan_stage_lines(store.root().parent_path(), "main", "code.cpp");
       else
         plan = op == "reset-hunks" ? store.plan_reset_hunks("main", "code.cpp")
                                    : store.plan_stage_hunks(store.root().parent_path(), "main", "code.cpp");
-      check(plan["ready"] == true && plan["diff"]["hunks"].size() == 2, "hunk crash plan is not ready");
-      if (op == "reset-lines")
+      check(plan["ready"] == true &&
+                (patch_operation(op) ? plan["result"]["hunks"] == 1 : plan["diff"]["hunks"].size() == 2),
+            "hunk crash plan is not ready");
+      if (patch_operation(op))
+        store.stage_patch("main", "code.cpp", bytes(info["patch"].get_ref<const std::string &>()),
+                          plan["plan_id"].get<std::string>());
+      else if (op == "reset-lines")
         store.reset_lines("main", "code.cpp", plan["plan_id"].get<std::string>(), {4});
       else if (line_operation(op))
         store.stage_lines(store.root().parent_path(), "main", "code.cpp", plan["plan_id"].get<std::string>(),

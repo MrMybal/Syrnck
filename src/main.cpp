@@ -200,6 +200,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                        [--branch BRANCHE] [--expect ID] [--directory .]
     Archive l'ancien commit ; conserve ses parents. --expect exige l'ID exact.
   native add CHEMIN... [--branch BRANCHE] [--directory .]
+  native add-patch-plan CHEMIN --patch FICHIER [--branch NOM]
+  native add-patch CHEMIN --patch FICHIER --expect-plan ID [--branch NOM]
   native add-lines-plan CHEMIN [--branch NOM] [--directory .]
   native add-lines CHEMIN --expect-plan ID --lines 1,3 [--branch NOM]
   native reset-lines-plan CHEMIN [--branch NOM]
@@ -299,7 +301,7 @@ Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -340,6 +342,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                        [--branch BRANCH] [--expect ID] [--directory .]
     Archives the previous tip and preserves its parents. --expect requires an exact ID.
   native add PATH... [--branch BRANCH] [--directory .]
+  native add-patch-plan PATH --patch FILE [--branch NAME]
+  native add-patch PATH --patch FILE --expect-plan ID [--branch NAME]
   native add-lines-plan PATH [--branch NAME] [--directory .]
   native add-lines PATH --expect-plan ID --lines 1,3 [--branch NAME]
   native reset-lines-plan PATH [--branch NAME]
@@ -439,7 +443,7 @@ Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
 Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -661,18 +665,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
-        sub == "add" || sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" ||
-        sub == "reset-hunks" || sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" ||
-        sub == "reset-lines" || sub == "staged" || sub == "reset" || sub == "reset-plan" ||
-        sub == "checkout-plan" || sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" ||
-        sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" ||
-        sub == "tag-archive" || sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" ||
-        sub == "revert-plan" || sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" ||
-        sub == "merge" || sub == "squash-plan" || sub == "squash" || sub == "archives" ||
-        sub == "archive-show" || sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" ||
-        sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
-        sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
-        sub == "branch-restore-plan" || sub == "branch-restore")) ||
+        sub == "add" || sub == "add-patch-plan" || sub == "add-patch" || sub == "add-hunks-plan" ||
+        sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" || sub == "add-lines-plan" ||
+        sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" || sub == "staged" ||
+        sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" || sub == "checkout" ||
+        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
+        sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
+        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
+        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
+        sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
+        sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
+        sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
+        sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
+        sub == "branch-restore")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -879,6 +884,24 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto directory = workspace();
       const auto branch = selected_branch();
       std::cout << store.stage_directory(directory, branch, args.paths(), options) << '\n';
+    } else if (sub == "add-patch-plan" || sub == "add-patch") {
+      const bool planning = sub == "add-patch-plan";
+      const auto limits = text_diff_options(args);
+      const auto branch = selected_branch();
+      const auto input = args.option("--patch");
+      require(input.has_value(), "native patch command requires --patch FILE");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+      if (!planning)
+        require(expected.has_value(), "native add-patch requires --expect-plan");
+      args.count(1);
+      const auto patch = read_bytes(path_from_utf8(*input), limits.max_output_bytes);
+      if (planning) {
+        const auto plan =
+            store.plan_stage_patch(branch, args.values[0], patch, limits, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      print(store.stage_patch(branch, args.values[0], patch, *expected, limits, {control->token(), observe}));
     } else if (sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" ||
                sub == "reset-hunks" || sub == "add-lines-plan" || sub == "add-lines" ||
                sub == "reset-lines-plan" || sub == "reset-lines") {

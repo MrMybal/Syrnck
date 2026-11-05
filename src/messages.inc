@@ -731,3 +731,6 @@ SYRNCK_MESSAGE("text patch contains an empty unterminated line", "Le patch conti
 SYRNCK_MESSAGE("text patch exceeds hunk limit", "Le patch dépasse le nombre maximal de hunks")
 SYRNCK_MESSAGE("native patch source file is absent", "Le fichier source du patch est absent")
 SYRNCK_MESSAGE("native patch staging is blocked; inspect native add-patch-plan", "La préparation du patch est bloquée ; consultez native add-patch-plan")
+SYRNCK_MESSAGE("native patch command requires --patch FILE", "La commande de patch exige --patch FICHIER")
+SYRNCK_MESSAGE("native add-patch requires --expect-plan", "native add-patch exige --expect-plan")
+SYRNCK_PREFIX("cannot inspect native checkout entry: ", "Impossible d’inspecter une entrée du dossier natif : ")

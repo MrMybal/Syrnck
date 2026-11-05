@@ -27,6 +27,7 @@ crash by throwing an exception or unwinding the stack.
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
 | Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
 | Native individual line selection | Partial add with/without an existing index and partial reset inside a hunk; selected-row chunk/manifest/index writes, atomic retention, untouched working files and exact independently computed result identities |
+| External native text patches | Strict single-file patch against frozen head/index, with/without an old index; chunk/manifest/index publication, atomic archive retention, exact independent result identity and unchanged working bytes |
 | Native branch switch and abort | HEAD descriptor/journal writes, the same file-move boundaries, HEAD/receipt publication and rollback; both branch heads remain unchanged and HEAD publishes with the committed journal |
 | Native tags | Annotation/deletion-record writes and atomic tag/annotation/archive reference creation, deletion and restoration; the old or complete new root set retains target bytes |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
@@ -66,7 +67,10 @@ checkpoints, production-isolation and release/lock controls. Individual line
 selection adds 120 Windows combinations (2,172 configured total). Its focused
 local run passed all 120 new cases, all 120 existing partial-hunk cases and
 2 commit checkpoints, plus production-isolation and release/lock controls.
-The complete 2,172-case campaign has not been rerun for these additions.
+External patch staging adds 80 Windows combinations (2,252 configured total).
+Its focused local run passed all 80 new cases, all 240 existing partial-hunk/
+line cases and 2 commit checkpoints, plus production-isolation and release/lock
+controls. The complete 2,252-case campaign has not been rerun for these additions.
 This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
 automatically in those configured builds.

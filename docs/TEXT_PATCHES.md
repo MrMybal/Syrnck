@@ -17,7 +17,8 @@ One existing UTF-8 text file per patch, with exactly matching file labels:
 +new line
 ```
 
-Unprefixed matching labels are also accepted. An optional exact
+Unprefixed matching labels and Git's trailing TAB label terminator are also
+accepted. An optional exact
 `diff --git a/PATH b/PATH` preamble and `index OLD..NEW [100644|100755]` line are
 accepted. Index hashes are format hints, not verified Git identities; source
 bytes and hunk context determine applicability. Hunk counts may be omitted
@@ -104,3 +105,34 @@ the old references; complete unreachable objects may remain. No workspace
 journal is needed. No observer runs after reference publication. The complete
 preview/application report is capped at 16 MiB, independently of patch input.
 The caller keeps the borrowed patch bytes stable for the duration of each call.
+
+## CLI workflow
+
+```text
+git -c core.quotepath=false diff --no-ext-diff --no-textconv --output=change.patch -- Source/Player.cpp
+syrnck native add-patch-plan Source/Player.cpp --patch change.patch
+syrnck native add-patch Source/Player.cpp --patch change.patch --expect-plan PLAN_ID
+syrnck native diff-text --staged Source/Player.cpp --unified
+syrnck native commit --staged -m "External text changes"
+```
+
+Git writes patch bytes directly with `--output`, avoiding shell text encoding
+conversion. Use a single existing file and the intended source state. Git's
+index hashes do not authorize or identify Syrnck objects. Modified-file patches
+from `native diff-text SOURCE TARGET PATH --unified` are also accepted. Git
+fixtures cover Unicode/spaces, CRLF/LF, missing final LF, empty existing files,
+clearing file contents and multiple hunks.
+
+Both commands require `--patch FILE`, accept `--branch NAME` and the text limits,
+and support `--progress` / `--progress-json` and cancellation. They accept no
+`--directory`: the patch is applied to stored bytes. The patch file is read once,
+within the input byte budget, before planning/application. Its captured bytes
+are bound by the plan hash; a changed file on a later invocation needs a new
+preview. Review the original patch and source/result hashes before application.
+
+The default UI is English, with French via `--lang fr`; JSON is identical in
+both languages. A ready preview exits 0; a blocked preview exits 1 with JSON.
+Invalid patches/options or failed applications exit nonzero without a result.
+Successful application returns JSON with `state: applied`, previous/new index,
+result manifest and file hash, keeping the original preview ID. Progress stays
+on stderr. Other prepared files and modes survive the subsequent staged commit.
