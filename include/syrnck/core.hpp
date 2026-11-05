@@ -350,6 +350,12 @@ public:
   Json stage_hunks(const fs::path &, std::string_view branch, std::string_view path,
                    std::string_view expected_plan, const std::vector<std::size_t> &hunks,
                    TextDiffOptions = {}, OperationOptions = {}) const;
+  // Remove selected baseline-to-index hunks without reading working files.
+  // Previous preparations remain rooted in archive/stage-index/<old index>.
+  Json plan_reset_hunks(std::string_view branch, std::string_view path, TextDiffOptions = {},
+                        OperationOptions = {}) const;
+  Json reset_hunks(std::string_view branch, std::string_view path, std::string_view expected_plan,
+                   const std::vector<std::size_t> &hunks, TextDiffOptions = {}, OperationOptions = {}) const;
   // Compare a frozen file against the index's original baseline, including
   // stale/unborn indexes. Does not read the working directory.
   Json diff_staged_file(std::string_view branch, std::string_view path, TextDiffOptions = {},

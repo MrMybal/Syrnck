@@ -1,6 +1,13 @@
 #pragma once
 #include "native_workspace.hpp"
 namespace syrnck {
+struct NativeRevisionDiff {
+  Json report;
+  std::string source, target;
+};
+NativeRevisionDiff read_native_revision_diff(const Store &, const std::optional<std::string> &,
+                                             const std::optional<std::string> &, std::string_view,
+                                             TextDiffOptions, OperationOptions);
 // Internal verified capture, retained only while preparing selected hunks.
 struct NativeWorkingDiff {
   Json report;

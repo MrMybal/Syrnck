@@ -67,13 +67,13 @@ std::string working_bytes(const NativeFile &file, OperationOptions options) {
   return result;
 }
 } // namespace
-Json Store::diff_revision_file(const std::optional<std::string> &source,
-                               const std::optional<std::string> &target, std::string_view path,
-                               TextDiffOptions limits, OperationOptions options) const {
+NativeRevisionDiff read_native_revision_diff(const Store &store, const std::optional<std::string> &source,
+                                             const std::optional<std::string> &target, std::string_view path,
+                                             TextDiffOptions limits, OperationOptions options) {
   throw_if_cancelled(options.stop);
   limits.validate();
   validate_path(path);
-  auto before = side(*this, source, path, options), after = side(*this, target, path, options);
+  auto before = side(store, source, path, options), after = side(store, target, path, options);
   require(!before.entry.is_null() || !after.entry.is_null(),
           "native text diff path is absent from both snapshots");
   const bool content_changed = before.entry.is_null() || after.entry.is_null() || before.size != after.size ||
@@ -85,8 +85,8 @@ Json Store::diff_revision_file(const std::optional<std::string> &source,
   if (oversized) {
     difference = file_limit(before.size, after.size);
   } else {
-    load(*this, before, options);
-    load(*this, after, options);
+    load(store, before, options);
+    load(store, after, options);
     difference = compare_text(bytes(before.content), bytes(after.content), limits, options);
   }
   Json report{{"version", 1},
@@ -103,7 +103,12 @@ Json Store::diff_revision_file(const std::optional<std::string> &source,
               {"diff", std::move(difference)}};
   require(report.dump().size() <= max_object_size, "native text diff report exceeds 16 MiB");
   report_progress(options, {ProgressPhase::planning, path, 1, 1, true});
-  return report;
+  return {std::move(report), std::move(before.content), std::move(after.content)};
+}
+Json Store::diff_revision_file(const std::optional<std::string> &source,
+                               const std::optional<std::string> &target, std::string_view path,
+                               TextDiffOptions limits, OperationOptions options) const {
+  return read_native_revision_diff(*this, source, target, path, limits, options).report;
 }
 NativeWorkingDiff read_native_working_diff(const Store &store, const fs::path &directory,
                                            const std::optional<std::string> &source, std::string_view path,

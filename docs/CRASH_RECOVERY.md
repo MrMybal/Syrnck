@@ -25,6 +25,7 @@ crash by throwing an exception or unwinding the stack.
 | Native rebase and abort | Two-candidate linear chains, resolved conflicts and empty-range moves; first/second candidate writes, checkout journal/move/publication/rollback boundaries, stable planned IDs and unchanged onto roots |
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
+| Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
 | Native branch switch and abort | HEAD descriptor/journal writes, the same file-move boundaries, HEAD/receipt publication and rollback; both branch heads remain unchanged and HEAD publishes with the committed journal |
 | Native tags | Annotation/deletion-record writes and atomic tag/annotation/archive reference creation, deletion and restoration; the old or complete new root set retains target bytes |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
@@ -58,7 +59,10 @@ combinations**, plus checkpoint/lock and production-isolation checks. Unix adds
 hard-link-boundary cases. Partial text staging adds 80 Windows combinations
 (2,012 configured combinations total). A focused local run passed all 80 new
 cases plus 2 commit checkpoints, production-isolation and release/lock controls.
-The complete 2,012-case campaign has not been rerun for this addition.
+Partial text reset adds 40 more Windows combinations (2,052 configured total).
+A separate focused local run passed all 40 new reset cases plus 2 commit
+checkpoints, production-isolation and release/lock controls. The complete
+2,052-case campaign has not been rerun for these additions.
 This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it
 automatically in those configured builds.

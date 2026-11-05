@@ -701,3 +701,6 @@ SYRNCK_MESSAGE("native hunk number is out of range", "Le numéro de hunk est hor
 SYRNCK_MESSAGE("native hunk selection exceeds 100000 numbers", "La sélection des hunks dépasse 100000 numéros")
 
 SYRNCK_MESSAGE("native add-hunks requires --expect-plan and --hunks", "native add-hunks exige --expect-plan et --hunks")
+
+SYRNCK_MESSAGE("native hunk reset is blocked; inspect native reset-hunks-plan", "Le retrait des hunks est bloqué ; consultez native reset-hunks-plan")
+SYRNCK_MESSAGE("native reset-hunks requires --expect-plan and --hunks", "native reset-hunks exige --expect-plan et --hunks")

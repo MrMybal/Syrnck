@@ -1,4 +1,4 @@
-# Native partial text staging
+# Native partial text staging and reset
 
 Select complete numbered text hunks from an existing file without changing the
 working copy. This complements ordinary file/directory staging.
@@ -111,3 +111,51 @@ C++ callers use `plan_stage_hunks(directory, branch, path, limits, operation)` a
 Tests cover every subset of three hunks, frozen neighboring files, newlines,
 mode preservation, initial/stale indexes, expected-plan drift, cancellation,
 observers, archive collisions, missing payloads, result budgets, GC and commit.
+
+## Remove prepared hunks
+
+```text
+syrnck native reset-hunks-plan Source/Player.cpp
+syrnck native reset-hunks Source/Player.cpp --expect-plan PLAN_ID --hunks 1,3
+syrnck native diff-text --staged Source/Player.cpp --unified
+```
+
+The reset preview compares the original staging baseline to the frozen index,
+in the same forward direction as `diff-text --staged`. It adds one-based
+`number` fields to those hunks. Selected numbers identify changes to remove;
+unselected changes remain prepared. The engine builds the result from the
+baseline plus the retained hunks, preserving exact bytes even when insertions
+and deletions change line offsets. Preview again after each application.
+
+Both reset commands accept `--branch`, progress/cancellation and the five text
+options listed above. They have no `--directory` argument: they do not inspect
+working files, ignore rules or workspace paths. Dirty, absent, binary or
+directory-replaced working paths therefore do not affect the plan or result.
+The plan uses `operation: reset-hunks` and frozen `source_revision` (baseline)
+and `target_revision` (index); its identity binds that content, branch state,
+limits and blockers. It does not bind a working directory or working hash.
+English and French output have identical JSON. Ready/blocked exit conventions,
+selection validation, budgets and exact expected-plan checks match partial add.
+
+A frozen index is required (`staging_required` otherwise), and the file must
+exist in both the baseline and index. New files, complete deletions and an
+unborn branch's initial additions use ordinary file-level `native reset`.
+Pending checkout, stale index, binary/limited comparisons, no text changes and
+archive collisions also block partial reset. A mode-only change cannot be
+removed as a text hunk. Selecting all hunks restores baseline content while
+keeping the index's executable flag, other frozen files and the staging root.
+
+Publication uses the same verified atomic reference transaction and
+`archive/stage-index/OLD_INDEX_ID` retention as partial add. The complete previous
+index remains reconstructible after GC and after committing the remaining
+prepared changes. Cancellation, observer failures and incomplete retained
+closures preserve the old references; unreachable complete objects may remain.
+No working-file revalidation or workspace journal is needed for reset because
+the operation reads only stored snapshots and writes only objects/references.
+
+C++ callers use `plan_reset_hunks(branch, path, limits, operation)` and
+`reset_hunks(branch, path, expected_plan_id, numbers, limits, operation)`.
+Tests cover every nonempty removal subset in plain/encrypted loose and packed
+stores, shifted/zero-count line ranges, newline fidelity, invalid/drifted plans,
+workspace independence, mode/neighbor preservation, bounded results, corrupt
+payloads, cancellation/observer failure, archive reuse/collisions and GC/commit.

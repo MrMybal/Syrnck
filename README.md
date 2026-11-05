@@ -88,6 +88,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native add-hunks-plan PATH` numbers the text changes of an existing file. `native add-hunks PATH --expect-plan ID --hunks 1,3` freezes only those hunks, preserves other preparations and archives the previous index through GC. See [partial text staging](docs/NATIVE_HUNKS.md).
 
+`native reset-hunks-plan PATH` numbers changes already prepared against their baseline. `native reset-hunks PATH --expect-plan ID --hunks 1,3` removes selected hunks, preserves the remaining preparations and archives the complete old index. These commands use stored snapshots without reading working files.
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

@@ -94,7 +94,7 @@ commit refuse the stale index. Inspect/export it if needed, then explicitly
 clear it with `native reset`, or use `native rebase-index-plan` and
 `native rebase-index` to replay its frozen changes onto an existing branch head.
 The latter archives the old index and preserves working files; conflicts block
-publication. See [staging rebase](NATIVE_STAGE_REBASE.md). [Numbered text hunks](NATIVE_HUNKS.md) can be selected for existing files.
+publication. See [staging rebase](NATIVE_STAGE_REBASE.md). [Numbered text hunks](NATIVE_HUNKS.md) can be added or removed for existing files.
 Editable/interactive patches remain future work.
 
 ## Retention and publication

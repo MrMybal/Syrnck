@@ -265,8 +265,11 @@ void blocked_states(const fs::path &project) {
   });
   plan = store.plan_stage_hunks(project, "main", "code.cpp");
   require(blocked(plan, "pending_checkout"), "pending checkout did not block hunk selection");
+  const auto reset = store.plan_reset_hunks("main", "code.cpp");
+  require(blocked(reset, "pending_checkout"), "pending checkout did not block hunk reset");
   before = physical(store);
   fails([&] { store.stage_hunks(project, "main", "code.cpp", identity(plan), {1}); });
+  fails([&] { store.reset_hunks("main", "code.cpp", identity(reset), {1}); });
   require(physical(store) == before, "hunk staging modified a pending checkout");
   store.recover_checkout(true);
 }

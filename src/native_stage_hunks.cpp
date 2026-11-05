@@ -9,12 +9,12 @@ Json nullable(const std::optional<ObjectKey> &key) {
 }
 struct HunkPlan {
   Refs refs;
-  std::string branch, path, archive;
+  std::string branch, path, archive, source_text;
   std::optional<ObjectKey> head, index, base, source;
   Json snapshot, report;
   NativeWorkingDiff working;
 };
-HunkPlan prepare(const Store &store, const fs::path &directory, std::string_view branch,
+HunkPlan prepare(const Store &store, const fs::path *directory, std::string_view branch,
                  std::string_view path, TextDiffOptions limits, OperationOptions options) {
   throw_if_cancelled(options.stop);
   limits.validate();
@@ -43,14 +43,27 @@ HunkPlan prepare(const Store &store, const fs::path &directory, std::string_view
             : std::optional{ObjectKey{Kind::revision, plan.snapshot["parents"][0].get<std::string>()}};
     plan.archive = "archive/stage-index/" + plan.index->id;
   }
-  plan.working = read_native_working_diff(
-      store, directory, plan.source ? std::optional{plan.source->id} : std::nullopt, path, limits, options);
-  auto &report = plan.working.report;
+  Json report;
+  if (directory) {
+    plan.working = read_native_working_diff(store, *directory,
+                                            plan.source ? std::optional{plan.source->id} : std::nullopt, path,
+                                            limits, options);
+    report = std::move(plan.working.report);
+    plan.source_text = std::move(plan.working.source);
+  } else {
+    auto frozen = read_native_revision_diff(store, plan.base ? std::optional{plan.base->id} : std::nullopt,
+                                            plan.source ? std::optional{plan.source->id} : std::nullopt, path,
+                                            limits, options);
+    report = std::move(frozen.report);
+    plan.source_text = std::move(frozen.source);
+  }
   Json blockers = Json::array();
   if (store.checkout_status()["pending"].get<bool>())
     blockers.push_back(Json{{"reason", "pending_checkout"}});
   if (plan.head != plan.base)
     blockers.push_back(Json{{"reason", "stale_staging"}});
+  if (!directory && !plan.index)
+    blockers.push_back(Json{{"reason", "staging_required"}});
   if (report["source"].is_null() || report["target"].is_null())
     blockers.push_back(Json{{"reason", "existing_file_required"}});
   if (report["diff"]["status"] != "text")
@@ -65,7 +78,7 @@ HunkPlan prepare(const Store &store, const fs::path &directory, std::string_view
   std::size_t number = 0;
   for (auto &hunk : report["diff"]["hunks"])
     hunk["number"] = ++number;
-  report["operation"] = "stage-hunks";
+  report["operation"] = directory ? "stage-hunks" : "reset-hunks";
   report["branch"] = branch;
   report["head"] = nullable(plan.head);
   report["index"] = nullable(plan.index);
@@ -89,7 +102,7 @@ HunkPlan prepare(const Store &store, const fs::path &directory, std::string_view
 std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, TextDiffOptions limits,
                    OperationOptions options) {
   std::vector<std::string_view> lines;
-  const std::string_view source(plan.working.source);
+  const std::string_view source(plan.source_text);
   for (std::size_t pos = 0; pos < source.size();) {
     const auto newline = source.find('\n', pos);
     const auto end = newline == source.npos ? source.size() : newline + 1;
@@ -129,28 +142,35 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
     append(lines[cursor++]);
   return result;
 }
-} // namespace
-Json Store::plan_stage_hunks(const fs::path &directory, std::string_view branch, std::string_view path,
-                             TextDiffOptions limits, OperationOptions options) const {
-  return prepare(*this, directory, branch, path, limits, options).report;
-}
-Json Store::stage_hunks(const fs::path &directory, std::string_view branch, std::string_view path,
-                        std::string_view expected, const std::vector<std::size_t> &hunks,
-                        TextDiffOptions limits, OperationOptions options) const {
+Json apply(const Store &store, const fs::path *directory, std::string_view branch, std::string_view path,
+           std::string_view expected, const std::vector<std::size_t> &hunks, TextDiffOptions limits,
+           OperationOptions options) {
   throw_if_cancelled(options.stop);
   validate_id(expected);
   require(!hunks.empty(), "native hunk selection must not be empty");
   require(hunks.size() <= 100000, "native hunk selection exceeds 100000 numbers");
-  const std::set<std::size_t> selected(hunks.begin(), hunks.end());
+  std::set<std::size_t> selected(hunks.begin(), hunks.end());
   require(selected.size() == hunks.size() && !selected.contains(0),
           "native hunk numbers must be unique and positive");
-  auto plan = prepare(*this, directory, branch, path, limits, options);
+  auto plan = prepare(store, directory, branch, path, limits, options);
   require(plan.report["plan_id"].get<std::string>() == expected,
           "native hunk plan changed; refresh the plan");
-  require(plan.report["ready"].get<bool>(), "native hunk staging is blocked; inspect native add-hunks-plan");
+  if (directory)
+    require(plan.report["ready"].get<bool>(),
+            "native hunk staging is blocked; inspect native add-hunks-plan");
+  else
+    require(plan.report["ready"].get<bool>(),
+            "native hunk reset is blocked; inspect native reset-hunks-plan");
   require(*selected.rbegin() <= plan.report["diff"]["hunks"].size(), "native hunk number is out of range");
+  if (!directory) {
+    std::set<std::size_t> retained;
+    for (std::size_t n = 1; n <= plan.report["diff"]["hunks"].size(); ++n)
+      if (!selected.contains(n))
+        retained.insert(n);
+    selected = std::move(retained);
+  }
   const auto chosen = select(plan, selected, limits, options);
-  auto ingestion = settings().ingest_options();
+  auto ingestion = store.settings().ingest_options();
   ingestion.stop = options.stop;
   ingestion.progress = [&](const ProgressEvent &event) {
     auto contextual = event;
@@ -158,15 +178,16 @@ Json Store::stage_hunks(const fs::path &directory, std::string_view branch, std:
     report_progress(options, contextual);
   };
   std::istringstream input(chosen);
-  const auto manifest = ingest(input, {}, ingestion).first;
+  const auto manifest = store.ingest(input, {}, ingestion).first;
   auto snapshot = std::move(plan.snapshot);
   snapshot["parents"] = plan.head ? Json::array({plan.head->id}) : Json::array();
   snapshot["message"] = "Syrnck staging v1: " + plan.branch;
   snapshot["timestamp"] = 0;
   snapshot["files"][plan.path]["manifest"] = manifest;
   throw_if_cancelled(options.stop);
-  const auto candidate = put(Kind::revision, bytes(snapshot.dump())).first;
-  verify_native_working_diff(*this, plan.working, options);
+  const auto candidate = store.put(Kind::revision, bytes(snapshot.dump())).first;
+  if (directory)
+    verify_native_working_diff(store, plan.working, options);
   const auto selection = native_branch_lookup(plan.refs, "workspace/HEAD");
   std::vector<RefUpdate> updates{{"heads/" + plan.branch, plan.head, plan.head},
                                  {"staging/" + plan.branch, plan.index, candidate},
@@ -183,10 +204,30 @@ Json Store::stage_hunks(const fs::path &directory, std::string_view branch, std:
   auto publication = options;
   publication.progress = [&](const ProgressEvent &event) {
     report_progress(options, event);
-    if (event.phase == ProgressPhase::publishing && event.path == "refs")
-      verify_native_working_diff(*this, plan.working, {options.stop});
+    if (directory && event.phase == ProgressPhase::publishing && event.path == "refs")
+      verify_native_working_diff(store, plan.working, {options.stop});
   };
-  require(compare_update_refs(updates, publication), "native staging references changed; retry operation");
+  require(store.compare_update_refs(updates, publication),
+          "native staging references changed; retry operation");
   return std::move(plan.report);
+}
+} // namespace
+Json Store::plan_stage_hunks(const fs::path &directory, std::string_view branch, std::string_view path,
+                             TextDiffOptions limits, OperationOptions options) const {
+  return prepare(*this, &directory, branch, path, limits, options).report;
+}
+Json Store::stage_hunks(const fs::path &directory, std::string_view branch, std::string_view path,
+                        std::string_view expected, const std::vector<std::size_t> &hunks,
+                        TextDiffOptions limits, OperationOptions options) const {
+  return apply(*this, &directory, branch, path, expected, hunks, limits, options);
+}
+Json Store::plan_reset_hunks(std::string_view branch, std::string_view path, TextDiffOptions limits,
+                             OperationOptions options) const {
+  return prepare(*this, nullptr, branch, path, limits, options).report;
+}
+Json Store::reset_hunks(std::string_view branch, std::string_view path, std::string_view expected,
+                        const std::vector<std::size_t> &hunks, TextDiffOptions limits,
+                        OperationOptions options) const {
+  return apply(*this, nullptr, branch, path, expected, hunks, limits, options);
 }
 } // namespace syrnck

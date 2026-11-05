@@ -30,6 +30,8 @@ Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège le
 
 `native add-hunks-plan CHEMIN` numérote les changements textuels d’un fichier existant. `native add-hunks CHEMIN --expect-plan ID --hunks 1,3` fige seulement ces hunks, conserve les autres préparations et archive l’ancien index après GC. Voir [la préparation partielle du texte](docs/NATIVE_HUNKS.md).
 
+`native reset-hunks-plan CHEMIN` numérote les changements déjà préparés par rapport à leur base. `native reset-hunks CHEMIN --expect-plan ID --hunks 1,3` retire les hunks choisis, conserve les autres préparations et archive l’ancien index complet. Ces commandes utilisent les versions stockées sans lire les fichiers de travail.
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

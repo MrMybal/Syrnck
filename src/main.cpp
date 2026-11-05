@@ -200,6 +200,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                        [--branch BRANCHE] [--expect ID] [--directory .]
     Archive l'ancien commit ; conserve ses parents. --expect exige l'ID exact.
   native add CHEMIN... [--branch BRANCHE] [--directory .]
+  native reset-hunks-plan CHEMIN [--branch NOM]
+  native reset-hunks CHEMIN --expect-plan ID --hunks 1,3 [--branch NOM]
   native add-hunks-plan CHEMIN [--branch NOM] [--directory .]
   native add-hunks CHEMIN --expect-plan ID --hunks 1,3 [--branch NOM]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
@@ -293,7 +295,7 @@ Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/add-hunks-plan/add-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -334,6 +336,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                        [--branch BRANCH] [--expect ID] [--directory .]
     Archives the previous tip and preserves its parents. --expect requires an exact ID.
   native add PATH... [--branch BRANCH] [--directory .]
+  native reset-hunks-plan PATH [--branch NAME]
+  native reset-hunks PATH --expect-plan ID --hunks 1,3 [--branch NAME]
   native add-hunks-plan PATH [--branch NAME] [--directory .]
   native add-hunks PATH --expect-plan ID --hunks 1,3 [--branch NAME]
   native staged [--branch BRANCH]    Inspect staged changes
@@ -427,7 +431,7 @@ Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
 Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/add-hunks-plan/add-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -649,16 +653,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
-        sub == "add" || sub == "add-hunks-plan" || sub == "add-hunks" || sub == "staged" || sub == "reset" ||
-        sub == "reset-plan" || sub == "checkout-plan" || sub == "checkout" || sub == "checkout-recover" ||
-        sub == "switch-plan" || sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" ||
-        sub == "tag-delete" || sub == "tag-archive" || sub == "tag-restore" || sub == "ancestry" ||
-        sub == "cherry-pick-plan" || sub == "revert-plan" || sub == "cherry-pick" || sub == "revert" ||
-        sub == "merge-plan" || sub == "merge" || sub == "squash-plan" || sub == "squash" ||
-        sub == "archives" || sub == "archive-show" || sub == "rebase-plan" || sub == "rebase" ||
-        sub == "rebase-index-plan" || sub == "rebase-index" || sub == "branch" || sub == "branches" ||
-        sub == "branch-delete-plan" || sub == "branch-delete" || sub == "branch-archives" ||
-        sub == "branch-archive" || sub == "branch-restore-plan" || sub == "branch-restore")) ||
+        sub == "add" || sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" ||
+        sub == "reset-hunks" || sub == "staged" || sub == "reset" || sub == "reset-plan" ||
+        sub == "checkout-plan" || sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" ||
+        sub == "switch" || sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" ||
+        sub == "tag-archive" || sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" ||
+        sub == "revert-plan" || sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" ||
+        sub == "merge" || sub == "squash-plan" || sub == "squash" || sub == "archives" ||
+        sub == "archive-show" || sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" ||
+        sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
+        sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
+        sub == "branch-restore-plan" || sub == "branch-restore")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -865,20 +870,27 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto directory = workspace();
       const auto branch = selected_branch();
       std::cout << store.stage_directory(directory, branch, args.paths(), options) << '\n';
-    } else if (sub == "add-hunks-plan" || sub == "add-hunks") {
-      const bool planning = sub == "add-hunks-plan";
+    } else if (sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" ||
+               sub == "reset-hunks") {
+      const bool resetting = sub.starts_with("reset-");
+      const bool planning = sub.ends_with("-plan");
       const auto limits = text_diff_options(args);
-      const auto directory = workspace();
+      const auto directory = resetting ? fs::path{} : workspace();
       const auto branch = selected_branch();
       if (planning) {
         args.count(1);
         const auto report =
-            store.plan_stage_hunks(directory, branch, args.values[0], limits, {control->token(), observe});
+            resetting ? store.plan_reset_hunks(branch, args.values[0], limits, {control->token(), observe})
+                      : store.plan_stage_hunks(directory, branch, args.values[0], limits,
+                                               {control->token(), observe});
         print(report);
         return report["ready"].get<bool>() ? 0 : 1;
       }
       const auto expected = args.option("--expect-plan"), selection = args.option("--hunks");
-      require(expected && selection, "native add-hunks requires --expect-plan and --hunks");
+      if (resetting)
+        require(expected && selection, "native reset-hunks requires --expect-plan and --hunks");
+      else
+        require(expected && selection, "native add-hunks requires --expect-plan and --hunks");
       args.count(1);
       std::vector<std::size_t> hunks;
       for (std::size_t pos = 0;;) {
@@ -891,8 +903,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
           break;
         pos = comma + 1;
       }
-      print(store.stage_hunks(directory, branch, args.values[0], *expected, hunks, limits,
-                              {control->token(), observe}));
+      print(resetting ? store.reset_hunks(branch, args.values[0], *expected, hunks, limits,
+                                          {control->token(), observe})
+                      : store.stage_hunks(directory, branch, args.values[0], *expected, hunks, limits,
+                                          {control->token(), observe}));
     } else if (sub == "staged") {
       const auto branch = selected_branch();
       args.count(0);
