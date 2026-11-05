@@ -202,6 +202,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
+  native branches [--after NOM] [--limit 100] [--verify]
   native tag NOM [RÉVISION] [-m MESSAGE]   Nommer une version (HEAD par défaut)
   native tags [--after NOM] [--limit 100] | tag-show NOM [--verify]
   native tag-delete NOM --expect RÉVISION
@@ -259,6 +260,7 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native branch/branches,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -320,6 +322,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
+  native branches [--after NAME] [--limit 100] [--verify]
   native tag NAME [REVISION] [-m MESSAGE]   Label a version (defaults to HEAD)
   native tags [--after NAME] [--limit 100] | tag-show NAME [--verify]
   native tag-delete NAME --expect REVISION
@@ -377,6 +380,7 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native branch/branches,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -600,7 +604,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
-        sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index")) ||
+        sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
+        sub == "branch" || sub == "branches")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -956,9 +961,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                     {control->token(), observe}));
     } else if (sub == "branch") {
       args.count(2);
-      auto name = "heads/" + args.values[0];
-      require(!store.refs().contains(name), "branch already exists");
-      store.set_ref(name, {Kind::revision, resolve(args.values[1])});
+      (void)store.create_native_branch(args.values[0], resolve(args.values[1]), {control->token(), observe});
+    } else if (sub == "branches") {
+      const auto after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "native branch page limit must be in 1..1000");
+      const bool verify = args.flag("--verify");
+      args.count(0);
+      print(
+          store.native_branches(after, static_cast<std::size_t>(limit), verify, {control->token(), observe}));
     } else if (sub == "tag") {
       const auto message = args.option("--message", "-m");
       args.count(args.values.size() -

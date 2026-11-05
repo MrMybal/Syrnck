@@ -1,4 +1,4 @@
-# Native current branch and recoverable switching
+# Native branches and recoverable switching
 
 The native CLI has a symbolic current branch. Existing Stores without a HEAD
 descriptor implicitly select `main`, including when that branch is unborn.
@@ -23,6 +23,51 @@ it. **Neither branch head moves during switch**. `native checkout REVISION`
 continues to restore an exact revision and move the selected branch, with an
 archive of its previous head. Both use the [recoverable checkout](NATIVE_CHECKOUT.md)
 executor. There is no detached HEAD or automatic branch creation during switch.
+
+## Branch inventory and verified creation
+
+```text
+syrnck native branches --limit 100 --verify
+syrnck native branches --after feature/topic --limit 100
+syrnck native branch feature/topic REVISION --progress
+```
+
+`native branches` lists existing `heads/` references in byte-sorted name order.
+It returns the current `head` descriptor, a `branches` array, `has_more`, an
+exclusive `next_after` name cursor and `objects_verified`. An unborn selected
+branch appears in `head`, without an invented entry in the array. Empty pages
+have a null cursor. `--limit` is 1..1000, default 100; a cursor need not still
+exist. Pages reflect the references present during each call, rather than a
+snapshot spanning several invocations.
+
+Each row includes `name`, `revision`, `current`, file/parent counts, the revision
+timestamp and a UTF-8-safe message preview of at most 256 bytes, with
+`message_bytes`/`message_truncated`. `index`, `index_base` and `stale_index` expose
+the branch's frozen preparation, including stale indexes, without reading working
+files. Orphan indexes without a branch remain accessible through `refs` and
+`native staged --branch NAME`; the inventory does not adopt them as branch heads.
+
+Metadata-only inventory does not audit block payloads. `--verify` audits the full
+closures of the displayed heads and indexes, including their baseline histories.
+The selected head outside that page is not an additional verified root. Reports
+are bounded to 16 MiB. The implementation reads the reference table once for the
+page, then resolves its rows without copying that table per branch; the table
+itself is still loaded in full.
+
+Creation accepts an existing exact revision in C++; the CLI also accepts normal
+revision selectors. It verifies the complete retained data and publishes only if
+both the destination head and staging slot are absent. Existing heads and orphan
+indexes are errors. A pending checkout/switch blocks creation. There is no force
+replacement. Creation neither selects the branch nor checks out its files; if
+HEAD already symbolically names that unborn branch, its revision resolves to the
+new head afterwards. Dirty working files remain unchanged.
+
+Branch creation stays quiet on stdout in the CLI; its C++ result reports the
+created name/revision. Inventory emits English JSON in either interface language.
+Both commands accept the ordinary progress/cancellation options. Reference
+publication uses the exclusive Store lock and expected absent slots. Cancellation,
+missing retained bytes or observer failure before publication preserves existing
+references and working files. No callbacks run after the commit point.
 
 ## CLI defaults and workspace identity
 
@@ -121,6 +166,8 @@ binaries for native workspace commands after enabling it.
 
 ```cpp
 auto head = store.native_head();
+auto branches = store.native_branches({}, 100, true, operation);
+auto created = store.create_native_branch("feature", revision_id, operation);
 auto plan = store.plan_switch(project, "feature", true, operation);
 auto switched = store.switch_directory(project, "feature", operation);
 ```

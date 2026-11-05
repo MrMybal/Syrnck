@@ -334,6 +334,10 @@ public:
   // Symbolic current branch; legacy stores implicitly select main. Switching
   // journals workspace changes and publishes HEAD without moving either branch.
   Json native_head() const;
+  // Bounded pages of existing branch heads and their frozen staging state.
+  Json native_branches(const std::optional<std::string> &after = {}, std::size_t limit = 100,
+                       bool verify_objects = false, OperationOptions = {}) const;
+  Json create_native_branch(std::string_view name, std::string_view revision, OperationOptions = {}) const;
   Json plan_switch(const fs::path &, std::string_view branch, bool verify_objects = false,
                    OperationOptions = {}) const;
   Json switch_directory(const fs::path &, std::string_view branch, OperationOptions = {}) const;

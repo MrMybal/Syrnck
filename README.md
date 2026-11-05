@@ -130,6 +130,8 @@ Rebase also accepts `--resolutions JSON_FILE`: a series of explicit file choices
 
 Both staging rebase commands accept `--resolutions JSON_FILE`, with explicit file choices bound to the branch head, frozen index and its original base. Custom manifests/modes are verified before publication; partial or stale choices cannot replace the index.
 
+`native branches --verify` lists bounded pages of branch heads and frozen staging state, auditing the displayed histories. `native branch NAME REVISION` now creates a fully verified head atomically and refuses existing heads, orphan indexes or active checkouts. See [native branches](docs/NATIVE_BRANCHES.md#branch-inventory-and-verified-creation).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

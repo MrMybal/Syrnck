@@ -649,3 +649,7 @@ SYRNCK_MESSAGE("native staging rebase tip changed; refresh the plan", "la tête 
 SYRNCK_MESSAGE("native staging rebase index changed; refresh the plan", "l'index du rebase natif a changé ; actualisez le plan")
 SYRNCK_MESSAGE("native staging rebase is blocked; inspect native rebase-index-plan", "le rebase de l'index natif est bloqué ; inspectez native rebase-index-plan")
 SYRNCK_MESSAGE("native staging rebase candidate changed; refresh the plan", "le candidat du rebase de l'index natif a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native branch page limit must be in 1..1000", "la limite de branches par page doit être comprise entre 1 et 1000")
+SYRNCK_MESSAGE("native branch report exceeds 16 MiB", "le rapport de branches natives dépasse 16 Mio")
+SYRNCK_MESSAGE("native branch has an orphan staging index", "la branche native possède un index de staging orphelin")
+SYRNCK_MESSAGE("native branch references changed; retry operation", "les références de branche native ont changé ; réessayez l'opération")

@@ -145,6 +145,8 @@ Le rebase accepte aussi `--resolutions FICHIER_JSON` : une série de choix expli
 
 Les deux commandes acceptent `--resolutions FICHIER_JSON` : des choix par fichier liés à la tête, à l'index figé et à sa base d'origine. Les manifestes/modes personnalisés sont vérifiés avant publication ; des choix incomplets ou périmés ne peuvent pas remplacer l'index.
 
+`native branches --verify` liste des pages bornées de têtes et d'index préparés, en vérifiant les historiques affichés. `native branch NOM RÉVISION` crée désormais une tête entièrement vérifiée sous transaction et refuse les branches existantes, index orphelins et checkouts actifs. Voir les [branches natives](docs/NATIVE_BRANCHES.md#branch-inventory-and-verified-creation).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.
