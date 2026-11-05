@@ -16,6 +16,7 @@ crash by throwing an exception or unwinding the stack.
 | --- | --- |
 | Revision publication | Parallel ingestion, chunk/manifest/revision writes and reference replacement; previous revision and archive remain reconstructible |
 | Native staging | Selected chunk/manifest/snapshot writes, atomic branch/index commit and index reset; prepared bytes survive, with either the old head plus index or the new head without index |
+| Native amendment | Directory chunk/manifest writes and all three modes' revision/reference publication; branch, previous-tip archive and staged-index consumption publish together, preserving parents and retained bytes |
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | Native branch switch and abort | HEAD descriptor/journal writes, the same file-move boundaries, HEAD/receipt publication and rollback; both branch heads remain unchanged and HEAD publishes with the committed journal |
 | Native tags | Annotation/deletion-record writes and atomic tag/annotation/archive reference creation, deletion and restoration; the old or complete new root set retains target bytes |
@@ -45,7 +46,7 @@ audit. Packing and GC must clean inactive generated pack/index files. A positive
 control releases the checkpoint normally and confirms that another process
 cannot open the locked store while the writer is paused.
 
-The local Windows x64 Release run on 5 November 2026 passed **590 process-kill
+The local Windows x64 Release run on 5 November 2026 passed **670 process-kill
 combinations**, plus checkpoint/lock and production-isolation checks. Unix adds
 hard-link-boundary cases. This local result does not claim the new suite has
 already run on Linux, macOS, ARM64 or sanitizer builds. CTest includes it

@@ -118,9 +118,10 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     if (operation == "switch" || operation == "switch-abort")
       store.set_ref("heads/feature", next);
   }
-  if (operation == "stage-add" || operation == "stage-commit" || operation == "stage-reset") {
+  if (operation == "stage-add" || operation == "stage-commit" || operation == "stage-reset" ||
+      operation == "amend" || operation == "amend-staged") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(1)), false);
-    if (operation != "stage-add")
+    if (operation != "stage-add" && operation != "amend")
       store.stage_directory(root.parent_path(), "main", {"asset.bin"});
   }
   if (operation == "tag-delete" || operation == "tag-restore") {
@@ -159,6 +160,16 @@ void perform(Store &store, const Json &info) {
     auto next = ingest(store, 1, 4);
     auto tip = put_revision(store, next, parse_key(info.at("old_revision")));
     store.set_ref("heads/main", tip);
+  } else if (op == "amend" || op == "amend-staged" || op == "amend-message") {
+    const auto old = parse_key(info.at("old_revision"));
+    if (store.refs().at("heads/main") == old) {
+      if (op == "amend")
+        store.amend_directory(store.root().parent_path(), "main", old.id, "Amended crash fixture");
+      else if (op == "amend-staged")
+        store.amend_staged("main", old.id, "Amended crash fixture");
+      else
+        store.amend_message("main", old.id, "Amended crash fixture");
+    }
   } else if (op == "stage-add") {
     store.stage_directory(store.root().parent_path(), "main", {"asset.bin"});
   } else if (op == "stage-commit") {
@@ -229,6 +240,22 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op == "amend" || op == "amend-staged" || op == "amend-message") {
+    const bool changed = refs.at("heads/main") != old;
+    const auto archive = refs.find("archive/amend/" + old.id);
+    check((archive != refs.end()) == changed && (!changed || archive->second == old),
+          "amendment published apart from its archive");
+    check(refs.contains("staging/main") == (op == "amend-staged" && !changed),
+          "amendment consumed staging apart from its branch");
+    if (changed)
+      check(head["parents"] == store.metadata(Kind::revision, old.id)["parents"] &&
+                head["message"] == "Amended crash fixture",
+            "amendment ancestry or message changed");
+    check(current.str() == content(changed && op != "amend-message" ? 1 : 0),
+          "amendment lost snapshot bytes");
+    if (resumed)
+      check(changed, "amendment did not resume");
+  }
   if (op == "tag-create" || op == "tag-delete" || op == "tag-restore") {
     const bool tagged = refs.contains("tags/release/v1");
     check(tagged == refs.contains("tag-metadata/release/v1"), "tag and annotation published separately");

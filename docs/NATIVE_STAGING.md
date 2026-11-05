@@ -125,6 +125,11 @@ concurrent edits can require retrying.
 
 ## C++ API and validation
 
+`native commit --amend --staged -m MESSAGE` can replace the existing tip using
+the same prepared snapshot, including a clean index for a message correction.
+It preserves the old tip's parents and atomically archives the old revision while
+consuming the index. See [native amendment and retention](NATIVE_AMEND.md).
+
 ```cpp
 auto snapshot = store.stage_directory(project, "main", {"Source", "Content/Maps"});
 auto report = store.staged_status("main", operation);

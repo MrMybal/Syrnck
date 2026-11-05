@@ -33,6 +33,9 @@ def cases():
     atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
     atomic("stage-commit", ("revision", "refs"))
     atomic("stage-reset", ("refs",))
+    atomic("amend", ("chunk", "manifest", "revision", "refs"))
+    atomic("amend-staged", ("revision", "refs"))
+    atomic("amend-message", ("revision", "refs"))
     for occurrence in (1, 2, 3, 4):
         atomic("checkout", ("refs",), occurrence)
     atomic("checkout", ("checkout-prepared",))
@@ -158,6 +161,18 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation in ("amend", "amend-staged", "amend-message"):
+            changed = kind == "refs" and published
+            refs = checked["refs"]
+            archive = "archive/amend/" + info["old_revision"]["id"]
+            self.assertEqual(refs["heads/main"] != info["old_revision"], changed)
+            self.assertEqual(archive in refs, changed)
+            self.assertEqual("staging/main" in refs, operation == "amend-staged" and not changed)
+            if changed:
+                self.assertEqual(refs[archive], info["old_revision"])
+            unrelated = lambda values: {name: key for name, key in values.items()
+                                         if name not in ("heads/main", "staging/main", archive)}
+            self.assertEqual(unrelated(refs), unrelated(info["refs"]))
         elif operation in ("tag-create", "tag-delete", "tag-restore"):
             changed = kind == "refs" and published
             tagged = "tags/release/v1" in checked["refs"]

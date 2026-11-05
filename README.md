@@ -14,7 +14,7 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 
 | Component | Available functionality |
 | --- | --- |
-| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/recoverable checkout/snapshot diff/tags, revisions, retention and GC |
+| `syrnck_core` | FastCDC/fixed blocks, BLAKE3, Zstd, verified file/range reads, chunk reuse plans, indexed packs, native staging/status/recoverable checkout/snapshot diff/tags/archived amendment, revisions, retention and GC |
 | `syrnck_git` | Git filters, asset catalogs, retention inventory/protection, offline LFS migration and opt-in pre-push hooks |
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
@@ -97,6 +97,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 `native head` reports the current branch; legacy Stores implicitly select `main`. `native switch-plan BRANCH` previews a change, and `native switch BRANCH` restores and selects that existing branch without moving either branch head. Commit, staging, status, log and checkout default to the selected branch; `--branch` overrides it. HEAD publishes atomically with the recovery journal. See [native branch selection, defaults and recovery](docs/NATIVE_BRANCHES.md).
 
 `native tag NAME [REVISION] [-m MESSAGE]` labels a committed version, defaulting to HEAD, with an optional annotation. `native tags` lists bounded pages; `tag-show --verify` audits the target. `tag-delete NAME --expect ID` retains a restorable archive through GC, and `tag-restore ARCHIVE_ID` restores the original label and message. Native snapshot commands accept HEAD, unambiguous branch/tag names and explicit `heads/NAME` or `tags/NAME`. See [native tags, selectors and archive retention](docs/NATIVE_TAGS.md).
+
+`native commit --amend -m MESSAGE` replaces the tip while preserving its parents and atomically archiving the old revision. Add `--staged` to use prepared bytes or `--message-only` to reuse the existing snapshot; `--expect ID` guards the exact old tip. Archives retain their complete file blocks through GC. See [native amendment, retention and interruption recovery](docs/NATIVE_AMEND.md).
 
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 

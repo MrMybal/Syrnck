@@ -173,6 +173,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native commit [-m MESSAGE] [--branch BRANCHE] [--directory .]
                 [--workers N] [--buffer-mib N]
   native commit --staged -m MESSAGE [--branch BRANCHE]
+  native commit --amend [--staged | --message-only] -m MESSAGE
+                       [--branch BRANCHE] [--expect ID] [--directory .]
+    Archive l'ancien commit ; conserve ses parents. --expect exige l'ID exact.
   native add CHEMIN... [--branch BRANCHE] [--directory .]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
   native reset [CHEMIN...] [--branch BRANCHE]
@@ -256,6 +259,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native commit [-m MESSAGE] [--branch BRANCH] [--directory .]
                 [--workers N] [--buffer-mib N]
   native commit --staged -m MESSAGE [--branch BRANCH]
+  native commit --amend [--staged | --message-only] -m MESSAGE
+                       [--branch BRANCH] [--expect ID] [--directory .]
+    Archives the previous tip and preserves its parents. --expect requires an exact ID.
   native add PATH... [--branch BRANCH] [--directory .]
   native staged [--branch BRANCH]    Inspect staged changes
   native reset [PATH...] [--branch BRANCH]
@@ -691,19 +697,32 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     };
     if (sub == "commit") {
       const auto staged = args.flag("--staged");
+      const auto amend = args.flag("--amend");
+      const auto message_only = args.flag("--message-only");
+      const auto expected = args.option("--expect");
+      require(amend || (!message_only && !expected), "--message-only and --expect require --amend");
+      require(!staged || !message_only, "choose either --staged or --message-only");
       auto branch = selected_branch();
       auto message = args.option("--message", "-m");
       require(message.has_value(), "--message is required");
-      if (staged) {
+      const auto tip = amend ? (expected ? *expected : resolve("heads/" + branch)) : std::string{};
+      if (message_only) {
         args.count(0);
-        std::cout << store.commit_staged(branch, *message, {control->token(), observe}) << '\n';
+        std::cout << store.amend_message(branch, tip, *message, {control->token(), observe}) << '\n';
+      } else if (staged) {
+        args.count(0);
+        std::cout << (amend ? store.amend_staged(branch, tip, *message, {control->token(), observe})
+                            : store.commit_staged(branch, *message, {control->token(), observe}))
+                  << '\n';
       } else {
         auto options = ingestion_options(args, store);
         options.stop = control->token();
         options.progress = observe;
         auto directory = workspace();
         args.count(0);
-        std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
+        std::cout << (amend ? store.amend_directory(directory, branch, tip, *message, options)
+                            : store.commit_directory(directory, branch, *message, options))
+                  << '\n';
       }
     } else if (sub == "add") {
       auto options = ingestion_options(args, store);

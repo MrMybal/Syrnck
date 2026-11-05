@@ -313,6 +313,17 @@ public:
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
                                          OperationOptions = {}) const;
   std::string commit_staged(std::string_view branch, std::string_view message, OperationOptions = {}) const;
+  // Replace exactly the expected tip, preserving its parents and archiving it
+  // under archive/amend/ID in the same reference transaction. Directory/message
+  // modes reject an existing index; staged mode consumes a fresh index atomically.
+  std::string amend_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
+                              std::string_view message) const;
+  std::string amend_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
+                              std::string_view message, IngestOptions) const;
+  std::string amend_staged(std::string_view branch, std::string_view expected_revision,
+                           std::string_view message, OperationOptions = {}) const;
+  std::string amend_message(std::string_view branch, std::string_view expected_revision,
+                            std::string_view message, OperationOptions = {}) const;
   std::string detach_history(std::string_view branch, std::string_view message) const;
   void export_revision(std::string_view id, const fs::path &destination, OperationOptions = {}) const;
 

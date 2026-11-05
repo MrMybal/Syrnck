@@ -116,9 +116,10 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] HEAD symbolique local et branche courante implicite main pour les anciens stores ; changement de branche récupérable sans déplacer les deux têtes, publication atomique du HEAD avec journal, commandes CLI par défaut sur la sélection courante.
 - [x] Tags natifs simples/annotés, noms immuables par l'API, inspection paginée bornée, suppression archivée avec cible attendue et restauration atomiques ; rétention après GC et sélecteurs de révision HEAD/branche/tag avec ambiguïtés explicites.
 - [ ] Sélection de hunks, diff textuel et rebase automatique d'un index périmé.
-- [ ] HEAD détaché, workspaces multiples et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout et tags.
+- [ ] HEAD détaché, workspaces multiples et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
 - [ ] Merge à trois voies, base commune, conflits de texte, conflits binaires et renommages.
-- [ ] Rebase, cherry-pick, revert, reset, stash, squash et amend.
+- [x] Amendement du dernier commit natif par dossier, index préparé ou message seul ; parents conservés, tête attendue et publication atomique branche/archive/index, reconstruction après GC et arrêts forcés.
+- [ ] Rebase, cherry-pick, revert, reset, stash et squash.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [ ] Push/pull des références avec validation d'ascendance et politiques serveur.

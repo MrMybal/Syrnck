@@ -572,3 +572,8 @@ SYRNCK_MESSAGE("native workspace metadata exceeds 16 MiB", "les métadonnées du
 SYRNCK_MESSAGE("choose either --branch or --revision", "choisissez --branch ou --revision")
 SYRNCK_MESSAGE("source file read failed", "échec de lecture du fichier source")
 SYRNCK_MESSAGE("ignore file must be a regular file", "le fichier d'exclusions doit être un fichier ordinaire")
+SYRNCK_MESSAGE("native amendment tip changed; inspect the branch and retry", "le dernier commit natif a changé ; inspectez la branche et relancez l'opération")
+SYRNCK_MESSAGE("native amendment archive points to another object", "l'archive d'amendement natif pointe vers un autre objet")
+SYRNCK_MESSAGE("native amendment references changed; retry operation", "les références d'amendement natif ont changé ; relancez l'opération")
+SYRNCK_MESSAGE("--message-only and --expect require --amend", "--message-only et --expect nécessitent --amend")
+SYRNCK_MESSAGE("choose either --staged or --message-only", "choisissez --staged ou --message-only")
