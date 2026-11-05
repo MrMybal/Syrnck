@@ -135,6 +135,18 @@ struct OperationOptions {
   std::stop_token stop{};
   ProgressCallback progress{};
 };
+// Read-only line diffs. Inputs and JSON output have separate hard limits;
+// an exceeded budget returns status=limited with no partial hunks.
+struct TextDiffOptions {
+  std::size_t context = 3;
+  std::size_t max_file_bytes = 1024 * 1024;
+  std::size_t max_lines = 50000;
+  std::size_t max_work = 16 * 1024 * 1024;
+  std::size_t max_output_bytes = 4 * 1024 * 1024;
+  void validate() const;
+};
+Json compare_text(std::span<const std::uint8_t> source, std::span<const std::uint8_t> target,
+                  TextDiffOptions = {}, OperationOptions = {});
 struct NativeGraphLimits {
   std::size_t max_revisions = 100000;
   std::size_t max_parent_links = 1000000;

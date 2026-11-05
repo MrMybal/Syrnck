@@ -661,3 +661,9 @@ SYRNCK_MESSAGE("native branch deletion is blocked; inspect native branch-delete-
 SYRNCK_MESSAGE("--expect is required for native branch deletion", "--expect est requis pour supprimer une branche native")
 SYRNCK_MESSAGE("--expect-index requires --archive-index", "--expect-index nécessite --archive-index")
 SYRNCK_MESSAGE("native branch restoration is blocked; inspect native branch-restore-plan", "la restauration de branche native est bloquée ; inspectez native branch-restore-plan")
+
+SYRNCK_MESSAGE("text diff context must be in 0..100", "Le contexte du diff textuel doit être compris entre 0 et 100")
+SYRNCK_MESSAGE("text diff file budget must be in 1..4194304 bytes", "Le budget de fichier du diff textuel doit être compris entre 1 et 4194304 octets")
+SYRNCK_MESSAGE("text diff line limit must be in 1..100000", "La limite de lignes du diff textuel doit être comprise entre 1 et 100000")
+SYRNCK_MESSAGE("text diff work budget must be in 1..268435456", "Le budget de calcul du diff textuel doit être compris entre 1 et 268435456")
+SYRNCK_MESSAGE("text diff output budget must be in 1024..8388608 bytes", "Le budget de sortie du diff textuel doit être compris entre 1024 et 8388608 octets")
