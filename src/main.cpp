@@ -182,6 +182,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native reset-plan RÉVISION --soft|--mixed [--branch BRANCHE] [--verify]
   native reset RÉVISION --soft|--mixed [--branch BRANCHE] [--expect ID]
     Déplace la branche sans écrire les fichiers ; archive l'historique et l'index.
+  native squash-plan NOMBRE [--branch BRANCHE] [--verify]
+  native squash NOMBRE -m MESSAGE [--branch BRANCHE] [--expect ID]
+    Regroupe les derniers commits linéaires ; conserve le snapshot et l'ancien historique.
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
   native status --combined [--branch BRANCHE] [--directory .]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
@@ -284,6 +287,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native reset-plan REVISION --soft|--mixed [--branch BRANCH] [--verify]
   native reset REVISION --soft|--mixed [--branch BRANCH] [--expect ID]
     Moves the branch without writing files; archives previous history and index.
+  native squash-plan COUNT [--branch BRANCH] [--verify]
+  native squash COUNT -m MESSAGE [--branch BRANCH] [--expect ID]
+    Collapses linear tip commits, preserving the snapshot and archived history.
   native status [--branch BRANCH | --revision REVISION] [--directory .]
   native status --combined [--branch BRANCH] [--directory .]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
@@ -566,7 +572,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
         sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
-        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge")) ||
+        sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
+        sub == "squash-plan" || sub == "squash")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -800,6 +807,25 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
         print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
       }
+    } else if (sub == "squash-plan" || sub == "squash") {
+      const bool planning = sub == "squash-plan";
+      const auto branch = selected_branch();
+      const bool verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
+      require(planning || message.has_value(), "--message is required");
+      args.count(1);
+      const auto count = integer(args.values[0]);
+      require(count >= 2 && count <= 100000, "native squash count must be in 2..100000");
+      if (planning) {
+        const auto plan =
+            store.plan_squash(branch, static_cast<std::size_t>(count), verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      print(store.squash_commits(branch, tip, static_cast<std::size_t>(count), *message,
+                                 {control->token(), observe}));
     } else if (sub == "status") {
       const auto combined = args.flag("--combined");
       const auto directory = workspace();

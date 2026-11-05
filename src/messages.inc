@@ -617,3 +617,7 @@ SYRNCK_MESSAGE("native reset tip changed; inspect the branch and retry", "la tê
 SYRNCK_MESSAGE("native reset is blocked; inspect native reset-plan", "le reset natif est bloqué ; inspectez native reset-plan")
 SYRNCK_MESSAGE("choose either --soft or --mixed", "choisissez --soft ou --mixed")
 SYRNCK_MESSAGE("native reset-plan requires --soft or --mixed", "native reset-plan nécessite --soft ou --mixed")
+SYRNCK_MESSAGE("native squash count must be in 2..100000", "le nombre de commits à regrouper doit être compris entre 2 et 100000")
+SYRNCK_MESSAGE("native squash report exceeds 16 MiB", "le rapport de squash natif dépasse 16 Mio")
+SYRNCK_MESSAGE("native squash tip changed; inspect the branch and retry", "la tête du squash natif a changé ; inspectez la branche et relancez l'opération")
+SYRNCK_MESSAGE("native squash is blocked; inspect native squash-plan", "le squash natif est bloqué ; inspectez native squash-plan")

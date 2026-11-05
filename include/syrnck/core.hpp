@@ -381,6 +381,13 @@ public:
   Json reset_branch(std::string_view branch, std::string_view expected_revision, std::string_view target,
                     NativeResetMode, OperationOptions = {}) const;
   std::string commit_staged(std::string_view branch, std::string_view message, OperationOptions = {}) const;
+  // Collapse 2..100000 linear tip commits, preserving the exact tip snapshot
+  // and archiving former history. Merge commits in the range and staging block
+  // publication. Working files are not accessed.
+  Json plan_squash(std::string_view branch, std::size_t count, bool verify_objects = false,
+                   OperationOptions = {}) const;
+  Json squash_commits(std::string_view branch, std::string_view expected_revision, std::size_t count,
+                      std::string_view message, OperationOptions = {}) const;
   // Replace exactly the expected tip, preserving its parents and archiving it
   // under archive/amend/ID in the same reference transaction. Directory/message
   // modes reject an existing index; staged mode consumes a fresh index atomically.

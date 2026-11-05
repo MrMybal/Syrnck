@@ -125,8 +125,9 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Plans de cherry-pick/revert à trois voies par fichier : contenu/mode et représentations distincts, conflits de contenu/ajouts/suppressions et collisions du résultat, parent principal explicite pour les merges, contrôle du workspace et vérification optionnelle sans écriture.
 - [x] Amendement du dernier commit natif par dossier, index préparé ou message seul ; parents conservés, tête attendue et publication atomique branche/archive/index, reconstruction après GC et arrêts forcés.
 - [x] Cherry-pick et revert par fichier avec commit enfant et application récupérable : tête attendue, données vérifiées, conflits bloquants, branche source intacte, reprise/annulation et conservation après GC.
-- [ ] Rebase, reset, stash et squash ; résolution interactive des conflits de rejeu et fusion textuelle.
+- [ ] Rebase, reset hard et stash ; résolution interactive des conflits de rejeu et fusion textuelle.
 - [x] Reset de branche soft/mixed avec préparation en lecture seule : fichiers de travail intacts, index conservé sur la nouvelle base ou archivé puis retiré, tête attendue et publication atomique des anciennes racines ; reconstruction après GC.
+- [x] Squash des derniers commits linéaires avec plan borné, snapshot exact de tête, frontière conservée ou nouvelle racine, merges/index refusés, tête attendue et archive atomique de tout l'ancien historique.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [ ] Push/pull des références avec validation d'ascendance et politiques serveur.
