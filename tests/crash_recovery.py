@@ -52,6 +52,11 @@ def cases():
     atomic("amend", ("chunk", "manifest", "revision", "refs"))
     atomic("amend-staged", ("revision", "refs"))
     atomic("amend-message", ("revision", "refs"))
+    for operation in ("asset-lock-acquire", "asset-lock-renew", "asset-lock-release", "asset-lock-prune"):
+        atomic(operation, ("refs",))
+        if operation in ("asset-lock-acquire", "asset-lock-renew"):
+            for occurrence in range(1, 4 if operation == "asset-lock-acquire" else 3):
+                atomic(operation, ("chunk",), occurrence)
     for occurrence in (1, 2, 3, 4):
         atomic("checkout", ("refs",), occurrence)
     atomic("checkout", ("checkout-prepared",))
@@ -323,6 +328,16 @@ class CrashRecovery(unittest.TestCase):
             unrelated = lambda refs: {name: key for name, key in refs.items()
                                       if not name.startswith(("tags/", "tag-metadata/", "archive/tags/"))}
             self.assertEqual(unrelated(checked["refs"]), unrelated(info["refs"]))
+        elif operation.startswith("asset-lock-"):
+            changed = kind == "refs" and published
+            current = checked["refs"]
+            lock_refs = lambda values: {name: value for name, value in values.items() if name.startswith("asset-locks/paths/")}
+            wanted = (2 if changed else 0) if operation == "asset-lock-acquire" else (
+                2 if operation == "asset-lock-renew" or not changed else 0)
+            self.assertEqual(len(lock_refs(current)), wanted)
+            self.assertEqual("asset-locks/clock" in current, operation != "asset-lock-acquire" or changed)
+            unrelated = lambda values: {name: value for name, value in values.items() if not name.startswith("asset-locks/")}
+            self.assertEqual(unrelated(current), unrelated(info["refs"]))
         elif operation.startswith("checkout-namespace"):
             changed = operation == "checkout-namespace" and (
                 (kind == "refs" and (occurrence == 5 or (occurrence == 4 and published))) or

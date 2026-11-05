@@ -25,6 +25,7 @@ crash by throwing an exception or unwinding the stack.
 | Native rebase and abort | Two-candidate linear chains, resolved conflicts, successive virtual text compositions and empty-range moves; first/second generated chunk/manifest/candidate writes, both prepared files and moves, checkout journal/publication/rollback boundaries, stable planned IDs and unchanged onto roots |
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
 | Native namespace checkout and abort | File/directory transitions and parent case changes in one operation; all-source evacuation, first/second directory removal/creation, all prepared files and backup/install/rollback moves, durable uninstall/restore phases and exact-name retention |
+| Local asset leases | First/second lease records and persistent fencing counter writes; atomic grouped acquisition, renewal, release and expiry-pruning publication |
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
 | Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
 | Native individual line selection | Partial add with/without an existing index and partial reset inside a hunk; selected-row chunk/manifest/index writes, atomic retention, untouched working files and exact independently computed result identities |
@@ -94,6 +95,14 @@ ordinary binary replacement. Fresh production readers verify exact path spelling
 bytes, archives and complete resume/rollback in plaintext/encrypted storage.
 Isolation and exclusive-lock controls also passed. This is a focused process
 termination result, without a claim of power-loss or other-platform validation.
+
+A focused Windows x64 Release asset-lease run on 6 November 2026 passed **94
+process-kill combinations**, including 90 new grouped acquisition, renewal,
+release and pruning combinations, plus 4 existing checkout/commit checkpoints.
+Fresh production readers verify complete owner sets, matching generations and
+deadlines, retained asset history and retry. Plaintext/encrypted cases and
+production-isolation/exclusive-lock controls passed. This is separate from the
+larger full campaign and other-platform or power-loss validation.
 
 Exports may leave `.syrnck-export-<32 hex>` sibling directories after a hard
 kill. Recovery verifies the published tree if present; a retry prepares a fresh

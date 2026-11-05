@@ -168,6 +168,11 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 ## Git and synchronization
 
+`locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide
+[repository-local asset leases](docs/ASSET_LOCKS.md), with atomic groups, expiry
+and persistent fencing generations. The caller supplies a trusted owner identity;
+remote authentication and publication enforcement remain future integration work.
+
 In an existing Git repository, run `syrnck git install`, then add the appropriate rules from [examples/unreal.gitattributes](examples/unreal.gitattributes). An opt-in [pre-push hook](docs/GIT_ASSETS.md#opt-in-pre-push-hook) can verify and upload assets throughout the history being pushed before Git proceeds. Install it explicitly and configure a separate block URL. [Checkout policies](docs/GIT_ASSETS.md#on-demand-checkout-and-pointer-only-clones) support verified local reconstruction, opt-in downloads of missing blocks, and pointer-only clones for code work. The [resident filter](docs/GIT_FILTER_PROCESS.md) keeps one Store and its bounded verified cache across files in a Git command. Deferred hydration and a watcher remain future work.
 
 Existing LFS projects can use `syrnck git lfs-preview HEAD` to audit cached objects, then `syrnck git migrate-lfs HEAD --branch converted-assets` to create a child commit with native pointers and retained blocks. This preserves HEAD, the index and working files. It converts one snapshot; earlier commits still require LFS storage. See [offline LFS migration and recovery](docs/GIT_LFS_MIGRATION.md).

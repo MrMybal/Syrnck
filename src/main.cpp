@@ -10,6 +10,7 @@
 #include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
 #include <syrnck/i18n.hpp>
+#include <syrnck/asset_locks.hpp>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -288,6 +289,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Gérer les baux du store serveur
+  locks list [--after CHEMIN] [--limit 100]   Lister les verrous locaux d’assets
+  locks acquire-plan|acquire --owner ID [--seconds 3600] CHEMIN...
+  locks renew --owner ID --fence N [--seconds 3600] CHEMIN...
+  locks release --owner ID --fence N CHEMIN... | locks prune [--delete]
   agent push URL RÉF_LOCALE RÉF_DISTANTE
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
@@ -432,6 +437,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Manage server store leases
+  locks list [--after PATH] [--limit 100]   List local asset locks
+  locks acquire-plan|acquire --owner ID [--seconds 3600] PATH...
+  locks renew --owner ID --fence N [--seconds 3600] PATH...
+  locks release --owner ID --fence N PATH... | locks prune [--delete]
   agent push URL LOCAL_REF REMOTE_REF
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
@@ -500,7 +509,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   }
   std::string sub;
   if (command == "git" || command == "native" || command == "agent" || command == "config" ||
-      command == "leases")
+      command == "leases" || command == "locks")
     sub = args.pop();
   if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
@@ -666,7 +675,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
-      command == "pack" || command == "gc" ||
+      command == "pack" || command == "gc" || command == "locks" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
@@ -1460,6 +1469,45 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       git::clean(store, std::cin, std::cout, options);
     } else
       throw Error("unknown Git command");
+  } else if (command == "locks") {
+    AssetLocks locks(store);
+    const OperationOptions operation{control->token(), observe};
+    if (sub == "list") {
+      const auto after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "asset lock page limit must be in 1..1000");
+      args.count(0);
+      print(locks.list(after, static_cast<std::size_t>(limit), operation));
+    } else if (sub == "prune") {
+      const bool remove = args.flag("--delete");
+      args.count(0);
+      print(locks.prune(remove, operation));
+    } else if (sub == "acquire-plan" || sub == "acquire" || sub == "renew" || sub == "release") {
+      const auto owner = args.option("--owner");
+      require(owner.has_value(), "asset lock command requires --owner");
+      const auto seconds = sub == "release" ? 3600 : integer(args.option("--seconds").value_or("3600"));
+      const auto fence =
+          sub == "renew" || sub == "release" ? args.option("--fence") : std::optional<std::string>{};
+      require((sub != "renew" && sub != "release") || fence.has_value(),
+              "asset lock command requires --fence");
+      const auto paths = args.paths();
+      if (sub == "acquire-plan") {
+        const auto plan = locks.acquire_plan(*owner, paths, seconds, operation);
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      if (sub == "acquire")
+        print(locks.acquire(*owner, paths, seconds, operation));
+      else {
+        const auto generation = integer(*fence);
+        std::vector<AssetLockClaim> claims;
+        for (const auto &path : paths)
+          claims.push_back({path, generation});
+        print(sub == "renew" ? locks.renew(*owner, claims, seconds, operation)
+                             : locks.release(*owner, claims, operation));
+      }
+    } else
+      throw Error("unknown asset lock command");
   } else if (command == "leases") {
     auto reads = args.flag("--read");
     if (sub == "list") {

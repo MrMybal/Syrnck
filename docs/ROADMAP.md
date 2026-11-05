@@ -87,7 +87,8 @@ Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets t
 
 ## 3 — Équipes et Unreal Engine
 
-- [ ] Verrous d'assets exclusifs avec propriétaire, lease, expiration et fencing token.
+- [x] Socle local C++/CLI des verrous d’assets : propriétaire fourni par l’appelant, acquisition/renouvellement/libération groupés atomiques, expiration, compteur de générations conservé après GC et purge explicite.
+- [ ] API distante de verrous, propriétaires issus des identités authentifiées et coordination des clients.
 - [ ] Validation serveur des verrous à la publication ; gestion des branches et mode hors ligne.
 - [ ] Rôles et ACL par dépôt/chemin, audit et identité des appareils/utilisateurs.
 - [ ] Plugin Unreal : état, historique, locks, submit, revert et résolution des conflits.

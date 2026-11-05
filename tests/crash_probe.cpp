@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include "pack_storage.hpp"
+#include <syrnck/asset_locks.hpp>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -132,6 +133,10 @@ ObjectKey put_text_revision(const Store &store, const ObjectKey &manifest, unsig
 }
 bool namespace_operation(std::string_view operation) {
   return operation == "checkout-namespace" || operation == "checkout-namespace-abort";
+}
+bool asset_lock_operation(std::string_view operation) {
+  return operation == "asset-lock-acquire" || operation == "asset-lock-renew" ||
+         operation == "asset-lock-release" || operation == "asset-lock-prune";
 }
 ObjectKey put_namespace_revision(const Store &store, const ObjectKey &asset, bool target,
                                  const std::optional<ObjectKey> &parent = {}) {
@@ -539,12 +544,37 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     auto duplicate = operation == "gc" ? garbage : old;
     atomic_write(loose(store, duplicate), packs.read(duplicate), false);
   }
+  if (asset_lock_operation(operation) && operation != "asset-lock-acquire") {
+    AssetLocks locks(store, [] { return 1000; });
+    const auto result = locks.acquire("alice", {"Content/Map.uasset", "Content/Map.ubulk"}, 30);
+    info["asset_fence"] = result["locks"][0]["fence"];
+  }
   info["objects"] = store.objects().size();
   info["refs"] = parse_json(read_bytes(root / "refs.json"));
   std::cout << info.dump() << '\n';
 }
 void perform(Store &store, const Json &info) {
   auto op = info.at("operation").get<std::string>();
+  if (asset_lock_operation(op)) {
+    AssetLocks locks(store, [&] {
+      return op == "asset-lock-prune" ? 1030ULL : op == "asset-lock-acquire" ? 1000ULL : 1005ULL;
+    });
+    const auto held = locks.list()["locks"];
+    if (op == "asset-lock-acquire") {
+      if (held.empty())
+        locks.acquire("alice", {"Content/Map.uasset", "Content/Map.ubulk"}, 30);
+    } else if (op == "asset-lock-prune") {
+      locks.prune(true);
+    } else if (!held.empty()) {
+      const auto fence = info["asset_fence"].get<std::uint64_t>();
+      const std::vector<AssetLockClaim> claims{{"Content/Map.uasset", fence}, {"Content/Map.ubulk", fence}};
+      if (op == "asset-lock-release")
+        locks.release("alice", claims);
+      else if (held[0]["expires_at"] == 1030)
+        locks.renew("alice", claims, 60);
+    }
+    return;
+  }
   if (partial_text_operation(op)) {
     const auto expected = parse_key(info["hunk_target"]);
     const auto refs = store.refs();
@@ -1158,6 +1188,27 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     if (resumed)
       check(fs::exists(destination), "export did not resume");
+  }
+  if (asset_lock_operation(op)) {
+    AssetLocks locks(store, [] { return 1030; });
+    const auto rows = locks.list()["locks"];
+    check(rows.empty() || rows.size() == 2, "asset lock batch published a partial owner set");
+    std::optional<std::uint64_t> expires;
+    for (const auto &row : rows) {
+      check(row["owner"] == "alice" && row["fence"] == 1 && row["created_at"] == 1000 &&
+                (row["expires_at"] == 1030 || (op == "asset-lock-renew" && row["expires_at"] == 1065)),
+            "asset lock publication changed owner, fence or deadline");
+      const auto deadline = row["expires_at"].get<std::uint64_t>();
+      check(!expires || *expires == deadline, "asset lock renewal published apart from its group");
+      expires = deadline;
+    }
+    if (resumed) {
+      check(rows.size() == (op == "asset-lock-acquire" || op == "asset-lock-renew" ? 2 : 0) &&
+                refs.contains("asset-locks/clock"),
+            "asset lock operation did not resume");
+      if (op == "asset-lock-renew")
+        check(expires == 1065, "asset lock renewal did not resume");
+    }
   }
   return Json{{"retained_files_verified", true},
               {"audit_ok", audit_ok},

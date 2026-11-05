@@ -121,6 +121,11 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+`locks acquire-plan`/`acquire`, `renew`, `release`, `list` et `prune` gèrent les
+[baux locaux d’assets](docs/ASSET_LOCKS.md) : groupes atomiques, expiration et
+générations conservées après GC. Le propriétaire vient de l’appelant ; le raccordement
+aux identités et aux validations de publication du serveur reste à développer.
+
 Le checkout et le changement de branche prennent en charge les transitions
 fichier/dossier et les changements de casse des fichiers et de leurs parents.
 Les sources sont mises à l’abri avant installation, avec reprise et annulation
