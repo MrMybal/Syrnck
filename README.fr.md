@@ -133,6 +133,8 @@ logiques et trafic des corps d'objets.
 
 `native archives` liste l'historique conservé par pages bornées, avec filtre reset, index préparé, squash, amendement, checkout ou détachement. `native archive-show RÉFÉRENCE --verify` vérifie une version conservée avant export ou récupération. Voir les [archives de l'historique natif](docs/NATIVE_ARCHIVES.md).
 
+`native rebase-plan BASE --onto RÉVISION` prépare le rejeu de la plage linéaire explicite `(BASE, HEAD]` sur une autre base. Les nouveaux IDs sont calculés sans stocker de candidats ; messages et dates sont conservés, et le premier conflit ou obstacle du dossier est signalé. Voir le [rebase linéaire natif](docs/NATIVE_REBASE.md).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

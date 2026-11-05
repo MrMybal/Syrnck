@@ -166,6 +166,9 @@ struct NativeMergeOptions {
   bool fast_forward_only = false;
   std::optional<NativeResolutionSet> resolutions{};
 };
+struct NativeRebaseOptions {
+  std::size_t max_commits = 1000;
+};
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
   // At most 2 * workers distinct blocks may await publication, independently
@@ -351,6 +354,11 @@ public:
   Json merge_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
                        std::string_view source, std::string_view message, const NativeMergeOptions & = {},
                        OperationOptions = {}) const;
+  // Replay the linear range (base, head] onto an exact new base. Planning never
+  // stores candidates; virtual IDs preserve source messages and timestamps.
+  Json plan_rebase(const fs::path &, std::string_view branch, std::string_view base, std::string_view onto,
+                   const NativeRebaseOptions & = {}, bool verify_objects = false,
+                   OperationOptions = {}) const;
   // Read-only file-level three-way replay plus the existing clean-workspace
   // checkout preflight. Merge revisions require an explicit 1-based mainline.
   Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,

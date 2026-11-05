@@ -118,6 +118,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native archives` lists retained history in bounded pages, optionally filtered by reset, prepared index, squash, amendment, checkout or detachment. `native archive-show REFERENCE --verify` audits a stored version before export or recovery. See [native history archives](docs/NATIVE_ARCHIVES.md).
 
+`native rebase-plan BASE --onto REVISION` previews replaying the explicit linear range `(BASE, HEAD]` on another base. It computes deterministic virtual commit IDs without storing candidates, preserves messages/timestamps and reports the first file conflict or workspace blocker. See [native linear rebase](docs/NATIVE_REBASE.md).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).
