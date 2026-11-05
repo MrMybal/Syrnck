@@ -4,8 +4,11 @@ namespace syrnck {
 NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &directory, std::string_view branch,
                                        std::string_view source_id, NativeReplayKind kind,
                                        std::optional<std::uint32_t> mainline, bool verify_objects,
-                                       OperationOptions options, const NativeResolutionSet *resolutions) {
+                                       OperationOptions options, const NativeResolutionSet *resolutions,
+                                       const TextDiffOptions *text_limits) {
   throw_if_cancelled(options.stop);
+  if (text_limits)
+    text_limits->validate();
   require(kind == NativeReplayKind::cherry_pick || kind == NativeReplayKind::revert,
           "invalid native replay kind");
   validate_ref("heads/" + std::string(branch));
@@ -41,8 +44,9 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
     original.swap(incoming);
   const auto current = read_native_snapshot(store, head->second.id, options);
   NativeReplayPlan plan{head->second.id, {}, {}};
-  auto combined = merge_native_files(store, original, current, incoming, options, resolutions);
+  auto combined = merge_native_files(store, original, current, incoming, options, resolutions, text_limits);
   plan.files = std::move(combined.files);
+  plan.generated = std::move(combined.generated);
   auto &conflicts = combined.conflicts;
   auto &changes = combined.changes;
   Json workspace;
@@ -69,6 +73,7 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
                      {"changes", std::move(changes)},
                      {"conflicts", std::move(conflicts)},
                      {"resolved", std::move(combined.resolved)},
+                     {"text_merge", std::move(combined.text_merge)},
                      {"resolution_context", context.json()},
                      {"workspace", std::move(workspace)}};
   require(plan.report.dump().size() <= max_object_size, "native replay report exceeds 16 MiB");
@@ -87,6 +92,15 @@ Json Store::plan_replay_resolved(const fs::path &directory, std::string_view bra
                                  OperationOptions options) const {
   return prepare_native_replay(*this, directory, branch, source, kind, mainline, verify_objects, options,
                                &resolutions)
+      .report;
+}
+Json Store::plan_replay_with_options(const fs::path &directory, std::string_view branch,
+                                     std::string_view source, NativeReplayKind kind,
+                                     const NativeReplayOptions &settings, bool verify_objects,
+                                     OperationOptions options) const {
+  return prepare_native_replay(*this, directory, branch, source, kind, settings.mainline, verify_objects,
+                               options, settings.resolutions ? &*settings.resolutions : nullptr,
+                               settings.text_merge ? &*settings.text_merge : nullptr)
       .report;
 }
 } // namespace syrnck

@@ -28,8 +28,9 @@ content and executable-mode changes on the same existing file can combine.
 Different concurrent file contents produce `content` conflicts. Other reasons
 are `add_add`, `delete_modify` and `modify_delete`. Conflicting text or binary
 content can be resolved with `--resolutions JSON_FILE`; see the shared
-[resolution schema and workflow](NATIVE_RESOLUTIONS.md). Automatic text merging
-and rename detection remain future work. Independent additions are also
+[resolution schema and workflow](NATIVE_RESOLUTIONS.md). Bounded text composition
+can be enabled in the options-based planner described below. Rename detection
+remains future work. Independent additions are also
 checked together for portable `case_collision` and `file_directory_collision`.
 
 The report contains the operation, branch, expected `head`, selected `source`,
@@ -69,6 +70,42 @@ auto inverse = store.plan_replay(project, "main", merge_id,
 Callbacks must not reenter the Store. Progress and cooperative cancellation use
 the existing English/French interface; report fields and conflict reason codes
 are language-independent. C ABI and Go replay bindings remain future work.
+
+## Optional bounded text composition
+
+`plan_replay_with_options` accepts a `NativeReplayOptions` value containing
+optional `mainline`, `resolutions` and `text_merge` settings. Existing replay
+entry points keep their defaults and remain source compatible. With no
+`text_merge`, file-level behavior is unchanged.
+
+```cpp
+syrnck::NativeReplayOptions settings;
+settings.text_merge.emplace(); // Default per-file text limits.
+// settings.mainline = 2; // Required for a selected merge parent.
+auto plan = store.plan_replay_with_options(project, "main", source_id,
+    syrnck::NativeReplayKind::cherry_pick, settings, true, operation);
+```
+
+Explicit file choices are applied first. Only remaining existing-file `content`
+conflicts are candidates for the [bounded text engine](TEXT_MERGE.md).
+Cherry-pick uses the selected parent as text base and source as incoming;
+revert uses source as text base and the selected parent as incoming. Both use
+the current branch content as the current side. This direction preserves later
+independent changes when removing a selected commit's delta. Root, add/delete,
+namespace, binary and overlapping cases keep their existing conflict rules.
+
+The `text_merge` report is null when disabled. When enabled it contains the
+same limits, counters and per-path status/ranges/target metadata as native merge.
+Each attempted file reconstructs and hash-verifies all three inputs, even without
+full-history verification. File-size and aggregate limits are checked before
+payload reads. At most 64 conflicts are attempted and verified inputs plus clean
+results charge at most 16 MiB, in addition to the per-file text limits.
+
+Clean results have exact predicted v1 manifest IDs and internal candidate bytes;
+planning writes no objects or workspace files and reports no merged plaintext.
+Explicit all-current resolution can still be empty, which never becomes ready.
+One unresolved file blocks the entire replay. Existing workspace, staging,
+pending-journal, mainline and resolution-context checks still apply.
 
 ## Apply a planned change
 

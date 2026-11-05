@@ -202,6 +202,12 @@ struct NativeRebaseResolutionSet {
   static NativeRebaseResolutionSet parse(const Json &);
   static NativeRebaseResolutionSet decode(std::span<const std::uint8_t>);
 };
+// Unified replay settings; legacy mainline/resolved entry points remain valid.
+struct NativeReplayOptions {
+  std::optional<std::uint32_t> mainline{};
+  std::optional<NativeResolutionSet> resolutions{};
+  std::optional<TextDiffOptions> text_merge{};
+};
 struct NativeRebaseOptions {
   std::size_t max_commits = 1000;
   std::optional<NativeRebaseResolutionSet> resolutions{};
@@ -480,6 +486,9 @@ public:
                             NativeReplayKind, const NativeResolutionSet &,
                             std::optional<std::uint32_t> mainline = {}, bool verify_objects = false,
                             OperationOptions = {}) const;
+  Json plan_replay_with_options(const fs::path &, std::string_view branch, std::string_view source,
+                                NativeReplayKind, const NativeReplayOptions &, bool verify_objects = false,
+                                OperationOptions = {}) const;
   // Verify both inputs, create a child of the expected head and apply it through
   // the recoverable checkout journal. Conflicts/empty results never publish.
   Json replay_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,

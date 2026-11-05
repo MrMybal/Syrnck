@@ -140,6 +140,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Fusion textuelle automatique opt-in dans le merge natif C++ : choix explicites prioritaires, plafonds par fichier/ensemble, manifestes virtuels sans écriture, application récupérable et rétention après GC.
 - [x] CLI anglais/français `merge-plan/merge --text-merge`, budgets par invocation, publication de l’ensemble et campagne d’arrêts forcés sur blocs/manifestes/révisions, checkout, reprise et annulation en clair/chiffré.
 - [ ] Fusion textuelle automatique dans cherry-pick/revert/rebase et le rejeu d’index, détection des renommages et synthèse récursive des bases multiples.
+- [x] Plans C++ de fusion textuelle pour cherry-pick et revert : options communes, direction inverse et parent principal exacts, résolutions prioritaires et candidats virtuels sans écriture.
 - [x] Plan de merge natif : branche à jour, avance rapide, fusion par fichier sur base commune, bases multiples explicites et option d'historiques sans lien ; moteur partagé avec le rejeu et contrôle du dossier sans écriture.
 - [x] Application récupérable du merge natif : avance rapide exacte, commit à deux parents, no-ff/ff-only, tête attendue, reprise/annulation et conservation des deux historiques après GC.
 - [x] Résolutions explicites par fichier pour merge/cherry-pick/revert : choix courant/entrant/base/suppression/manifeste personnalisé, contexte et parent principal attendus, validation stricte, collisions recalculées et rétention après GC ; tests d'arrêts forcés du merge résolu.
