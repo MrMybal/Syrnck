@@ -127,6 +127,8 @@ logiques et trafic des corps d'objets.
 
 `--resolutions FICHIER_JSON` fournit les choix explicites aux merges, cherry-picks, reverts et à leurs plans : version courante, entrante, base, suppression ou manifeste personnalisé importé. Le document exige les révisions et le parent sélectionné attendus ; les conflits restants bloquent toute l'opération. Voir les [résolutions de conflits natives](docs/NATIVE_RESOLUTIONS.md).
 
+`native reset-plan RÉVISION --soft|--mixed` prépare un déplacement de branche ; `native reset RÉVISION --soft|--mixed` l'applique sans écrire les fichiers de travail. Soft conserve les entrées préparées sur la nouvelle base ; mixed archive puis retire l'index. L'ancien historique et les blocs du staging restent conservés après GC. Voir le [reset de branche natif](docs/NATIVE_RESET.md).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

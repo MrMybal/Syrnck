@@ -112,6 +112,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `--resolutions JSON_FILE` supplies explicit conflict choices to merge, cherry-pick, revert and their plans: current, incoming, base, removal or a custom imported manifest. Documents bind the exact revisions and selected parent; unresolved conflicts still block the complete operation. See [native conflict resolutions](docs/NATIVE_RESOLUTIONS.md).
 
+`native reset-plan REVISION --soft|--mixed` previews a branch move; `native reset REVISION --soft|--mixed` applies it without writing working files. Soft preserves prepared entries on the new baseline; mixed archives and clears the index. Old history and staging blocks stay retained through GC. See [native branch reset](docs/NATIVE_RESET.md).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

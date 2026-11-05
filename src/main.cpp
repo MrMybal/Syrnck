@@ -179,6 +179,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native add CHEMIN... [--branch BRANCHE] [--directory .]
   native staged [--branch BRANCHE]   Inspecter les changements préparés
   native reset [CHEMIN...] [--branch BRANCHE]
+  native reset-plan RÉVISION --soft|--mixed [--branch BRANCHE] [--verify]
+  native reset RÉVISION --soft|--mixed [--branch BRANCHE] [--expect ID]
+    Déplace la branche sans écrire les fichiers ; archive l'historique et l'index.
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
   native status --combined [--branch BRANCHE] [--directory .]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
@@ -278,6 +281,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native add PATH... [--branch BRANCH] [--directory .]
   native staged [--branch BRANCH]    Inspect staged changes
   native reset [PATH...] [--branch BRANCH]
+  native reset-plan REVISION --soft|--mixed [--branch BRANCH] [--verify]
+  native reset REVISION --soft|--mixed [--branch BRANCH] [--expect ID]
+    Moves the branch without writing files; archives previous history and index.
   native status [--branch BRANCH | --revision REVISION] [--directory .]
   native status --combined [--branch BRANCH] [--directory .]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
@@ -556,9 +562,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
-        sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
-        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
-        sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
+        sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
+        sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
+        sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
@@ -771,10 +777,29 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto branch = selected_branch();
       args.count(0);
       print(store.staged_status(branch, {control->token(), observe}));
-    } else if (sub == "reset") {
+    } else if (sub == "reset" || sub == "reset-plan") {
       const auto branch = selected_branch();
-      const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
-      print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
+      const bool soft = args.flag("--soft"), mixed = args.flag("--mixed"), planning = sub == "reset-plan";
+      require(!(soft && mixed), "choose either --soft or --mixed");
+      if (soft || mixed || planning) {
+        require(soft || mixed, "native reset-plan requires --soft or --mixed");
+        const bool verify = planning && args.flag("--verify");
+        const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+        args.count(1);
+        const auto target = resolve(args.values[0]);
+        const auto mode = soft ? NativeResetMode::soft : NativeResetMode::mixed;
+        if (planning) {
+          const auto plan =
+              store.plan_reset_branch(branch, target, mode, verify, {control->token(), observe});
+          print(plan);
+          return plan["ready"].get<bool>() ? 0 : 1;
+        }
+        const auto tip = expected ? *expected : resolve("heads/" + branch);
+        print(store.reset_branch(branch, tip, target, mode, {control->token(), observe}));
+      } else {
+        const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
+        print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
+      }
     } else if (sub == "status") {
       const auto combined = args.flag("--combined");
       const auto directory = workspace();

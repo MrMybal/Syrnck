@@ -140,6 +140,7 @@ struct NativeGraphLimits {
   std::size_t max_parent_links = 1000000;
 };
 enum class NativeReplayKind { cherry_pick, revert };
+enum class NativeResetMode { soft, mixed };
 enum class NativeResolutionChoice { current, incoming, base, remove, file };
 struct NativeFileResolution {
   NativeResolutionChoice choice = NativeResolutionChoice::current;
@@ -372,6 +373,13 @@ public:
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
                                          OperationOptions = {}) const;
+  // Branch resets preserve working files. Soft preserves prepared entries on
+  // the new baseline; mixed archives and clears the index. Old roots publish
+  // atomically with the expected branch/index transition.
+  Json plan_reset_branch(std::string_view branch, std::string_view target, NativeResetMode,
+                         bool verify_objects = false, OperationOptions = {}) const;
+  Json reset_branch(std::string_view branch, std::string_view expected_revision, std::string_view target,
+                    NativeResetMode, OperationOptions = {}) const;
   std::string commit_staged(std::string_view branch, std::string_view message, OperationOptions = {}) const;
   // Replace exactly the expected tip, preserving its parents and archiving it
   // under archive/amend/ID in the same reference transaction. Directory/message
