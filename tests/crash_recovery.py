@@ -68,6 +68,11 @@ def cases():
     result.extend(("export", phase, "export", 1) for phase in
                   ("directory.created", "directory.writer_finished", "directory.synced",
                    "directory.published", "directory.durable"))
+    result.extend(("switch" if operation == "checkout" else "switch-abort", phase, kind, occurrence)
+                  for operation, phase, kind, occurrence in list(result)
+                  if operation in ("checkout", "checkout-abort"))
+    for occurrence in (1, 2):
+        atomic("switch", ("chunk",), occurrence)
     return result
 
 
@@ -134,7 +139,7 @@ class CrashRecovery(unittest.TestCase):
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
-                        (operation in ("checkout", "checkout-abort") and target == root.parent / "asset.bin") or
+                        (operation in ("checkout", "checkout-abort", "switch", "switch-abort") and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
                         f"Checkpoint target {target} is outside fixture {root}")
         if kind == "config":
@@ -155,6 +160,13 @@ class CrashRecovery(unittest.TestCase):
                 (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
                 phase in ("checkout.committed", "checkout.cleaned"))
             self.assertEqual(checked["refs"]["heads/main"] != info["old_revision"], changed)
+        elif operation in ("switch", "switch-abort"):
+            committed = operation == "switch" and (
+                (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
+                phase in ("checkout.committed", "checkout.cleaned"))
+            self.assertEqual("workspace/HEAD" in checked["refs"], committed)
+            self.assertEqual(checked["refs"]["heads/main"], info["old_revision"])
+            self.assertEqual(checked["refs"]["heads/feature"], info["new_revision"])
         elif operation in ("stage-add", "stage-commit", "stage-reset"):
             changed = kind == "refs" and published
             refs = checked["refs"]

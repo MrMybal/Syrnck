@@ -5,9 +5,11 @@
 #include <chrono>
 #include <iterator>
 #include <thread>
+#include <tuple>
 namespace syrnck {
 namespace {
 constexpr std::string_view active_name = "checkouts/active";
+constexpr std::string_view head_name = "workspace/HEAD";
 std::optional<ObjectKey> lookup(const Refs &refs, std::string_view name) {
   const auto found = refs.find(std::string(name));
   return found == refs.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
@@ -56,16 +58,63 @@ void remove_empty_directory(const fs::path &path, OperationOptions options) {
     throw fs::filesystem_error("remove", path, error);
   }
 }
+struct Head {
+  std::string branch = "main";
+  fs::path workspace;
+  std::optional<ObjectKey> key;
+  Json json() const {
+    return Json{{"version", 1}, {"type", "native-head"}, {"directory", utf8(workspace)}, {"branch", branch}};
+  }
+};
+Head read_head(const Store &store, const std::optional<ObjectKey> &key) {
+  Head head;
+  if (!key)
+    return head;
+  require(key->kind == Kind::chunk, "invalid native HEAD");
+  const auto data = store.get(*key);
+  const auto value = parse_json(data);
+  require(value.is_object() && value.size() == 4 && value.value("version", 0) == 1 &&
+              value.value("type", "") == "native-head",
+          "invalid native HEAD");
+  head.key = key;
+  head.branch = value.at("branch").get<std::string>();
+  head.workspace = path_from_utf8(value.at("directory").get<std::string>());
+  validate_ref("heads/" + head.branch);
+  validate_ref("staging/" + head.branch);
+  require(head.workspace.is_absolute() && head.workspace == head.workspace.lexically_normal() &&
+              head.workspace != store.root() && inside(store.root(), head.workspace) &&
+              head.json().dump() == text(data),
+          "invalid native HEAD");
+  return head;
+}
+Head read_head(const Store &store) {
+  return read_head(store, lookup(store.refs(), head_name));
+}
+void head_workspace(const Head &head, const fs::path &workspace) {
+  require(!head.key || head.workspace == fs::canonical(workspace),
+          "native HEAD belongs to another workspace");
+}
 struct Record {
   std::string id, nonce, branch, target, state = "preparing";
   fs::path workspace;
   std::optional<std::string> source;
+  std::optional<std::string> destination_branch;
+  std::optional<ObjectKey> previous_head, next_head;
   ObjectKey key{Kind::chunk, {}};
   Json identity() const {
-    return Json{{"version", 1},     {"type", "native-checkout"},
-                {"nonce", nonce},   {"directory", utf8(workspace)},
-                {"branch", branch}, {"source", source ? Json(*source) : Json{}},
-                {"target", target}};
+    auto result = Json{{"version", destination_branch ? 2 : 1},
+                       {"type", "native-checkout"},
+                       {"nonce", nonce},
+                       {"directory", utf8(workspace)},
+                       {"branch", branch},
+                       {"source", source ? Json(*source) : Json{}},
+                       {"target", target}};
+    if (destination_branch) {
+      result["destination_branch"] = *destination_branch;
+      result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
+      result["next_head"] = next_head->id;
+    }
+    return result;
   }
   Json json() const {
     auto result = identity();
@@ -102,7 +151,9 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   require(key.kind == Kind::chunk, "invalid native checkout record");
   const auto data = store.get(key);
   const auto value = parse_json(data);
-  require(value.is_object() && value.size() == 9 && value.value("version", 0) == 1 &&
+  const auto version = value.value("version", 0);
+  require(value.is_object() &&
+              ((version == 1 && value.size() == 9) || (version == 2 && value.size() == 12)) &&
               value.value("type", "") == "native-checkout",
           "invalid native checkout record");
   Record record;
@@ -115,6 +166,20 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   record.workspace = path_from_utf8(value.at("directory").get<std::string>());
   if (!value.at("source").is_null())
     record.source = value.at("source").get<std::string>();
+  if (version == 2) {
+    record.destination_branch = value.at("destination_branch").get<std::string>();
+    validate_ref("heads/" + *record.destination_branch);
+    validate_ref("staging/" + *record.destination_branch);
+    require(*record.destination_branch != record.branch, "invalid native checkout record");
+    if (!value.at("previous_head").is_null()) {
+      const auto id = value.at("previous_head").get<std::string>();
+      validate_id(id);
+      record.previous_head = ObjectKey{Kind::chunk, id};
+    }
+    const auto id = value.at("next_head").get<std::string>();
+    validate_id(id);
+    record.next_head = ObjectKey{Kind::chunk, id};
+  }
   validate_id(record.id);
   validate_id(record.nonce);
   validate_id(record.target);
@@ -140,6 +205,11 @@ std::optional<Record> active(const Store &store) {
   require(lookup(refs, record.pin("target")) == record.destination() &&
               lookup(refs, record.pin("source")) == record.origin(),
           "native checkout retention changed");
+  if (record.destination_branch) {
+    const auto head = read_head(store, record.next_head);
+    require(head.branch == *record.destination_branch && head.workspace == record.workspace,
+            "invalid native checkout record");
+  }
   return record;
 }
 Json actions(const Store &store, const Record &record, OperationOptions options) {
@@ -258,6 +328,11 @@ public:
     require(lookup(refs, "heads/" + record.branch) == record.origin() &&
                 !refs.contains("staging/" + record.branch),
             "native checkout branch or staging changed");
+    if (record.destination_branch)
+      require(lookup(refs, head_name) == record.previous_head &&
+                  lookup(refs, "heads/" + *record.destination_branch) == record.destination() &&
+                  !refs.contains("staging/" + *record.destination_branch),
+              "native switch HEAD, destination branch or staging changed");
   }
   void prepare(OperationOptions options);
   void apply(OperationOptions options);
@@ -359,6 +434,12 @@ void Transaction::apply(OperationOptions options) {
                                  {std::string(active_name), record.key, key},
                                  {record.receipt(), {}, key},
                                  {record.retained(), {}, record.destination()}};
+  if (record.destination_branch) {
+    updates[0].value = record.origin();
+    updates.push_back({"heads/" + *record.destination_branch, record.destination(), record.destination()});
+    updates.push_back({std::string(head_name), record.previous_head, record.next_head});
+    updates.push_back({"staging/" + *record.destination_branch, {}, {}});
+  }
   if (record.source)
     updates.push_back({record.archive(), {}, record.origin()});
   require(store_.compare_update_refs(updates, final_options), "native checkout references changed");
@@ -465,6 +546,9 @@ void Transaction::cleanup(OperationOptions options) {
                 lookup(refs, record.retained()) == record.destination() &&
                 (!record.source || lookup(refs, record.archive()) == record.origin()),
             "native checkout retention changed");
+    if (record.destination_branch)
+      require(lookup(refs, head_name) == record.next_head,
+              "native switch HEAD, destination branch or staging changed");
   } else
     expected_head();
   require(store_.compare_update_refs({{std::string(active_name), record.key, {}},
@@ -507,6 +591,87 @@ Json Transaction::run(bool abort, OperationOptions options) {
   return result;
 }
 } // namespace
+Json Store::native_head() const {
+  const auto head = read_head(*this);
+  const auto revision = lookup(refs(), "heads/" + head.branch);
+  require(!revision || revision->kind == Kind::revision, "branch must point to a revision");
+  return Json{{"version", 1},
+              {"branch", head.branch},
+              {"revision", revision ? Json(revision->id) : Json{}},
+              {"explicit", head.key.has_value()},
+              {"directory", head.key ? Json(utf8(head.workspace)) : Json{}}};
+}
+Json Store::plan_switch(const fs::path &workspace, std::string_view branch, bool verify_objects,
+                        OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  validate_ref("heads/" + std::string(branch));
+  validate_ref("staging/" + std::string(branch));
+  const auto head = read_head(*this);
+  head_workspace(head, workspace);
+  const auto destination = lookup(refs(), "heads/" + std::string(branch));
+  require(destination && destination->kind == Kind::revision, "unknown native branch");
+  auto plan = plan_checkout(workspace, head.branch, destination->id, verify_objects, options);
+  const auto staging = staged_status(branch, options);
+  plan["operation"] = "switch";
+  plan["destination_branch"] = branch;
+  plan["head_object"] = head.key ? Json(head.key->id) : Json{};
+  plan["destination_staging_snapshot"] = staging["snapshot"];
+  if (branch != head.branch && !staging["snapshot"].is_null()) {
+    plan["conflicts"].push_back(
+        Json{{"path", ""}, {"reason", "target_staging_present"}, {"obstruction", ""}});
+    plan["ready"] = false;
+    std::sort(plan["conflicts"].begin(), plan["conflicts"].end(), [](const Json &a, const Json &b) {
+      return std::tuple{a["path"].get<std::string>(), a["reason"].get<std::string>(),
+                        a["obstruction"].get<std::string>()} <
+             std::tuple{b["path"].get<std::string>(), b["reason"].get<std::string>(),
+                        b["obstruction"].get<std::string>()};
+    });
+  }
+  return plan;
+}
+Json Store::switch_directory(const fs::path &workspace, std::string_view branch,
+                             OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  require_no_native_checkout(*this);
+  const auto head = read_head(*this);
+  const auto plan = plan_switch(workspace, branch, false, options);
+  require(plan["ready"].get<bool>(), "native switch is blocked; inspect native switch-plan");
+  require(plan["branch"] == head.branch && plan["head_object"] == (head.key ? Json(head.key->id) : Json{}),
+          "native switch HEAD, destination branch or staging changed");
+  if (branch == head.branch)
+    return Json{{"version", 1},
+                {"pending", false},
+                {"state", "unchanged"},
+                {"branch", branch},
+                {"target", plan["target"]}};
+  Record record;
+  record.workspace = fs::canonical(workspace);
+  record.nonce = hex(random_bytes(32));
+  record.branch = head.branch;
+  record.destination_branch = branch;
+  record.target = plan["target"].get<std::string>();
+  if (!plan["source"].is_null())
+    record.source = plan["source"].get<std::string>();
+  record.previous_head = head.key;
+  Head next{std::string(branch), record.workspace, {}};
+  record.next_head = put(Kind::chunk, bytes(next.json().dump())).first;
+  record.id = hash(bytes(record.identity().dump()));
+  if (present(root() / "checkouts"))
+    directory(root() / "checkouts", false);
+  require(!present(record.data(*this)), "native checkout transaction directory already exists");
+  record.key = record.save(*this);
+  std::vector<RefUpdate> updates{{std::string(active_name), {}, record.key},
+                                 {std::string(head_name), head.key, head.key},
+                                 {"heads/" + record.branch, record.origin(), record.origin()},
+                                 {"heads/" + std::string(branch), record.destination(), record.destination()},
+                                 {"staging/" + record.branch, {}, {}},
+                                 {"staging/" + std::string(branch), {}, {}},
+                                 {record.pin("target"), {}, record.destination()}};
+  if (record.source)
+    updates.push_back({record.pin("source"), {}, record.origin()});
+  require(compare_update_refs(updates, options), "native switch HEAD, destination branch or staging changed");
+  return Transaction(*this, std::move(record), options).run(false, options);
+}
 void require_no_native_checkout(const Store &store) {
   require(!store.refs().contains(std::string(active_name)),
           "native checkout is pending; run native checkout-recover");

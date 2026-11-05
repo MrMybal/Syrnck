@@ -15,7 +15,8 @@ syrnck native diff SOURCE_REVISION TARGET_REVISION
 
 ## Working-directory status
 
-The default baseline is `heads/main`. `--branch NAME` selects another native
+The default baseline is the [current native branch](NATIVE_BRANCHES.md),
+implicitly `heads/main` for legacy Stores. `--branch NAME` selects another native
 branch; a missing branch is an empty baseline, with every selected file reported
 as untracked. `--revision ID` selects an exact revision and cannot be combined
 with `--branch`. A missing or invalid explicit revision is an error.

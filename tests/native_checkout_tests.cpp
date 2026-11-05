@@ -250,6 +250,142 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned storage)
             "committed checkout cleanup changed the branch");
   }
 }
+void switching(const fs::path &project, std::optional<Key> key, unsigned storage) {
+  const std::string original(1024 * 1024 + 3, 'a'), replacement(original.size(), 'b');
+  std::string base, target, receipt;
+  {
+    Store store(project / ".syrnck", key, true);
+    write(project / "asset.bin", original);
+    write(project / "removed.txt", "removed");
+    write(project / "script", "#!/bin/sh\n");
+    base = store.commit_directory(project, "main", "baseline");
+    target = target_revision(store, base, replacement);
+    store.set_ref("heads/feature", {Kind::revision, target});
+    layout(store, storage);
+    const auto refs = store.refs();
+    require(store.native_head()["branch"] == "main" && store.native_head()["explicit"] == false,
+            "legacy HEAD must implicitly select main");
+    require(store.plan_switch(project, "feature")["ready"] == true && store.refs() == refs,
+            "switch planning changed references");
+    std::stop_source preparing;
+    fails([&] {
+      store.switch_directory(project, "feature",
+                             {preparing.get_token(), [&](const ProgressEvent &event) {
+                                if (event.phase == ProgressPhase::reconstructing && event.bytes > 0)
+                                  preparing.request_stop();
+                              }});
+    });
+    require(store.checkout_status()["version"] == 2 && store.native_head()["branch"] == "main",
+            "preparation published HEAD early");
+    store.recover_checkout(true);
+    require(store.refs() == refs && text(read_bytes(project / "asset.bin")) == original,
+            "discarded switch changed branches or HEAD");
+    std::stop_source partial;
+    fails([&] {
+      store.switch_directory(project, "feature",
+                             {partial.get_token(), [&](const ProgressEvent &event) {
+                                if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                  partial.request_stop();
+                              }});
+    });
+    require(store.native_head()["branch"] == "main" && store.refs().at("heads/main").id == base &&
+                store.refs().at("heads/feature").id == target &&
+                text(read_bytes(project / "asset.bin")) == replacement,
+            "partial switch moved a branch or published HEAD");
+    fails([&] { store.switch_directory(project, "main"); });
+    layout(store, storage);
+  }
+  {
+    Store store(project / ".syrnck", key);
+    const auto result = store.recover_checkout();
+    receipt = result["id"].get<std::string>();
+    const auto head = store.native_head();
+    require(head["explicit"] == true && head["branch"] == "feature" && head["revision"] == target &&
+                head["directory"] == utf8(fs::canonical(project)) &&
+                store.refs().at("heads/main").id == base && store.refs().at("heads/feature").id == target &&
+                result["destination_branch"] == "feature" && result["state"] == "committed",
+            "resumed switch did not atomically select its retained destination");
+    // Checkout still moves the explicitly selected branch; symbolic HEAD follows it.
+    store.checkout_directory(project, "feature", base);
+    require(store.native_head()["branch"] == "feature" && store.native_head()["revision"] == base &&
+                store.refs().at("heads/main").id == base,
+            "checkout broke symbolic HEAD");
+    store.checkout_directory(project, "feature", target);
+    store.stage_directory(project, "main", {"asset.bin"});
+    require(store.plan_switch(project, "main")["ready"] == false, "destination staging did not block switch");
+    fails([&] { store.switch_directory(project, "main"); });
+    store.reset_stage("main");
+    store.stage_directory(project, "feature", {"asset.bin"});
+    fails([&] { store.switch_directory(project, "main"); });
+    store.reset_stage("feature");
+    write(project / "asset.bin", "local edit");
+    fails([&] { store.switch_directory(project, "main"); });
+    require(store.native_head() == head && text(read_bytes(project / "asset.bin")) == "local edit",
+            "blocked switch changed HEAD or a local edit");
+    write(project / "asset.bin", replacement);
+    fails([&] { store.plan_switch(project.parent_path(), "main"); });
+    fails([&] { store.plan_switch(project, "missing"); });
+    auto partial_switch = [&] {
+      std::stop_source partial;
+      fails([&] {
+        store.switch_directory(project, "main",
+                               {partial.get_token(), [&](const ProgressEvent &event) {
+                                  if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                    partial.request_stop();
+                                }});
+      });
+    };
+    partial_switch();
+    std::stop_source rollback;
+    fails([&] {
+      store.recover_checkout(true, {rollback.get_token(), [&](const ProgressEvent &event) {
+                                      if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                        rollback.request_stop();
+                                    }});
+    });
+    require(store.checkout_status()["state"] == "aborting" && store.native_head() == head,
+            "interrupted rollback changed HEAD");
+    store.recover_checkout();
+    require(store.native_head() == head && text(read_bytes(project / "asset.bin")) == replacement,
+            "resumed rollback changed HEAD or lost the original bytes");
+    partial_switch();
+    store.set_ref("heads/main", {Kind::revision, target});
+    fails([&] { store.recover_checkout(); });
+    fails([&] { store.recover_checkout(true); });
+    store.set_ref("heads/main", {Kind::revision, base});
+    store.recover_checkout(true);
+    const auto head_key = store.refs().at("workspace/HEAD");
+    partial_switch();
+    auto descriptor = parse_json(store.get(head_key));
+    descriptor["branch"] = "main";
+    const auto other_head = store.put(Kind::chunk, bytes(descriptor.dump())).first;
+    store.set_ref("workspace/HEAD", other_head);
+    fails([&] { store.recover_checkout(); });
+    fails([&] { store.recover_checkout(true); });
+    store.set_ref("workspace/HEAD", head_key);
+    store.recover_checkout(true);
+    descriptor["version"] = 99;
+    store.set_ref("workspace/HEAD", store.put(Kind::chunk, bytes(descriptor.dump())).first);
+    fails([&] { store.native_head(); });
+    store.set_ref("workspace/HEAD", {Kind::revision, base});
+    fails([&] { store.native_head(); });
+    store.set_ref("workspace/HEAD", head_key);
+    store.set_ref("heads/same", {Kind::revision, target});
+    const auto switched = store.switch_directory(project, "same");
+    require(switched["state"] == "committed" && store.native_head()["branch"] == "same" &&
+                text(read_bytes(project / "asset.bin")) == replacement &&
+                store.refs().at("heads/main").id == base && store.refs().at("heads/feature").id == target,
+            "identical-revision switch moved branches or lost bytes");
+    const auto refs = store.refs();
+    const auto count = store.objects().size();
+    require(store.switch_directory(project, "same")["state"] == "unchanged" && store.refs() == refs &&
+                store.objects().size() == count,
+            "same-branch switch was not a no-op");
+    store.gc(true);
+    require(store.checkout_status(receipt)["destination_branch"] == "feature" && store.fsck() > 0,
+            "GC broke an older switch receipt");
+  }
+}
 void missing_objects(const fs::path &project) {
   Store store(project / ".syrnck", {}, true);
   write(project / "asset.bin", "original");
@@ -293,6 +429,8 @@ int main() {
           key->fill(31);
         }
         scenario(root / (std::to_string(encrypted) + '-' + std::to_string(storage)), key, storage);
+        switching(root / ("switch-" + std::to_string(encrypted) + '-' + std::to_string(storage)), key,
+                  storage);
       }
     missing_objects(root / "missing");
     std::cout << "native checkout, recovery, races and retention passed\n";

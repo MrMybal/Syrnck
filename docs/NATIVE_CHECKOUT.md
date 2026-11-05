@@ -14,11 +14,11 @@ syrnck native checkout-recover --abort --progress
 syrnck native checkout-status --id TRANSACTION_ID
 ```
 
-The default branch is `main`, and the default directory is `.`. There is no
-current-branch/HEAD state yet: selecting `--branch feature` moves that branch,
-using its current snapshot as the workspace baseline. This command does not
-switch between two independent branches as `git switch` does. The Store must
-be strictly inside the canonical workspace directory.
+The default branch is the [current native branch](NATIVE_BRANCHES.md), implicitly
+`main` in legacy Stores; the default directory is `.`. Selecting `--branch feature`
+moves that branch, using its current snapshot as the workspace baseline.
+`native switch BRANCH` selects a different branch while preserving both heads.
+The Store must be strictly inside the canonical workspace directory.
 
 ## Starting and publishing
 
@@ -98,7 +98,9 @@ recovery refuse to proceed. Do not edit or replicate the active checkout roots.
 The immutable journal is an ordinary chunk object, so existing compression,
 encryption and pack support apply without changing logical/physical formats.
 Its identity hashes the version, nonce, canonical directory, branch and source/
-target revisions. Each phase publishes a new journal object.
+target revisions. Switch journals add destination and expected/new HEAD fields
+in version 2; version 1 checkout journals remain supported. Each phase publishes
+a new journal object.
 
 | Reference | Retained value |
 | --- | --- |

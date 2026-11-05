@@ -170,23 +170,26 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   fsck                               Vérifier les objets et les hashes des fichiers
   config show | reset                Afficher ou réinitialiser les réglages du dépôt
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
-  native commit [-m MESSAGE] [--branch main] [--directory .]
+  native commit [-m MESSAGE] [--branch BRANCHE] [--directory .]
                 [--workers N] [--buffer-mib N]
-  native commit --staged -m MESSAGE [--branch main]
-  native add CHEMIN... [--branch main] [--directory .]
-  native staged [--branch main]      Inspecter les changements préparés
-  native reset [CHEMIN...] [--branch main]
-  native status [--branch main | --revision RÉVISION] [--directory .]
-  native status --combined [--branch main] [--directory .]
-  native checkout-plan RÉVISION [--branch main] [--directory .] [--verify]
-  native checkout RÉVISION [--branch main] [--directory .]
+  native commit --staged -m MESSAGE [--branch BRANCHE]
+  native add CHEMIN... [--branch BRANCHE] [--directory .]
+  native staged [--branch BRANCHE]   Inspecter les changements préparés
+  native reset [CHEMIN...] [--branch BRANCHE]
+  native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
+  native status --combined [--branch BRANCHE] [--directory .]
+  native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
+  native checkout RÉVISION [--branch BRANCHE] [--directory .]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
+  native head                       Afficher la branche courante
+  native switch-plan BRANCHE [--directory .] [--verify]
+  native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native branch NOM RÉVISION
-  native log [--branch main] [--limit 50]
+  native log [--branch BRANCHE] [--limit 50]
   native export RÉVISION NOUVEAU_DOSSIER
-  native detach-history -m MESSAGE [--branch main]
+  native detach-history -m MESSAGE [--branch BRANCHE]
   git install [DOSSIER] [--encrypted]
   git catalog COMMIT [--directory CHEMIN]   Inspecter les pointeurs du commit
   git retention-scan [--directory CHEMIN]   Inventorier les pointeurs de toutes les racines Git
@@ -214,8 +217,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
 Compression : --compression auto|off|zstd ; serveur : --no-compression.
 Transferts : 3 relances par requête ; débits partagés en Kio/s (0 = illimité).
 Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
+Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
@@ -243,23 +247,26 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   fsck                              Verify all objects and full file hashes
   config show | reset               Show or reset repository settings
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
-  native commit [-m MESSAGE] [--branch main] [--directory .]
+  native commit [-m MESSAGE] [--branch BRANCH] [--directory .]
                 [--workers N] [--buffer-mib N]
-  native commit --staged -m MESSAGE [--branch main]
-  native add PATH... [--branch main] [--directory .]
-  native staged [--branch main]      Inspect staged changes
-  native reset [PATH...] [--branch main]
-  native status [--branch main | --revision REVISION] [--directory .]
-  native status --combined [--branch main] [--directory .]
-  native checkout-plan REVISION [--branch main] [--directory .] [--verify]
-  native checkout REVISION [--branch main] [--directory .]
+  native commit --staged -m MESSAGE [--branch BRANCH]
+  native add PATH... [--branch BRANCH] [--directory .]
+  native staged [--branch BRANCH]    Inspect staged changes
+  native reset [PATH...] [--branch BRANCH]
+  native status [--branch BRANCH | --revision REVISION] [--directory .]
+  native status --combined [--branch BRANCH] [--directory .]
+  native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
+  native checkout REVISION [--branch BRANCH] [--directory .]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
+  native head                       Show the current branch
+  native switch-plan BRANCH [--directory .] [--verify]
+  native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native branch NAME REVISION
-  native log [--branch main] [--limit 50]
+  native log [--branch BRANCH] [--limit 50]
   native export REVISION NEW_DIRECTORY
-  native detach-history -m MESSAGE [--branch main]
+  native detach-history -m MESSAGE [--branch BRANCH]
   git install [DIRECTORY] [--encrypted]
   git catalog COMMIT [--directory PATH]   Inspect committed asset pointers
   git retention-scan [--directory PATH]   Inventory pointers from all Git roots
@@ -287,8 +294,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
 Compression: --compression auto|off|zstd; server: --no-compression.
 Transfers: 3 retries per request; shared rates in KiB/s (0 = unlimited).
 Language: English by default; --lang en|fr overrides SYRNCK_LANG.
+Native branch: --branch overrides the current branch (main without explicit HEAD).
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/diff/export,
+              fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
@@ -502,9 +510,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" ||
-      (command == "native" && (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" ||
-                               sub == "add" || sub == "staged" || sub == "reset" || sub == "checkout-plan" ||
-                               sub == "checkout" || sub == "checkout-recover")) ||
+      (command == "native" &&
+       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "add" ||
+        sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
+        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -652,9 +661,21 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << localize("Verified ", language) << checked
               << localize(" objects and every file hash\n", language);
   } else if (command == "native") {
+    auto selected_branch = [&] {
+      const auto branch = args.option("--branch");
+      return branch ? *branch : store.native_head()["branch"].get<std::string>();
+    };
+    auto workspace = [&] {
+      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto head = store.native_head();
+      require(head["directory"].is_null() ||
+                  utf8(fs::canonical(directory)) == head["directory"].get<std::string>(),
+              "native HEAD belongs to another workspace");
+      return directory;
+    };
     if (sub == "commit") {
       const auto staged = args.flag("--staged");
-      auto branch = args.option("--branch").value_or("main");
+      auto branch = selected_branch();
       auto message = args.option("--message", "-m");
       require(message.has_value(), "--message is required");
       if (staged) {
@@ -664,7 +685,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         auto options = ingestion_options(args, store);
         options.stop = control->token();
         options.progress = observe;
-        auto directory = path_from_utf8(args.option("--directory").value_or("."));
+        auto directory = workspace();
         args.count(0);
         std::cout << store.commit_directory(directory, branch, *message, options) << '\n';
       }
@@ -672,31 +693,32 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto options = ingestion_options(args, store);
       options.stop = control->token();
       options.progress = observe;
-      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
-      const auto branch = args.option("--branch").value_or("main");
+      const auto directory = workspace();
+      const auto branch = selected_branch();
       std::cout << store.stage_directory(directory, branch, args.paths(), options) << '\n';
     } else if (sub == "staged") {
-      const auto branch = args.option("--branch").value_or("main");
+      const auto branch = selected_branch();
       args.count(0);
       print(store.staged_status(branch, {control->token(), observe}));
     } else if (sub == "reset") {
-      const auto branch = args.option("--branch").value_or("main");
+      const auto branch = selected_branch();
       const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
       print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
     } else if (sub == "status") {
       const auto combined = args.flag("--combined");
-      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto directory = workspace();
       const auto branch = args.option("--branch");
       auto revision = args.option("--revision");
       args.count(0);
       require(!(branch && revision), "choose either --branch or --revision");
       require(!(combined && revision), "combined native status cannot select an explicit revision");
       if (combined) {
-        print(store.workspace_status(directory, branch.value_or("main"), {control->token(), observe}));
+        const auto selected = branch ? *branch : store.native_head()["branch"].get<std::string>();
+        print(store.workspace_status(directory, selected, {control->token(), observe}));
         return 0;
       }
       if (!revision) {
-        const auto name = "heads/" + branch.value_or("main");
+        const auto name = "heads/" + (branch ? *branch : store.native_head()["branch"].get<std::string>());
         validate_ref(name);
         const auto all = store.refs();
         if (const auto found = all.find(name); found != all.end()) {
@@ -706,8 +728,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       print(store.status_directory(directory, revision, {control->token(), observe}));
     } else if (sub == "checkout") {
-      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
-      const auto branch = args.option("--branch").value_or("main");
+      const auto directory = workspace();
+      const auto branch = selected_branch();
       args.count(1);
       print(store.checkout_directory(directory, branch, args.values[0], {control->token(), observe}));
     } else if (sub == "checkout-status") {
@@ -719,14 +741,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(0);
       print(store.recover_checkout(abort, {control->token(), observe}));
     } else if (sub == "checkout-plan") {
-      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
-      const auto branch = args.option("--branch").value_or("main");
+      const auto directory = workspace();
+      const auto branch = selected_branch();
       const auto verify = args.flag("--verify");
       args.count(1);
       const auto plan =
           store.plan_checkout(directory, branch, args.values[0], verify, {control->token(), observe});
       print(plan);
       return plan["ready"].get<bool>() ? 0 : 1;
+    } else if (sub == "head") {
+      args.count(0);
+      print(store.native_head());
+    } else if (sub == "switch" || sub == "switch-plan") {
+      const auto directory = workspace();
+      const auto verify = sub == "switch-plan" && args.flag("--verify");
+      args.count(1);
+      if (sub == "switch")
+        print(store.switch_directory(directory, args.values[0], {control->token(), observe}));
+      else {
+        const auto plan = store.plan_switch(directory, args.values[0], verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
     } else if (sub == "diff") {
       args.count(2);
       print(store.compare_revisions(args.values[0], args.values[1], {control->token(), observe}));
@@ -736,7 +772,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       require(!store.refs().contains(name), "branch already exists");
       store.set_ref(name, {Kind::revision, args.values[1]});
     } else if (sub == "log") {
-      auto branch = args.option("--branch").value_or("main");
+      auto branch = selected_branch();
       auto limit = integer(args.option("--limit").value_or("50"));
       args.count(0);
       auto refs = store.refs();
@@ -756,7 +792,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(2);
       store.export_revision(args.values[0], path_from_utf8(args.values[1]), {control->token(), observe});
     } else if (sub == "detach-history") {
-      auto branch = args.option("--branch").value_or("main");
+      auto branch = selected_branch();
       auto message = args.option("--message", "-m");
       args.count(0);
       require(message.has_value(), "--message is required");

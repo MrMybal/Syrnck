@@ -13,7 +13,8 @@ syrnck native commit --staged -m "Update the selected maps" --branch main
 
 `native add .` selects the entire candidate workspace. `native reset` without
 paths discards the branch's staging index. None of these commands changes working
-files. The default branch is `main`; there is no current-branch/HEAD state yet.
+files. The CLI defaults to the [current native branch](NATIVE_BRANCHES.md),
+implicitly `main` in legacy Stores; `--branch` overrides it without selecting it.
 
 ## Selection and frozen contents
 

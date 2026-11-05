@@ -89,7 +89,7 @@ syrnck native commit --branch release --message "Préparation de la release"
 syrnck native export <identifiant-revision> ../export-release
 ```
 
-`--branch` choisit la branche à mettre à jour ; il n'y a pas encore de branche courante. Le commit ordinaire scanne tout le dossier et refuse si un staging existe pour cette branche. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
+Les commandes natives utilisent la branche courante, implicitement `main` pour les anciens stores. `--branch` choisit une autre branche pour l'opération sans changer cette sélection. `native head` l'affiche ; `native switch-plan release` puis `native switch release` préparent et exécutent un changement de branche récupérable sans déplacer les têtes. Voir les [contrats du HEAD et des branches natives](NATIVE_BRANCHES.md). Le commit ordinaire scanne tout le dossier et refuse si un staging existe pour cette branche. L'export exige un nouveau dossier dont le parent existe. Les fichiers doivent être stables pendant la lecture.
 
 Pour préparer une sélection, puis publier les octets figés même après d'autres modifications du dossier :
 

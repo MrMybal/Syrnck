@@ -113,8 +113,9 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] État combiné base/index/workspace, conservation de l'information d'index périmé et distinction des deux côtés d'un même chemin.
 - [x] Plan de checkout en lecture seule : actions, vérification complète optionnelle, fichiers suivis propres par hash, collisions non suivies/ignorées, liens/jonctions, casse et stockage protégé ; API C++ et CLI interruptibles.
 - [x] Premier checkout récupérable sur workspace suivi propre : préparation vérifiée, déplacements exclusifs, journal persistant, reprise/annulation, publication atomique de branche, archive source et rétention cible ; tests d'arrêts forcés.
+- [x] HEAD symbolique local et branche courante implicite main pour les anciens stores ; changement de branche récupérable sans déplacer les deux têtes, publication atomique du HEAD avec journal, commandes CLI par défaut sur la sélection courante.
 - [ ] Sélection de hunks, diff textuel et rebase automatique d'un index périmé.
-- [ ] HEAD/branche courante, changement de branche, tags et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout.
+- [ ] HEAD détaché, workspaces multiples, tags et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout.
 - [ ] Merge à trois voies, base commune, conflits de texte, conflits binaires et renommages.
 - [ ] Rebase, cherry-pick, revert, reset, stash, squash et amend.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.

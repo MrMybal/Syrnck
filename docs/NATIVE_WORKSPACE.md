@@ -12,10 +12,11 @@ syrnck native checkout-plan TARGET_REVISION --branch main --progress-json
 syrnck native checkout-plan TARGET_REVISION --verify
 ```
 
-Both commands default to branch `main` and directory `.`. The Store must be
+Both commands default to the [current native branch](NATIVE_BRANCHES.md)
+(`main` for legacy Stores) and directory `.`. The Store must be
 inside the workspace; checkout planning requires it strictly below the workspace
-root. There is no automatic current-branch/HEAD state. Output keys, action names
-and conflict codes are English in both interface languages.
+root. Explicit HEAD binds CLI workspace commands to that canonical root. Output
+keys, action names and conflict codes are English in both interface languages.
 
 ## Combined status
 

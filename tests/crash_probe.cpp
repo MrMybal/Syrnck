@@ -109,11 +109,14 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
-  if (operation == "checkout" || operation == "checkout-abort") {
+  if (operation == "checkout" || operation == "checkout-abort" || operation == "switch" ||
+      operation == "switch-abort") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
     const auto next = put_revision(store, ingest(store, 1), tip);
     store.set_ref("pins/checkout-target", next);
     info["new_revision"] = key_json(next);
+    if (operation == "switch" || operation == "switch-abort")
+      store.set_ref("heads/feature", next);
   }
   if (operation == "stage-add" || operation == "stage-commit" || operation == "stage-reset") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(1)), false);
@@ -165,6 +168,13 @@ void perform(Store &store, const Json &info) {
       store.checkout_directory(store.root().parent_path(), "main", parse_key(info.at("new_revision")).id);
   } else if (op == "checkout-abort") {
     store.recover_checkout(true);
+  } else if (op == "switch") {
+    if (store.checkout_status()["pending"].get<bool>())
+      store.recover_checkout();
+    else if (store.native_head()["branch"] != "feature")
+      store.switch_directory(store.root().parent_path(), "feature");
+  } else if (op == "switch-abort") {
+    store.recover_checkout(true);
   } else if (op == "detach") {
     store.detach_history("main", "Detached crash fixture");
   } else if (op == "append" || op == "compact") {
@@ -205,7 +215,7 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
-  if (op == "checkout" || op == "checkout-abort") {
+  if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort") {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";
     if (fs::exists(working))
@@ -218,9 +228,20 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     if (resumed) {
       check(!status["pending"].get<bool>() && fs::exists(working) &&
-                text(read_bytes(working)) == content(op == "checkout" ? 1 : 0),
+                text(read_bytes(working)) == content(op == "checkout" || op == "switch" ? 1 : 0),
             "checkout recovery did not finish");
       check(current.str() == content(op == "checkout" ? 1 : 0), "checkout recovery moved the wrong branch");
+    }
+    if (op == "switch" || op == "switch-abort") {
+      check(refs.at("heads/main") == old && refs.at("heads/feature") == parse_key(info.at("new_revision")),
+            "switch changed a branch revision");
+      const auto head = store.native_head();
+      const bool committed = refs.contains("workspace/HEAD");
+      check(head["branch"] == (committed ? "feature" : "main") &&
+                (!status["pending"].get<bool>() || (status["state"] == "committed") == committed),
+            "switch published HEAD apart from its committed journal");
+      if (resumed)
+        check(committed == (op == "switch"), "switch recovery selected the wrong HEAD");
     }
   }
   if (op == "stage-add" || op == "stage-commit" || op == "stage-reset") {
@@ -329,14 +350,18 @@ int entry(int argc, char **argv) {
             std::ofstream(path, std::ios::binary) << "destructor ran";
           }
         } sentinel{root.parent_path() / "unwound.txt"};
-        if (info["operation"] == "checkout-abort") {
+        if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort") {
           std::stop_source stop;
           try {
-            store.checkout_directory(root.parent_path(), "main", parse_key(info.at("new_revision")).id,
-                                     {stop.get_token(), [&](const ProgressEvent &event) {
-                                        if (event.phase == ProgressPhase::exporting && event.bytes > 0)
-                                          stop.request_stop();
-                                      }});
+            const OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
+                                             if (event.phase == ProgressPhase::exporting && event.bytes > 0)
+                                               stop.request_stop();
+                                           }};
+            if (info["operation"] == "switch-abort")
+              store.switch_directory(root.parent_path(), "feature", options);
+            else
+              store.checkout_directory(root.parent_path(), "main", parse_key(info.at("new_revision")).id,
+                                       options);
           } catch (const Cancelled &) {
           }
           check(store.checkout_status()["state"] == "applying", "missing abort fixture journal");

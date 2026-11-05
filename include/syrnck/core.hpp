@@ -288,6 +288,12 @@ public:
                           OperationOptions = {}) const;
   Json checkout_status(const std::optional<std::string> &transaction = {}) const;
   Json recover_checkout(bool abort = false, OperationOptions = {}) const;
+  // Symbolic current branch; legacy stores implicitly select main. Switching
+  // journals workspace changes and publishes HEAD without moving either branch.
+  Json native_head() const;
+  Json plan_switch(const fs::path &, std::string_view branch, bool verify_objects = false,
+                   OperationOptions = {}) const;
+  Json switch_directory(const fs::path &, std::string_view branch, OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},
