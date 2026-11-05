@@ -671,3 +671,19 @@ SYRNCK_MESSAGE("text diff output budget must be in 1024..8388608 bytes", "Le bud
 SYRNCK_MESSAGE("native text diff path is absent from both snapshots", "Le chemin du diff textuel est absent des deux snapshots")
 SYRNCK_MESSAGE("native text diff report exceeds 16 MiB", "Le rapport de diff textuel dépasse 16 Mio")
 SYRNCK_MESSAGE("native text diff cannot render binary or limited input; use JSON output", "Le diff textuel ne peut pas afficher une entrée binaire ou limitée ; utilisez la sortie JSON")
+
+SYRNCK_MESSAGE("native text diff directory nesting exceeds 128 levels", "La profondeur du diff textuel dépasse 128 niveaux")
+SYRNCK_MESSAGE("native text diff path is ignored", "Le chemin du diff textuel est exclu par les règles ignore")
+SYRNCK_MESSAGE("native text diff namespace exceeds 16 MiB budget", "Les noms du workspace dépassent le budget de 16 Mio du diff textuel")
+SYRNCK_MESSAGE("native text diff path spelling differs from workspace", "La casse ou la graphie du chemin diffère de celle du workspace")
+SYRNCK_MESSAGE("native text diff cannot inspect protected storage", "Le diff textuel ne peut pas inspecter le stockage protégé")
+SYRNCK_MESSAGE("native text diff path cannot be a link or reparse point", "Le chemin du diff textuel ne peut pas être un lien ou un point de réanalyse")
+SYRNCK_MESSAGE("native text diff path is obstructed", "Le chemin du diff textuel est obstrué")
+SYRNCK_MESSAGE("file changed during native text diff; retry operation", "Le fichier a changé pendant le diff textuel ; réessayez")
+SYRNCK_MESSAGE("native text diff ignore rules exceed 16384 entries", "Les règles ignore du diff textuel dépassent 16384 entrées")
+
+SYRNCK_MESSAGE("native text diff ignore rule exceeds 4096 bytes", "Une règle ignore du diff textuel dépasse 4096 octets")
+
+SYRNCK_MESSAGE("choose either --staged or --working", "Choisissez --staged ou --working")
+
+SYRNCK_MESSAGE("text diff budget exceeds platform size limit", "Le budget du diff textuel dépasse la limite de taille de la plateforme")

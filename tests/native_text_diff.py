@@ -134,6 +134,29 @@ class NativeTextDiff(unittest.TestCase):
                          path.name, b"initial\n", None)
         self.assertEqual(before, self.snapshot())
 
+    def test_cli_diff_budgets_apply_to_revisions_and_staging(self):
+        path = self.root / "code.cpp"
+        path.write_bytes(b"old\n")
+        first = self.commit("base")
+        path.write_bytes(b"changed\nsecond\n")
+        self.call("native", "add", path.name)
+        before = self.snapshot()
+        staged = json.loads(self.call("native", "diff-text", "--staged", path.name, "--max-lines", "1").stdout)
+        self.assertEqual(staged["diff"]["reason"], "line_limit")
+        self.assertEqual(before, self.snapshot())
+        second = self.call("native", "commit", "--staged", "-m", "changed").stdout.decode().strip()
+        before = self.snapshot()
+        for option, value, reason in [("--max-file-bytes", "1", "file_limit"),
+                                      ("--max-lines", "1", "line_limit"),
+                                      ("--max-work", "1", "work_limit")]:
+            result = json.loads(self.call("native", "diff-text", first, second, path.name, option, value).stdout)
+            self.assertEqual(result["diff"]["reason"], reason)
+            self.assertEqual(result["diff"]["hunks"], [])
+        for option, value in [("--max-file-bytes", "4194305"), ("--max-lines", "0"),
+                              ("--max-work", "0"), ("--max-output-bytes", "1023")]:
+            self.call("--lang", "fr", "native", "diff-text", first, second, path.name, option, value, ok=False)
+        self.assertEqual(before, self.snapshot())
+
 
 if __name__ == "__main__":
     unittest.main()

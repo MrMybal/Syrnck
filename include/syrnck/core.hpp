@@ -328,6 +328,14 @@ public:
   // empty snapshot. Oversized files are reported before any chunk is read.
   Json diff_revision_file(const std::optional<std::string> &source, const std::optional<std::string> &target,
                           std::string_view path, TextDiffOptions = {}, OperationOptions = {}) const;
+  // Targeted working-file comparison. Null source means an empty snapshot;
+  // ignored/obstructed paths fail rather than appearing as deletions.
+  Json diff_working_file(const fs::path &directory, const std::optional<std::string> &source,
+                         std::string_view path, TextDiffOptions = {}, OperationOptions = {}) const;
+  // Use the frozen index when present, otherwise the branch head. Stale
+  // indexes stay inspectable; report their original base/current head.
+  Json diff_unstaged_file(const fs::path &directory, std::string_view branch, std::string_view path,
+                          TextDiffOptions = {}, OperationOptions = {}) const;
   // Branch-local immutable staging snapshot. Paths are repository-relative
   // files/directory prefixes, or "." for the entire selected workspace.
   std::string stage_directory(const fs::path &, std::string_view branch,

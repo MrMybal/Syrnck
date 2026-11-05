@@ -204,6 +204,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native diff-text SOURCE CIBLE CHEMIN [--context 3] [--unified]
   native diff-text --staged CHEMIN [--branch NOM] [--context 3] [--unified]
+  native diff-text --working CHEMIN [--branch NOM | --revision SOURCE]
+                   [--directory .] [--context 3] [--unified]
+    Limites du diff : --max-file-bytes N --max-lines N --max-work N --max-output-bytes N
   native branch NOM RÉVISION
   native branches [--after NOM] [--limit 100] [--verify]
   native branch-delete-plan NOM [--archive-index] [--verify]
@@ -333,6 +336,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native diff SOURCE TARGET         Compare native revision snapshots
   native diff-text SOURCE TARGET PATH [--context 3] [--unified]
   native diff-text --staged PATH [--branch NAME] [--context 3] [--unified]
+  native diff-text --working PATH [--branch NAME | --revision SOURCE]
+                   [--directory .] [--context 3] [--unified]
+    Diff limits: --max-file-bytes N --max-lines N --max-work N --max-output-bytes N
   native branch NAME REVISION
   native branches [--after NAME] [--limit 100] [--verify]
   native branch-delete-plan NAME [--archive-index] [--verify]
@@ -983,10 +989,38 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         require(value <= 100, "text diff context must be in 0..100");
         limits.context = static_cast<std::size_t>(value);
       }
+      auto budget = [&](std::string_view name, std::size_t &field) {
+        if (const auto value = args.option(name)) {
+          const auto count = integer(*value);
+          require(count <= std::numeric_limits<std::size_t>::max(),
+                  "text diff budget exceeds platform size limit");
+          field = static_cast<std::size_t>(count);
+        }
+      };
+      budget("--max-file-bytes", limits.max_file_bytes);
+      budget("--max-lines", limits.max_lines);
+      budget("--max-work", limits.max_work);
+      budget("--max-output-bytes", limits.max_output_bytes);
+      limits.validate();
       const bool unified = args.flag("--unified");
       const bool staged = args.flag("--staged");
+      const bool working = args.flag("--working");
+      require(!staged || !working, "choose either --staged or --working");
       Json report;
-      if (staged) {
+      if (working) {
+        const auto directory = workspace();
+        const auto revision = args.option("--revision");
+        if (revision) {
+          args.count(1);
+          report = store.diff_working_file(directory, resolve(*revision), args.values[0], limits,
+                                           {control->token(), observe});
+        } else {
+          const auto branch = selected_branch();
+          args.count(1);
+          report = store.diff_unstaged_file(directory, branch, args.values[0], limits,
+                                            {control->token(), observe});
+        }
+      } else if (staged) {
         const auto branch = selected_branch();
         args.count(1);
         report = store.diff_staged_file(branch, args.values[0], limits, {control->token(), observe});

@@ -222,3 +222,5 @@ unchanged; upload and read leases negotiate HTTP extensions. C++ callers should 
 against the updated headers.
 
 [Text differences](TEXT_DIFF.md) are read-only and bounded. `native diff-text SOURCE TARGET PATH` reconstructs and verifies only the requested file; `--staged` compares frozen entries to their original base without reading working files. Oversized inputs are reported before payload reads. Binary/budget results are explicit JSON; unified output refuses these results before stdout. Cancellation and observer failures preserve Store/workspace data.
+
+Working text diffs (`native diff-text --working PATH`) target one path against the frozen index/head or `--revision` source. Ignore exclusions, namespace obstructions and detected concurrent modifications fail explicitly. File-size limits prevent payload reads; unknown equality stays null. See [working-file read guarantees](TEXT_DIFF.md#compare-a-working-file).

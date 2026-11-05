@@ -235,6 +235,22 @@ Json Store::workspace_status(const fs::path &directory, std::string_view branch,
               {"staged", std::move(staged)},
               {"unstaged", std::move(unstaged)}};
 }
+Json Store::diff_unstaged_file(const fs::path &directory, std::string_view branch, std::string_view path,
+                               TextDiffOptions limits, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  limits.validate();
+  validate_path(path);
+  const Stage stage(*this, branch);
+  auto report =
+      diff_working_file(directory, id(stage.index ? stage.index : stage.head), path, limits, options);
+  report["branch"] = branch;
+  report["base"] = nullable_id(stage.base);
+  report["head"] = nullable_id(stage.head);
+  report["index"] = nullable_id(stage.index);
+  report["stale"] = stage.head != stage.base;
+  require(report.dump().size() <= max_object_size, "native text diff report exceeds 16 MiB");
+  return report;
+}
 std::string Store::commit_staged(std::string_view branch, std::string_view message,
                                  OperationOptions options) const {
   throw_if_cancelled(options.stop);

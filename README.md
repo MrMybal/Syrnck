@@ -84,6 +84,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native diff-text --staged PATH [--branch NAME]` compares frozen prepared bytes to their original baseline, including unborn or stale indexes. Later working changes are excluded; `--unified` is also available.
 
+`native diff-text --working PATH` compares a working file to the frozen index (or branch head), with `--revision SELECTOR` for an explicit base. Reads target one path, reject ignored/obstructed names, and detect observed file changes. See [working text differences](docs/TEXT_DIFF.md#compare-a-working-file).
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

@@ -34,6 +34,10 @@ void verify_native_checkout_namespace(const Store &, const fs::path &, const std
 // Shared snapshot selection for native commit and working-directory status.
 void visit_native_files(const fs::path &directory, const fs::path &store,
                         const std::function<void(const NativeFile &)> &, OperationOptions);
+// Targeted inspection with shared ignore rules. Only enumerate ancestor
+// directories; reject case aliases, links/reparse points and protected storage.
+std::optional<NativeFile> inspect_native_file(const fs::path &directory, const fs::path &store,
+                                              std::string_view path, OperationOptions);
 Json ingest_native_file(const Store &, const NativeFile &, IngestOptions, std::string_view changed_message);
 Json compare_native_snapshots(const Store &, const std::optional<std::string> &source,
                               const std::optional<std::string> &target, OperationOptions);

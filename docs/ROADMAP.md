@@ -121,7 +121,9 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Moteur C++ de diff textuel UTF-8 borné : hunks déterministes, fins de ligne exactes, budgets de calcul/mémoire/sortie, classification binaire et validation par oracle LCS indépendant.
 - [x] Diff textuel ciblé entre révisions natives : reconstruction/hashes vérifiés du seul chemin, métadonnées de mode/représentation, JSON et sortie unifiée appliquée par Git dans les tests ; lecture seule, en clair/chiffré et sur trois stockages.
 - [x] Diff textuel des sélections figées contre leur base d’origine : index initial/frais/périmé, suppressions préparées, branche explicite/courante, JSON/sortie unifiée et fichiers de travail ignorés.
-- [ ] Sélection de hunks, diff de fichiers de travail et application de patchs textuels.
+- [x] Diff textuel ciblé du fichier de travail contre l’index figé/la tête ou une révision explicite : suppressions/ajouts, index périmés, règles ignore imbriquées, casse/liens/stockage protégés, lectures bornées et détection des changements observés.
+- [x] Budgets de diff ajustables par invocation CLI pour les trois modes : octets par fichier, lignes, calcul et sortie, avec plafonds stricts, refus des valeurs invalides et aucun patch partiel.
+- [ ] Sélection de hunks et application de patchs textuels.
 - [x] Plan de rejeu d'un index périmé sur la tête courante : sélections figées, base vide initiale, conflits par fichier/namespace, représentations préparées, contrôle des archives et vérification optionnelle, sans lire le workspace ni écrire d'objets.
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.

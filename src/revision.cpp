@@ -3,6 +3,7 @@
 #include <chrono>
 #include <fstream>
 #include <regex>
+#include <sstream>
 namespace syrnck {
 namespace {
 std::uint64_t now() {
@@ -65,7 +66,8 @@ std::string glob(std::string_view input) {
   }
   return out + '$';
 }
-void add_rules(const fs::path &dir, std::string base, std::vector<Rule> &rules) {
+void add_rules(const fs::path &dir, std::string base, std::vector<Rule> &rules, std::size_t *budget = nullptr,
+               std::stop_token stop = {}) {
   auto path = dir / ".syrnckignore";
   if (!fs::exists(path))
     return;
@@ -73,8 +75,17 @@ void add_rules(const fs::path &dir, std::string base, std::vector<Rule> &rules) 
   require(fs::is_regular_file(path), "ignore file must be a regular file");
   std::ifstream in(path);
   require(in.is_open(), "cannot read ignore file");
+  std::istringstream bounded;
+  std::istream *input = &in;
+  if (budget) {
+    const auto data = read_bytes(path, max_object_size - *budget);
+    *budget += data.size();
+    bounded.str(text(data));
+    input = &bounded;
+  }
   std::string line;
-  while (std::getline(in, line)) {
+  while (std::getline(*input, line)) {
+    throw_if_cancelled(stop);
     if (!line.empty() && line.back() == '\r')
       line.pop_back();
     while (!line.empty() && line.back() == ' ' && (line.size() < 2 || line[line.size() - 2] != '\\'))
@@ -95,12 +106,14 @@ void add_rules(const fs::path &dir, std::string base, std::vector<Rule> &rules) 
     if (line.empty())
       continue;
     bool basename = !anchored && line.find('/') == line.npos;
+    require(!budget || line.size() <= 4096, "native text diff ignore rule exceeds 4096 bytes");
     auto pattern = glob(line);
     if (basename)
       pattern.insert(1, "(?:.*/)?");
+    require(!budget || rules.size() < 16384, "native text diff ignore rules exceed 16384 entries");
     rules.push_back({base, std::regex(pattern, std::regex::ECMAScript), neg, dirs});
   }
-  require(!in.bad(), "ignore file read failed");
+  require(!input->bad(), "ignore file read failed");
 }
 bool ignored(const std::string &relative, bool dir, const std::vector<Rule> &rules) {
   bool ignored = false;
@@ -174,6 +187,66 @@ void visit_native_files(const fs::path &directory, const fs::path &store_root,
       require(!folded.contains(path.substr(0, n)), "file/directory path collision");
   }
   throw_if_cancelled(options.stop);
+}
+std::optional<NativeFile> inspect_native_file(const fs::path &directory, const fs::path &store_root,
+                                              std::string_view path, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  validate_path(path);
+  const auto base = fs::canonical(directory);
+  require(base != store_root && inside(store_root, base), "native store must be below checkout workspace");
+  auto current = base;
+  std::string prefix;
+  std::vector<Rule> rules;
+  std::size_t budget = 0, depth = 0;
+  for (std::size_t start = 0;;) {
+    throw_if_cancelled(options.stop);
+    require(++depth <= 128, "native text diff directory nesting exceeds 128 levels");
+    const auto slash = path.find('/', start);
+    const auto component = path.substr(start, slash == path.npos ? path.size() - start : slash - start);
+    const bool leaf = slash == path.npos;
+    const auto relative = prefix + std::string(component);
+    const auto ignore_file = current / ".syrnckignore";
+    const auto ignore_status = fs::symlink_status(ignore_file);
+    if (fs::exists(ignore_status))
+      require(!native_link_like(ignore_file, ignore_status), "ignore file cannot be a symlink");
+    add_rules(current, prefix, rules, &budget, options.stop);
+    require(!ignored(relative, !leaf, rules), "native text diff path is ignored");
+    const auto wanted = portable_fold(component);
+    std::optional<fs::directory_entry> found;
+    report_progress(options, {ProgressPhase::scanning, relative});
+    for (const auto &entry : fs::directory_iterator(current)) {
+      throw_if_cancelled(options.stop);
+      const auto name = utf8(entry.path().filename());
+      require(name.size() + 64 <= max_object_size - budget,
+              "native text diff namespace exceeds 16 MiB budget");
+      budget += name.size() + 64;
+      if (portable_fold(name) != wanted)
+        continue;
+      require(!found, "case-insensitive path collision");
+      found = entry;
+    }
+    if (!found)
+      return {};
+    require(utf8(found->path().filename()) == component,
+            "native text diff path spelling differs from workspace");
+    current = found->path();
+    require(!inside(current, store_root), "native text diff cannot inspect protected storage");
+    const auto status = found->symlink_status();
+    require(!native_link_like(current, status), "native text diff path cannot be a link or reparse point");
+    require(leaf ? fs::is_regular_file(status) : fs::is_directory(status),
+            "native text diff path is obstructed");
+    if (leaf) {
+      bool executable = false;
+#ifndef _WIN32
+      executable =
+          (status.permissions() & (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) !=
+          fs::perms::none;
+#endif
+      return NativeFile{current, std::string(path), found->file_size(), found->last_write_time(), executable};
+    }
+    prefix = relative + '/';
+    start = slash + 1;
+  }
 }
 Json ingest_native_file(const Store &store, const NativeFile &file, IngestOptions options,
                         std::string_view changed_message) {

@@ -89,8 +89,11 @@ Mode-only changes, alternate manifests and empty-file creation/removal require
 the JSON metadata; unified output represents text content only. It is not a
 complete native revision patch or a native patch-application command.
 
-`--context 0..100`, `--progress` and `--progress-json` are supported; the other
-budgets currently use C++ defaults in the CLI. Owned errors/help are available
+`--context 0..100`, `--progress` and `--progress-json` are supported. All modes
+accept `--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes`,
+using the defaults and hard maxima in the table above. Options apply to this
+invocation only; an exceeded runtime budget remains an explicit limited result.
+Invalid limits fail before inspection. Owned errors/help are available
 in English and French. Tests apply emitted textual patches with Git and compare
 the resulting bytes, including Unicode/space-containing paths and CRLF.
 
@@ -122,3 +125,65 @@ branch overrides, later dirty files, binary/size limits and immutable Store
 contents. C++ coverage uses plaintext/encrypted stores and loose/single-pack/
 multi-pack layouts. Line/hunk selection and patch application remain future
 work; this milestone is read-only inspection.
+
+## Compare a working file
+
+```text
+syrnck native diff-text --working Source/Player.cpp --unified
+syrnck native diff-text --working Source/Player.cpp --branch feature
+syrnck native diff-text --working Source/Player.cpp --revision HEAD --directory .
+```
+
+The default source is the selected branch's frozen index, or its head when no
+index exists. `--branch` overrides branch selection. A stale index remains the
+source, with its original base and current head reported. `--revision SELECTOR`
+instead chooses an explicit committed source; it cannot be combined with
+`--branch`. `--working` and `--staged` are mutually exclusive. An unborn branch
+without an index compares against an empty snapshot. Working deletions and
+untracked/empty additions are explicit in JSON.
+
+C++ entry points:
+
+```cpp
+auto explicit_base = store.diff_working_file(project, revision_id, "Source/Player.cpp", limits, operation);
+auto unstaged = store.diff_unstaged_file(project, "feature", "Source/Player.cpp", limits, operation);
+```
+
+Only ancestor directories are enumerated to resolve the exact path, detect
+portable case collisions and apply the existing nested ignore rules. Unrelated
+subdirectories and their file contents are not traversed. Ignored paths are
+errors, including tracked paths and missing ignored names; they are never
+silently reported as deletions. Links/reparse points, case aliases, directory/
+file obstructions and the protected Store are refused. The Store must be below
+the selected workspace. The CLI also checks native HEAD's workspace identity.
+Paths use the filesystem's actual UTF-8 spelling, including Unicode normalization.
+
+Inspection has a 128-component depth bound and a 16 MiB budget for enumerated
+names and ignore-file bytes per pass. Bounded ignore parsing also limits rules
+to 16,384 entries of at most 4,096 bytes. Glob semantics match native staging;
+the limits apply only to this targeted inspector. Ordinary snapshot scanning
+keeps its existing policy.
+
+Both source/working sizes are checked before payload reads. Within budget, the
+complete source is reconstructed and verified, and the working file is read
+through a 64 KiB buffer with growth/shrink checks. Namespace, size, timestamp
+and available mode are rechecked around the read. Detected changes fail with
+a retry diagnostic. This is an observed working-file read, not a filesystem
+snapshot or protection against a hostile writer that restores timestamps or
+swaps paths between checks.
+
+The envelope has `comparison: working`, canonical `directory`, `source_revision`
+and a null `target_revision`. Working `target.manifest` is null; `file_hash` is
+computed only when payloads are read. `workspace_verified` records that the
+working read/missing-path checks completed; `objects_verified` records source
+payload verification. Both are false on a file-size limit. Size/presence can
+prove `content_changed`; otherwise `content_changed` and envelope `equal` stay
+null when size limits prevented a content comparison. No equality is invented.
+`manifest_changed` is null because a working file has no stored representation.
+
+On Windows, `target.executable` is null, `executable_comparable` is false, and
+mode does not affect envelope equality. On Unix, executable mode is compared.
+Branch-based results additionally include `branch`, `head`, `base`, `index` and
+`stale`. JSON/unified output, cancellation and binary classification follow the
+earlier contracts. The command imports no objects and changes no working files,
+references or staging state.
