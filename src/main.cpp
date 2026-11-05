@@ -197,6 +197,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log [--branch BRANCHE] [--limit 50]
   native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
+  native cherry-pick-plan RÉVISION [--mainline N] [--verify]
+  native revert-plan RÉVISION [--mainline N] [--verify]
+    [--branch BRANCHE] [--directory .] ; calcul et contrôle sans écriture.
   native export RÉVISION NOUVEAU_DOSSIER
   native detach-history -m MESSAGE [--branch BRANCHE]
   git install [DOSSIER] [--encrypted]
@@ -285,6 +288,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log [--branch BRANCH] [--limit 50]
   native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
     Ancestry relations and every best common ancestor.
+  native cherry-pick-plan REVISION [--mainline N] [--verify]
+  native revert-plan REVISION [--mainline N] [--verify]
+    [--branch BRANCH] [--directory .]; read-only replay and workspace preflight.
   native export REVISION NEW_DIRECTORY
   native detach-history -m MESSAGE [--branch BRANCH]
   git install [DIRECTORY] [--encrypted]
@@ -537,7 +543,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "staged" || sub == "reset" || sub == "checkout-plan" || sub == "checkout" ||
         sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
         sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
-        sub == "tag-restore" || sub == "ancestry")) ||
+        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -843,6 +849,23 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "tag-restore") {
       args.count(1);
       print(store.restore_native_tag(args.values[0], {control->token(), observe}));
+    } else if (sub == "cherry-pick-plan" || sub == "revert-plan") {
+      const auto directory = workspace();
+      const auto branch = selected_branch();
+      const auto verify = args.flag("--verify");
+      std::optional<std::uint32_t> mainline;
+      if (const auto value = args.option("--mainline")) {
+        const auto n = integer(*value);
+        require(n >= 1 && n <= UINT32_MAX, "native replay mainline must be in 1..4294967295");
+        mainline = static_cast<std::uint32_t>(n);
+      }
+      args.count(1);
+      const auto kind = sub == "revert-plan" ? NativeReplayKind::revert : NativeReplayKind::cherry_pick;
+      auto plan = store.plan_replay(directory, branch, resolve(args.values[0]), kind, mainline, verify,
+                                    {control->token(), observe});
+      const bool ready = plan["ready"].get<bool>();
+      print(plan);
+      return ready ? 0 : 1;
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));

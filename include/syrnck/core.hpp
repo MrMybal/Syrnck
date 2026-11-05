@@ -139,6 +139,7 @@ struct NativeGraphLimits {
   std::size_t max_revisions = 100000;
   std::size_t max_parent_links = 1000000;
 };
+enum class NativeReplayKind { cherry_pick, revert };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.
   // At most 2 * workers distinct blocks may await publication, independently
@@ -316,6 +317,11 @@ public:
   // ancestor, including multiple bases in a criss-cross history.
   Json native_ancestry(std::string_view source, std::string_view target, NativeGraphLimits = {},
                        OperationOptions = {}) const;
+  // Read-only file-level three-way replay plus the existing clean-workspace
+  // checkout preflight. Merge revisions require an explicit 1-based mainline.
+  Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,
+                   std::optional<std::uint32_t> mainline = {}, bool verify_objects = false,
+                   OperationOptions = {}) const;
   // No paths clears the index, including a stale index. Selected paths restore
   // their recorded baseline entries. Working files are never changed.
   std::optional<std::string> reset_stage(std::string_view branch, const std::vector<std::string> &paths = {},

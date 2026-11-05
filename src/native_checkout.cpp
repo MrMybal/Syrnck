@@ -157,19 +157,21 @@ void verify_native_checkout_namespace(const Store &store, const fs::path &direct
             "native checkout path became obstructed");
   }
 }
-Json Store::plan_checkout(const fs::path &directory, std::string_view branch, std::string_view target,
-                          bool verify_objects, OperationOptions options) const {
+namespace {
+Json plan_checkout_impl(const Store &store, const fs::path &directory, std::string_view branch,
+                        const NativeSnapshot *supplied, std::optional<std::string_view> target,
+                        bool verify_objects, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  auto staging = staged_status(branch, options);
+  auto staging = store.staged_status(branch, options);
   const auto source_id = staging["head"].is_null() ? std::optional<std::string>{}
                                                    : std::optional{staging["head"].get<std::string>()};
-  const auto source = source_id ? read_native_snapshot(*this, *source_id, options) : NativeSnapshot{};
-  const auto other =
-      source_id && *source_id == target ? NativeSnapshot{} : read_native_snapshot(*this, target, options);
-  const auto &destination = source_id && *source_id == target ? source : other;
-  const Inventory inventory(directory, root(), options);
+  const auto source = source_id ? read_native_snapshot(store, *source_id, options) : NativeSnapshot{};
+  const bool same = target && source_id && *source_id == *target;
+  const auto other = supplied || same ? NativeSnapshot{} : read_native_snapshot(store, *target, options);
+  const auto &destination = supplied ? *supplied : same ? source : other;
+  const Inventory inventory(directory, store.root(), options);
   Conflicts conflicts;
-  if (refs().contains("checkouts/active"))
+  if (store.refs().contains("checkouts/active"))
     conflicts.emplace("", "checkout_pending", "");
   if (!staging["snapshot"].is_null())
     conflicts.emplace("", staging["stale"].get<bool>() ? "stale_staging" : "staging_present", "");
@@ -251,7 +253,7 @@ Json Store::plan_checkout(const fs::path &directory, std::string_view branch, st
       ++right;
   }
   if (verify_objects)
-    (void)closure({{Kind::revision, std::string(target)}}, true, options.stop, options.progress);
+    (void)store.closure({{Kind::revision, std::string(*target)}}, true, options.stop, options.progress);
   Json blockers = Json::array();
   for (const auto &[path, reason, obstruction] : conflicts) {
     throw_if_cancelled(options.stop);
@@ -261,7 +263,7 @@ Json Store::plan_checkout(const fs::path &directory, std::string_view branch, st
   return Json{{"version", 1},
               {"branch", branch},
               {"source", source_id ? Json(*source_id) : Json{}},
-              {"target", target},
+              {"target", target ? Json(*target) : Json{}},
               {"staging_snapshot", std::move(staging["snapshot"])},
               {"policy", "clean-tracked-v1"},
               {"ready", conflicts.empty()},
@@ -278,5 +280,14 @@ Json Store::plan_checkout(const fs::path &directory, std::string_view branch, st
               {"actions", std::move(actions)},
               {"create_directories", directories},
               {"conflicts", std::move(blockers)}};
+}
+} // namespace
+Json Store::plan_checkout(const fs::path &directory, std::string_view branch, std::string_view target,
+                          bool verify_objects, OperationOptions options) const {
+  return plan_checkout_impl(*this, directory, branch, nullptr, target, verify_objects, options);
+}
+Json plan_native_checkout_files(const Store &store, const fs::path &directory, std::string_view branch,
+                                const NativeSnapshot &destination, OperationOptions options) {
+  return plan_checkout_impl(store, directory, branch, &destination, {}, false, options);
 }
 } // namespace syrnck
