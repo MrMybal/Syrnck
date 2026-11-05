@@ -149,6 +149,8 @@ Les deux commandes acceptent `--resolutions FICHIER_JSON` : des choix par fichie
 
 `native branch-delete-plan` / `branch-delete --expect ID` retirent les branches inactives en archivant atomiquement tout leur historique et les index explicitement autorisés. `native branch-archives` / `branch-archive` consultent ces snapshots conservés après GC. Voir la [suppression archivée de branches](docs/NATIVE_BRANCHES.md#archived-branch-deletion).
 
+`native branch-restore-plan ID_ARCHIVE` / `branch-restore ID_ARCHIVE [--as NOM]` recréent atomiquement les têtes et index archivés dans des destinations libres. Un nouveau nom ne change que le marqueur de branche de l'index ; fichiers préparés, modes et bases restent intacts. Voir la [restauration de branches](docs/NATIVE_BRANCHES.md#restore-an-archived-branch).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

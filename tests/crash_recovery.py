@@ -33,6 +33,12 @@ def cases():
     atomic("stage-add", ("chunk", "manifest", "revision", "refs"))
     atomic("stage-commit", ("revision", "refs"))
     atomic("stage-reset", ("refs",))
+    atomic("branch-create", ("refs",))
+    for operation in ("branch-delete", "branch-delete-index"):
+        atomic(operation, ("chunk", "refs"))
+    for operation in ("branch-restore", "branch-restore-index"):
+        atomic(operation, ("refs",))
+    atomic("branch-restore-as", ("revision", "refs"))
     for operation in ("stage-rebase", "stage-rebase-resolved", "stage-rebase-empty", "stage-rebase-unborn"):
         atomic(operation, ("revision", "refs"))
     atomic("amend", ("chunk", "manifest", "revision", "refs"))
@@ -185,6 +191,25 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation.startswith("branch-"):
+            changed = kind == "refs" and published
+            expected = dict(info["refs"])
+            name = info["branch_name"]
+            if changed:
+                if operation.startswith("branch-delete"):
+                    expected.pop("heads/" + name)
+                    expected.pop("staging/" + name, None)
+                    prefix = "archive/branches/" + info["branch_archive"]
+                    expected[prefix + "/record"] = {"kind": "chunk", "id": info["branch_archive"]}
+                    expected[prefix + "/target"] = info["branch_target"]
+                    if "branch_index" in info:
+                        expected[prefix + "/index"] = info["branch_index"]
+                else:
+                    destination = info.get("branch_destination", name)
+                    expected["heads/" + destination] = info["branch_target"]
+                    if info.get("branch_restored_index") is not None:
+                        expected["staging/" + destination] = {"kind": "revision", "id": info["branch_restored_index"]}
+            self.assertEqual(checked["refs"], expected)
         elif operation.startswith("stage-rebase"):
             changed = kind == "refs" and published
             refs = checked["refs"]

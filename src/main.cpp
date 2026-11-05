@@ -207,6 +207,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native branch-delete NOM --expect ID [--archive-index] [--expect-index ID]
   native branch-archives [--after ID] [--limit 100] [--verify]
   native branch-archive ID [--verify]
+  native branch-restore-plan ID [--as NOM] [--verify]
+  native branch-restore ID [--as NOM]
   native tag NOM [RÉVISION] [-m MESSAGE]   Nommer une version (HEAD par défaut)
   native tags [--after NOM] [--limit 100] | tag-show NOM [--verify]
   native tag-delete NOM --expect RÉVISION
@@ -265,6 +267,7 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
+              native branch-restore-plan/branch-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -331,6 +334,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native branch-delete NAME --expect ID [--archive-index] [--expect-index ID]
   native branch-archives [--after ID] [--limit 100] [--verify]
   native branch-archive ID [--verify]
+  native branch-restore-plan ID [--as NAME] [--verify]
+  native branch-restore ID [--as NAME]
   native tag NAME [REVISION] [-m MESSAGE]   Label a version (defaults to HEAD)
   native tags [--after NAME] [--limit 100] | tag-show NAME [--verify]
   native tag-delete NAME --expect REVISION
@@ -389,6 +394,7 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
+              native branch-restore-plan/branch-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
               native reset-plan/squash-plan/squash/archives/archive-show,
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
@@ -614,7 +620,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
         sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
         sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
-        sub == "branch-archives" || sub == "branch-archive")) ||
+        sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
+        sub == "branch-restore")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -1014,6 +1021,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const bool verify = args.flag("--verify");
       args.count(1);
       print(store.native_branch_archive(args.values[0], verify, {control->token(), observe}));
+    } else if (sub == "branch-restore-plan" || sub == "branch-restore") {
+      const bool planning = sub == "branch-restore-plan";
+      const auto name = args.option("--as");
+      const bool verify = planning && args.flag("--verify");
+      args.count(1);
+      if (planning) {
+        const auto plan =
+            store.plan_restore_native_branch(args.values[0], name, verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      print(store.restore_native_branch(args.values[0], name, {control->token(), observe}));
     } else if (sub == "tag") {
       const auto message = args.option("--message", "-m");
       args.count(args.values.size() -

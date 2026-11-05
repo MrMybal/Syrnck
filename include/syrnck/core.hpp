@@ -353,6 +353,12 @@ public:
                               bool verify_objects = false, OperationOptions = {}) const;
   Json native_branch_archive(std::string_view archive_id, bool verify_objects = false,
                              OperationOptions = {}) const;
+  // Restore archived heads/indexes only into absent destination slots. A new
+  // name rewrites just the staging marker, preserving frozen entries and base.
+  Json plan_restore_native_branch(std::string_view archive_id, const std::optional<std::string> &name = {},
+                                  bool verify_objects = false, OperationOptions = {}) const;
+  Json restore_native_branch(std::string_view archive_id, const std::optional<std::string> &name = {},
+                             OperationOptions = {}) const;
   // Native release labels are immutable through this API. Deletion archives
   // their target and optional annotation atomically; archives remain retained.
   Json native_tags(const std::optional<std::string> &after = {}, std::size_t limit = 100,

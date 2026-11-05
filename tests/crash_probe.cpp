@@ -192,6 +192,33 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (operation.starts_with("branch-")) {
+    const std::string name = "feature/topic";
+    info["branch_name"] = name;
+    const auto target = operation == "branch-create" ? tip : put_revision(store, ingest(store, 1), tip);
+    info["branch_target"] = key_json(target);
+    if (operation != "branch-create") {
+      store.create_native_branch(name, target.id);
+      if (operation.ends_with("-index") || operation == "branch-restore-as") {
+        atomic_write(root.parent_path() / "asset.bin", bytes(content(2)), false);
+        info["branch_index"] =
+            key_json({Kind::revision, store.stage_directory(root.parent_path(), name, {"asset.bin"})});
+      }
+      const auto index =
+          info.contains("branch_index") ? std::optional{parse_key(info["branch_index"]).id} : std::nullopt;
+      info["branch_archive"] = store.plan_delete_native_branch(name, index.has_value())["archive"];
+      if (operation.starts_with("branch-restore")) {
+        store.delete_native_branch(name, target.id, index);
+        const auto alias =
+            operation == "branch-restore-as" ? std::optional<std::string>{"recovered/topic"} : std::nullopt;
+        const auto plan = store.plan_restore_native_branch(info["branch_archive"].get<std::string>(), alias);
+        check(plan["ready"] == true, "branch restoration crash fixture is not ready");
+        info["branch_destination"] = plan["name"];
+        info["branch_restored_index"] = plan["index"];
+      }
+    }
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), true);
+  }
   if (operation.starts_with("stage-rebase")) {
     const bool unborn = operation == "stage-rebase-unborn";
     const auto baseline = operation == "stage-rebase" || unborn ? tip : put_revision(store, ingest(store, 2));
@@ -304,7 +331,24 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
 }
 void perform(Store &store, const Json &info) {
   auto op = info.at("operation").get<std::string>();
-  if (op == "commit") {
+  if (op.starts_with("branch-")) {
+    const auto name = info["branch_name"].get<std::string>();
+    const auto target = parse_key(info["branch_target"]);
+    if (op == "branch-create") {
+      if (!store.refs().contains("heads/" + name))
+        store.create_native_branch(name, target.id);
+    } else if (op.starts_with("branch-delete")) {
+      if (store.refs().contains("heads/" + name))
+        store.delete_native_branch(
+            name, target.id,
+            info.contains("branch_index") ? std::optional{parse_key(info["branch_index"]).id} : std::nullopt);
+    } else {
+      const auto destination = info["branch_destination"].get<std::string>();
+      if (!store.refs().contains("heads/" + destination))
+        store.restore_native_branch(info["branch_archive"].get<std::string>(),
+                                    destination == name ? std::nullopt : std::optional{destination});
+    }
+  } else if (op == "commit") {
     auto next = ingest(store, 1, 4);
     auto tip = put_revision(store, next, parse_key(info.at("old_revision")));
     store.set_ref("heads/main", tip);
@@ -433,6 +477,43 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (op.starts_with("branch-")) {
+    const auto name = info["branch_name"].get<std::string>();
+    const auto destination =
+        info.contains("branch_destination") ? info["branch_destination"].get<std::string>() : name;
+    const auto target = parse_key(info["branch_target"]);
+    const bool exists = refs.contains("heads/" + destination);
+    check(refs.at("heads/main") == old && store.native_head()["branch"] == "main" &&
+              text(read_bytes(root.parent_path() / "asset.bin")) == content(4),
+          "branch operation moved the selected head or working files");
+    if (exists) {
+      check(refs.at("heads/" + destination) == target, "branch operation selected another tip");
+      if (op.starts_with("branch-restore") && !info["branch_restored_index"].is_null()) {
+        const auto index = refs.at("staging/" + destination);
+        const auto value = store.metadata(Kind::revision, index.id),
+                   source = store.metadata(Kind::revision, parse_key(info["branch_index"]).id);
+        check(index.id == info["branch_restored_index"].get<std::string>() &&
+                  value["files"] == source["files"] && value["parents"] == source["parents"] &&
+                  value["timestamp"] == 0 && value["message"] == "Syrnck staging v1: " + destination,
+              "branch restoration lost its frozen index or planned identity");
+      }
+    }
+    if (info.contains("branch_archive")) {
+      const auto id = info["branch_archive"].get<std::string>();
+      const bool archived = refs.contains("archive/branches/" + id + "/record");
+      check(archived == (op.starts_with("branch-restore") || !exists),
+            "branch deletion published apart from its archive");
+      if (archived) {
+        const auto row = store.native_branch_archive(id, true)["archive"];
+        check(row["name"] == name && row["revision"] == target.id &&
+                  row["index"] ==
+                      (info.contains("branch_index") ? Json(parse_key(info["branch_index"]).id) : Json{}),
+              "branch archive lost its original tip or index");
+      }
+    }
+    if (resumed)
+      check(exists == !op.starts_with("branch-delete"), "branch operation did not resume");
+  }
   if (op.starts_with("stage-rebase")) {
     const auto previous = parse_key(info["old_index"]);
     const auto prepared = refs.at("staging/main");

@@ -134,6 +134,67 @@ command continues to list revision archives such as checkout, reset and amend.
 Storage/object formats are unchanged; the descriptor and its explicit dependency
 roots use existing chunk/revision/reference mechanisms.
 
+```cpp
+auto deletion = store.plan_delete_native_branch("feature", true, true, operation);
+auto removed = store.delete_native_branch("feature", expected_tip, expected_index, operation);
+auto saved = store.native_branch_archive(removed["archive"].get<std::string>(), true, operation);
+```
+
+## Restore an archived branch
+
+```text
+syrnck native branch-restore-plan ARCHIVE_ID --verify
+syrnck native branch-restore ARCHIVE_ID
+syrnck native branch-restore-plan ARCHIVE_ID --as recovered/topic --verify
+syrnck native branch-restore ARCHIVE_ID --as recovered/topic
+```
+
+Restoration recreates the archived head and optional frozen index in one
+reference transaction. Both destination slots must be absent; an existing branch
+or orphan index blocks it, even if it points to the same object. A pending
+checkout/switch also blocks restoration. The source archive remains retained.
+Working files and symbolic HEAD selection are unchanged; if that selection already
+names the unborn destination, its revision resolves to the restored head afterwards.
+Use the ordinary explicit checkout/switch workflow to restore working files.
+
+Without `--as`, the original name and exact staging ID are restored. `--as NAME`
+chooses another branch name. When an index exists, the engine creates an ordinary
+staging revision changing only its branch-bound internal message. Its frozen file
+entries, executable modes, timestamp and parents stay intact. The candidate ID is
+deterministic and may not be stored until application. Initially unborn indexes
+keep an empty parent list. Stale indexes remain stale; inspect them with
+`native staged --branch NAME` and explicitly use
+[staging rebase](NATIVE_STAGE_REBASE.md) if their changes must move onto the head.
+
+The read-only report includes `archive`, `original_name`, destination `name`,
+`revision`, source `previous_index`, proposed `index`, `index_rewritten`,
+`index_base`, `stale_index`, `current`, `ready`, `objects_verified` and `blockers`.
+A ready plan exits 0; a blocked plan exits 1 with JSON. Application always verifies
+the complete archive closure before storing a rewritten index or publishing
+references, and adds `state: restored` to its result. `--verify` audits previewed
+source data; metadata-only planning does not read file payloads.
+
+Publication guards the retained archive group, both absent destination slots and
+the current HEAD object. Source roots remain unchanged. Cancellation or observer
+failure before publication preserves the old reference table; a renamed index
+candidate can remain unreferenced. After interruption, inspect the destination
+and archive before retrying. A completed destination is a collision, rather than
+an implicit replacement. Original archived versions remain available through GC.
+
+Tests cover inventory/creation, deletion with and without staging, exact expected
+IDs, partial archive collisions, deterministic archive reuse, restoration under
+the original or a new name, fresh/stale/initial indexes, missing payloads, malformed
+records, cancellation and active checkout guards. Plain/encrypted and all three
+physical storage variants use the same reference transaction. Process-kill cases
+cover creation, deletion with/without an index and restoration with/without a
+rewritten index, checking complete retained data and unchanged working files in
+fresh production processes. They test process termination, not power-loss durability.
+
+```cpp
+auto preview = store.plan_restore_native_branch(archive_id, "recovered", true, operation);
+auto restored = store.restore_native_branch(archive_id, "recovered", operation);
+```
+
 ## CLI defaults and workspace identity
 
 When omitted, `--branch` resolves the current branch for native commit (ordinary
@@ -233,9 +294,6 @@ binaries for native workspace commands after enabling it.
 auto head = store.native_head();
 auto branches = store.native_branches({}, 100, true, operation);
 auto created = store.create_native_branch("feature", revision_id, operation);
-auto deletion = store.plan_delete_native_branch("feature", true, true, operation);
-auto removed = store.delete_native_branch("feature", expected_tip, expected_index, operation);
-auto saved = store.native_branch_archive(removed["archive"].get<std::string>(), true, operation);
 auto plan = store.plan_switch(project, "feature", true, operation);
 auto switched = store.switch_directory(project, "feature", operation);
 ```

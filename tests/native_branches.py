@@ -22,6 +22,14 @@ class NativeBranches(unittest.TestCase):
         self.assertEqual(value["ready"], ready)
         return value
 
+    def restoration_plan(self, archive, *args, ready=True):
+        result = subprocess.run([workflows.CLI, "--store", str(self.store), "native", "branch-restore-plan", archive,
+                                 *map(str, args)], cwd=self.root, env=self.env, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0 if ready else 1, result.stderr.decode("utf-8", "replace"))
+        value = json.loads(result.stdout)
+        self.assertEqual(value["ready"], ready)
+        return value
+
     def test_archived_deletion_retains_staging_and_historical_bytes(self):
         asset = self.root / "asset"
         asset.write_bytes(b"old")
@@ -55,6 +63,23 @@ class NativeBranches(unittest.TestCase):
         self.assertEqual(listing["archives"], [archive["archive"]])
         self.call("native", "export", index, self.store / "saved-index")
         self.assertEqual((self.store / "saved-index/asset").read_bytes(), b"prepared")
+        before = self.snapshot()
+        preview = self.restoration_plan(result["archive"], "--as", "recovered/topic", "--verify")
+        self.assertEqual(preview, self.restoration_plan(result["archive"], "--as", "recovered/topic", "--verify", "--lang", "fr"))
+        self.assertEqual(self.snapshot(), before)
+        self.restoration_plan(result["archive"], "--as", "main", ready=False)
+        restored = json.loads(self.call("native", "branch-restore", result["archive"], "--as", "recovered/topic").stdout)
+        self.assertEqual(restored["index"], preview["index"])
+        self.assertNotEqual(restored["index"], index)
+        metadata = json.loads(self.call("inspect", "revision", restored["index"]).stdout)
+        original = json.loads(self.call("inspect", "revision", index).stdout)
+        self.assertEqual(metadata["files"], original["files"])
+        self.assertEqual(metadata["parents"], original["parents"])
+        self.assertEqual(asset.read_bytes(), b"later dirty bytes")
+        self.restoration_plan(result["archive"], "--as", "recovered/topic", ready=False)
+        self.call("native", "branch-restore", result["archive"], "--as", "recovered/topic", ok=False)
+        self.call("gc", "--delete")
+        self.call("native", "branch-archive", result["archive"], "--verify")
 
     def test_pages_verified_creation_and_language_parity(self):
         self.assertEqual(json.loads(self.call("native", "branches").stdout)["branches"], [])

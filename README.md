@@ -134,6 +134,8 @@ Both staging rebase commands accept `--resolutions JSON_FILE`, with explicit fil
 
 `native branch-delete-plan` / `branch-delete --expect ID` remove inactive branches while atomically archiving their complete history and explicitly authorized staging indexes. `native branch-archives` / `branch-archive` inspect retained snapshots through GC. See [archived branch deletion](docs/NATIVE_BRANCHES.md#archived-branch-deletion).
 
+`native branch-restore-plan ARCHIVE_ID` / `branch-restore ARCHIVE_ID [--as NAME]` recreate archived heads and frozen indexes atomically into absent slots. A new name changes only the index's branch marker; prepared file entries, modes and baselines stay intact. See [branch restoration](docs/NATIVE_BRANCHES.md#restore-an-archived-branch).
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

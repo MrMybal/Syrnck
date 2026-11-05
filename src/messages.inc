@@ -660,3 +660,4 @@ SYRNCK_MESSAGE("native branch staging changed; refresh the plan", "l'index de br
 SYRNCK_MESSAGE("native branch deletion is blocked; inspect native branch-delete-plan", "la suppression de branche native est bloquée ; inspectez native branch-delete-plan")
 SYRNCK_MESSAGE("--expect is required for native branch deletion", "--expect est requis pour supprimer une branche native")
 SYRNCK_MESSAGE("--expect-index requires --archive-index", "--expect-index nécessite --archive-index")
+SYRNCK_MESSAGE("native branch restoration is blocked; inspect native branch-restore-plan", "la restauration de branche native est bloquée ; inspectez native branch-restore-plan")
