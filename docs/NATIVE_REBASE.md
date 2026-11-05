@@ -71,3 +71,55 @@ Planning supports English/French progress/errors and cooperative cancellation;
 JSON fields/reason codes remain English. Callbacks must not reenter the Store.
 The planning API is exposed through C++ and CLI; C/Go native history bindings,
 interactive rebase and preservation of merges remain future work.
+
+## Apply and recover
+
+```text
+syrnck native rebase OLD_BASE --onto upstream --expect OLD_TIP_ID
+syrnck native checkout-status
+syrnck native checkout-recover
+syrnck native checkout-recover --abort
+```
+
+Apply recomputes and verifies the entire ready plan before storing candidates.
+It then repeats the deterministic calculation, storing complete new revisions
+oldest first, and checks that the final ID matches the verified preview. It does
+not retain every candidate's full snapshot in memory. Each candidate remains an
+ordinary immutable v1 revision. Empty commits preserve their source metadata.
+
+Only the final candidate is applied to the workspace through the existing
+recoverable checkout journal. Intermediate steps never move the branch or working
+files. The old target tip is retained in `archive/checkout/TRANSACTION_ID`, while
+the final new chain retains ONTO and every replayed candidate. Original intermediate
+revisions and their file blocks therefore remain reconstructible after GC.
+Use [the archive browser](NATIVE_ARCHIVES.md) with `--kind checkout` to locate them.
+Source branches/tags and symbolic HEAD selection do not move.
+
+`--expect` is an exact old tip ID; otherwise the CLI captures it under the Store
+lock. The C++ API requires it explicitly. Up-to-date application returns
+`state: unchanged` without writes, but still verifies stored data and workspace
+preflight. An empty range checks out the exact ONTO revision without new commits.
+Conflicts, staging, dirty tracked files or an incomplete history prevent application.
+
+Cancellation before journal publication preserves branch/workspace and can leave
+complete unreferenced candidates. After publication, inspect and explicitly
+resume or abort the checkout journal. Abort is allowed before branch publication;
+afterwards recovery only completes cleanup. Opening the Store never applies
+recovery automatically. Active journals block GC and new history mutations.
+Prepared files/backups are plaintext even with encrypted object storage; the
+existing [checkout durability/data limits](NATIVE_CHECKOUT.md) apply.
+
+The direct result adds `operation: rebase`, `mode`, `previous_revision`, `base`,
+`onto` and `replayed_commits` to the checkout receipt. Recovered journals report
+their generic checkout identity and recorded target. Revision/journal formats
+are unchanged. Retention roots have no automatic expiry.
+
+```cpp
+auto applied = store.rebase_directory(project, "feature", expected_id,
+                                       old_base, new_base, settings, operation);
+```
+
+Tests compare preview/application IDs, ordered parents and preserved messages/dates,
+empty commits/ranges, retained historical bytes after GC, unchanged upstream refs,
+wrong expected tips, missing historical blocks, cancellation, reopen/resume and
+abort across plain/encrypted and loose/packed Stores.

@@ -27,6 +27,26 @@ class NativeRebase(unittest.TestCase):
         head = self.commit("second")
         return root, onto, first, head
 
+    def test_application_matches_virtual_ids_retains_source_and_retries(self):
+        root, onto, first, head = self.setup_range()
+        preview = self.plan("rebase-plan", root, "--onto", onto, "--verify")
+        self.call("native", "rebase", root, "--onto", onto, "--expect", first, ok=False)
+        result = json.loads(self.call("native", "rebase", root, "--onto", "upstream", "--expect", head).stdout)
+        self.assertEqual(result["target"], preview["target"])
+        self.assertEqual(result["replayed_commits"], 2)
+        self.assertEqual((self.root / "extra").read_bytes(), b"upstream")
+        self.assertEqual((self.root / "asset.bin").read_bytes(), b"changed")
+        refs = json.loads(self.cmd("refs"))
+        self.assertEqual(refs["heads/upstream"]["id"], onto)
+        self.assertEqual(refs[result["archive"]]["id"], head)
+        self.call("gc", "--delete")
+        self.call("native", "export", first, self.store / "old-first")
+        self.assertEqual((self.store / "old-first/asset.bin").read_bytes(), b"changed")
+        before = self.snapshot()
+        self.call("native", "rebase", root, "--onto", onto, "--expect", head, ok=False)
+        self.assertEqual(json.loads(self.call("native", "rebase", onto, "--onto", onto).stdout)["state"], "unchanged")
+        self.assertEqual(self.snapshot(), before)
+
     def test_readonly_virtual_plan_languages_topology_and_limits(self):
         root, onto, first, head = self.setup_range()
         before = self.snapshot()

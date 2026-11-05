@@ -359,6 +359,9 @@ public:
   Json plan_rebase(const fs::path &, std::string_view branch, std::string_view base, std::string_view onto,
                    const NativeRebaseOptions & = {}, bool verify_objects = false,
                    OperationOptions = {}) const;
+  Json rebase_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
+                        std::string_view base, std::string_view onto, const NativeRebaseOptions & = {},
+                        OperationOptions = {}) const;
   // Read-only file-level three-way replay plus the existing clean-workspace
   // checkout preflight. Merge revisions require an explicit 1-based mainline.
   Json plan_replay(const fs::path &, std::string_view branch, std::string_view source, NativeReplayKind,

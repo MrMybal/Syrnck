@@ -127,6 +127,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Cherry-pick et revert par fichier avec commit enfant et application récupérable : tête attendue, données vérifiées, conflits bloquants, branche source intacte, reprise/annulation et conservation après GC.
 - [ ] Rebase, reset hard et stash ; résolution interactive des conflits de rejeu et fusion textuelle.
 - [x] Plan de rebase linéaire natif sur base explicite : rejeu virtuel déterministe, messages/dates et commits vides conservés, conflits bloquants par étape, parcours/rapport bornés et contrôle du workspace sans écriture.
+- [x] Application du rebase linéaire : vérification complète avant création des candidats, IDs conformes au plan, checkout final récupérable, ancienne tête archivée, reprise/annulation et reconstruction des anciennes versions après GC.
 - [x] Reset de branche soft/mixed avec préparation en lecture seule : fichiers de travail intacts, index conservé sur la nouvelle base ou archivé puis retiré, tête attendue et publication atomique des anciennes racines ; reconstruction après GC.
 - [x] Squash des derniers commits linéaires avec plan borné, snapshot exact de tête, frontière conservée ou nouvelle racine, merges/index refusés, tête attendue et archive atomique de tout l'ancien historique.
 - [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.

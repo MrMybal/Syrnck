@@ -72,6 +72,88 @@ void planning(const fs::path &path, std::optional<Key> key, unsigned physical) {
           "rebase refused a merge outside its range");
   require(f.store.fsck() > 0, "rebase planner damaged storage");
 }
+void application(const fs::path &path, std::optional<Key> key, unsigned physical) {
+  std::string base, first, head, onto, target;
+  {
+    Fixture f(path, key);
+    const auto a = f.file("base"), b = f.file("changed"), extra = f.file("upstream"), own = f.file("own");
+    base = f.revision(Json{{"asset", a}});
+    first = f.revision(Json{{"asset", b}}, Json::array({base}));
+    head = f.revision(Json{{"asset", b}, {"own", own}}, Json::array({first}));
+    onto = f.revision(Json{{"asset", a}, {"extra", extra}}, Json::array({base}));
+    f.install(head);
+    f.store.set_ref("heads/upstream", {Kind::revision, onto});
+    f.pack(physical);
+    target = f.store.plan_rebase(path, "main", base, onto)["target"].get<std::string>();
+    const auto before = f.physical();
+    fails([&] { f.store.rebase_directory(path, "main", first, base, onto); });
+    require(f.physical() == before, "wrong expected rebase changed data");
+    const auto result = f.store.rebase_directory(path, "main", head, base, onto);
+    require(result["target"] == target && result["replayed_commits"] == 2 &&
+                f.store.refs().at("heads/upstream").id == onto &&
+                text(read_bytes(path / "extra")) == "upstream" &&
+                text(read_bytes(path / "asset")) == "changed" && text(read_bytes(path / "own")) == "own",
+            "rebase applied another candidate or lost independent changes");
+    auto next = target;
+    for (const auto &source : {head, first}) {
+      const auto value = f.store.metadata(Kind::revision, next),
+                 old = f.store.metadata(Kind::revision, source);
+      require(value["message"] == old["message"] && value["timestamp"] == old["timestamp"] &&
+                  value["parents"].size() == 1,
+              "rebase lost source metadata or ancestry");
+      next = value["parents"][0].get<std::string>();
+    }
+    require(next == onto, "rebase did not attach to onto");
+    const auto unchanged = f.physical();
+    require(f.store.rebase_directory(path, "main", target, onto, onto)["state"] == "unchanged" &&
+                f.physical() == unchanged,
+            "same-base rebase wrote data");
+    f.store.gc(true);
+    (void)f.store.closure({{Kind::revision, head}, {Kind::revision, first}}, true);
+    f.store.checkout_directory(path, "main", head);
+    std::stop_source stop;
+    fails([&] {
+      f.store.rebase_directory(path, "main", head, base, onto, {},
+                               {stop.get_token(), [&](const ProgressEvent &event) {
+                                  if (event.phase == ProgressPhase::exporting && event.bytes)
+                                    stop.request_stop();
+                                }});
+    });
+    require(f.store.checkout_status()["pending"] == true && f.store.refs().at("heads/main").id == head,
+            "interrupted rebase moved its branch early");
+  }
+  Store store(path / ".syrnck", key);
+  require(store.refs().at("heads/main").id == head && store.checkout_status()["pending"] == true,
+          "opening store applied recovery automatically");
+  require(store.recover_checkout()["target"] == target, "rebase resumed another candidate");
+  store.checkout_directory(path, "main", head);
+  std::stop_source stop;
+  fails([&] {
+    store.rebase_directory(path, "main", head, base, onto, {},
+                           {stop.get_token(), [&](const ProgressEvent &event) {
+                              if (event.phase == ProgressPhase::exporting && event.bytes)
+                                stop.request_stop();
+                            }});
+  });
+  store.recover_checkout(true);
+  require(store.refs().at("heads/main").id == head && !fs::exists(path / "extra") && store.fsck() > 0,
+          "aborted rebase lost the original workspace");
+}
+void empty_commits(const fs::path &path) {
+  Fixture f(path);
+  const auto root = f.revision(Json{{"asset", f.file("base")}});
+  const auto head = f.revision(Json{{"asset", f.file("same")}}, Json::array({root}));
+  const auto onto = f.revision(Json{{"asset", f.file("same")}}, Json::array({root}));
+  f.install(head);
+  require(f.store.plan_rebase(path, "main", root, onto)["steps"][0]["empty"] == true,
+          "empty replay not detected");
+  const auto result = f.store.rebase_directory(path, "main", head, root, onto);
+  const auto id = result["target"].get<std::string>();
+  require(f.store.metadata(Kind::revision, id)["parents"] == Json::array({onto}), "empty commit dropped");
+  require(f.store.rebase_directory(path, "main", id, id, root)["target"] == root &&
+              text(read_bytes(path / "asset")) == "base",
+          "empty-range rebase did not check out onto");
+}
 void missing_history(const fs::path &path) {
   std::string base, head, onto, chunk;
   {
@@ -90,6 +172,11 @@ void missing_history(const fs::path &path) {
   require(store.plan_rebase(path, "main", base, onto)["ready"] == true,
           "metadata rebase plan audited payloads");
   fails([&] { store.plan_rebase(path, "main", base, onto, {}, true); });
+  const auto refs = store.refs();
+  const auto objects = store.objects();
+  fails([&] { store.rebase_directory(path, "main", head, base, onto); });
+  require(store.refs() == refs && store.objects() == objects,
+          "rebase published with missing historical blocks");
 }
 } // namespace
 int main() {
@@ -103,8 +190,11 @@ int main() {
           key->fill(50);
         }
         planning(temp.path / (std::to_string(encrypted) + '-' + std::to_string(physical)), key, physical);
+        application(temp.path / ("apply-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
+                    physical);
       }
     missing_history(temp.path / "missing");
+    empty_commits(temp.path / "empty");
     std::cout
         << "read-only linear rebase, deterministic virtual chain, topology, conflicts and bounds passed\n";
   } catch (const std::exception &error) {

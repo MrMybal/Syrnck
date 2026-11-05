@@ -212,6 +212,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
   native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .]
                      [--max-commits 1000] [--verify]
+  native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
   native cherry-pick-plan RÉVISION [--mainline N] [--verify]
   native revert-plan RÉVISION [--mainline N] [--verify]
@@ -324,6 +325,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
   native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .]
                      [--max-commits 1000] [--verify]
+  native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
   native cherry-pick-plan REVISION [--mainline N] [--verify]
   native revert-plan REVISION [--mainline N] [--verify]
@@ -588,7 +590,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
-        sub == "rebase-plan")) ||
+        sub == "rebase-plan" || sub == "rebase")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -1015,21 +1017,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto tip = expected ? *expected : resolve("heads/" + branch);
       print(store.merge_directory(directory, branch, tip, source, message.value_or("Merge " + source),
                                   settings, {control->token(), observe}));
-    } else if (sub == "rebase-plan") {
+    } else if (sub == "rebase-plan" || sub == "rebase") {
+      const bool planning = sub == "rebase-plan";
       const auto directory = workspace();
       const auto branch = selected_branch();
       const auto onto = args.option("--onto");
       require(onto.has_value(), "native rebase requires --onto");
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
-      const bool verify = args.flag("--verify");
+      const bool verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       args.count(1);
       NativeRebaseOptions settings;
       settings.max_commits = static_cast<std::size_t>(limit);
-      const auto plan = store.plan_rebase(directory, branch, resolve(args.values[0]), resolve(*onto),
-                                          settings, verify, {control->token(), observe});
-      print(plan);
-      return plan["ready"].get<bool>() ? 0 : 1;
+      const auto base = resolve(args.values[0]), target = resolve(*onto);
+      if (planning) {
+        const auto plan =
+            store.plan_rebase(directory, branch, base, target, settings, verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      print(store.rebase_directory(directory, branch, expected ? *expected : resolve("heads/" + branch), base,
+                                   target, settings, {control->token(), observe}));
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
       const auto links = integer(args.option("--max-links").value_or("1000000"));

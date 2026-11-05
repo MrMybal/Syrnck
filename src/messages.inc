@@ -634,3 +634,7 @@ SYRNCK_MESSAGE("native rebase commit limit exceeded", "limite de commits du reba
 SYRNCK_MESSAGE("native rebase history contains a cycle", "l'historique du rebase natif contient un cycle")
 SYRNCK_MESSAGE("native rebase report exceeds 16 MiB", "le rapport de rebase natif dépasse 16 Mio")
 SYRNCK_MESSAGE("native rebase requires --onto", "le rebase natif nécessite --onto")
+SYRNCK_MESSAGE("native rebase tip changed; inspect the branch and retry", "la tête du rebase natif a changé ; inspectez la branche et relancez l'opération")
+SYRNCK_MESSAGE("native rebase requires an empty staging index", "le rebase natif nécessite un index de staging vide")
+SYRNCK_MESSAGE("native rebase is blocked; inspect native rebase-plan", "le rebase natif est bloqué ; inspectez native rebase-plan")
+SYRNCK_MESSAGE("native rebase candidate changed; refresh the plan", "le candidat du rebase natif a changé ; actualisez le plan")
