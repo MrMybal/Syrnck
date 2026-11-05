@@ -88,6 +88,20 @@ void budgets() {
   limits = {};
   limits.max_work = 1;
   limited("a\n", "b\n", "c\n", limits, "work_limit");
+  // Each individual identity diff fits in seven units. Both searches share
+  // this budget rather than silently receiving seven units each.
+  limits.max_work = 7;
+  require(compare_text(bytes("a\n"), bytes("a\n"), limits)["status"] == "text",
+          "work-budget fixture does not fit one diff");
+  limited("a\n", "a\n", "a\n", limits, "work_limit");
+  limits = {};
+  limits.max_work = 256 * 1024 * 1024;
+  std::string different_a, different_b;
+  for (unsigned i = 0; i < 1600; ++i) {
+    different_a += "A" + std::to_string(i) + '\n';
+    different_b += "B" + std::to_string(i) + '\n';
+  }
+  limited(different_a, different_b, different_a, limits, "trace_limit");
   limits = {};
   limits.max_output_bytes = 1024;
   const std::string quotes(500, '"');

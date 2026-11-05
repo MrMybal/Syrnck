@@ -84,3 +84,48 @@ references. The envelope has a separate 16 MiB hard ceiling; the nested core
 report obeys `max_output_bytes`. Tests run in clear/encrypted stores with loose,
 single-pack and multi-pack layouts, including incomplete stores, corrupt file
 hashes, missing payloads, cancellation and physical read-only checks.
+
+## CLI and reviewed conflict resolution
+
+```text
+syrnck native merge-text BASE CURRENT INCOMING Source/Player.cpp
+syrnck native merge-text BASE HEAD feature Source/Player.cpp --text
+```
+
+Selectors use the native HEAD/branch/tag rules. The default output is the JSON
+envelope; exit status is zero only when `ready` is true. A blocked JSON preview
+exits 1 and still writes its complete report to stdout. `--text` writes only
+clean merged bytes, without a trailing newline added by the CLI. On conflicts,
+binary input, absence or budget limits it fails with no content on stdout.
+Diagnostics and help use English by default, or French with `--lang fr`.
+JSON fields and merged bytes are language independent.
+
+`--max-file-bytes`, `--max-lines`, `--max-work` and `--max-output-bytes` override
+the normal text budgets. `--progress` and `--progress-json` report on stderr;
+the operation supports the existing cooperative CLI cancellation.
+
+This command is an explicit preview. Native `merge`, `cherry-pick`, `revert`
+and `rebase` still use their existing file-level decisions. A reviewed clean
+text result can be applied through a custom file resolution:
+
+1. Run the native operation's plan and retain its exact `resolution_context`.
+   For a merge, pass its `base`, `head` and `source` IDs to `merge-text`.
+2. Inspect the JSON report, including `result_executable`. Save clean `--text`
+   output to a temporary file outside the tracked workspace, using a tool that
+   preserves stdout bytes. Older shells can transcode redirected native output.
+3. Import that file with `syrnck put FILE`. If GC can run before application,
+   retain its manifest with a pin, as described in
+   [native conflict resolutions](NATIVE_RESOLUTIONS.md#choices).
+4. Add a `file` choice using that manifest and the reviewed executable mode to
+   the original resolution context. Preview again with `--resolutions` and
+   `--verify`, then apply with the same exact head and resolution document.
+
+The normal publication checks, recoverable checkout journal and archive roots
+then protect the resulting commit and both parents. Other unresolved conflicts
+still block publication. The text preview does not bind or publish a branch
+transaction by itself. Root/add/delete cases and virtual multi-step rebase text
+composition remain future integration work.
+
+CLI tests compare selected clean outputs byte for byte with `git merge-file`,
+exercise Unicode/spaced paths, selectors, bilingual output and failure modes,
+and apply a reviewed result through a real merge followed by GC and export.

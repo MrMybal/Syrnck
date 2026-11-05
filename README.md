@@ -94,6 +94,8 @@ Packing explicitly enables physical storage v2 for a single pack, or v3 for mult
 
 `native add-patch-plan PATH --patch FILE` previews an external unified text patch against the frozen index/head. `native add-patch PATH --patch FILE --expect-plan ID` prepares its exact result with atomic old-index retention, without reading working files. See [strict text patches](docs/TEXT_PATCHES.md) for supported Git/native patches and bounds.
 
+`native merge-text BASE CURRENT INCOMING PATH` previews a bounded, verified three-way text merge. `--text` emits exact bytes only for a clean result. Conflicts remain explicit; a reviewed result can be supplied through existing custom file resolutions. See [text merge and its limits](docs/TEXT_MERGE.md).
+
 ## Languages
 
 Local ingestion and pack limits can be saved with `config set`; explicit command options take precedence, including native commits and Git clean filters. See [repository settings](docs/SETTINGS.md).

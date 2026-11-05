@@ -234,6 +234,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native switch-plan BRANCHE [--directory .] [--verify]
   native switch BRANCHE [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
+  native merge-text BASE COURANT ENTRANT CHEMIN [--text]
+                                   Fusion textuelle vérifiée en lecture seule
   native diff-text SOURCE CIBLE CHEMIN [--context 3] [--unified]
   native diff-text --staged CHEMIN [--branch NOM] [--context 3] [--unified]
   native diff-text --working CHEMIN [--branch NOM | --revision SOURCE]
@@ -301,7 +303,7 @@ Langue : anglais par défaut ; --lang en|fr remplace SYRNCK_LANG.
 Branche native : --branch remplace la branche courante (main sans HEAD explicite).
 Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
-              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/merge-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -376,6 +378,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native switch-plan BRANCH [--directory .] [--verify]
   native switch BRANCH [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
+  native merge-text BASE CURRENT INCOMING PATH [--text]
+                                   Preview a verified three-way text merge
   native diff-text SOURCE TARGET PATH [--context 3] [--unified]
   native diff-text --staged PATH [--branch NAME] [--context 3] [--unified]
   native diff-text --working PATH [--branch NAME | --revision SOURCE]
@@ -443,7 +447,7 @@ Language: English by default; --lang en|fr overrides SYRNCK_LANG.
 Native branch: --branch overrides the current branch (main without explicit HEAD).
 Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
-              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/export,
+              fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/merge-text/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
@@ -665,12 +669,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
-        sub == "add" || sub == "add-patch-plan" || sub == "add-patch" || sub == "add-hunks-plan" ||
-        sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" || sub == "add-lines-plan" ||
-        sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" || sub == "staged" ||
-        sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" || sub == "checkout" ||
-        sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" || sub == "tag" ||
-        sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
+        sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
+        sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
+        sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
+        sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
+        sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
+        sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
@@ -1102,6 +1106,24 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
+    } else if (sub == "merge-text") {
+      const auto limits = text_diff_options(args);
+      const bool raw = args.flag("--text");
+      args.count(4);
+      const auto report =
+          store.merge_revision_file(resolve(args.values[0]), resolve(args.values[1]), resolve(args.values[2]),
+                                    args.values[3], limits, {control->token(), observe});
+      const auto ready = report["ready"].get<bool>();
+      if (raw) {
+        require(ready, "native text merge is not ready; inspect native merge-text without --text");
+        throw_if_cancelled(control->token());
+        const auto &content = report["merge"]["content"].get_ref<const std::string &>();
+        std::cout.write(content.data(), static_cast<std::streamsize>(content.size()));
+        require(std::cout.good(), "output write failed");
+      } else {
+        print(report);
+      }
+      return ready ? 0 : 1;
     } else if (sub == "diff-text") {
       const auto limits = text_diff_options(args);
       const bool unified = args.flag("--unified");

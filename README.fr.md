@@ -36,6 +36,8 @@ Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège le
 
 `native add-patch-plan CHEMIN --patch FICHIER` vérifie un patch textuel unifié externe contre l’index figé/la tête. `native add-patch CHEMIN --patch FICHIER --expect-plan ID` prépare son résultat exact avec archivage atomique de l’ancien index, sans lire les fichiers de travail. Voir [les patchs textuels stricts](docs/TEXT_PATCHES.md).
 
+`native merge-text BASE COURANT ENTRANT CHEMIN` donne un aperçu vérifié et borné de fusion textuelle à trois voies. `--text` émet les octets exacts uniquement si le résultat est sans conflit. Le résultat examiné peut ensuite servir de résolution personnalisée par fichier. Voir [la fusion textuelle et ses limites](docs/TEXT_MERGE.md).
+
 ## Compiler
 
 Prérequis : CMake 3.25+, compilateur C++20 et compilateur C, Ninja. Sous Windows, installer les outils C++ de Visual Studio 2022 et un SDK Windows. Sous Linux/macOS, les en-têtes et bibliothèques OpenSSL **3.x** sont aussi nécessaires. Python 3.9+ sert au script de construction et aux tests ; le moteur et le CLI sont des binaires natifs.

@@ -8,7 +8,9 @@ void run(const fs::path &root, std::optional<Key> key, unsigned layout) {
   const auto original_file = f.file("one\r\ntwo\r\nlast");
   const auto our_file = f.file("ONE\r\ntwo\r\nlast", true);
   const auto their_file = f.file("one\r\ntwo\r\nLAST");
-  const auto base = f.revision(Json{{path, original_file}, {"unrelated.bin", f.file("not requested")}});
+  const auto ancestor = f.revision(Json{{"ancestor.bin", f.file("not requested either")}});
+  const auto base = f.revision(Json{{path, original_file}, {"unrelated.bin", f.file("not requested")}},
+                               Json::array({ancestor}));
   const auto ours = f.revision(Json{{path, our_file}}, Json::array({base}));
   const auto theirs = f.revision(Json{{path, their_file}}, Json::array({base}));
   const auto changed = f.revision(Json{{path, f.file("OTHER\r\ntwo\r\nlast")}});
@@ -93,6 +95,7 @@ void run(const fs::path &root, std::optional<Key> key, unsigned layout) {
   }
   require(partial.merge_revision_file(base, ours, theirs, path) == result,
           "targeted merge traversed unrelated payloads");
+  require(!partial.contains({Kind::revision, ancestor}), "fixture unexpectedly imported an ancestor");
   auto bad_manifest = f.store.metadata(Kind::manifest, their_file["manifest"].get<std::string>());
   bad_manifest["file_hash"] = std::string(64, '0');
   const auto bad = f.store.put(Kind::manifest, bytes(bad_manifest.dump())).first;

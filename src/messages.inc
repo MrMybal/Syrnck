@@ -735,3 +735,4 @@ SYRNCK_MESSAGE("native patch command requires --patch FILE", "La commande de pat
 SYRNCK_MESSAGE("native add-patch requires --expect-plan", "native add-patch exige --expect-plan")
 SYRNCK_PREFIX("cannot inspect native checkout entry: ", "Impossible d’inspecter une entrée du dossier natif : ")
 SYRNCK_MESSAGE("native text merge report exceeds 16 MiB", "Le rapport de fusion textuelle dépasse 16 Mio")
+SYRNCK_MESSAGE("native text merge is not ready; inspect native merge-text without --text", "La fusion textuelle n’est pas prête ; consultez native merge-text sans --text")

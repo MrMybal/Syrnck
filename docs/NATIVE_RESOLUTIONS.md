@@ -72,6 +72,10 @@ an imported custom manifest if maintenance may run before application. Completed
 commits retain their selected manifests and blocks through their normal history
 and archive roots, including encrypted and packed Stores.
 
+For compatible edits on distinct text lines, [the bounded text merge preview](TEXT_MERGE.md#cli-and-reviewed-conflict-resolution)
+can produce a reviewed custom file from three explicit snapshots. It does not
+automatically change a native operation's file-level conflict decisions.
+
 Only paths involved in the original unresolved plan's file conflicts or either
 side of its namespace collisions can have choices. Overrides of clean paths are rejected.
 The engine reapplies portable case/prefix collision checks after all choices.
@@ -102,8 +106,8 @@ can discard them. IDs are lowercase 64-character hexadecimal values.
 
 Resolution documents do not create persistent conflict state, modify tracked
 files or retain their input objects. Keep the necessary branch/tag/pin roots
-until application. Automatic text merge, rename detection and an interactive
-conflict editor remain future work. Recovery after application starts uses
+until application. Automatic integration of text merge into these operations,
+rename detection and an interactive conflict editor remain future work. Recovery after application starts uses
 `native checkout-status` and `native checkout-recover [--abort]`; it finishes or
 rolls back the recorded candidate without needing the original JSON document.
 Rebase accepts a wrapper binding the original head, excluded base and onto revision,
