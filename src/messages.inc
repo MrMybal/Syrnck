@@ -645,3 +645,7 @@ SYRNCK_MESSAGE("native rebase resolution context changed; refresh the plan", "le
 SYRNCK_MESSAGE("native rebase resolutions have no replay", "les résolutions du rebase natif ne correspondent à aucun rejeu")
 SYRNCK_MESSAGE("native rebase resolution source is outside the range", "la source de résolution du rebase natif est hors de la plage")
 SYRNCK_MESSAGE("native staging rebase report exceeds 16 MiB", "le rapport de rebase de l'index natif dépasse 16 Mio")
+SYRNCK_MESSAGE("native staging rebase tip changed; refresh the plan", "la tête du rebase de l'index natif a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native staging rebase index changed; refresh the plan", "l'index du rebase natif a changé ; actualisez le plan")
+SYRNCK_MESSAGE("native staging rebase is blocked; inspect native rebase-index-plan", "le rebase de l'index natif est bloqué ; inspectez native rebase-index-plan")
+SYRNCK_MESSAGE("native staging rebase candidate changed; refresh the plan", "le candidat du rebase de l'index natif a changé ; actualisez le plan")

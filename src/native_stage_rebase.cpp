@@ -99,4 +99,33 @@ Json Store::plan_rebase_stage(std::string_view branch, bool verify_objects, Oper
   const NativeRewriteState state(*this, branch, options);
   return prepare_native_stage_rebase(*this, state, verify_objects, options).report;
 }
+Json Store::rebase_stage(std::string_view branch, std::string_view expected, std::string_view expected_index,
+                         OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  validate_id(expected);
+  validate_id(expected_index);
+  const NativeRewriteState state(*this, branch, options);
+  require(state.head.id == expected, "native staging rebase tip changed; refresh the plan");
+  require(state.index && state.index->id == expected_index,
+          "native staging rebase index changed; refresh the plan");
+  auto plan = prepare_native_stage_rebase(*this, state, true, options);
+  require(plan.report["ready"].get<bool>(),
+          "native staging rebase is blocked; inspect native rebase-index-plan");
+  const bool changed = plan.report["changed"].get<bool>();
+  if (changed) {
+    throw_if_cancelled(options.stop);
+    const auto next = put(Kind::revision, bytes(plan.candidate.dump())).first;
+    require(next.id == plan.target, "native staging rebase candidate changed; refresh the plan");
+    const auto archive = plan.report["archive"].get<std::string>();
+    require(compare_update_refs({{state.head_name, state.head, state.head},
+                                 {state.index_name, state.index, next},
+                                 {archive, state.lookup(archive), state.index}},
+                                options),
+            "native staging references changed; retry operation");
+  }
+  plan.report["previous_index"] = state.index->id;
+  plan.report["index"] = plan.target;
+  plan.report["state"] = changed ? "applied" : "unchanged";
+  return plan.report;
+}
 } // namespace syrnck

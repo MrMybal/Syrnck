@@ -396,6 +396,10 @@ public:
   // Replay frozen staging changes onto the current branch head without reading
   // or changing working files. A ready plan contains a deterministic index ID.
   Json plan_rebase_stage(std::string_view branch, bool verify_objects = false, OperationOptions = {}) const;
+  // Verify retained bytes, archive the old index and replace it in one expected
+  // branch/index reference transaction. The branch and working files do not move.
+  Json rebase_stage(std::string_view branch, std::string_view expected_revision,
+                    std::string_view expected_index, OperationOptions = {}) const;
   // Branch resets preserve working files. Soft preserves prepared entries on
   // the new baseline; mixed archives and clears the index. Old roots publish
   // atomically with the expected branch/index transition.
@@ -412,7 +416,7 @@ public:
   Json squash_commits(std::string_view branch, std::string_view expected_revision, std::size_t count,
                       std::string_view message, OperationOptions = {}) const;
   // Read-only pages of owned revision archives, with full reference cursors.
-  // Kinds: reset, reset-index, squash, amend, checkout and detached.
+  // Kinds: reset, reset-index, rebase-index, squash, amend, checkout and detached.
   Json native_archives(const std::optional<std::string> &kind = {},
                        const std::optional<std::string> &after = {}, std::size_t limit = 100,
                        bool verify_objects = false, OperationOptions = {}) const;

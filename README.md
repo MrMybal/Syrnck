@@ -126,6 +126,8 @@ Rebase also accepts `--resolutions JSON_FILE`: a series of explicit file choices
 
 `native rebase-index-plan --verify` previews replaying a stale frozen staging index onto its current branch head, without reading working files or storing candidates. See [native staging rebase](docs/NATIVE_STAGE_REBASE.md).
 
+`native rebase-index --expect HEAD_ID --expect-index INDEX_ID` publishes that prepared result atomically, retaining the former index and baseline through GC. Working files and branch selection remain untouched.
+
 **English is the default. French is the second built-in interface language.** Select `--lang en` / `--lang fr`, or set `SYRNCK_LANG=en` / `SYRNCK_LANG=fr`. The command-line flag takes precedence. Operating-system locale settings do not change the default.
 
 Help, status messages, and owned diagnostics are localized at the interface boundary. Commands, option names, JSON keys, object IDs, Git pointers, and network formats are language independent. Core exceptions and C/Go diagnostics retain their canonical English text; C++ interfaces can use [i18n.hpp](include/syrnck/i18n.hpp) for presentation. Unknown operating-system/dependency diagnostics fall back to their original text. See [localization policy](docs/LOCALIZATION.md).

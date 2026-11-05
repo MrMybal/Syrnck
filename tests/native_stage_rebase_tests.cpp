@@ -64,6 +64,92 @@ void planning(const fs::path &path, std::optional<Key> key, unsigned physical) {
   f.store.reset_stage("main");
   fails([&] { f.store.plan_rebase_stage("main"); });
 }
+void application(const fs::path &path, std::optional<Key> key, unsigned physical) {
+  Fixture f(path, key);
+  const auto a = f.file("baseline"), b = f.file("removed"), extra = f.file("upstream");
+  const auto base = f.revision(Json{{"a", a}, {"b", b}});
+  f.install(base);
+  f.write("a", "frozen selection");
+  fs::remove(path / "b");
+  const auto index = f.store.stage_directory(path, "main", {"."});
+  const auto prepared = f.store.metadata(Kind::revision, index)["files"]["a"];
+  const auto head = f.revision(Json{{"a", a}, {"b", b}, {"extra", extra}}, Json::array({base}));
+  f.store.set_ref("heads/main", {Kind::revision, head});
+  f.write("a", "later dirty bytes");
+  f.write("untracked", "keep");
+  f.pack(physical);
+  const auto plan = f.store.plan_rebase_stage("main");
+  const auto before = f.physical();
+  const auto selection = f.store.native_head();
+  fails([&] { f.store.rebase_stage("main", base, index); });
+  fails([&] { f.store.rebase_stage("main", head, base); });
+  require(f.physical() == before, "wrong expected staging rebase values wrote data");
+  const auto refs = f.store.refs();
+  std::stop_source stop;
+  fails([&] {
+    f.store.rebase_stage("main", head, index, {stop.get_token(), [&](const ProgressEvent &event) {
+                                                 if (event.phase == ProgressPhase::publishing)
+                                                   stop.request_stop();
+                                               }});
+  });
+  require(f.store.refs() == refs && text(read_bytes(path / "a")) == "later dirty bytes" &&
+              text(read_bytes(path / "untracked")) == "keep",
+          "cancelled staging rebase moved refs or working files");
+  fails([&] {
+    f.store.rebase_stage("main", head, index, {{}, [](const ProgressEvent &event) {
+                                                 if (event.phase == ProgressPhase::publishing)
+                                                   throw Error("observer failed");
+                                               }});
+  });
+  require(f.store.refs() == refs, "failed observer published a staging rebase");
+  const auto result = f.store.rebase_stage("main", head, index);
+  const auto target = result["target"].get<std::string>();
+  const auto value = f.store.metadata(Kind::revision, target);
+  require(result["state"] == "applied" && result["target"] == plan["target"] &&
+              result["previous_index"] == index && value["parents"] == Json::array({head}) &&
+              value["files"]["a"] == prepared && value["files"]["extra"] == extra &&
+              !value["files"].contains("b") && f.store.refs().at("heads/main").id == head &&
+              f.store.refs().at("archive/rebase-index/" + index).id == index &&
+              f.store.native_head() == selection && text(read_bytes(path / "a")) == "later dirty bytes" &&
+              !fs::exists(path / "b") && text(read_bytes(path / "untracked")) == "keep",
+          "staging rebase lost its planned snapshot, archive or dirty workspace");
+  const auto unchanged = f.physical();
+  require(f.store.rebase_stage("main", head, target)["state"] == "unchanged" && f.physical() == unchanged,
+          "fresh staging rebase wrote data");
+  require(f.store.staged_status("main")["stale"] == false &&
+              f.store.native_archives("rebase-index", {}, 100, true)["archives"][0]["revision"] == index,
+          "staging rebase index is stale or its archive is not inspectable");
+  const auto committed = f.store.commit_staged("main", "Publish rebased selection");
+  const auto commit = f.store.metadata(Kind::revision, committed);
+  require(commit["parents"] == Json::array({head}) && commit["files"] == value["files"],
+          "staged commit after rebase lost frozen entries or current head");
+  f.store.gc(true);
+  (void)f.store.closure({{Kind::revision, index}, {Kind::revision, base}, {Kind::revision, committed}}, true);
+  require(f.store.fsck() > 0, "staging rebase damaged retained data");
+}
+void missing_history(const fs::path &path) {
+  std::string base, index, head, chunk;
+  {
+    Fixture f(path);
+    const auto old = f.file("exclusive old history"), now = f.file("new content");
+    base = f.revision(Json{{"asset", old}});
+    f.install(base);
+    index = frozen(f, Json{{"asset", now}}, base);
+    head = f.revision(Json{{"asset", now}}, Json::array({base}));
+    f.store.set_ref("heads/main", {Kind::revision, head});
+    chunk = f.store.metadata(Kind::manifest, old["manifest"].get<std::string>())["blocks"][0]["id"]
+                .get<std::string>();
+  }
+  require(fs::remove(path / ".syrnck/objects/chunk" / chunk.substr(0, 2) / chunk),
+          "missing history fixture failed");
+  Store store(path / ".syrnck");
+  require(store.plan_rebase_stage("main")["ready"] == true, "metadata staging plan read historical payloads");
+  const auto refs = store.refs();
+  const auto objects = store.objects();
+  fails([&] { store.plan_rebase_stage("main", true); });
+  fails([&] { store.rebase_stage("main", head, index); });
+  require(store.refs() == refs && store.objects() == objects, "staging rebase published damaged old history");
+}
 void representations_and_unborn(const fs::path &path) {
   Fixture f(path);
   const auto a = f.file(std::string(4096, 'x'), false, 1024),
@@ -98,8 +184,11 @@ int main() {
         }
         planning(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(physical)), key,
                  physical);
+        application(temporary.path / ("apply-" + std::to_string(encrypted) + '-' + std::to_string(physical)),
+                    key, physical);
       }
     representations_and_unborn(temporary.path / "representation");
+    missing_history(temporary.path / "missing");
     std::cout
         << "read-only staging rebase, frozen changes, conflicts, representations and cancellation passed\n";
   } catch (const std::exception &error) {

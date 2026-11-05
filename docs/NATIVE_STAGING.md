@@ -91,8 +91,11 @@ selection or reset it explicitly first.
 
 If another operation moves/removes the branch, add, selective reset and staged
 commit refuse the stale index. Inspect/export it if needed, then explicitly
-clear it with `native reset` and start again from the new base. Automatic rebase,
-merge, partial hunks and text patches remain future work.
+clear it with `native reset`, or use `native rebase-index-plan` and
+`native rebase-index` to replay its frozen changes onto an existing branch head.
+The latter archives the old index and preserves working files; conflicts block
+publication. See [staging rebase](NATIVE_STAGE_REBASE.md). Partial hunks and text
+patches remain future work.
 
 ## Retention and publication
 
