@@ -121,6 +121,12 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+Le checkout et le changement de branche prennent en charge les transitions
+fichier/dossier et les changements de casse des fichiers et de leurs parents.
+Les sources sont mises à l’abri avant installation, avec reprise et annulation
+par phases persistantes ; les descendants non suivis ou ignorés restent protégés.
+Voir les [transitions récupérables du workspace](docs/NATIVE_CHECKOUT.md#recoverable-namespace-transitions).
+
 `native status` compare le contenu du dossier de travail à une branche ou une révision native sans importer les fichiers. `native diff SOURCE CIBLE` compare les métadonnées de deux snapshots, avec distinction du contenu, du mode et du manifeste. Voir les [contrats et limites des comparaisons natives](docs/NATIVE_COMPARISON.md).
 
 `native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). La sélection de patches textuels reste à développer.

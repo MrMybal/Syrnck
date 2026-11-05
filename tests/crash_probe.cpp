@@ -26,6 +26,9 @@ std::string target_kind(const fs::path &path) {
     return "restore";
   if (name == "exported")
     return "export";
+  if (name == "node" || name == "flat" || name == "new.txt" || name == "old.txt" || name == "zCase" ||
+      name == "zcase")
+    return "namespace-entry";
   if (name == "asset.bin" || name == "second.bin" || name == "empty" || name == "code.cpp")
     return "export-file";
   if (path.extension() == ".syp")
@@ -127,6 +130,21 @@ ObjectKey put_text_revision(const Store &store, const ObjectKey &manifest, unsig
   value["files"]["code.cpp"] = Json{{"manifest", store.ingest(input).first}, {"executable", false}};
   return store.put(Kind::revision, bytes(value.dump())).first;
 }
+bool namespace_operation(std::string_view operation) {
+  return operation == "checkout-namespace" || operation == "checkout-namespace-abort";
+}
+ObjectKey put_namespace_revision(const Store &store, const ObjectKey &asset, bool target,
+                                 const std::optional<ObjectKey> &parent = {}) {
+  auto value = revision(asset, parent);
+  auto entry = [&](std::string_view content) {
+    std::istringstream input{std::string(content)};
+    return Json{{"manifest", store.ingest(input).first}, {"executable", false}};
+  };
+  value["files"][target ? "flat/new.txt" : "flat"] = entry(target ? "new nested" : "old flat");
+  value["files"][target ? "node" : "node/code.cpp"] = entry(target ? "new flat" : "old nested");
+  value["files"][target ? "zcase/old.txt" : "zCase/old.txt"] = entry("same case bytes");
+  return store.put(Kind::revision, bytes(value.dump())).first;
+}
 fs::path loose(const Store &store, const ObjectKey &key) {
   return store.root() / "objects" / kind_name(key.kind) / key.id.substr(0, 2) / key.id;
 }
@@ -219,6 +237,8 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
   auto tip = put_revision(store, old);
+  if (namespace_operation(operation))
+    tip = put_namespace_revision(store, old, false);
   std::optional<ObjectKey> merge_base;
   if (merge_operation(operation) && !operation.starts_with("merge-fast-forward")) {
     merge_base = put_revision(store, ingest(store, operation.starts_with("merge-resolved") ? 2 : 0));
@@ -470,10 +490,18 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
     store.set_ref("pins/replay-source", source);
     info["replay_source"] = key_json(source);
   }
-  if (operation == "checkout" || operation == "checkout-abort" || operation == "switch" ||
-      operation == "switch-abort") {
+  if (namespace_operation(operation) || operation == "checkout" || operation == "checkout-abort" ||
+      operation == "switch" || operation == "switch-abort") {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
-    const auto next = put_revision(store, ingest(store, 1), tip);
+    const auto next = namespace_operation(operation)
+                          ? put_namespace_revision(store, ingest(store, 1), true, tip)
+                          : put_revision(store, ingest(store, 1), tip);
+    if (namespace_operation(operation)) {
+      const auto original = store.metadata(Kind::revision, tip.id);
+      for (const auto &[path, entry] : original["files"].items())
+        if (path != "asset.bin")
+          store.restore_file(entry["manifest"].get<std::string>(), root.parent_path() / path_from_utf8(path));
+    }
     store.set_ref("pins/checkout-target", next);
     info["new_revision"] = key_json(next);
     if (operation == "switch" || operation == "switch-abort")
@@ -635,12 +663,12 @@ void perform(Store &store, const Json &info) {
       store.commit_staged("main", "Staged crash fixture");
   } else if (op == "stage-reset") {
     store.reset_stage("main");
-  } else if (op == "checkout") {
+  } else if (op == "checkout" || op == "checkout-namespace") {
     if (store.checkout_status()["pending"].get<bool>())
       store.recover_checkout();
     else if (store.refs().at("heads/main") != parse_key(info.at("new_revision")))
       store.checkout_directory(store.root().parent_path(), "main", parse_key(info.at("new_revision")).id);
-  } else if (op == "checkout-abort") {
+  } else if (op == "checkout-abort" || op == "checkout-namespace-abort") {
     store.recover_checkout(true);
   } else if (op == "switch") {
     if (store.checkout_status()["pending"].get<bool>())
@@ -874,8 +902,8 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     if (resumed)
       check(tagged == (op != "tag-delete"), "tag operation did not resume");
   }
-  if (op == "checkout" || op == "checkout-abort" || op == "switch" || op == "switch-abort" ||
-      replay_operation(op) || merge_operation(op) || rebase_operation(op)) {
+  if (namespace_operation(op) || op == "checkout" || op == "checkout-abort" || op == "switch" ||
+      op == "switch-abort" || replay_operation(op) || merge_operation(op) || rebase_operation(op)) {
     const auto status = store.checkout_status();
     const auto working = root.parent_path() / "asset.bin";
     if (fs::exists(working))
@@ -888,19 +916,55 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     }
     if (resumed) {
       check(!status["pending"].get<bool>() && fs::exists(working) &&
-                text(read_bytes(working)) == content(op == "checkout" || op == "switch" ||
-                                                             (replay_operation(op) && !replay_abort(op)) ||
-                                                             (merge_operation(op) && !merge_abort(op)) ||
-                                                             (rebase_operation(op) && !rebase_abort(op))
-                                                         ? 1
-                                                         : 0),
+                text(read_bytes(working)) ==
+                    content(op == "checkout" || op == "checkout-namespace" || op == "switch" ||
+                                    (replay_operation(op) && !replay_abort(op)) ||
+                                    (merge_operation(op) && !merge_abort(op)) ||
+                                    (rebase_operation(op) && !rebase_abort(op))
+                                ? 1
+                                : 0),
             "checkout recovery did not finish");
-      check(current.str() == content(op == "checkout" || (replay_operation(op) && !replay_abort(op)) ||
+      check(current.str() == content(op == "checkout" || op == "checkout-namespace" ||
+                                             (replay_operation(op) && !replay_abort(op)) ||
                                              (merge_operation(op) && !merge_abort(op)) ||
                                              (rebase_operation(op) && !rebase_abort(op))
                                          ? 1
                                          : 0),
             "checkout recovery moved the wrong branch");
+    }
+    if (namespace_operation(op)) {
+      std::map<std::string, std::string> observed, source_files, target_files;
+      const auto source_value = store.metadata(Kind::revision, old.id);
+      const auto target_value = store.metadata(Kind::revision, parse_key(info["new_revision"]).id);
+      auto contents = [&](const Json &value, auto &files) {
+        for (const auto &[path, file] : value["files"].items())
+          if (path != "asset.bin") {
+            std::ostringstream output;
+            store.reconstruct(file["manifest"].template get<std::string>(), output);
+            files.emplace(path, output.str());
+          }
+      };
+      contents(source_value, source_files);
+      contents(target_value, target_files);
+      for (const auto &entry : fs::directory_iterator(root.parent_path())) {
+        const auto name = utf8(entry.path().filename()), folded = portable_fold(name);
+        if (folded != "flat" && folded != "node" && folded != "zcase")
+          continue;
+        if (entry.is_regular_file())
+          observed.emplace(name, text(read_bytes(entry.path())));
+        else
+          for (const auto &file : fs::recursive_directory_iterator(entry.path()))
+            if (file.is_regular_file())
+              observed.emplace(utf8(file.path().lexically_relative(root.parent_path())),
+                               text(read_bytes(file.path())));
+      }
+      for (const auto &[path, content] : observed)
+        check((source_files.contains(path) && source_files.at(path) == content) ||
+                  (target_files.contains(path) && target_files.at(path) == content),
+              "namespace checkout left unexpected names or partial bytes");
+      if (resumed)
+        check(observed == (op.ends_with("-abort") ? source_files : target_files),
+              "namespace recovery lost exact source/target names");
     }
     if (op == "switch" || op == "switch-abort") {
       check(refs.at("heads/main") == old && refs.at("heads/feature") == parse_key(info.at("new_revision")),
@@ -1138,16 +1202,19 @@ int entry(int argc, char **argv) {
             std::ofstream(path, std::ios::binary) << "destructor ran";
           }
         } sentinel{root.parent_path() / "unwound.txt"};
-        if (info["operation"] == "checkout-abort" || info["operation"] == "switch-abort" ||
-            replay_abort(info["operation"].get<std::string>()) ||
+        if (info["operation"] == "checkout-abort" || info["operation"] == "checkout-namespace-abort" ||
+            info["operation"] == "switch-abort" || replay_abort(info["operation"].get<std::string>()) ||
             merge_abort(info["operation"].get<std::string>()) ||
             rebase_abort(info["operation"].get<std::string>())) {
           std::stop_source stop;
           try {
-            const OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
-                                             if (event.phase == ProgressPhase::exporting && event.bytes > 0)
-                                               stop.request_stop();
-                                           }};
+            const OperationOptions options{
+                stop.get_token(), [&](const ProgressEvent &event) {
+                  if (info["operation"] == "checkout-namespace-abort"
+                          ? event.phase == ProgressPhase::publishing && event.path == "checkout"
+                          : event.phase == ProgressPhase::exporting && event.bytes > 0)
+                    stop.request_stop();
+                }};
             if (rebase_abort(info["operation"].get<std::string>()))
               store.rebase_directory(root.parent_path(), "main", parse_key(info["old_revision"]).id,
                                      parse_key(info["rebase_base"]).id, parse_key(info["rebase_onto"]).id,
@@ -1168,7 +1235,9 @@ int entry(int argc, char **argv) {
                                        options);
           } catch (const Cancelled &) {
           }
-          check(store.checkout_status()["state"] == "applying", "missing abort fixture journal");
+          check(store.checkout_status()["state"] ==
+                    (info["operation"] == "checkout-namespace-abort" ? "installing" : "applying"),
+                "missing abort fixture journal");
         }
         control = Control{argv[3], argv[4], static_cast<std::size_t>(std::stoull(argv[5])), 0, true};
         perform(store, info);

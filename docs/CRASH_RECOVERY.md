@@ -24,6 +24,7 @@ crash by throwing an exception or unwinding the stack.
 | Native merge and abort | Ordinary and explicitly resolved two-parent candidates, exact fast-forward, the checkout publication/move/rollback boundaries and both-parent retention through recovery and GC |
 | Native rebase and abort | Two-candidate linear chains, resolved conflicts, successive virtual text compositions and empty-range moves; first/second generated chunk/manifest/candidate writes, both prepared files and moves, checkout journal/publication/rollback boundaries, stable planned IDs and unchanged onto roots |
 | Native checkout and abort | Journal/pending roots, prepared files, exclusive backup/install/rollback moves, branch/archive/receipt publication and cleanup; resume or rollback preserves the selected version and leaves no active journal |
+| Native namespace checkout and abort | File/directory transitions and parent case changes in one operation; all-source evacuation, first/second directory removal/creation, all prepared files and backup/install/rollback moves, durable uninstall/restore phases and exact-name retention |
 | Native partial text staging | Selected chunk/manifest/index writes and atomic publication, with or without a previous index archive; unselected text, other frozen files and working bytes stay intact |
 | Native partial text reset | Chunk/manifest/replacement-index writes and atomic old-index archival; removed text stays reconstructible in the archive, remaining prepared text and working files stay intact |
 | Native individual line selection | Partial add with/without an existing index and partial reset inside a hunk; selected-row chunk/manifest/index writes, atomic retention, untouched working files and exact independently computed result identities |
@@ -84,6 +85,15 @@ the source history, the two-file checkout and resume/abort bytes. The index
 fixture verifies generated text, atomic old-index archival and unchanged dirty
 working files. Cases run with plaintext and encrypted objects. This focused run
 does not claim a new complete-campaign, other-platform or power-loss result.
+
+A second focused Windows x64 Release run on 6 November 2026 passed **262
+process-kill combinations**, including 256 namespace checkout/abort combinations
+and 6 existing checkout/rebase/commit checkpoints. The fixture combines a file
+becoming a directory, a directory becoming a file, a parent case change and an
+ordinary binary replacement. Fresh production readers verify exact path spellings,
+bytes, archives and complete resume/rollback in plaintext/encrypted storage.
+Isolation and exclusive-lock controls also passed. This is a focused process
+termination result, without a claim of power-loss or other-platform validation.
 
 Exports may leave `.syrnck-export-<32 hex>` sibling directories after a hard
 kill. Recovery verifies the published tree if present; a retry prepares a fresh

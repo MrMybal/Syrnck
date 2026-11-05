@@ -113,8 +113,8 @@ plan even if its bytes happen to match the desired target.
 | `tracked_mode_changed` | Local Unix executable metadata differs |
 | `staging_present`, `stale_staging` | The branch has a pending or stale index; path is empty |
 | `checkout_pending` | A checkout journal requires recovery; path is empty |
-| `untracked_collision` | A target file would occupy an untracked file path |
-| `file_directory_transition` | A file/directory conversion or ancestor obstruction needs a later transaction policy |
+| `untracked_collision` | A target would occupy an untracked path, or an affected directory contains untracked/ignored entries |
+| `file_directory_transition` | A file/directory conversion or ancestor obstruction includes an entry outside the tracked transition |
 | `path_spelling` | A name matches only after Unicode normalization/case folding |
 | `portable_collision` | Multiple physical names fold to the same affected name |
 | `symlink_obstruction`, `special_file` | An affected path or ancestor is not an ordinary file/directory |
@@ -124,8 +124,12 @@ Static symlinks and Windows reparse points, including junctions, are opaque.
 The inventory never deliberately traverses them. `.git` and `.syrnck` names and
 the actual Store directory are protected and their contents are excluded from
 the workspace inventory. Custom Store names receive the same protection.
-Case-only/normalization renames and file/directory transitions are blocked by
-this first policy, including when tracked entries would make them possible.
+Clean tracked case/normalization changes and file/directory transitions are
+planned through the [recoverable namespace executor](NATIVE_CHECKOUT.md#recoverable-namespace-transitions).
+Such plans add `namespace_transition: true` and `remove_directories`. Only
+snapshot-owned files and their known parent directories can be displaced;
+unknown empty directories and ignored descendants remain protected. Parent
+spellings inside each snapshot must be consistent under portable folding.
 No force, overwrite, automatic index reset or adoption option is implemented.
 
 ## C++, progress and resource boundaries

@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_checkout_layout.hpp"
 #include "io_checkpoint.hpp"
 #include <algorithm>
 #include <charconv>
@@ -100,20 +101,24 @@ struct Record {
   std::optional<std::string> source;
   std::optional<std::string> destination_branch;
   std::optional<ObjectKey> previous_head, next_head;
+  bool namespace_transition = false;
   ObjectKey key{Kind::chunk, {}};
   Json identity() const {
-    auto result = Json{{"version", destination_branch ? 2 : 1},
-                       {"type", "native-checkout"},
-                       {"nonce", nonce},
-                       {"directory", utf8(workspace)},
-                       {"branch", branch},
-                       {"source", source ? Json(*source) : Json{}},
-                       {"target", target}};
+    auto result =
+        Json{{"version", namespace_transition ? (destination_branch ? 4 : 3) : (destination_branch ? 2 : 1)},
+             {"type", "native-checkout"},
+             {"nonce", nonce},
+             {"directory", utf8(workspace)},
+             {"branch", branch},
+             {"source", source ? Json(*source) : Json{}},
+             {"target", target}};
     if (destination_branch) {
       result["destination_branch"] = *destination_branch;
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
       result["next_head"] = next_head->id;
     }
+    if (namespace_transition)
+      result["namespace_transition"] = true;
     return result;
   }
   Json json() const {
@@ -153,7 +158,8 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   const auto value = parse_json(data);
   const auto version = value.value("version", 0);
   require(value.is_object() &&
-              ((version == 1 && value.size() == 9) || (version == 2 && value.size() == 12)) &&
+              ((version == 1 && value.size() == 9) || (version == 2 && value.size() == 12) ||
+               (version == 3 && value.size() == 10) || (version == 4 && value.size() == 13)) &&
               value.value("type", "") == "native-checkout",
           "invalid native checkout record");
   Record record;
@@ -163,10 +169,13 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   record.branch = value.at("branch").get<std::string>();
   record.target = value.at("target").get<std::string>();
   record.state = value.at("state").get<std::string>();
+  record.namespace_transition = version == 3 || version == 4;
+  if (record.namespace_transition)
+    require(value.at("namespace_transition") == true, "invalid native checkout record");
   record.workspace = path_from_utf8(value.at("directory").get<std::string>());
   if (!value.at("source").is_null())
     record.source = value.at("source").get<std::string>();
-  if (version == 2) {
+  if (version == 2 || version == 4) {
     record.destination_branch = value.at("destination_branch").get<std::string>();
     validate_ref("heads/" + *record.destination_branch);
     validate_ref("staging/" + *record.destination_branch);
@@ -187,8 +196,13 @@ Record parse_record(const Store &store, const ObjectKey &key) {
     validate_id(*record.source);
   validate_ref("heads/" + record.branch);
   validate_ref("staging/" + record.branch);
-  require(record.state == "preparing" || record.state == "applying" || record.state == "aborting" ||
-              record.state == "discarding" || record.state == "aborted" || record.state == "committed",
+  require(
+      record.state == "preparing" || record.state == "applying" || record.state == "aborting" ||
+          record.state == "discarding" || record.state == "aborted" || record.state == "committed" ||
+          (record.namespace_transition && (record.state == "evacuating" || record.state == "installing" ||
+                                           record.state == "uninstalling" || record.state == "restoring")),
+      "invalid native checkout record");
+  require(!record.namespace_transition || (record.state != "applying" && record.state != "aborting"),
           "invalid native checkout record");
   require(record.workspace.is_absolute() && record.workspace == record.workspace.lexically_normal() &&
               record.workspace != store.root() && inside(store.root(), record.workspace) &&
@@ -274,8 +288,16 @@ class Transaction {
 public:
   Record record;
   Json entries;
+  std::optional<NativeCheckoutLayout> layout;
   Transaction(const Store &store, Record value, OperationOptions options)
-      : store_(store), record(std::move(value)), entries(actions(store, record, options)) {}
+      : store_(store), record(std::move(value)), entries(actions(store, record, options)) {
+    if (record.namespace_transition) {
+      const auto source =
+          record.source ? read_native_snapshot(store, *record.source, options) : NativeSnapshot{};
+      layout.emplace(source, read_native_snapshot(store, record.target, options), options);
+      require(layout->transition, "invalid native checkout record");
+    }
+  }
   fs::path file(std::string_view area, std::size_t index) const {
     return record.data(store_) / area / (std::to_string(index) + ".bin");
   }
@@ -336,6 +358,10 @@ public:
   }
   void prepare(OperationOptions options);
   void apply(OperationOptions options);
+  void apply_namespace(OperationOptions options);
+  void undo_namespace(OperationOptions options);
+  std::optional<fs::path> exact_path(const std::string &, bool create);
+  void remove_directories(const std::set<std::string> &, OperationOptions, bool rollback);
   void undo(OperationOptions options);
   void cleanup(OperationOptions options);
   Json run(bool abort, OperationOptions options);
@@ -372,42 +398,46 @@ void Transaction::prepare(OperationOptions options) {
           "native checkout references changed");
   for (const auto &conflict : plan["conflicts"])
     require(conflict["reason"] == "checkout_pending", "native checkout workspace is no longer clean");
-  state("applying", options);
+  state(record.namespace_transition ? "evacuating" : "applying", options);
   SYRNCK_IO_CHECKPOINT("checkout.prepared", store_.root() / "checkout.state");
 }
 void Transaction::apply(OperationOptions options) {
   const auto total = touched_bytes(entries);
   std::uint64_t completed = 0;
-  for (std::size_t i = 0; i < entries.size(); ++i) {
-    const auto &row = entries[i], &source = row["source"], &target = row["target"];
-    const auto path = row["path"].get<std::string>();
-    report_progress(options, {ProgressPhase::exporting, path, completed, total});
-    private_directories(false);
-    const auto old = file("old", i), next = file("new", i);
-    auto working = working_path(store_, record, path, !target.is_null());
-    if (!source.is_null()) {
-      if (!present(old)) {
-        require(matches(working, source, path, options), "working file changed during native checkout");
-        working = working_path(store_, record, path, false);
-        move_exclusive(working, old);
-      }
-      require(matches(old, source, path, options), "native checkout backup changed; abort to restore it");
-    } else
-      require(!present(old), "invalid native checkout backup state");
-    working = working_path(store_, record, path, !target.is_null());
-    if (!target.is_null()) {
-      if (present(next)) {
-        require(matches(next, target, path, options), "native checkout prepared file changed");
-        working = working_path(store_, record, path, true);
-        require(!present(working), "native checkout destination appeared; preserve it before recovery");
-        move_exclusive(next, working);
+  if (record.namespace_transition) {
+    apply_namespace(options);
+    completed = total;
+  } else
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      const auto &row = entries[i], &source = row["source"], &target = row["target"];
+      const auto path = row["path"].get<std::string>();
+      report_progress(options, {ProgressPhase::exporting, path, completed, total});
+      private_directories(false);
+      const auto old = file("old", i), next = file("new", i);
+      auto working = working_path(store_, record, path, !target.is_null());
+      if (!source.is_null()) {
+        if (!present(old)) {
+          require(matches(working, source, path, options), "working file changed during native checkout");
+          working = working_path(store_, record, path, false);
+          move_exclusive(working, old);
+        }
+        require(matches(old, source, path, options), "native checkout backup changed; abort to restore it");
       } else
-        require(matches(working, target, path, options), "working file changed during native checkout");
-    } else
-      require(!present(working), "native checkout destination appeared; preserve it before recovery");
-    completed += (target.is_null() ? source : target)["size"].get<std::uint64_t>();
-    report_progress(options, {ProgressPhase::exporting, path, completed, total, i + 1 == entries.size()});
-  }
+        require(!present(old), "invalid native checkout backup state");
+      working = working_path(store_, record, path, !target.is_null());
+      if (!target.is_null()) {
+        if (present(next)) {
+          require(matches(next, target, path, options), "native checkout prepared file changed");
+          working = working_path(store_, record, path, true);
+          require(!present(working), "native checkout destination appeared; preserve it before recovery");
+          move_exclusive(next, working);
+        } else
+          require(matches(working, target, path, options), "working file changed during native checkout");
+      } else
+        require(!present(working), "native checkout destination appeared; preserve it before recovery");
+      completed += (target.is_null() ? source : target)["size"].get<std::uint64_t>();
+      report_progress(options, {ProgressPhase::exporting, path, completed, total, i + 1 == entries.size()});
+    }
   SYRNCK_IO_CHECKPOINT("checkout.applied", store_.root() / "checkout.state");
   report_progress(options, {ProgressPhase::publishing, "checkout", completed, total});
   // This is the last observer. Recheck every desired file after it, then use
@@ -421,11 +451,13 @@ void Transaction::apply(OperationOptions options) {
   }
   for (const auto &row : entries)
     if (row["target"].is_null()) {
-      require(!present(working_path(store_, record, row["path"].get<std::string>(), false)),
-              "native checkout destination appeared; preserve it before recovery");
+      if (!record.namespace_transition)
+        require(!present(working_path(store_, record, row["path"].get<std::string>(), false)),
+                "native checkout destination appeared; preserve it before recovery");
       removed_paths.push_back(row["path"].get<std::string>());
     }
-  verify_native_checkout_namespace(store_, record.workspace, target_paths, removed_paths, final_options);
+  verify_native_checkout_namespace(store_, record.workspace, target_paths, removed_paths, final_options, true,
+                                   record.namespace_transition);
   expected_head();
   auto committed = record;
   committed.state = "committed";
@@ -446,6 +478,157 @@ void Transaction::apply(OperationOptions options) {
   committed.key = key;
   record = std::move(committed);
   SYRNCK_IO_CHECKPOINT("checkout.committed", store_.root() / "checkout.state");
+}
+std::optional<fs::path> Transaction::exact_path(const std::string &relative, bool create) {
+  validate_path(relative);
+  auto parent = record.workspace;
+  const auto components = path_from_utf8(relative);
+  for (auto i = components.begin(); i != components.end(); ++i) {
+    const bool last = std::next(i) == components.end();
+    const auto status = fs::symlink_status(parent);
+    require(fs::is_directory(status) && !native_link_like(parent, status),
+            "native checkout path became obstructed");
+    std::optional<fs::path> exact;
+    const auto wanted = utf8(*i), folded = portable_fold(wanted);
+    bool alias = false;
+    for (const auto &entry : fs::directory_iterator(parent)) {
+      const auto name = utf8(entry.path().filename());
+      if (name == wanted)
+        exact = entry.path();
+      else if (portable_fold(name) == folded)
+        alias = true;
+    }
+    if (!exact) {
+      if (!create)
+        return {};
+      require(!alias, "native checkout path became obstructed");
+      parent /= *i;
+      require(!inside(parent, store_.root()), "native checkout path became obstructed");
+      if (!last) {
+        require(fs::create_directory(parent), "cannot create native checkout directory");
+        sync_directory(parent.parent_path());
+        SYRNCK_IO_CHECKPOINT("checkout.directory_created", parent);
+      }
+    } else {
+      require(!alias && !inside(*exact, store_.root()), "native checkout path became obstructed");
+      const auto entry_status = fs::symlink_status(*exact);
+      require(!native_link_like(*exact, entry_status), "native checkout path became obstructed");
+      if (!last && !fs::is_directory(entry_status)) {
+        require(!create && fs::is_regular_file(entry_status), "native checkout path became obstructed");
+        return {};
+      }
+      parent = *exact;
+    }
+  }
+  return parent;
+}
+void Transaction::remove_directories(const std::set<std::string> &directories, OperationOptions options,
+                                     bool rollback) {
+  for (auto i = directories.rbegin(); i != directories.rend(); ++i) {
+    throw_if_cancelled(options.stop);
+    const auto path = exact_path(*i, false);
+    if (!path)
+      continue;
+    const auto status = fs::symlink_status(*path);
+    if (rollback && fs::is_regular_file(status)) {
+      bool original = false;
+      for (const auto &row : entries)
+        if (row["path"].get<std::string>() == *i && !row["source"].is_null())
+          original = true;
+      require(original, "native checkout path became obstructed");
+      continue;
+    }
+    require(fs::is_directory(status) && !native_link_like(*path, status) && fs::is_empty(*path),
+            "native checkout path became obstructed");
+    remove_empty_directory(*path, options);
+    sync_directory(path->parent_path());
+    SYRNCK_IO_CHECKPOINT("checkout.directory_removed", *path);
+  }
+}
+void Transaction::apply_namespace(OperationOptions options) {
+  const auto total = touched_bytes(entries);
+  if (record.state == "evacuating") {
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      const auto &row = entries[i], &source = row["source"];
+      if (source.is_null())
+        continue;
+      const auto path = row["path"].get<std::string>();
+      report_progress(options, {ProgressPhase::exporting, path, 0, total});
+      private_directories(false);
+      const auto old = file("old", i);
+      if (!present(old)) {
+        const auto working = exact_path(path, false);
+        require(working && matches(*working, source, path, options),
+                "working file changed during native checkout");
+        move_exclusive(*working, old);
+      }
+      require(matches(old, source, path, options), "native checkout backup changed; abort to restore it");
+    }
+    remove_directories(layout->remove_directories, options, false);
+    state("installing", options);
+    SYRNCK_IO_CHECKPOINT("checkout.evacuated", store_.root() / "checkout.state");
+  }
+  std::uint64_t completed = 0;
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const auto &row = entries[i], &target = row["target"];
+    const auto path = row["path"].get<std::string>();
+    report_progress(options, {ProgressPhase::exporting, path, completed, total});
+    private_directories(false);
+    if (!target.is_null()) {
+      const auto next = file("new", i);
+      if (present(next)) {
+        require(matches(next, target, path, options), "native checkout prepared file changed");
+        const auto working = *exact_path(path, true);
+        require(!present(working), "native checkout destination appeared; preserve it before recovery");
+        move_exclusive(next, working);
+      } else {
+        const auto working = exact_path(path, false);
+        require(working && matches(*working, target, path, options),
+                "working file changed during native checkout");
+      }
+    }
+    completed += (target.is_null() ? row["source"] : target)["size"].get<std::uint64_t>();
+    report_progress(options, {ProgressPhase::exporting, path, completed, total, i + 1 == entries.size()});
+  }
+}
+void Transaction::undo_namespace(OperationOptions options) {
+  const auto total = touched_bytes(entries);
+  if (record.state == "uninstalling") {
+    for (std::size_t n = entries.size(); n != 0; --n) {
+      const auto i = n - 1;
+      const auto &row = entries[i], &target = row["target"];
+      if (target.is_null() || present(file("new", i)))
+        continue;
+      const auto path = row["path"].get<std::string>();
+      report_progress(options, {ProgressPhase::exporting, path, 0, total});
+      const auto working = exact_path(path, false);
+      require(working && matches(*working, target, path, options),
+              "working file changed; preserve it before aborting checkout");
+      move_exclusive(*working, file("new", i));
+    }
+    remove_directories(layout->rollback_directories, options, true);
+    state("restoring", options);
+    SYRNCK_IO_CHECKPOINT("checkout.uninstalled", store_.root() / "checkout.state");
+  }
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const auto &row = entries[i];
+    if (row["source"].is_null())
+      continue;
+    const auto path = row["path"].get<std::string>();
+    report_progress(options, {ProgressPhase::exporting, path, 0, total});
+    const auto old = file("old", i);
+    if (present(old)) {
+      const auto status = fs::symlink_status(old);
+      require(fs::is_regular_file(status) && !native_link_like(old, status), "invalid native checkout file");
+      const auto working = *exact_path(path, true);
+      require(!present(working), "native checkout destination appeared; preserve it before recovery");
+      move_exclusive(old, working);
+    } else {
+      const auto working = exact_path(path, false);
+      require(working && fs::is_regular_file(fs::symlink_status(*working)),
+              "native checkout path became obstructed");
+    }
+  }
 }
 void Transaction::undo(OperationOptions options) {
   if (record.state == "discarding")
@@ -562,12 +745,16 @@ Json Transaction::run(bool abort, OperationOptions options) {
   require(fs::canonical(record.workspace) == record.workspace, "native checkout workspace changed");
   if (abort) {
     require(record.state != "committed", "native checkout is committed; recovery can only finish cleanup");
-    if (record.state == "preparing" || record.state == "applying")
-      state(record.state == "preparing" ? "discarding" : "aborting", options);
+    if (record.state == "preparing" || record.state == "applying" || record.state == "evacuating" ||
+        record.state == "installing")
+      state(record.state == "preparing"   ? "discarding"
+            : record.namespace_transition ? "uninstalling"
+                                          : "aborting",
+            options);
   }
   if (record.state != "committed")
     expected_head();
-  if (record.state == "applying" || record.state == "aborting") {
+  if (!record.namespace_transition && (record.state == "applying" || record.state == "aborting")) {
     std::vector<std::string> paths;
     for (const auto &entry : entries)
       paths.push_back(entry["path"].get<std::string>());
@@ -575,11 +762,15 @@ Json Transaction::run(bool abort, OperationOptions options) {
   }
   if (record.state == "preparing")
     prepare(options);
-  if (record.state == "applying")
+  if (record.state == "applying" || record.state == "evacuating" || record.state == "installing")
     apply(options);
   const bool committed = record.state == "committed";
   if (record.state == "aborting") {
     undo(options);
+    state("aborted", options);
+  }
+  if (record.state == "uninstalling" || record.state == "restoring") {
+    undo_namespace(options);
     state("aborted", options);
   }
   // Once branch publication succeeds, cleanup has no observers/cancellation.
@@ -646,6 +837,7 @@ Json Store::switch_directory(const fs::path &workspace, std::string_view branch,
                 {"target", plan["target"]}};
   Record record;
   record.workspace = fs::canonical(workspace);
+  record.namespace_transition = plan.value("namespace_transition", false);
   record.nonce = hex(random_bytes(32));
   record.branch = head.branch;
   record.destination_branch = branch;
@@ -686,6 +878,7 @@ Json Store::checkout_directory(const fs::path &workspace, std::string_view branc
     return Json{{"version", 1}, {"pending", false}, {"state", "unchanged"}, {"target", target}};
   Record record;
   record.workspace = fs::canonical(workspace);
+  record.namespace_transition = plan.value("namespace_transition", false);
   record.nonce = hex(random_bytes(32));
   record.branch = branch;
   record.target = target;

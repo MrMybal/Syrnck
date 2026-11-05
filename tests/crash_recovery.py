@@ -136,6 +136,31 @@ def cases():
             for kind in ("checkout-backup", "export-file"):
                 result.extend((rebase, phase, kind, 2)
                               for phase in ("move.before", "move.published", "move.durable"))
+    # Namespace journals have a durable evacuation phase before installation,
+    # and a separate uninstall/restore pair for rollback.
+    result.extend(("checkout-namespace" if operation == "checkout" else "checkout-namespace-abort", phase, kind, occurrence)
+                  for operation, phase, kind, occurrence in list(result)
+                  if operation in ("checkout", "checkout-abort"))
+    atomic("checkout-namespace", ("refs",), 5)
+    atomic("checkout-namespace-abort", ("refs",), 4)
+    for occurrence in (2, 3, 4):
+        atomic("checkout-namespace", ("checkout-prepared",), occurrence)
+        for phase in ("move.before", "move.published", "move.durable"):
+            result.append(("checkout-namespace", phase, "checkout-backup", occurrence))
+            result.append(("checkout-namespace-abort", phase, "checkout-prepared", occurrence))
+    for occurrence in (1, 2, 3):
+        for operation in ("checkout-namespace", "checkout-namespace-abort"):
+            # Restoring node/code.cpp uses the existing export-file category;
+            # only the flat file and case-renamed leaf use namespace-entry.
+            kind, number = ("export-file", 2) if operation.endswith("-abort") and occurrence == 3 else ("namespace-entry", occurrence)
+            result.extend((operation, phase, kind, number)
+                          for phase in ("move.before", "move.published", "move.durable"))
+    result.append(("checkout-namespace", "checkout.evacuated", "checkout", 1))
+    result.append(("checkout-namespace-abort", "checkout.uninstalled", "checkout", 1))
+    for occurrence in (1, 2):
+        for operation in ("checkout-namespace", "checkout-namespace-abort"):
+            for phase in ("checkout.directory_created", "checkout.directory_removed"):
+                result.append((operation, phase, "namespace-entry", occurrence))
     return result
 
 
@@ -201,7 +226,10 @@ class CrashRecovery(unittest.TestCase):
         sibling = target.relative_to(root.parent).parts[0] if target.is_relative_to(root.parent) else ""
         staging = sibling.startswith(".syrnck-export-") and len(sibling) == 47 and all(
             c in "0123456789abcdef" for c in sibling[15:])
+        namespace_paths = {root.parent / path for path in
+                           ("asset.bin", "flat", "flat/new.txt", "node", "node/code.cpp", "zCase", "zCase/old.txt", "zcase", "zcase/old.txt")}
         self.assertTrue(target.is_relative_to(root) or target in (root.parent / "restored.bin", root.parent / "exported") or
+                        (operation.startswith("checkout-namespace") and target in namespace_paths) or
                         (operation.startswith(("merge-text", "cherry-pick-text", "revert-text", "rebase-text")) and target == root.parent / "code.cpp") or
                         ((operation in ("checkout", "checkout-abort", "switch", "switch-abort") or replay_operation(operation) or operation.startswith(("merge", "rebase"))) and target == root.parent / "asset.bin") or
                         (operation == "export" and staging),
@@ -295,6 +323,11 @@ class CrashRecovery(unittest.TestCase):
             unrelated = lambda refs: {name: key for name, key in refs.items()
                                       if not name.startswith(("tags/", "tag-metadata/", "archive/tags/"))}
             self.assertEqual(unrelated(checked["refs"]), unrelated(info["refs"]))
+        elif operation.startswith("checkout-namespace"):
+            changed = operation == "checkout-namespace" and (
+                (kind == "refs" and (occurrence == 5 or (occurrence == 4 and published))) or
+                phase in ("checkout.committed", "checkout.cleaned"))
+            self.assertEqual(checked["refs"]["heads/main"] != info["old_revision"], changed)
         elif operation in ("checkout", "checkout-abort") or replay_operation(operation) or operation.startswith(("merge", "rebase")):
             changed = not operation.endswith("-abort") and (
                 (kind == "refs" and (occurrence == 4 or (occurrence == 3 and published))) or
@@ -340,7 +373,8 @@ class CrashRecovery(unittest.TestCase):
         probe = PROBE.read_bytes()
         production = PRODUCTION.read_bytes()
         reader = READER.read_bytes()
-        for label in (b"atomic.temporary_opened", b"pack.envelope_written", b"gc.loose_removed", b"directory.created"):
+        for label in (b"atomic.temporary_opened", b"pack.envelope_written", b"gc.loose_removed", b"directory.created",
+                      b"checkout.directory_created", b"checkout.evacuated", b"checkout.uninstalled"):
             self.assertIn(label, probe)
             self.assertNotIn(label, production)
             self.assertNotIn(label, reader)

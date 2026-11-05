@@ -260,9 +260,8 @@ void namespace_obstructions(const fs::path &project) {
   description["files"].erase("ALIAS.txt");
   description["files"].erase("base.txt");
   description["files"]["base.txt/child"] = file;
-  require(conflict(store.plan_checkout(project, "main", revision(store, description)), "base.txt",
-                   "file_directory_transition"),
-          "tracked file/directory conversion was not blocked");
+  require(store.plan_checkout(project, "main", revision(store, description))["ready"] == true,
+          "clean tracked file/directory conversion was blocked");
 #ifndef _WIN32
   fs::permissions(project / "base.txt", fs::perms::owner_exec, fs::perm_options::add);
   require(conflict(store.plan_checkout(project, "main", base), "base.txt", "tracked_mode_changed"),

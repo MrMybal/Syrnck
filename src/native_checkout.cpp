@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_checkout_layout.hpp"
 #include <tuple>
 #ifdef _WIN32
 #include <windows.h>
@@ -97,7 +98,8 @@ public:
   }
   // Report namespace obstructions before opening anything. Links/reparse
   // points are opaque, including inside ignored directories.
-  bool inspect(const std::string &path, Conflicts &conflicts, bool leaf) const {
+  bool inspect(const std::string &path, Conflicts &conflicts, bool leaf,
+               const std::set<std::string> *evacuated = nullptr) const {
     const auto folded = folded_.find(portable_fold(path));
     if (folded == folded_.end())
       return true;
@@ -107,6 +109,8 @@ public:
       return false;
     }
     const auto &[actual, node] = *folded->second.front();
+    if (evacuated && evacuated->contains(actual) && (node.type == Type::file || node.type == Type::directory))
+      return true;
     if (actual != path) {
       conflicts.emplace(path, "path_spelling", actual);
       return false;
@@ -122,14 +126,44 @@ public:
     }
     return true;
   }
-  bool parents(const std::string &path, Conflicts &conflicts) const {
+  bool parents(const std::string &path, Conflicts &conflicts,
+               const std::set<std::string> *evacuated = nullptr) const {
     bool valid = true;
     for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
-      if (!inspect(path.substr(0, n), conflicts, false)) {
+      if (!inspect(path.substr(0, n), conflicts, false, evacuated)) {
         valid = false;
         break;
       }
     return valid;
+  }
+  void evacuation(const NativeCheckoutLayout &layout, Conflicts &conflicts, OperationOptions options) const {
+    for (const auto &[path, node] : nodes_) {
+      throw_if_cancelled(options.stop);
+      bool removed = layout.remove_directories.contains(path);
+      for (auto n = path.find('/'); !removed && n != path.npos; n = path.find('/', n + 1))
+        removed = layout.remove_directories.contains(path.substr(0, n));
+      if (removed &&
+          (!layout.evacuated.contains(path) || (node.type != Type::file && node.type != Type::directory)))
+        conflicts.emplace(path, "untracked_collision", path);
+    }
+  }
+  bool removed(const std::string &path, const std::set<std::string> &targets,
+               const std::set<std::string> &directories) const {
+    for (auto n = path.find('/');; n = path.find('/', n + 1)) {
+      const auto prefix = n == path.npos ? path : path.substr(0, n);
+      const auto found = folded_.find(portable_fold(prefix));
+      if (found == folded_.end())
+        return true;
+      if (found->second.size() != 1)
+        return false;
+      const auto &[actual, node] = *found->second.front();
+      if (node.type == Type::file)
+        return targets.contains(actual);
+      if (node.type != Type::directory || (actual != prefix && !directories.contains(actual)))
+        return false;
+      if (n == path.npos)
+        return directories.contains(actual);
+    }
   }
 };
 bool executable_equal(bool actual, bool expected) {
@@ -145,7 +179,7 @@ bool executable_equal(bool actual, bool expected) {
 void verify_native_checkout_namespace(const Store &store, const fs::path &directory,
                                       const std::vector<std::string> &target,
                                       const std::vector<std::string> &removed, OperationOptions options,
-                                      bool final) {
+                                      bool final, bool transitions) {
   const Inventory inventory(directory, store.root(), options);
   Conflicts conflicts;
   for (const auto &path : target) {
@@ -154,8 +188,17 @@ void verify_native_checkout_namespace(const Store &store, const fs::path &direct
                 (!final || inventory.find(path)),
             "native checkout path became obstructed");
   }
+  std::set<std::string> targets(target.begin(), target.end()), directories;
+  if (transitions)
+    for (const auto &path : target)
+      for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
+        directories.insert(path.substr(0, n));
   for (const auto &path : removed) {
     throw_if_cancelled(options.stop);
+    if (transitions) {
+      require(inventory.removed(path, targets, directories), "native checkout path became obstructed");
+      continue;
+    }
     require(inventory.parents(path, conflicts) && inventory.inspect(path, conflicts, true) &&
                 (!final || !inventory.find(path)),
             "native checkout path became obstructed");
@@ -173,6 +216,7 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
   const bool same = target && source_id && *source_id == *target;
   const auto other = supplied || same ? NativeSnapshot{} : read_native_snapshot(store, *target, options);
   const auto &destination = supplied ? *supplied : same ? source : other;
+  const NativeCheckoutLayout layout(source, destination, options);
   const Inventory inventory(directory, store.root(), options);
   Conflicts conflicts;
   if (store.refs().contains("checkouts/active"))
@@ -204,16 +248,20 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
       conflicts.emplace(path, "tracked_mode_changed", path);
   }
   std::set<std::string> directories;
+  if (layout.transition)
+    inventory.evacuation(layout, conflicts, options);
+  const auto *evacuated = layout.transition ? &layout.evacuated : nullptr;
   for (const auto &[path, entry] : destination) {
     (void)entry;
     throw_if_cancelled(options.stop);
-    if (!inventory.parents(path, conflicts) || !inventory.inspect(path, conflicts, true))
+    if (!inventory.parents(path, conflicts, evacuated) ||
+        !inventory.inspect(path, conflicts, true, evacuated))
       continue;
-    if (inventory.find(path) && !source.contains(path))
+    if (inventory.find(path) && !source.contains(path) && !layout.remove_directories.contains(path))
       conflicts.emplace(path, "untracked_collision", path);
     for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1)) {
       auto parent = path.substr(0, n);
-      if (!inventory.find(parent))
+      if (!inventory.find(parent) || (evacuated && evacuated->contains(parent)))
         directories.insert(std::move(parent));
     }
   }
@@ -264,26 +312,31 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
     blockers.push_back(Json{{"path", path}, {"reason", reason}, {"obstruction", obstruction}});
   }
   report_progress(options, {ProgressPhase::planning, {}, processed, total, true});
-  return Json{{"version", 1},
-              {"branch", branch},
-              {"source", source_id ? Json(*source_id) : Json{}},
-              {"target", target ? Json(*target) : Json{}},
-              {"staging_snapshot", std::move(staging["snapshot"])},
-              {"policy", "clean-tracked-v1"},
-              {"ready", conflicts.empty()},
-              {"objects_verified", verify_objects},
+  auto result = Json{{"version", 1},
+                     {"branch", branch},
+                     {"source", source_id ? Json(*source_id) : Json{}},
+                     {"target", target ? Json(*target) : Json{}},
+                     {"staging_snapshot", std::move(staging["snapshot"])},
+                     {"policy", "clean-tracked-v1"},
+                     {"ready", conflicts.empty()},
+                     {"objects_verified", verify_objects},
 #ifdef _WIN32
-              {"executable_metadata_supported", false},
+                     {"executable_metadata_supported", false},
 #else
-              {"executable_metadata_supported", true},
+                     {"executable_metadata_supported", true},
 #endif
-              {"inventory_entries", inventory.size()},
-              {"hashed_bytes", hashed_bytes},
-              {"restore_bytes", restore_bytes},
-              {"counts", counts},
-              {"actions", std::move(actions)},
-              {"create_directories", directories},
-              {"conflicts", std::move(blockers)}};
+                     {"inventory_entries", inventory.size()},
+                     {"hashed_bytes", hashed_bytes},
+                     {"restore_bytes", restore_bytes},
+                     {"counts", counts},
+                     {"actions", std::move(actions)},
+                     {"create_directories", directories},
+                     {"conflicts", std::move(blockers)}};
+  if (layout.transition) {
+    result["namespace_transition"] = true;
+    result["remove_directories"] = layout.remove_directories;
+  }
+  return result;
 }
 } // namespace
 Json Store::plan_checkout(const fs::path &directory, std::string_view branch, std::string_view target,

@@ -2,6 +2,11 @@
 
 La priorité produit est de conserver toutes les capacités Git pour le code tout en remplaçant le stockage des assets. Le mode autonome progresse sur le même socle, avec des critères de validation explicites. Les cases cochées décrivent le prototype présent dans ce dossier.
 
+Ordre de développement demandé : gestion du workspace, travail en équipe,
+synchronisation continue, fonctions avancées de versionnage, puis sécurité et
+exploitation. Les performances et les validations restent des critères de chaque
+étape. Le plugin Unreal n’est pas dans le périmètre de développement actuel.
+
 ## 0 — Socle vérifiable
 
 - [x] Bibliothèque de blocs indépendante, découpage CDC et fixe, BLAKE3.
@@ -133,7 +138,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Plan de rejeu d'un index périmé sur la tête courante : sélections figées, base vide initiale, conflits par fichier/namespace, représentations préparées, contrôle des archives et vérification optionnelle, sans lire le workspace ni écrire d'objets.
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.
-- [ ] HEAD détaché, workspaces multiples et checkout avec transitions fichier/dossier et renommages de casse ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
+- [x] Checkout et changement de branche récupérables avec transitions fichier/dossier et changements de casse des fichiers/dossiers : évacuation complète avant installation, phases durables d’annulation, protection des données non suivies et rétention après GC.
+- [ ] HEAD détaché, workspaces multiples/partiels et index de travail persistant ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.

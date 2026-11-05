@@ -29,8 +29,9 @@ before preflight. C++ callers can resolve them explicitly with
 The initial policy requires every tracked file to match its baseline by complete
 content hash and supported executable metadata. An existing staging index blocks
 checkout, even if it has no staged changes. Ignored and untracked collisions,
-links/junctions, protected paths, portable aliases, case-only renames and
-file/directory transitions are refused. There is no `--force` option.
+links/junctions, protected paths and ambiguous portable aliases are refused.
+Clean tracked case changes and file/directory transitions use the namespace
+executor described below. There is no `--force` option.
 
 For a revision change, execution repeats preflight and verifies the complete
 source and target closures, including historical parents and file hashes,
@@ -73,6 +74,10 @@ JSON fields and state names remain English with either interface language.
 | --- | --- | --- |
 | `preparing` | Finish reconstruction, recheck the clean baseline, then apply | Discard prepared outputs without touching working files |
 | `applying` | Validate backups/installed files and finish application | Restore originals in reverse action order |
+| `evacuating` | Finish backing up changed sources and removing required empty directories | Uninstall targets, then restore sources |
+| `installing` | Validate/install all targets, then publish | Uninstall all targets, then restore sources |
+| `uninstalling` | Continue the requested target removal | Continue target removal |
+| `restoring` | Continue the requested source restoration | Continue source restoration |
 | `aborting` | Continue the requested rollback | Continue rollback |
 | `discarding` | Finish discarding preparation | Finish discarding preparation |
 | `aborted` | Finish cleanup without replaying file moves | Finish cleanup |
@@ -103,7 +108,8 @@ The immutable journal is an ordinary chunk object, so existing compression,
 encryption and pack support apply without changing logical/physical formats.
 Its identity hashes the version, nonce, canonical directory, branch and source/
 target revisions. Switch journals add destination and expected/new HEAD fields
-in version 2; version 1 checkout journals remain supported. Each phase publishes
+in version 2. Namespace checkout/switch journals use versions 3/4 and an explicit
+`namespace_transition: true` flag; versions 1/2 remain supported. Each phase publishes
 a new journal object.
 
 | Reference | Retained value |
@@ -172,3 +178,45 @@ missing target chunks and CLI localization. Plain/encrypted objects run with
 loose, single-pack and multi-pack storage. The process-kill suite covers journal
 publication, preparation, both move directions, branch publication and cleanup.
 Unix-specific behavior awaits execution in the existing CI matrix.
+
+## Recoverable namespace transitions
+
+Clean tracked files can change case, including parent directories, or cross
+file/directory boundaries. For example, `Source/Code.cpp` can become
+`source/code.cpp`, a tracked `Content` file can become `Content/Map.uasset`, and
+a fully tracked `Content/...` tree can become a `Content` file. Ordinary renamed
+paths are already represented as removals/additions; rename detection and
+history following remain separate work.
+
+Planning keeps the full clean-tracked policy, checks exact portable directory
+spellings, and reports `namespace_transition: true` and `remove_directories` when
+the operation requires this executor. Each affected directory must contain only
+the source snapshot's files and their known parent directories. Untracked or
+ignored descendants, unknown empty directories, links and protected storage
+block the entire operation before journal publication. Snapshots with inconsistent
+case spellings for the same portable parent are rejected.
+
+The executor prepares every target, then backs up **all changed source files**
+before installing any target. It removes only the snapshot-derived directories
+needed for the transition, deepest first, and only while empty. There is no
+recursive removal. It persists `installing` before creating target parents and
+moving the prepared files. Final hashes, exact namespace checks and atomic
+branch/archive/journal publication retain the existing guarantees.
+
+Abort first moves installed targets back into their prepared slots, removes
+only required empty target directories, persists `restoring`, then restores the
+original sources and their spelling. Distinct durable phases prevent resumed
+rollback from confusing restored originals with still-installed targets.
+Changed working files and newly appeared obstructions are preserved and block
+unsafe recovery. Opening the Store still performs no recovery automatically.
+
+Switch, merge, replay and linear rebase use the shared checkout executor; branch
+switch preserves both tips and publishes its HEAD descriptor with the journal.
+No new object, pointer, revision or network format is introduced. Older engines
+cannot recover namespace journals and must reject their unsupported versions.
+
+Tests cover exact names and bytes, both transition directions, Unicode case,
+dirty/untracked/ignored obstructions, namespace-aware switching, cancellation,
+interrupted rollback and retained source versions after GC. The namespace
+executor enumerates parent names during recovery/moves to verify exact spelling;
+this is not yet a persistent workspace index or a rename optimization.
