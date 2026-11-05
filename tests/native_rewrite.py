@@ -82,6 +82,30 @@ class NativeRewrite(unittest.TestCase):
         self.call("native", "squash", "1", "-m", "invalid count", ok=False)
         self.call("native", "squash", "2", ok=False)
 
+    def test_archive_pages_inspection_and_export_after_gc(self):
+        asset = self.root / "asset.bin"
+        asset.write_bytes(b"old")
+        root = self.commit("old")
+        asset.write_bytes(b"new")
+        head = self.commit("new")
+        self.call("native", "reset", root, "--soft")
+        self.call("native", "reset", root, "--mixed")
+        before = self.snapshot()
+        page = json.loads(self.call("native", "archives", "--limit", 1, "--verify").stdout)
+        self.assertTrue(page["has_more"])
+        self.assertTrue(page["objects_verified"])
+        second = json.loads(self.call("native", "archives", "--after", page["next_after"], "--limit", 100).stdout)
+        rows = page["archives"] + second["archives"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(json.loads(self.call("--lang", "fr", "native", "archives", "--limit", 1, "--verify").stdout), page)
+        self.assertEqual(self.snapshot(), before)
+        saved = json.loads(self.call("native", "archive-show", "archive/reset/" + head, "--verify").stdout)
+        self.assertEqual(saved["archive"]["revision"], head)
+        self.call("native", "archives", "--kind", "invalid", ok=False)
+        self.call("gc", "--delete")
+        self.call("native", "export", saved["archive"]["revision"], self.store / "old-copy")
+        self.assertEqual((self.store / "old-copy/asset.bin").read_bytes(), b"new")
+
     def test_explicit_modes_validation_and_selected_branch(self):
         (self.root / "a").write_bytes(b"first")
         first = self.commit("first")

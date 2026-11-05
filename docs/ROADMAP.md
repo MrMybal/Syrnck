@@ -128,6 +128,7 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [ ] Rebase, reset hard et stash ; résolution interactive des conflits de rejeu et fusion textuelle.
 - [x] Reset de branche soft/mixed avec préparation en lecture seule : fichiers de travail intacts, index conservé sur la nouvelle base ou archivé puis retiré, tête attendue et publication atomique des anciennes racines ; reconstruction après GC.
 - [x] Squash des derniers commits linéaires avec plan borné, snapshot exact de tête, frontière conservée ou nouvelle racine, merges/index refusés, tête attendue et archive atomique de tout l'ancien historique.
+- [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [ ] Push/pull des références avec validation d'ascendance et politiques serveur.

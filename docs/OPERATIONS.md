@@ -18,7 +18,7 @@ syrnck get MANIFEST restored.uasset --progress
 `put`, `get`, `compare`, `fsck`, `pack`, `gc`, `native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export`, `git clean/smudge/filter-process`,
 `native tag/tags/tag-show/tag-delete/tag-archive/tag-restore`,
 `native ancestry/cherry-pick-plan/revert-plan/cherry-pick/revert/merge-plan/merge`,
-`native reset-plan/squash-plan/squash`,
+`native reset-plan/squash-plan/squash/archives/archive-show`,
 `git lfs-preview/migrate-lfs/retention-scan/retention` and
 `agent push/pull` accept mutually
 exclusive `--progress` and `--progress-json`. Both write only to stderr; stdout
@@ -105,6 +105,13 @@ executor. Cancellation before journal publication preserves branch/workspace;
 afterwards inspect/resume/abort the journal as for checkout. Explicit
 [resolution documents](NATIVE_RESOLUTIONS.md) bind the inputs and selected parent;
 partial choices never publish a partial snapshot.
+
+[Branch reset](NATIVE_RESET.md) and [squash](NATIVE_SQUASH.md) preserve working
+files. Plans read metadata, with optional full stored-data verification. Application
+verifies retained data and atomically publishes branch, index and archive roots;
+the final observer is `publishing` at `refs`, with no callbacks after publication.
+[Archive queries](NATIVE_ARCHIVES.md) are read-only and verify only returned roots
+when requested. Cancellation never publishes partial pages or reference changes.
 
 These commands handle Ctrl+C, Windows Ctrl+Break and SIGINT/SIGTERM where
 available. Cooperative cancellation reports an English/French diagnostic and

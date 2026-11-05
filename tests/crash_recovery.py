@@ -90,6 +90,10 @@ def cases():
                       if operation in ("checkout", "checkout-abort"))
         if merge != "merge-fast-forward":
             atomic(merge, ("revision",))
+    for rewrite in ("reset-soft", "reset-soft-index", "reset-mixed", "reset-mixed-index", "squash", "squash-root"):
+        atomic(rewrite, ("refs",))
+        if rewrite.startswith("reset-soft") or rewrite.startswith("squash"):
+            atomic(rewrite, ("revision",))
     return result
 
 
@@ -172,6 +176,23 @@ class CrashRecovery(unittest.TestCase):
         if operation == "commit":
             changed = checked["refs"]["heads/main"] != info["old_revision"]
             self.assertEqual(changed, kind == "refs" and published)
+        elif operation.startswith("reset-") or operation in ("squash", "squash-root"):
+            changed = kind == "refs" and published
+            refs = checked["refs"]
+            archive = "archive/" + ("reset/" if operation.startswith("reset-") else "squash/") + info["old_revision"]["id"]
+            self.assertEqual(refs["heads/main"] != info["old_revision"], changed)
+            self.assertEqual(archive in refs, changed)
+            expected_index = operation.startswith("reset-soft") if changed else "old_index" in info
+            self.assertEqual("staging/main" in refs, expected_index)
+            ignored = {"heads/main", "staging/main", archive}
+            if "old_index" in info:
+                saved = "archive/reset-index/" + info["old_index"]["id"]
+                self.assertEqual(saved in refs, changed)
+                if changed:
+                    self.assertEqual(refs[saved], info["old_index"])
+                ignored.add(saved)
+            self.assertEqual({key: value for key, value in refs.items() if key not in ignored},
+                             {key: value for key, value in info["refs"].items() if key not in ignored})
         elif operation in ("amend", "amend-staged", "amend-message"):
             changed = kind == "refs" and published
             refs = checked["refs"]

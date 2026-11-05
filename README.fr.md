@@ -131,6 +131,8 @@ logiques et trafic des corps d'objets.
 
 `native squash-plan NOMBRE` prépare le regroupement de commits linéaires ; `native squash NOMBRE -m MESSAGE` crée un commit contenant le snapshot exact de l'ancienne tête. Tout l'ancien historique reste archivé après GC. Un merge dans la plage ou un index présent bloque l'opération. Voir le [squash de commits natifs](docs/NATIVE_SQUASH.md).
 
+`native archives` liste l'historique conservé par pages bornées, avec filtre reset, index préparé, squash, amendement, checkout ou détachement. `native archive-show RÉFÉRENCE --verify` vérifie une version conservée avant export ou récupération. Voir les [archives de l'historique natif](docs/NATIVE_ARCHIVES.md).
+
 La [campagne d'interruption de processus](docs/CRASH_RECOVERY.md) couvre les écritures, les références, l'empaquetage, la compaction, le GC et la reconstruction, en clair et chiffré. La réouverture et la reprise utilisent le moteur de production. Un GC interrompu peut nécessiter de terminer son nettoyage avant qu'un `fsck` complet réussisse. Cette campagne ne simule pas les coupures d'alimentation.
 
 La migration depuis le prototype Rust conserve les identifiants, les manifestes, les frontières FastCDC, les enveloppes chiffrées et les pointeurs Git v1. La lecture et l'écriture croisées des stores physiques v1 ont été vérifiées dans les deux sens. Des fixtures produites par l'ancien moteur sont testées sans installation Rust. L'activation ultérieure des packs requiert le nouveau moteur.

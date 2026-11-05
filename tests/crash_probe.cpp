@@ -111,6 +111,10 @@ NativeMergeOptions merge_settings(const Json &info) {
   }
   return settings;
 }
+bool rewrite_operation(std::string_view op) {
+  return op == "reset-soft" || op == "reset-soft-index" || op == "reset-mixed" || op == "reset-mixed-index" ||
+         op == "squash" || op == "squash-root";
+}
 void prepare(const fs::path &root, bool encrypted, const std::string &operation) {
   Store store(root, secret(encrypted), true);
   auto old = ingest(store, 0);
@@ -122,6 +126,12 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   }
   if (operation == "revert" || operation == "revert-abort")
     tip = put_revision(store, old, put_revision(store, ingest(store, 1)));
+  if (rewrite_operation(operation)) {
+    auto parent = put_revision(store, ingest(store, 1));
+    if (operation == "squash")
+      parent = put_revision(store, ingest(store, 2), parent);
+    tip = put_revision(store, old, parent);
+  }
   if (operation == "export") {
     auto value = revision(old);
     std::istringstream empty;
@@ -144,6 +154,17 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Json info{{"encrypted", encrypted},        {"operation", operation},
             {"old_manifest", key_json(old)}, {"old_revision", key_json(tip)},
             {"marker", key_json(marker)},    {"initial_catalog", config["packs"]}};
+  if (rewrite_operation(operation)) {
+    const auto parent = store.metadata(Kind::revision, tip.id)["parents"][0].get<std::string>();
+    info["rewrite_target"] = key_json({Kind::revision, parent});
+    info["rewrite_parents"] = store.metadata(Kind::revision, parent)["parents"];
+    if (operation.ends_with("-index")) {
+      atomic_write(root.parent_path() / "asset.bin", bytes(content(3)), false);
+      info["old_index"] =
+          key_json({Kind::revision, store.stage_directory(root.parent_path(), "main", {"asset.bin"})});
+    }
+    atomic_write(root.parent_path() / "asset.bin", bytes(content(4)), true);
+  }
   if (merge_operation(operation)) {
     atomic_write(root.parent_path() / "asset.bin", bytes(content(0)), false);
     const auto source = put_revision(store, ingest(store, 1), merge_base ? merge_base : std::optional{tip});
@@ -209,6 +230,15 @@ void perform(Store &store, const Json &info) {
     auto next = ingest(store, 1, 4);
     auto tip = put_revision(store, next, parse_key(info.at("old_revision")));
     store.set_ref("heads/main", tip);
+  } else if (rewrite_operation(op)) {
+    const auto old = parse_key(info["old_revision"]);
+    if (store.refs().at("heads/main") == old) {
+      if (op.starts_with("reset"))
+        store.reset_branch("main", old.id, parse_key(info["rewrite_target"]).id,
+                           op.starts_with("reset-soft") ? NativeResetMode::soft : NativeResetMode::mixed);
+      else
+        store.squash_commits("main", old.id, 2, "Squashed crash fixture");
+    }
   } else if (op == "amend" || op == "amend-staged" || op == "amend-message") {
     const auto old = parse_key(info.at("old_revision"));
     if (store.refs().at("heads/main") == old) {
@@ -307,6 +337,46 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   check(archived.str() == content(0), "archived revision was lost");
   check(current.str() == content(0) || current.str() == content(1), "current revision is incomplete");
   auto op = info.at("operation").get<std::string>();
+  if (rewrite_operation(op)) {
+    const bool changed = refs.at("heads/main") != old;
+    const auto name = "archive/" + std::string(op.starts_with("reset") ? "reset/" : "squash/") + old.id;
+    check(refs.contains(name) == changed && (!changed || refs.at(name) == old),
+          "history rewrite published apart from its archive");
+    const auto original_index =
+        info.contains("old_index") ? std::optional{parse_key(info["old_index"])} : std::nullopt;
+    if (original_index) {
+      const auto saved = "archive/reset-index/" + original_index->id;
+      check(refs.contains(saved) == changed && (!changed || refs.at(saved) == *original_index),
+            "history rewrite lost its prepared archive");
+    }
+    if (changed) {
+      if (op.starts_with("reset")) {
+        check(refs.at("heads/main") == parse_key(info["rewrite_target"]), "reset selected another target");
+        const bool soft = op.starts_with("reset-soft");
+        check(refs.contains("staging/main") == soft, "reset published a mixed branch/index state");
+        if (soft) {
+          const auto prepared = store.metadata(Kind::revision, refs.at("staging/main").id);
+          const auto previous = store.metadata(Kind::revision, original_index ? original_index->id : old.id);
+          check(prepared["parents"] == Json::array({parse_key(info["rewrite_target"]).id}) &&
+                    prepared["files"] == previous["files"],
+                "soft reset lost the prepared entries or baseline");
+        }
+      } else {
+        check(head["parents"] == info["rewrite_parents"] && head["message"] == "Squashed crash fixture" &&
+                  head["files"] == store.metadata(Kind::revision, old.id)["files"] &&
+                  !refs.contains("staging/main"),
+              "squash lost tip entries or parent boundary");
+      }
+    } else {
+      check(refs.contains("staging/main") == original_index.has_value() &&
+                (!original_index || refs.at("staging/main") == *original_index),
+            "unpublished rewrite changed staging");
+    }
+    check(text(read_bytes(root.parent_path() / "asset.bin")) == content(4),
+          "history rewrite touched working bytes");
+    if (resumed)
+      check(changed, "history rewrite did not resume");
+  }
   if (op == "amend" || op == "amend-staged" || op == "amend-message") {
     const bool changed = refs.at("heads/main") != old;
     const auto archive = refs.find("archive/amend/" + old.id);

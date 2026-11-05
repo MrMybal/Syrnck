@@ -185,6 +185,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native squash-plan NOMBRE [--branch BRANCHE] [--verify]
   native squash NOMBRE -m MESSAGE [--branch BRANCHE] [--expect ID]
     Regroupe les derniers commits linéaires ; conserve le snapshot et l'ancien historique.
+  native archives [--kind reset|reset-index|squash|amend|checkout|detached]
+                  [--after RÉFÉRENCE] [--limit 100] [--verify]
+  native archive-show RÉFÉRENCE [--verify]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
   native status --combined [--branch BRANCHE] [--directory .]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
@@ -249,6 +252,8 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
+              native reset-plan/squash-plan/squash/archives/archive-show,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
 Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
@@ -290,6 +295,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native squash-plan COUNT [--branch BRANCH] [--verify]
   native squash COUNT -m MESSAGE [--branch BRANCH] [--expect ID]
     Collapses linear tip commits, preserving the snapshot and archived history.
+  native archives [--kind reset|reset-index|squash|amend|checkout|detached]
+                  [--after REFERENCE] [--limit 100] [--verify]
+  native archive-show REFERENCE [--verify]
   native status [--branch BRANCH | --revision REVISION] [--directory .]
   native status --combined [--branch BRANCH] [--directory .]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
@@ -354,6 +362,8 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               fsck, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/export,
               git clean/smudge/filter-process,
               native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
+              native reset-plan/squash-plan/squash/archives/archive-show,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
 Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
@@ -573,7 +583,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
-        sub == "squash-plan" || sub == "squash")) ||
+        sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -807,6 +817,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
         print(Json{{"snapshot", snapshot ? Json(*snapshot) : Json{}}});
       }
+    } else if (sub == "archives") {
+      const auto kind = args.option("--kind"), after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "native archive page limit must be in 1..1000");
+      const bool verify = args.flag("--verify");
+      args.count(0);
+      print(store.native_archives(kind, after, static_cast<std::size_t>(limit), verify,
+                                  {control->token(), observe}));
+    } else if (sub == "archive-show") {
+      const bool verify = args.flag("--verify");
+      args.count(1);
+      print(store.native_archive(args.values[0], verify, {control->token(), observe}));
     } else if (sub == "squash-plan" || sub == "squash") {
       const bool planning = sub == "squash-plan";
       const auto branch = selected_branch();

@@ -388,6 +388,12 @@ public:
                    OperationOptions = {}) const;
   Json squash_commits(std::string_view branch, std::string_view expected_revision, std::size_t count,
                       std::string_view message, OperationOptions = {}) const;
+  // Read-only pages of owned revision archives, with full reference cursors.
+  // Kinds: reset, reset-index, squash, amend, checkout and detached.
+  Json native_archives(const std::optional<std::string> &kind = {},
+                       const std::optional<std::string> &after = {}, std::size_t limit = 100,
+                       bool verify_objects = false, OperationOptions = {}) const;
+  Json native_archive(std::string_view reference, bool verify_objects = false, OperationOptions = {}) const;
   // Replace exactly the expected tip, preserving its parents and archiving it
   // under archive/amend/ID in the same reference transaction. Directory/message
   // modes reject an existing index; staged mode consumes a fresh index atomically.

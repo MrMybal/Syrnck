@@ -33,7 +33,9 @@ the same publication, rather than frozen by an earlier plan.
 Plans emit JSON and exit 0 when ready, 1 with JSON for blockers. They read metadata
 only; `--verify` audits complete head/target/index closures and reconstructed file
 hashes. The soft plan includes the proposed staged comparison against the target.
-Reports are limited to 16 MiB. Filesystem working contents are neither inspected
+Reports and prepared revision metadata retain the existing 16 MiB limits.
+Memory grows with decoded flat snapshots and the bounded staged comparison.
+Filesystem working contents are neither inspected
 nor validated, so dirty/untracked files remain available for subsequent status.
 Pending checkout/switch recovery, conflicting archive roots or a stale soft
 index prevent publication. A reset to the same tip is a no-op, except mixed reset
@@ -56,7 +58,8 @@ inspect `refs`, `native head` and `native staged` before retrying with the old
 expected tip. There is no working-file journal to resume because no files change.
 No callbacks or cancellation checks run after publication.
 
-Archives have no automatic expiry. Export the old ID or create a recovery branch:
+Archives have no automatic expiry. Find retained versions using
+[the archive browser](NATIVE_ARCHIVES.md), then export the old ID or create a recovery branch:
 
 ```text
 syrnck native export OLD_ID recovered-version
@@ -81,3 +84,5 @@ work. Progress/errors support English and French; JSON field/reason names remain
 English. Callbacks must not reenter the Store. Tests cover prepared versus later
 working bytes, stale indexes, no-ops, expected tips, archive conflicts, pending
 checkout, cancellation, damaged retained data and reconstruction after GC.
+Process-kill cases cover soft/mixed reset with and without prepared bytes,
+candidate index writes and atomic publication in plain/encrypted Stores.

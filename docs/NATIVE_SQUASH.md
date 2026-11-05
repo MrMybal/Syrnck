@@ -14,6 +14,7 @@ commit's parent is the parent of the oldest included commit, or no parent when
 the range reaches the root. All manifests, executable modes and representation
 choices come from the old tip; no files are reconstructed or reingested to build
 the candidate. The new message is required and the timestamp is current UTC.
+The complete candidate remains subject to the ordinary 16 MiB revision limit.
 
 A merge inside the selected range is a `merge_in_range` blocker. Squash does not
 silently select a merge parent. A merge immediately before the range is preserved
@@ -52,7 +53,8 @@ remain. There is no working-file journal. Inspect `native head` and `refs` befor
 retrying with the original expected tip. No callback or stop check runs after
 reference publication.
 
-Archives have no automatic expiry and retain every intermediate file version
+The [archive browser](NATIVE_ARCHIVES.md) locates the original heads and prepared
+versions. Archives have no automatic expiry and retain every intermediate file version
 through destructive GC in plaintext/encrypted and loose/packed Stores. To recover
 a former version, export its ID or create a branch at it. Removing the last root
 with generic reference tools permits GC to collect its exclusive data. Squash
@@ -69,4 +71,6 @@ English/French progress, cooperative cancellation and the usual callback
 non-reentrancy contract apply. Exposure is through C++ and CLI; native history
 C/Go bindings remain future work. Tests cover root/partial ranges, merge boundaries,
 exact tip entries, dirty working files, indexes, expected tips, cancellation,
-damaged ancestor blocks and reconstruction after GC.
+damaged ancestor blocks and reconstruction after GC. Process-kill cases cover
+partial/root ranges through candidate writes and atomic archive publication,
+with dirty working files preserved in plain/encrypted Stores.
