@@ -8,7 +8,7 @@ Syrnck splits files into reusable, content-addressed blocks instead of storing a
 
 Two modes share the same engine: **Git integration**, retaining Git's workflow for source code while storing assets as Syrnck pointers, and **standalone revisions**, building toward an independent version control system. The library is independent of Unreal Engine and can be embedded through C++ or its C ABI. A Go binding provides a foundation for future synchronization adapters.
 
-**Status: working prototype with experimental formats.** The engine, Git filters, local revisions, server, and one-shot transfer agent run today. Standalone mode does not yet implement Git's full feature set. Unreal project benchmarks, an Unreal plugin, end-to-end encryption, and Syncthing protocol interoperability remain future work.
+**Status: working prototype with experimental formats.** The engine, Git filters, local revisions, server, and one-shot transfer agent run today. Standalone mode does not yet implement Git's full feature set. Unreal project benchmarks, an Unreal plugin, end-to-end encryption, and complete Syncthing daemon/folder interoperability remain future work.
 
 ## Components
 
@@ -188,7 +188,7 @@ Existing LFS projects can use `syrnck git lfs-preview HEAD` to audit cached obje
 
 `syrnck git retention-scan` inventories pointers across references, reflogs and worktree indexes. `git retention` previews verified protections; `git retention --apply` adds them atomically. Existing pins remain intact; unobserved pins are reported for inspection. See [Git retention coverage and limits](docs/GIT_RETENTION.md).
 
-The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for chunked storage and [Syncthing](https://github.com/syncthing/syncthing) for differential synchronization. No implementation code from either project was copied into this engine. Syncthing interoperability is not currently implemented.
+The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for chunked storage and [Syncthing](https://github.com/syncthing/syncthing) for differential synchronization. No implementation code from either project was copied into this engine. An optional [Syncthing adapter](bindings/syncthing/README.md) supports regular-file BEP blocks and differential reconstruction, tested against its reference library over TLS 1.3. Full daemon/folder synchronization remains future work.
 
 Agent transfers accept `--requests 4 --transfer-buffer-mib 64` to overlap object requests while keeping Store access coordinated. The default remains one request; the buffer budget covers object payloads and reserved responses, rather than total process memory. See [parallel transfer limits and recovery](docs/PARALLEL_TRANSFERS.md). Packing and GC support progress/cancellation during preparation, then finish committed cleanup; see [maintenance boundaries](docs/MAINTENANCE.md).
 

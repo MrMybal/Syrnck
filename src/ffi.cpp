@@ -61,6 +61,14 @@ public:
     }
   }
 };
+class DiscardOutput : public std::streambuf {
+  std::streamsize xsputn(const char *, std::streamsize length) override {
+    return length;
+  }
+  int_type overflow(int_type value) override {
+    return traits_type::not_eof(value);
+  }
+};
 } // namespace
 extern "C" {
 uint32_t syrnck_abi_version(void) {
@@ -123,6 +131,13 @@ int syrnck_ingest_file_ex(SyrnckStore *p, const char *path, const SyrnckChunking
     (void)stats;
     store.set_ref("ffi/" + id, {syrnck::Kind::manifest, id});
     std::memcpy(out, id.c_str(), 65);
+  });
+}
+int syrnck_file_verify(SyrnckStore *p, const char *id) {
+  return boundary([&] {
+    DiscardOutput output;
+    std::ostream stream(&output);
+    checked(p).reconstruct(checked(id), stream);
   });
 }
 int syrnck_restore_file(SyrnckStore *p, const char *id, const char *destination) {

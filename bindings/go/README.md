@@ -79,4 +79,4 @@ still fail the test. Native calls and functional assertions are never retried.
 
 ## Syncthing
 
-Ce binding prépare l'utilisation du moteur depuis Go. Il ne modifie pas Syncthing et n'implémente pas BEP : les hashes BLAKE3 avec domaine, les manifestes et le CDC Syrnck ne correspondent pas à son protocole. Même le mode fixe conserve le format Syrnck. Une future intégration devra adapter explicitement les index et échanges, ou négocier une extension entre pairs modifiés. Voir la [spécification BEP](https://docs.syncthing.net/specs/bep-v1.html) et les [règles cgo](https://pkg.go.dev/cmd/cgo#hdr-Passing_pointers).
+Le module optionnel [Syncthing](../syncthing/README.md) adapte maintenant les manifestes aux blocs fixes SHA-256 de BEP et aux requêtes de la bibliothèque Syncthing v2.1.7. Il prend en charge la reconstruction différentielle et un staging reprenable, avec tests du scanner et des connexions BEP réelles sur TLS 1.3. Les objets et le CDC Syrnck gardent leur format propre. Le daemon résident, la découverte, les conflits et la synchronisation complète entre exécutables Syncthing restent à réaliser.

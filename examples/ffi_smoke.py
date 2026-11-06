@@ -18,6 +18,7 @@ def main():
     lib.syrnck_store_close.argtypes = [handle]
     lib.syrnck_ingest_file.argtypes = [handle, c.c_char_p, c.c_void_p]
     lib.syrnck_restore_file.argtypes = [handle, c.c_char_p, c.c_char_p]
+    lib.syrnck_file_verify.argtypes = [handle, c.c_char_p]
     lib.syrnck_manifest_json.argtypes = [handle, c.c_char_p, c.POINTER(c.c_void_p)]
     lib.syrnck_string_free.argtypes = [c.c_void_p]
     lib.syrnck_abi_version.restype = c.c_uint32
@@ -43,6 +44,7 @@ def main():
         try:
             identifier = c.create_string_buffer(65)
             check(lib.syrnck_ingest_file(store, encoded(source), identifier))
+            check(lib.syrnck_file_verify(store, identifier.value))
             value = c.c_void_p()
             check(lib.syrnck_manifest_json(store, identifier.value, c.byref(value)))
             try:

@@ -256,7 +256,7 @@ syrnck --store donnees-chiffrees init --encrypted
 syrnck --store donnees-chiffrees put Content/Map.uasset
 ```
 
-Conserver cette clé dans un gestionnaire de secrets avant de fermer le terminal. Le même `SYRNCK_KEY` doit être fourni à chaque ouverture du store chiffré. Un store non chiffré doit s'ouvrir sans cette variable. Il n'existe pas encore de commande de conversion, rotation ou récupération des clés.
+Conserver cette clé dans un gestionnaire de secrets avant de fermer le terminal. Le même `SYRNCK_KEY` doit être fourni à chaque ouverture du store chiffré. Un store non chiffré doit s'ouvrir sans cette variable. Les [sauvegardes](BACKUPS.md) peuvent recopier les objets dans un nouveau store avec une autre clé ; la rotation en place, la révocation distribuée et la récupération des clés restent à développer.
 
 Chaque store peut employer sa propre clé. L'agent transmet le contenu déchiffré via le transport sécurisé ; le store destinataire le chiffre avec sa propre clé. Il ne s'agit pas de chiffrement de bout en bout contre le serveur.
 

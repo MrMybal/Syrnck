@@ -127,6 +127,15 @@ func (s *Store) Ingest(path string, chunking Chunking) (id string, err error) {
 	return
 }
 
+// VerifyFile checks every chunk and the whole file hash without a disk export.
+func (s *Store) VerifyFile(id string) error {
+	i, err := text(id)
+	if err != nil {
+		return err
+	}
+	return s.with(func() error { return nativeVerifyFile(s.handle, i) })
+}
+
 func (s *Store) Restore(id, destination string) error {
 	i, err := text(id)
 	if err != nil {

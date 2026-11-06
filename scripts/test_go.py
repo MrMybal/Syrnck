@@ -10,6 +10,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--library", type=Path, required=True)
 parser.add_argument("--go", default=shutil.which("go"))
 parser.add_argument("--check-pointers", action="store_true")
+parser.add_argument("--module", choices=("core", "syncthing"), default="core")
+parser.add_argument("--benchmark", action="store_true")
 args = parser.parse_args()
 library = args.library.resolve(strict=True)
 go = args.go or str(root / ".tools/go/bin" / ("go.exe" if os.name == "nt" else "go"))
@@ -31,8 +33,16 @@ else:
     env["CGO_LDFLAGS"] = env.get("CGO_LDFLAGS", "") + " " + quote + flag + quote
     for key in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         env[key] = str(library.parent) + os.pathsep + env.get(key, "")
-command = [go, "test", "-v", "-count=1"]
+command = [go, "test", "-mod=readonly", "-v", "-count=1", "-timeout=90s"]
+if args.module == "syncthing":
+    # Tests use the pinned module/sums and never fetch dependencies implicitly.
+    env["GOPROXY"] = "off"
+if args.benchmark:
+    if args.module != "syncthing":
+        parser.error("--benchmark requires --module syncthing")
+    command.extend(["-run", "^$", "-bench", ".", "-benchmem", "-benchtime=300ms"])
 if args.check_pointers:
     command.append("-gcflags=all=-d=checkptr=2")
 command.append("./...")
-raise SystemExit(subprocess.call(command, cwd=root / "bindings/go", env=env))
+directory = root / "bindings" / ("go" if args.module == "core" else "syncthing")
+raise SystemExit(subprocess.call(command, cwd=directory, env=env))

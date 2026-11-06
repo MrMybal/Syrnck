@@ -53,6 +53,12 @@ func TestFileRangeAndComparison(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if err := s.VerifyFile(a); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.VerifyFile("invalid"); err == nil {
+				t.Fatal("invalid verification ID accepted")
+			}
 			writeTest(t, path, changed)
 			b, err := s.Ingest(path, config)
 			if err != nil {

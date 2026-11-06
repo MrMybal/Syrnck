@@ -38,6 +38,9 @@ typedef struct SyrnckChunking {
 SYRNCK_API int syrnck_ingest_file_ex(SyrnckStore *store, const char *path, const SyrnckChunking *chunking,
                                      char *out_id);
 SYRNCK_API int syrnck_restore_file(SyrnckStore *store, const char *id, const char *destination);
+/* Verify all chunks, lengths and the complete file_hash without writing a file
+ * or changing references. Decoding uses bounded chunk buffers. */
+SYRNCK_API int syrnck_file_verify(SyrnckStore *store, const char *id);
 /* Exact ranges within manifest size, without truncation. Partial reads verify
  * selected chunks; whole-file ranges also verify file_hash. File output is
  * atomic and exclusive, with no 16 MiB streaming export limit. */

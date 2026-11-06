@@ -68,6 +68,7 @@ class FileOperations(unittest.TestCase):
         lib = c.CDLL(LIBRARY)
         handle = c.c_void_p
         lib.syrnck_last_error.restype = c.c_char_p
+        lib.syrnck_file_verify.argtypes = [handle, c.c_char_p]
         lib.syrnck_store_open.argtypes = [c.c_char_p, c.c_bool, c.c_void_p, c.c_size_t, c.POINTER(handle)]
         lib.syrnck_store_close.argtypes = [handle]
         lib.syrnck_ingest_file_ex.argtypes = [handle, c.c_char_p, c.c_void_p, c.c_void_p]
@@ -129,8 +130,10 @@ class FileOperations(unittest.TestCase):
                     manifest = json.loads(c.string_at(value))
                     check(lib.syrnck_string_free(value))
                     oid = manifest["blocks"][2]["id"]
+                    check(lib.syrnck_file_verify(store, ids[0]))
                     path = root / "objects/chunk" / oid[:2] / oid
                     broken = bytearray(path.read_bytes()); broken[0] ^= 1; path.write_bytes(broken)
+                    self.assertEqual(lib.syrnck_file_verify(store, ids[0]), 1)
                     unchanged = c.create_string_buffer(b"X" * 2048)
                     self.assertEqual(lib.syrnck_file_read_range(store, ids[0], 1, 2048, unchanged, 2048, c.byref(size)), 1)
                     self.assertEqual(size.value, 0)

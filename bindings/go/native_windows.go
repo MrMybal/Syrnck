@@ -34,7 +34,7 @@ func loadLibrary() error {
 			return
 		}
 		library.functions = make(map[string]*syscall.Proc)
-		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify"} {
+		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify"} {
 			p, err := library.dll.FindProc("syrnck_" + name)
 			if err != nil {
 				library.err = err
@@ -94,6 +94,11 @@ func nativeRestore(h nativeHandle, id, path []byte) error {
 	r, _, _ := library.functions["restore_file"].Call(uintptr(h), uintptr(unsafe.Pointer(&id[0])), uintptr(unsafe.Pointer(&path[0])))
 	runtime.KeepAlive(id)
 	runtime.KeepAlive(path)
+	return status(int(r))
+}
+func nativeVerifyFile(h nativeHandle, id []byte) error {
+	r, _, _ := library.functions["file_verify"].Call(uintptr(h), uintptr(unsafe.Pointer(&id[0])))
+	runtime.KeepAlive(id)
 	return status(int(r))
 }
 

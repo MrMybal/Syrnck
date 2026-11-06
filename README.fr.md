@@ -20,7 +20,7 @@ Deux modes consomment la même bibliothèque : **Git**, pour conserver son écos
 | `syrnck_ffi` / `syrnck_ffi_static` | Interface C dynamique/statique : blocs, dépendances, import vérifié et pins |
 | `bindings/go` | Binding Go, copie différentielle et reprise entre stores ; DLL Windows / cgo Unix |
 
-Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège les objets **au repos** ; le serveur accède au contenu. Le serveur HTTP écoute en loopback et se publie derrière un proxy HTTPS. Le chiffrement de bout en bout et la compatibilité réseau Syncthing restent à développer.
+Le moteur ne dépend pas d'Unreal. Le chiffrement XChaCha20-Poly1305 protège les objets **au repos** ; le serveur accède au contenu. Le serveur HTTP écoute en loopback et se publie derrière un proxy HTTPS. L’[adaptateur Syncthing](bindings/syncthing/README.md) échange les blocs de fichiers BEP avec tests sur TLS 1.3 ; l’interopérabilité des daemons/dossiers complets et le chiffrement de bout en bout restent à développer.
 
 `native diff-text SOURCE CIBLE CHEMIN` compare un fichier vérifié par groupes de lignes UTF-8 bornés ; `--unified` affiche les changements textuels. Les fichiers binaires et limites dépassées sont explicites. Voir [les différences textuelles et leurs limites](docs/TEXT_DIFF.md).
 

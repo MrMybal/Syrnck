@@ -36,6 +36,9 @@ func nativeIngest(h nativeHandle, path []byte, config *[4]uint32) (string, error
 func nativeRestore(h nativeHandle, id, path []byte) error {
 	return status(int(C.syrnck_restore_file(h, ctext(id), ctext(path))))
 }
+func nativeVerifyFile(h nativeHandle, id []byte) error {
+	return status(int(C.syrnck_file_verify(h, ctext(id))))
+}
 func nativeRestoreRange(h nativeHandle, id, path []byte, offset, length uint64) error {
 	return status(int(C.syrnck_restore_file_range(h, ctext(id), ctext(path), C.uint64_t(offset), C.uint64_t(length))))
 }

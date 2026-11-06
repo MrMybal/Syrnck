@@ -108,8 +108,9 @@ Critère de sortie : deux artistes ne peuvent pas publier silencieusement des mo
 - [ ] Planificateur multi-source, découverte et identité des appareils, gestion hors ligne.
 - [x] ABI C étendue et binding Go ; banc de copie différentielle, reprise et reconstruction sous Windows x64.
 - [ ] Exécution réelle du backend cgo Linux/macOS, validation ARM64 et mesure des coûts d'interface.
-- [ ] Adaptateur BEP à blocs fixes, ou extension CDC négociée entre pairs adaptés.
-- [ ] Tests d'interopérabilité avec Syncthing ; mesurer le coût du passage Go/C++ via l'interface C.
+- [x] Adaptateur Go optionnel BEP à blocs fixes SHA-256 : index depuis les plages vérifiées, requêtes de blocs, réutilisation déplacée/répétée, reconstruction et staging reprenable ; moteur C++ inchangé pour son format de blocs.
+- [x] Tests contre le scanner et la bibliothèque protocole Syncthing v2.1.7 : Hello/index/requêtes sur TLS 1.3 authentifié, messages bruts/compressés, octets reconstruits exacts ; mesures synthétiques de lectures Go/C++ et de reconstruction différentielle.
+- [ ] Interopérabilité des daemons et dossiers complets, intégration des versions causales/tombstones/conflits et corpus de performances réalistes ; validations Linux/macOS/ARM64.
 
 Critère de sortie : après partitions réseau et modifications concurrentes, convergence sans écrasement silencieux. La compatibilité Syncthing ne sera annoncée qu'après des tests contre sa propre implémentation.
 
