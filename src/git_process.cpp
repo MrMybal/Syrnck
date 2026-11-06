@@ -125,11 +125,17 @@ public:
   }
 };
 class Content : public std::streambuf {
+  struct CloseSpool {
+    void operator()(std::FILE *file) const noexcept {
+      if (file)
+        std::fclose(file);
+    }
+  };
   std::ostream &output_;
   const Body &body_;
   std::stop_token stop_;
   std::string held_;
-  std::unique_ptr<std::FILE, decltype(&std::fclose)> spool_{nullptr, &std::fclose};
+  std::unique_ptr<std::FILE, CloseSpool> spool_;
   bool started_ = false;
 
   void emit(std::string_view data) {

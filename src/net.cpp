@@ -777,12 +777,14 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
              }));
   server.Get("/v1/refs", guarded([&](const auto &, auto &response) {
                auto refs = store.refs();
-               if (access)
-                 for (auto it = refs.begin(); it != refs.end();)
+               if (access) {
+                 for (auto it = refs.begin(); it != refs.end();) {
                    if (!access->visible(it->first))
                      it = refs.erase(it);
                    else
                      ++it;
+                 }
+               }
                response.set_content(encode_refs(refs).dump(), "application/json");
              }));
   server.Put(
