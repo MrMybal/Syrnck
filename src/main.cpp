@@ -15,6 +15,7 @@
 #include <syrnck/backup.hpp>
 #include <syrnck/retention.hpp>
 #include <syrnck/bisect.hpp>
+#include <syrnck/history.hpp>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -320,6 +321,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native bisect-start BON MAUVAIS | bisect-status
   native bisect-good|bisect-bad|bisect-skip RÉVISION --expect-state ID
   native bisect-reset --expect-state ID   Archiver la recherche sans toucher aux fichiers
+  native diff SOURCE CIBLE --renames     Détecter les renommages de contenu exact
+  native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   agent push URL RÉF_LOCALE RÉF_DISTANTE
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
@@ -481,6 +484,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native bisect-start GOOD BAD | bisect-status
   native bisect-good|bisect-bad|bisect-skip REVISION --expect-state ID
   native bisect-reset --expect-state ID   Archive the search without changing files
+  native diff SOURCE TARGET --renames    Detect exact-content renames
+  native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   agent push URL LOCAL_REF REMOTE_REF
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
@@ -739,7 +744,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
         sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
         sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
-        sub == "branch-restore" || sub == "push" || sub == "fetch" || sub.starts_with("bisect-"))) ||
+        sub == "branch-restore" || sub == "push" || sub == "fetch" || sub == "log-file" ||
+        sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -1250,9 +1256,23 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       else
         print(report);
     } else if (sub == "diff") {
+      const auto renames = args.flag("--renames");
       args.count(2);
-      print(store.compare_revisions(resolve(args.values[0]), resolve(args.values[1]),
-                                    {control->token(), observe}));
+      const auto source = resolve(args.values[0]), target = resolve(args.values[1]);
+      print(renames ? native_diff_renames(store, source, target, {control->token(), observe})
+                    : store.compare_revisions(source, target, {control->token(), observe}));
+    } else if (sub == "log-file") {
+      NativeFileHistoryOptions limits;
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      const auto visited = integer(args.option("--max-revisions").value_or("1000"));
+      require(limit >= 1 && limit <= 1000, "native file history page limit must be in 1..1000");
+      require(visited >= 1 && visited <= 10000, "native file history traversal limit must be in 1..10000");
+      limits.limit = static_cast<std::size_t>(limit);
+      limits.max_revisions = static_cast<std::size_t>(visited);
+      limits.follow_renames = !args.flag("--no-follow");
+      args.count(2);
+      print(native_file_history(store, resolve(args.values[0]), args.values[1], limits,
+                                {control->token(), observe}));
     } else if (sub == "branch") {
       args.count(2);
       (void)store.create_native_branch(args.values[0], resolve(args.values[1]), {control->token(), observe});

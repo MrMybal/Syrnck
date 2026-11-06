@@ -1,5 +1,9 @@
 // Canonical English keys, French translations. Only explicitly marked prefixes
 // translate a diagnostic with a dynamic suffix; user data is never translated.
+SYRNCK_MESSAGE("native file history report exceeds 16 MiB", "Le rapport d’historique de fichier natif dépasse 16 Mio")
+SYRNCK_MESSAGE("native rename comparison exceeds path limit", "La comparaison des renommages natifs dépasse la limite de chemins")
+SYRNCK_MESSAGE("native file history page limit must be in 1..1000", "La limite de page d’historique de fichier doit être comprise entre 1 et 1000")
+SYRNCK_MESSAGE("native file history traversal limit must be in 1..10000", "La limite de parcours d’historique de fichier doit être comprise entre 1 et 10000")
 SYRNCK_MESSAGE("invalid native bisect revision list", "Liste de révisions de bisection native invalide")
 SYRNCK_MESSAGE("native bisect has an orphan history pin", "La bisection native contient une protection d’historique orpheline")
 SYRNCK_MESSAGE("invalid native bisect state", "État de bisection native invalide")

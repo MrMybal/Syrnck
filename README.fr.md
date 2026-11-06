@@ -123,6 +123,8 @@ logiques et trafic des corps d'objets.
 
 L’historique autonome propose une [bisection persistante sans checkout](docs/NATIVE_BISECT.md),
 avec prise en compte des merges, ambiguïtés des révisions ignorées et historique protégé.
+[`native diff --renames` et `native log-file`](docs/NATIVE_FILE_HISTORY.md) ajoutent
+les renommages de contenu exact et l’historique paginé d’un fichier par premier parent.
 
 `backup create`, `backup verify`, `backup restore` et `backup repair` fournissent
 des [sauvegardes hors ligne vérifiées et la réparation des objets absents](docs/BACKUPS.md),

@@ -150,7 +150,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] CLI anglais/français `merge-plan/merge --text-merge`, budgets par invocation, publication de l’ensemble et campagne d’arrêts forcés sur blocs/manifestes/révisions, checkout, reprise et annulation en clair/chiffré.
 - [x] Fusion textuelle automatique opt-in du rebase linéaire : cache virtuel partagé entre étapes, budgets globaux, IDs exacts, vérification complète avant matérialisation et conservation des versions intermédiaires après GC.
 - [x] Fusion textuelle automatique du rejeu d’index : API C++ et CLI bilingue, choix explicites prioritaires, aucune lecture du workspace, publication atomique de l’index et de son archive, commit ultérieur et rétention.
-- [ ] Détection des renommages et synthèse récursive des bases multiples.
+- [x] Détection explicite des renommages de contenu exact dans les diffs natifs : modes/représentations distincts, ambiguïtés conservatrices, métadonnées seules et comparaison avec Git sur noms Unicode.
+- [ ] Renommages avec édition/copies, intégration aux fusions/rebases et synthèse récursive des bases multiples.
 - [x] Plans C++ de fusion textuelle pour cherry-pick et revert : options communes, direction inverse et parent principal exacts, résolutions prioritaires et candidats virtuels sans écriture.
 - [x] Application C++ de cherry-pick/revert textuels : tête attendue, aucun candidat sur conflit/résultat vide/workspace bloqué, publication récupérable, annulation/reprise et reconstruction après GC indépendamment de l’ascendance source.
 - [x] CLI anglais/français de cherry-pick/revert `--text-merge`, budgets, résolutions explicites et tests de publication de l’ensemble ; arrêts forcés sur objets générés, deux fichiers, références, reprise et annulation en clair/chiffré.
@@ -169,7 +170,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Squash des derniers commits linéaires avec plan borné, snapshot exact de tête, frontière conservée ou nouvelle racine, merges/index refusés, tête attendue et archive atomique de tout l'ancien historique.
 - [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.
 - [x] Bisection native persistante sans checkout : graphe avec merges, suggestions équilibrées, bons/mauvais/skips, ambiguïtés explicites, état attendu et session distincte ; historique protégé et archivage atomique à la fin.
-- [ ] Blame, suivi des renommages, recherche dans l’historique et bisection avec checkout/exécution automatique.
+- [x] Historique de fichier paginé par premier parent avec suivi des renommages exacts, suppressions, curseur révision/chemin, limites de parcours et raisons d’arrêt explicites.
+- [ ] Blame, suivi heuristique des renommages/tous les parents, recherche générale dans l’historique et bisection avec checkout/exécution automatique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [x] Push de branches autonomes et fetch de références de suivi : fermeture complète, baux/reprise, publication CAS, règles serveur d’ascendance et de chemins ; têtes de suivi précédentes archivées et workspace intact.
 - [ ] Synchronisation des tags/annotations/politiques, intégration automatique du pull, administration de la rétention des racines de fetch et tests d’arrêts forcés de cette publication.
