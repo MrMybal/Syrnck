@@ -108,6 +108,8 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native status` hashes working files against a native branch or exact revision without ingesting them. `native diff SOURCE TARGET` compares snapshot metadata, including content, mode and manifest changes. See [native comparison contracts and limits](docs/NATIVE_COMPARISON.md).
 
+`native status --indexed` persists an optional working hash cache with filesystem identity/change checks, recent-write fallback and automatic rebuild after GC. It supports combined staging status; destructive workspace preflights keep their full reads. See the [working index](docs/WORKING_INDEX.md).
+
 `native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Numbered text hunk selection is also available; see [partial staging](docs/NATIVE_HUNKS.md).
 
 `native status --combined` separates staged and later working changes. `native checkout-plan REVISION` reports proposed actions and blockers, including ignored-file collisions, links, case aliases and pending staging. `--verify` additionally audits the target's complete stored closure. See [native workspace inspection](docs/NATIVE_WORKSPACE.md).

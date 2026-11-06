@@ -15,6 +15,10 @@ syrnck native diff SOURCE_REVISION TARGET_REVISION
 
 ## Working-directory status
 
+The optional [`--indexed` working hash cache](WORKING_INDEX.md) has a separate
+reuse contract and can write local cache data. The full-read/read-only contract
+below describes ordinary status without that flag.
+
 The default baseline is the [current native branch](NATIVE_BRANCHES.md),
 implicitly `heads/main` for legacy Stores. `--branch NAME` selects another native
 branch; a missing branch is an empty baseline, with every selected file reported

@@ -19,6 +19,7 @@
 #include <syrnck/workspace.hpp>
 #include <syrnck/stash.hpp>
 #include <syrnck/checkout_retention.hpp>
+#include <syrnck/working_index.hpp>
 #ifdef _WIN32
 #include <Windows.h>
 #include <fcntl.h>
@@ -345,8 +346,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native archives [--kind reset|reset-index|rebase-index|stage-index|squash|amend|checkout|detached]
                   [--after RÉFÉRENCE] [--limit 100] [--verify]
   native archive-show RÉFÉRENCE [--verify]
-  native status [--branch BRANCHE | --revision RÉVISION] [--directory .]
-  native status --combined [--branch BRANCHE] [--directory .]
+  native status [--branch BRANCHE | --revision RÉVISION] [--directory .] [--indexed]
+  native status --combined [--branch BRANCHE] [--directory .] [--indexed]
+  native index-clear
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
   native checkout RÉVISION [--branch BRANCHE] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -523,8 +525,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native archives [--kind reset|reset-index|rebase-index|stage-index|squash|amend|checkout|detached]
                   [--after REFERENCE] [--limit 100] [--verify]
   native archive-show REFERENCE [--verify]
-  native status [--branch BRANCH | --revision REVISION] [--directory .]
-  native status --combined [--branch BRANCH] [--directory .]
+  native status [--branch BRANCH | --revision REVISION] [--directory .] [--indexed]
+  native status --combined [--branch BRANCH] [--directory .] [--indexed]
+  native index-clear
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
   native checkout REVISION [--branch BRANCH] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -893,7 +896,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
         sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
         sub == "branch-restore-plan" || sub == "branch-restore" || sub == "push" || sub == "fetch" ||
-        sub == "checkout-receipts" || sub == "stash" || sub == "log-file" || sub.starts_with("bisect-"))) ||
+        sub == "checkout-receipts" || sub == "index-clear" || sub == "stash" || sub == "log-file" || sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
                             sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
@@ -1378,6 +1381,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                  {control->token(), observe}));
     } else if (sub == "status") {
       const auto combined = args.flag("--combined");
+      const auto indexed = args.flag("--indexed");
       const auto directory = workspace();
       const auto branch = args.option("--branch");
       auto revision = args.option("--revision");
@@ -1388,7 +1392,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         *revision = resolve(*revision);
       if (combined) {
         const auto selected = branch ? *branch : store.native_head()["branch"].get<std::string>();
-        print(store.workspace_status(directory, selected, {control->token(), observe}));
+        print(indexed ? indexed_native_workspace_status(store, directory, selected, {control->token(), observe})
+                      : store.workspace_status(directory, selected, {control->token(), observe}));
         return 0;
       }
       if (!revision) {
@@ -1400,7 +1405,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
           revision = found->second.id;
         }
       }
-      print(store.status_directory(directory, revision, {control->token(), observe}));
+      print(indexed ? indexed_native_status(store, directory, revision, {control->token(), observe})
+                    : store.status_directory(directory, revision, {control->token(), observe}));
+    } else if (sub == "index-clear") {
+      args.count(0);
+      print(clear_native_working_index(store, {control->token(), observe}));
     } else if (sub == "checkout") {
       const auto directory = workspace();
       const auto branch = selected_branch();

@@ -70,7 +70,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Plans de réutilisation entre manifestes, blocs déplacés/répétés, déduplication des besoins et compteurs logiques ; comparaison de métadonnées C++/C/Go et CLI sans lire les payloads.
 - [x] Tables de références sans parcours quadratique de la table, sérialisation triée locale/HTTP et garde de profondeur JSON en SAX ; validation de 32 768 pins en clair/chiffré et mesure CLI reproductible.
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et index de plages persistant.
-- [ ] Index de travail, watcher et journal de changements pour éviter les rescans.
+- [x] Index de travail persistant optionnel pour le statut natif : empreintes liées aux identités/changements du système de fichiers, relecture des écritures récentes, reconstruction après corruption/GC et staging distinct ; les opérations destructives gardent les lectures complètes.
+- [ ] Watcher résident, journal borné et inventaire incrémental des dossiers pour éviter les rescans ; reprise explicite après perte d’événements.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
 - [x] Compression réseau Zstandard négociée, repli brut, décodage borné, budgets de préparation et compteurs logiques/réseau distincts.
 - [ ] Cache des présences et validation de charge de la compression sur des corpus réels.

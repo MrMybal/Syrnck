@@ -108,6 +108,10 @@ Json compare_native_file_maps(const NativeSnapshot &source, const NativeSnapshot
                               OperationOptions options) {
   return changes(source, target, false, options);
 }
+Json compare_native_workspace_maps(const NativeSnapshot &source, const NativeSnapshot &target,
+                                   OperationOptions options) {
+  return changes(source, target, true, options);
+}
 NativeContent hash_native_file(const NativeFile &file, Bytes &buffer, const OperationOptions &options) {
   std::ifstream input(file.path, std::ios::binary);
   require(input.is_open(), "cannot open source file");

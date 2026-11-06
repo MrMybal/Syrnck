@@ -20,6 +20,10 @@ keys, action names and conflict codes are English in both interface languages.
 
 ## Combined status
 
+`--indexed` can opt into the [persistent working hash cache](WORKING_INDEX.md)
+for the unstaged side. That mode writes disposable cache data; ordinary combined
+status keeps the full-read/read-only contract described here.
+
 `native status --combined` returns `version`, `branch`, `clean`, `staged` and
 `unstaged`. The nested `staged` report is the existing
 [`native staged` report](NATIVE_STAGING.md): its recorded base is compared with
