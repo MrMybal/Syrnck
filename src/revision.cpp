@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include "native_workspace.hpp"
+#include "native_inventory.hpp"
 #include <chrono>
 #include <fstream>
 #include <regex>
@@ -111,7 +112,8 @@ void add_rules(const fs::path &dir, std::string base, std::vector<Rule> &rules, 
     if (basename)
       pattern.insert(1, "(?:.*/)?");
     require(!budget || rules.size() < 16384, "native text diff ignore rules exceed 16384 entries");
-    rules.push_back({base, std::regex(pattern, std::regex::ECMAScript), neg, dirs});
+    try { rules.push_back({base, std::regex(pattern, std::regex::ECMAScript), neg, dirs}); }
+    catch (const std::regex_error &) { throw Error("invalid ignore pattern"); }
   }
   require(!input->bad(), "ignore file read failed");
 }
@@ -128,67 +130,123 @@ bool ignored(const std::string &relative, bool dir, const std::vector<Rule> &rul
   }
   return ignored;
 }
+struct NativeScan {
+  fs::path base, storage;
+  const std::function<void(const NativeFile &)> &visit;
+  OperationOptions options;
+  NativeInventoryPaths paths;
+  bool bounded;
+  std::size_t budget = 0;
+  NativeScan(const fs::path &directory, const fs::path &store,
+             const std::function<void(const NativeFile &)> &visitor, OperationOptions operation, bool scope)
+      : base(fs::canonical(directory)), storage(store), visit(visitor), options(operation), bounded(scope) {
+    require(inside(storage, base), "native store must be inside committed directory");
+  }
+  void rules_at(const fs::path &dir, const std::string &prefix, std::vector<Rule> &rules) {
+    const auto ignore_file = dir / ".syrnckignore";
+    const auto status = fs::symlink_status(ignore_file);
+    if (fs::exists(status))
+      require(!native_link_like(ignore_file, status), "ignore file cannot be a symlink");
+    add_rules(dir, prefix, rules, bounded ? &budget : nullptr, options.stop);
+  }
+  void account_name(std::string_view name) {
+    if (!bounded) return;
+    require(name.size() + 64 <= max_object_size - budget, "native workspace scope exceeds 16 MiB");
+    budget += name.size() + 64;
+  }
+  void file(const fs::directory_entry &entry, const std::string &relative, const fs::file_status &status) {
+    require(fs::is_regular_file(status), "special files cannot be committed");
+    paths.add(relative);
+    bool executable = false;
+#ifndef _WIN32
+    executable = (status.permissions() & (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) !=
+                 fs::perms::none;
+#endif
+    visit({entry.path(), relative, entry.file_size(), entry.last_write_time(), executable});
+  }
+  void scan(const fs::path &dir, std::vector<Rule> rules, std::size_t depth) {
+    require(depth <= 128, "native workspace directory nesting exceeds 128 levels");
+    throw_if_cancelled(options.stop);
+    const auto rel = dir.lexically_relative(base);
+    const auto prefix = rel == "." ? std::string{} : utf8(rel) + "/";
+    report_progress(options, {ProgressPhase::scanning, prefix});
+    rules_at(dir, prefix, rules);
+    for (const auto &entry : fs::directory_iterator(dir)) {
+      throw_if_cancelled(options.stop);
+      const auto path = entry.path();
+      const auto name = utf8(path.filename());
+      account_name(name);
+      if (name == ".git" || name == ".syrnck" || inside(path, storage)) continue;
+      const auto relative = utf8(path.lexically_relative(base));
+      const auto status = entry.symlink_status();
+      const bool isdir = fs::is_directory(status);
+      if (ignored(relative, isdir, rules)) continue;
+      require(!native_link_like(path, status), "native symlink support is not implemented");
+      if (isdir) scan(path, rules, depth + 1);
+      else file(entry, relative, status);
+    }
+  }
+  std::string scope(std::string_view path) {
+    validate_path(path);
+    auto current = base;
+    std::string prefix;
+    std::vector<Rule> rules;
+    for (std::size_t start = 0, depth = 0;;) {
+      throw_if_cancelled(options.stop);
+      require(++depth <= 128, "native workspace directory nesting exceeds 128 levels");
+      const auto slash = path.find('/', start);
+      const auto component = path.substr(start, slash == path.npos ? path.size() - start : slash - start);
+      const auto relative = prefix + std::string(component);
+      rules_at(current, prefix, rules);
+      const auto wanted = portable_fold(component);
+      std::optional<fs::directory_entry> found;
+      report_progress(options, {ProgressPhase::scanning, relative});
+      for (const auto &entry : fs::directory_iterator(current)) {
+        throw_if_cancelled(options.stop);
+        const auto name = utf8(entry.path().filename());
+        account_name(name);
+        if (portable_fold(name) != wanted) continue;
+        require(!found, "case-insensitive path collision");
+        found = entry;
+      }
+      // Missing ancestors remove their entire former prefix, not just the
+      // leaf named by the hint. Never leave stale sibling files in the map.
+      if (!found) return relative;
+      require(utf8(found->path().filename()) == component, "native workspace scope spelling differs from workspace");
+      current = found->path();
+      require(!inside(current, storage), "cannot observe protected native storage");
+      const auto status = found->symlink_status();
+      const bool isdir = fs::is_directory(status);
+      if (ignored(relative, isdir, rules)) return relative;
+      require(!native_link_like(current, status), "native symlink support is not implemented");
+      if (!isdir) {
+        file(*found, relative, status);
+        return relative; // Also handles an ancestor directory replaced by a file.
+      }
+      if (slash == path.npos) {
+        scan(current, std::move(rules), depth);
+        return relative;
+      }
+      prefix = relative + '/';
+      start = slash + 1;
+    }
+  }
+};
 } // namespace
 void visit_native_files(const fs::path &directory, const fs::path &store_root,
                         const std::function<void(const NativeFile &)> &visit, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  auto base = fs::canonical(directory);
-  require(inside(store_root, base), "native store must be inside committed directory");
-  std::set<std::string> folded;
-  std::size_t metadata_bytes = 2;
-  std::function<void(const fs::path &, std::vector<Rule>, unsigned)> scan = [&](const fs::path &dir,
-                                                                                std::vector<Rule> rules,
-                                                                                unsigned depth) {
-    require(depth <= 128, "native workspace directory nesting exceeds 128 levels");
-    throw_if_cancelled(options.stop);
-    auto rel = dir.lexically_relative(base);
-    std::string prefix = rel == "." ? "" : utf8(rel) + "/";
-    if (options.progress)
-      options.progress({ProgressPhase::scanning, prefix});
-    throw_if_cancelled(options.stop);
-    add_rules(dir, prefix, rules);
-    for (const auto &entry : fs::directory_iterator(dir)) {
-      throw_if_cancelled(options.stop);
-      auto path = entry.path();
-      auto name = utf8(path.filename());
-      if (name == ".git" || name == ".syrnck" || inside(path, store_root))
-        continue;
-      auto relative = utf8(path.lexically_relative(base));
-      auto status = entry.symlink_status();
-      bool isdir = fs::is_directory(status);
-      if (ignored(relative, isdir, rules))
-        continue;
-      require(!native_link_like(path, status), "native symlink support is not implemented");
-      if (isdir) {
-        scan(path, rules, depth + 1);
-        continue;
-      }
-      require(fs::is_regular_file(status), "special files cannot be committed");
-      validate_path(relative);
-      require(folded.insert(portable_fold(relative)).second, "case-insensitive path collision");
-      // A lower bound on this file's revision entry, with the shortest boolean
-      // spelling and a 64-character ID. No valid flat v1 snapshot can exceed
-      // the object limit here, even before its header/message are counted.
-      const auto minimum = relative.size() + std::string_view(R"({"manifest":"","executable":true})").size() +
-                           64 + 3 + (folded.size() > 1 ? 1 : 0);
-      require(minimum <= max_object_size - metadata_bytes, "native workspace metadata exceeds 16 MiB");
-      metadata_bytes += minimum;
-      bool executable = false;
-#ifndef _WIN32
-      executable =
-          (status.permissions() & (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) !=
-          fs::perms::none;
-#endif
-      visit({path, relative, entry.file_size(), entry.last_write_time(), executable});
-    }
-  };
-  scan(base, {}, 0);
-  for (const auto &path : folded) {
-    throw_if_cancelled(options.stop);
-    for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
-      require(!folded.contains(path.substr(0, n)), "file/directory path collision");
-  }
+  NativeScan scan(directory, store_root, visit, options, false);
+  scan.scan(scan.base, {}, 0);
+  scan.paths.finish(options.stop);
+}
+std::string visit_native_scope(const fs::path &directory, const fs::path &store_root, std::string_view path,
+                                const std::function<void(const NativeFile &)> &visit, OperationOptions options) {
   throw_if_cancelled(options.stop);
+  NativeScan scan(directory, store_root, visit, options, true);
+  auto scope = scan.scope(path);
+  scan.paths.finish(options.stop);
+  return scope;
 }
 std::optional<NativeFile> inspect_native_file(const fs::path &directory, const fs::path &store_root,
                                               std::string_view path, OperationOptions options) {

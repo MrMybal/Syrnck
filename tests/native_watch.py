@@ -155,6 +155,86 @@ class NativeWatch(unittest.TestCase):
             self.assertEqual(frame["status"]["observation"]["retained_files"], 1)
             run.finish()
 
+    def test_file_create_rename_delete_are_targeted_and_journaled(self):
+        (self.root / "large").write_bytes(b"x" * (4 * 1024 * 1024))
+        self.baseline()
+        with self.watch("--journal", "--max-updates", 4, "--duration-ms", 5000) as run:
+            initial = run.until(lambda f: f["type"] == "status")
+            if initial["backend"] == "polling":
+                self.skipTest("targeted namespace observation requires native notifications")
+            (self.root / "new").write_bytes(b"new")
+            created = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "new" for r in f["status"]["changes"]))
+            (self.root / "new").rename(self.root / "renamed")
+            renamed = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "renamed" for r in f["status"]["changes"]))
+            (self.root / "renamed").unlink()
+            removed = run.until(lambda f: f["type"] == "status" and f["status"]["clean"])
+            for frame, expected in ((created, 3), (renamed, 3), (removed, 0)):
+                self.assertFalse(frame["full_scan"])
+                self.assertEqual(frame["status"]["observation"]["mode"], "targeted")
+                self.assertEqual(frame["status"]["hashed_bytes"], expected)
+                self.assertTrue(frame["journal"]["durable"])
+            self.assertEqual(removed["status"]["workspace_files"], 2)
+            run.finish()
+
+    def test_subtree_rename_nested_ignores_and_directory_to_file_transition(self):
+        (self.root / "large").write_bytes(b"x" * (4 * 1024 * 1024))
+        (self.root / "folder").mkdir()
+        (self.root / "folder/first").write_bytes(b"one")
+        (self.root / "folder/second").write_bytes(b"two")
+        self.baseline()
+        with self.watch("--journal", "--duration-ms", 5000) as run:
+            initial = run.until(lambda f: f["type"] == "status")
+            if initial["backend"] == "polling":
+                self.skipTest("targeted namespace observation requires native notifications")
+            (self.root / "folder").rename(self.root / "moved")
+            renamed = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "moved/first" for r in f["status"]["changes"]))
+            if initial["backend"] == "windows":
+                self.assertFalse(renamed["full_scan"])
+                self.assertEqual(renamed["status"]["hashed_bytes"], 6)
+            else:
+                self.assertTrue(renamed["full_scan"], "inotify registration gap needs full recovery")
+            (self.root / "moved/.syrnckignore").write_bytes(b"second\n")
+            ignored = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "moved/.syrnckignore" for r in f["status"]["changes"]))
+            self.assertFalse(ignored["full_scan"])
+            self.assertEqual(ignored["status"]["hashed_bytes"], 10)
+            self.assertEqual(ignored["status"]["observation"]["scanned_scopes"], ["moved"])
+            self.assertNotIn("moved/second", [r["path"] for r in ignored["status"]["changes"]])
+            (self.root / "moved/.syrnckignore").unlink()
+            restored = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "moved/second" for r in f["status"]["changes"]))
+            self.assertFalse(restored["full_scan"])
+            self.assertEqual(restored["status"]["hashed_bytes"], 6)
+            (self.root / "moved/first").unlink()
+            (self.root / "moved/second").unlink()
+            (self.root / "moved").rmdir()
+            (self.root / "moved").write_bytes(b"file")
+            transitioned = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "moved" for r in f["status"]["changes"]))
+            if initial["backend"] == "windows":
+                self.assertFalse(transitioned["full_scan"])
+                self.assertEqual(transitioned["status"]["hashed_bytes"], 4)
+            self.assertEqual(transitioned["status"]["workspace_files"], 3)
+            self.assertTrue(transitioned["journal"]["durable"])
+
+    def test_invalid_ignore_range_reports_error_without_terminating_resident_observer(self):
+        self.baseline()
+        with self.watch("--journal", "--max-updates", 2, "--duration-ms", 4000) as run:
+            run.until(lambda f: f["type"] == "status")
+            (self.root / ".syrnckignore").write_bytes(b"[z-a]\n")
+            error = run.until(lambda f: f["type"] == "error")
+            self.assertEqual(error["message"], "invalid ignore pattern")
+            self.assertTrue(error["journal"]["durable"])
+            self.assertIsNone(run.process.poll())
+            (self.root / ".syrnckignore").unlink()
+            recovered = run.until(lambda f: f["type"] == "status" and f["reason"] == "recovered")
+            self.assertTrue(recovered["full_scan"])
+            self.assertTrue(recovered["status"]["clean"])
+            run.finish()
+
     def test_busy_store_after_event_is_retried_without_losing_working_change(self):
         self.baseline()
         with self.watch("--journal", "--duration-ms", 5000, "--interval-ms", 40) as run:

@@ -33,12 +33,26 @@ files completely. Consequently a restart observes edits made while the watcher
 was offline, independently of an earlier cached hash.
 
 Normal notifications are coalesced for a fixed bounded interval. Each batch
-updates a complete in-memory inventory. Edits to known regular files inspect
-their ancestor directories and reread only those files, even if their size and
-timestamps match. They do not enumerate unrelated subtrees or rewrite the
-persisted hash cache. Creations, deletions, renames, directory/file transitions,
-ignore-rule changes and uncertain targeted inspection use a complete byte scan
-with the ordinary ignore rules, source selection and namespace checks.
+updates a complete in-memory inventory. Files and directory subtrees named by
+native hints are reselected with the ordinary ignore rules. Regular files in
+those scopes are read completely, even if their size and timestamps match;
+unrelated subtrees are neither enumerated nor read. Targeted observations do
+not rewrite the persisted hash cache. Creations, removals, renames and
+file/directory transitions replace their complete inventory prefixes. A missing,
+ignored or regular-file ancestor broadens the scope so stale sibling entries
+cannot survive a deleted/replaced directory. Similar names such as `asset` and
+`assets` remain distinct prefixes.
+
+Overlapping hints coalesce to their enclosing scope. A nested `.syrnckignore`
+change reselects its entire parent subtree, including nested rules and newly
+included files. Root ignore changes still force a complete byte scan. Portable
+case collisions, file/directory collisions and the v1 metadata size bound are
+validated across retained and newly selected entries before hashing scoped
+contents. Selection failures, case-spelling ambiguity, protected storage hints
+and scope budget exhaustion fall back to a full scan; unresolved filesystem or
+namespace errors remain errors. Symlink/reparse ignore files are refused by
+both scan paths. Invalid ignore patterns produce a recoverable scan error.
+
 Deletions and renamed paths are observed as
 current filesystem state; event names are hints, not a transaction log or
 guaranteed rename pairs. `--combined` preserves separate staging and working
@@ -65,7 +79,9 @@ interval, but unchanged semantic results are also quiet.
 
 The nested `status` has the ordinary or combined status fields. Working reports
 also include `observation` with `mode: full|indexed|targeted`, `full_scan`,
-`inspected_files` and `retained_files`. Only enumerated queries include the
+`inspected_files` and `retained_files`. Targeted reports also include
+`scanned_scopes`, the sorted replacement prefixes after overlap coalescing and
+ancestor resolution. A removal can inspect zero files and hash zero bytes. Only enumerated queries include the
 persisted `working_index` metrics; targeted queries retain a complete session
 inventory, including files unsupported by the stat cache. A full fallback sets
 the frame's `full_scan` flag as well. Report comparison still visits the
@@ -198,6 +214,13 @@ reports, kernel queues and allocation overhead are additional; these limits
 are not a total RAM budget. Large output consumers must keep reading; queued
 events can overflow while output is blocked, requiring a later full scan.
 
+Scoped C++ observations accept at most 65,536 hints and 1 MiB of accounted hint
+names. Each scope traversal accounts ancestor/scope directory names and ignore
+bytes against 16 MiB; gathered selected names also have a conservative 16 MiB
+budget. Crossing a scope budget requests a full scan. The ordinary full scan
+and the retained+replacement union still enforce the v1 revision metadata
+lower bound. These are accounting limits, not a total RAM or syscall budget.
+
 ## C++ API and validation
 
 ```cpp
@@ -233,16 +256,48 @@ bounded overflow, cancellation and root replacement. CLI scenarios cover
 plain/encrypted custom Stores, equal-size/restored-mtime edits, staging,
 idle Store-lock availability, occupied Store recovery, periodic audits,
 restart/offline edits, file/directory transitions, error suppression and
-French diagnostics. Journal coverage includes encrypted/plain persistence,
+French diagnostics. Scoped C++ scenarios compare every result against complete
+status in plain/encrypted Stores, covering missing-ancestor sibling removal,
+file/directory transitions, nested ignores, overlapping hints, prefix neighbors,
+protected storage and cancellation. Native CLI scenarios cover zero-byte
+removals, journaled file renames and scoped Windows directory transitions with
+an unrelated 4 MiB asset. Invalid ignore ranges remain recoverable.
+Journal coverage includes encrypted/plain persistence,
 interrupted pending records, session exclusion, unavailable/recovered states,
 quiet polling and corruption recovery. Twenty process termination boundaries
 cover initial/replacement checkpoint writes with a separate production reader.
 Linux native execution and macOS fallback execution still
 need confirmation by CI.
 
-Existing-file edits use targeted observation; namespace changes still rebuild
-directory inventories. Incremental directory
-topology updates, replayable event history, causal version
+## Synthetic performance measurement
+
+```text
+python scripts/benchmark_native_watch.py --cli build/Release/syrnck.exe --asset-mib 64 --files 1000 --iterations 5
+python scripts/benchmark_native_watch.py --cli build/Release/syrnck.exe --journal --output .scratch/watch-benchmark.json
+```
+
+The benchmark builds a new temporary corpus with an unrelated large asset and
+small source files. It measures native create/edit/rename/delete notification
+latency, checks targeted mode and exact working-content bytes hashed, then
+stops the resident process before collecting full-status subprocess timings.
+The final semantic status must match the full scan. `--journal` additionally
+checks that emitted checkpoints are durable. Polling-only platforms report
+`supported: false` instead of treating their queries as targeted observations.
+
+Defaults are 64 MiB, 1,000 source files, five iterations and a 10 ms debounce;
+the debounce differs from the ordinary CLI default and is recorded in output.
+Accepted bounds are 1..4096 MiB, 0..50,000 source files and 1..100 iterations.
+The JSON report includes every sample, medians, content byte counts and backend.
+Native latency includes the filesystem mutation, debounce, comparison and JSON
+delivery. Full timings include subprocess startup and run separately afterward.
+This measures a synthetic, warm corpus; it is not a cold-cache throughput test
+or an Unreal project result. Retained in-memory map checks and immutable
+revision metadata still contribute to each scoped comparison.
+
+File and subtree changes use targeted observation when event continuity is
+preserved. Linux directory topology still rebuilds inotify registrations and
+forces a complete byte scan to cover the gap; incremental registration updates
+and real Linux/macOS validation remain pending. Replayable event history, causal version
 tracking, tombstones, transfer scheduling, OS service packaging and full
 Syncthing daemon/folder interoperability remain separate work.
 

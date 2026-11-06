@@ -110,10 +110,13 @@ Directory enumeration and ignore evaluation still run on every indexed query,
 so additions, removals, renamed paths and ignore changes are observed. The
 [resident watcher](NATIVE_WATCH.md) triggers queries from native notifications
 and full audits, with bounded hints and overflow recovery. Its complete session
-inventory also supports targeted reads for known-file edits without unrelated
-subtree enumeration. Namespace changes still enumerate fully. The watcher offers an optional
-persistent checkpoint journal; replayable event history and incremental
-topology updates remain separate work. C ABI
+inventory supports targeted file/subtree replacement for edits, creations,
+removals, renames, type transitions and nested ignore changes, without unrelated
+subtree enumeration. Root rules, lost continuity and ambiguous selection still
+force complete byte scans. Linux directory topology changes also force a full
+scan to cover inotify registration gaps. The watcher offers an optional
+persistent checkpoint journal; replayable event history and incremental native
+watch registrations remain separate work. C ABI
 and Go bindings do not yet expose this native workspace cache.
 
 Local regression coverage includes plain/encrypted Stores with loose,
