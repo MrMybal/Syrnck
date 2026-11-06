@@ -6,8 +6,9 @@ HEAD, index and working files are preserved, including uncommitted changes.
 
 This is a snapshot migration. Earlier commits still contain their original LFS
 pointers and need their original LFS storage to reconstruct those versions.
-Rewriting an entire history, downloading LFS objects and converting LFS extension
-pipelines are separate, unimplemented operations.
+[Complete reachable history conversion](GIT_LFS_HISTORY.md) is available as a
+separate command. Downloading LFS objects and converting LFS extension pipelines
+remain unimplemented.
 
 ## Prepare and inspect
 
@@ -144,7 +145,8 @@ The implementation currently limits:
   strictly smaller than 1,024 bytes; legacy versions, extensions and unknown
   fields are refused.
 - A migration to 65,536 asset paths, 4,096 changed attributes directories and
-  1 MiB per changed attributes file. Native bundle metadata must also fit its
+  1 MiB per changed attributes file, with 16 MiB across all resulting attribute
+  contents. Native bundle metadata must also fit its
   existing 16 MiB format limit.
 - SHA-256 scratch batches to 64 KiB. Asset ingestion uses the existing bounded
   block pipeline without a complete asset spool; tree metadata, visited IDs,

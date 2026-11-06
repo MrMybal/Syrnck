@@ -28,4 +28,17 @@ Json preview_lfs(const LfsCatalog &, const fs::path &objects, OperationOptions =
 // Creates one child commit and a new branch, leaving HEAD/index/worktree untouched.
 Json migrate_lfs(const Store &, const fs::path &directory, std::string_view revision, const fs::path &objects,
                  std::string_view new_branch, IngestOptions = {});
+struct LfsHistoryOptions {
+  std::size_t max_commits = 10000;
+  bool strip_signatures = false;
+};
+// Inspect every raw parent, including merge sides; no Store or Git writes.
+Json preview_lfs_history(const fs::path &directory, std::string_view revision, const fs::path &objects,
+                         LfsHistoryOptions = {}, OperationOptions = {});
+// Rewrite the complete reachable DAG onto a new branch. Original refs stay intact.
+// Author/committer headers, messages and ordered parents are preserved. Signatures
+// on rewritten commits require explicit permission to strip, never silent reuse.
+Json migrate_lfs_history(const Store &, const fs::path &directory, std::string_view revision,
+                         const fs::path &objects, std::string_view new_branch, LfsHistoryOptions = {},
+                         IngestOptions = {});
 } // namespace syrnck::git

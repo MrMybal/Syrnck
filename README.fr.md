@@ -99,6 +99,12 @@ Dans un dépôt Git existant, lancer `syrnck git install`, puis ajouter les règ
 
 Pour un projet LFS existant, `syrnck git lfs-preview HEAD` vérifie les objets du cache local, puis `syrnck git migrate-lfs HEAD --branch converted-assets` crée un commit enfant avec les pointeurs Syrnck et leurs blocs conservés. HEAD, index et fichiers de travail sont préservés. La conversion porte sur un snapshot ; les anciens commits nécessitent toujours leur stockage LFS. Voir la [migration LFS hors ligne et sa récupération](docs/GIT_LFS_MIGRATION.md) en anglais.
 
+Pour convertir toutes les versions accessibles depuis une tête, utilisez
+`git lfs-history-preview HEAD`, puis `git migrate-lfs-history HEAD --branch converted-history`.
+Les parents des merges, auteurs, dates et messages sont conservés ; chaque
+catalogue historique protège ses blocs. Les signatures des commits réécrits
+exigent un choix explicite. Voir la [conversion de l'historique LFS complet](docs/GIT_LFS_HISTORY.md).
+
 `syrnck git retention-scan` inventorie les pointeurs des références, reflogs et index de tous les worktrees enregistrés. `git retention` prévisualise les protections vérifiées ; `git retention --apply` les ajoute en une transaction. Les anciennes protections restent conservées et sont signalées pour inspection. Voir la [couverture et les limites de rétention Git](docs/GIT_RETENTION.md).
 
 L'agent accepte `--requests 4 --transfer-buffer-mib 64` pour chevaucher les requêtes d'objets, avec accès au Store coordonnés. Le défaut reste une requête ; le budget couvre les payloads et les réponses réservées, pas toute la mémoire du processus. Voir [limites et reprises des transferts parallèles](docs/PARALLEL_TRANSFERS.md). Le GC et l'empaquetage deviennent interruptibles pendant la préparation, puis terminent leur nettoyage après publication ; voir les [frontières de maintenance](docs/MAINTENANCE.md).

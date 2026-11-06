@@ -300,6 +300,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   git clean [--workers N] [--buffer-mib N] | git smudge
   git filter-process [--checkout-policy]   Protocole Git v2, plusieurs fichiers par processus
   git lfs-preview COMMIT [--lfs-objects CHEMIN]   Auditer les objets LFS locaux
+  git lfs-history-preview COMMIT [--max-commits 10000] [--strip-signatures]
+  git migrate-lfs-history COMMIT --branch NOUVELLE [--strip-signatures]
   git migrate-lfs COMMIT --branch NOUVELLE [--lfs-objects CHEMIN]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -463,6 +465,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   git clean [--workers N] [--buffer-mib N] | git smudge
   git filter-process [--checkout-policy]   Git protocol v2, multiple files per process
   git lfs-preview COMMIT [--lfs-objects PATH]   Audit local LFS objects
+  git lfs-history-preview COMMIT [--max-commits 10000] [--strip-signatures]
+  git migrate-lfs-history COMMIT --branch NEW [--strip-signatures]
   git migrate-lfs COMMIT --branch NEW [--lfs-objects PATH]
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
@@ -657,9 +661,20 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               << localize("\nAssign filter=syrnck -text to assets in .gitattributes.\n", language);
     return 0;
   }
-  if (command == "git" && (sub == "catalog" || sub == "lfs-preview" || sub == "retention-scan")) {
+  if (command == "git" &&
+      (sub == "catalog" || sub == "lfs-preview" || sub == "lfs-history-preview" || sub == "retention-scan")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
-    auto cache = sub == "lfs-preview" ? args.option("--lfs-objects") : std::optional<std::string>{};
+    auto cache = (sub == "lfs-preview" || sub == "lfs-history-preview") ? args.option("--lfs-objects")
+                                                                        : std::optional<std::string>{};
+    git::LfsHistoryOptions history;
+    if (sub == "lfs-history-preview") {
+      history.strip_signatures = args.flag("--strip-signatures");
+      if (auto value = args.option("--max-commits")) {
+        const auto limit = integer(*value);
+        require(limit >= 1 && limit <= 100000, "Git LFS history commit limit must be in 1..100000");
+        history.max_commits = static_cast<std::size_t>(limit);
+      }
+    }
     auto text = args.flag("--progress"), json = args.flag("--progress-json");
     require(!(text && json), "choose one progress output mode");
     args.count(sub == "retention-scan" ? 0 : 1);
@@ -671,11 +686,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       print(git::retention_inventory(directory, operation).json());
       return 0;
     }
-    if (sub == "lfs-preview") {
+    if (sub == "lfs-preview" || sub == "lfs-history-preview") {
       auto objects =
           git::lfs_objects(directory, cache ? std::optional{path_from_utf8(*cache)} : std::nullopt);
       auto result =
-          git::preview_lfs(git::lfs_catalog(directory, args.values[0], operation), objects, operation);
+          sub == "lfs-preview"
+              ? git::preview_lfs(git::lfs_catalog(directory, args.values[0], operation), objects, operation)
+              : git::preview_lfs_history(directory, args.values[0], objects, history, operation);
       auto ready = result["ready"].get<bool>();
       print(result);
       return ready ? 0 : 1;
@@ -721,7 +738,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "git" ? path_from_utf8(args.option("--directory").value_or(".")) : fs::path{};
   if (command == "git" &&
       (sub == "prepare-assets" || sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
-       sub == "migrate-lfs" || sub == "retention") &&
+       sub == "migrate-lfs" || sub == "migrate-lfs-history" || sub == "retention") &&
       !root_option)
     root = git::common_store(git_directory);
   Store store(root, read_key(), false, store_options);
@@ -747,9 +764,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "branch-restore" || sub == "push" || sub == "fetch" || sub == "log-file" ||
         sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
-      (command == "git" &&
-       (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
-        sub == "pull-assets" || sub == "pre-push" || sub == "migrate-lfs" || sub == "retention"));
+      (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
+                            sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
+                            sub == "migrate-lfs" || sub == "migrate-lfs-history" || sub == "retention"));
   require(cancellable || (!text_progress && !json_progress), "progress is unavailable for this command");
   if (cancellable)
     control = std::make_unique<cli::OperationControl>(language, json_progress   ? cli::ProgressMode::json
@@ -1499,7 +1516,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto ready = result["ready"].get<bool>();
       print(result);
       return ready ? 0 : 1;
-    } else if (sub == "migrate-lfs") {
+    } else if (sub == "migrate-lfs" || sub == "migrate-lfs-history") {
       auto branch = args.option("--branch");
       require(branch.has_value(), "--branch is required for Git LFS migration");
       auto cache = args.option("--lfs-objects");
@@ -1508,8 +1525,20 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto options = ingestion_options(args, store);
       options.stop = control->token();
       options.progress = observe;
+      git::LfsHistoryOptions history;
+      if (sub == "migrate-lfs-history") {
+        history.strip_signatures = args.flag("--strip-signatures");
+        if (auto value = args.option("--max-commits")) {
+          const auto limit = integer(*value);
+          require(limit >= 1 && limit <= 100000, "Git LFS history commit limit must be in 1..100000");
+          history.max_commits = static_cast<std::size_t>(limit);
+        }
+      }
       args.count(1);
-      print(git::migrate_lfs(store, git_directory, args.values[0], objects, *branch, options));
+      print(sub == "migrate-lfs"
+                ? git::migrate_lfs(store, git_directory, args.values[0], objects, *branch, options)
+                : git::migrate_lfs_history(store, git_directory, args.values[0], objects, *branch, history,
+                                           options));
     } else if (sub == "pre-push") {
       auto limits = transfer_options(args);
       require(!limits.require_read_lease, "read lease requirement is only available for pull");

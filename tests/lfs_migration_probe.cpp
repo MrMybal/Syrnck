@@ -20,7 +20,11 @@ void test_transaction_acknowledgement() {
 int main(int argc, char **argv) {
   try {
     require(argc == 2, "expected migration probe mode");
-    const std::string mode = argv[1], branch = "probe-" + mode, reference = "refs/heads/" + branch;
+    std::string mode = argv[1];
+    const bool history = mode.starts_with("history_");
+    if (history)
+      mode.erase(0, 8);
+    const std::string branch = "probe-" + std::string(argv[1]), reference = "refs/heads/" + branch;
     auto run = [](std::vector<std::string> arguments) {
       arguments.insert(arguments.begin(), "git");
       auto result = process(arguments);
@@ -70,7 +74,9 @@ int main(int argc, char **argv) {
       }
     };
     try {
-      result = git::migrate_lfs(store, ".", "HEAD", git::lfs_objects("."), branch, options);
+      result = history
+                   ? git::migrate_lfs_history(store, ".", "HEAD", git::lfs_objects("."), branch, {}, options)
+                   : git::migrate_lfs(store, ".", "HEAD", git::lfs_objects("."), branch, options);
     } catch (const Cancelled &) {
       cancelled = true;
     } catch (const git::LfsPublicationUncertain &) {

@@ -594,6 +594,8 @@ if(SYRNCK_BUILD_TESTS)
     set_tests_properties(git_filter_process PROPERTIES TIMEOUT 120)
     add_test(NAME git_lfs_migration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/git_lfs_migration.py $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_lfs_migration_probe>)
     set_tests_properties(git_lfs_migration PROPERTIES TIMEOUT 120)
+    add_test(NAME git_lfs_history COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/git_lfs_history.py $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_lfs_migration_probe>)
+    set_tests_properties(git_lfs_history PROPERTIES TIMEOUT 180)
     add_test(NAME git_retention COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/git_retention.py
       $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_git_retention_probe>)
     set_tests_properties(git_retention PROPERTIES TIMEOUT 240)

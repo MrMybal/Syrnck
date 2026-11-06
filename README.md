@@ -191,6 +191,12 @@ In an existing Git repository, run `syrnck git install`, then add the appropriat
 
 Existing LFS projects can use `syrnck git lfs-preview HEAD` to audit cached objects, then `syrnck git migrate-lfs HEAD --branch converted-assets` to create a child commit with native pointers and retained blocks. This preserves HEAD, the index and working files. It converts one snapshot; earlier commits still require LFS storage. See [offline LFS migration and recovery](docs/GIT_LFS_MIGRATION.md).
 
+For all reachable versions, use `git lfs-history-preview HEAD` followed by
+`git migrate-lfs-history HEAD --branch converted-history`. This preserves merge
+topology and raw author/committer metadata, retains every historical asset
+catalog and requires an explicit decision about signatures on rewritten commits.
+See [complete offline LFS history conversion](docs/GIT_LFS_HISTORY.md).
+
 `syrnck git retention-scan` inventories pointers across references, reflogs and worktree indexes. `git retention` previews verified protections; `git retention --apply` adds them atomically. Existing pins remain intact; unobserved pins are reported for inspection. See [Git retention coverage and limits](docs/GIT_RETENTION.md).
 
 The project takes inspiration from [Lore](https://github.com/EpicGames/lore) for chunked storage and [Syncthing](https://github.com/syncthing/syncthing) for differential synchronization. No implementation code from either project was copied into this engine. An optional [Syncthing adapter](bindings/syncthing/README.md) supports regular-file BEP blocks and differential reconstruction, tested against its reference library over TLS 1.3. Full daemon/folder synchronization remains future work.

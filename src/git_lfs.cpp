@@ -145,6 +145,7 @@ std::map<std::string, std::string> attributes(const Snapshot &source, const fs::
   for (const auto &entry : source.tree)
     require(entries.emplace(entry.path, entry).second, "invalid Git tree response");
   std::map<std::string, std::string> rules;
+  std::size_t total = 0;
   for (const auto &asset : source.catalog.assets) {
     auto [parent, basename] = split_path(asset.path);
     auto name = parent.empty() ? ".gitattributes" : parent + "/.gitattributes";
@@ -159,6 +160,8 @@ std::map<std::string, std::string> attributes(const Snapshot &source, const fs::
         Json(pattern).dump() + " filter=syrnck -text -diff -merge -ident -working-tree-encoding -eol -crlf\n";
     require(rule.size() <= attributes_limit - rules[name].size(),
             "Git LFS migration attribute limit exceeded");
+    require(rule.size() <= max_object_size - total, "Git LFS migration attributes exceed 16 MiB in total");
+    total += rule.size();
     rules[name] += rule;
     require(rules.size() <= 4096, "Git LFS migration directory limit exceeded");
   }
@@ -181,6 +184,9 @@ std::map<std::string, std::string> attributes(const Snapshot &source, const fs::
     }
     require(original.size() <= attributes_limit && value.size() <= attributes_limit - original.size(),
             "Git LFS migration attribute limit exceeded");
+    require(original.size() <= max_object_size - total,
+            "Git LFS migration attributes exceed 16 MiB in total");
+    total += original.size();
     value = original + value;
   }
   return rules;
@@ -195,6 +201,88 @@ std::string write_blob(const fs::path &directory, const std::string &value, std:
   return written_oid(
       detail::local_git(directory, {"hash-object", "-w", "--no-filters", "--stdin"}, value, 1024, stop),
       "cannot write migrated Git blob");
+}
+std::string migrate_tree(const Store &store, const fs::path &directory, const Snapshot &source,
+                         const fs::path &objects, const std::map<std::string, std::string> &rules,
+                         std::map<std::string, Pointer> &imported, Json &converted, IngestOptions options) {
+  if (source.catalog.assets.empty()) {
+    const auto result = detail::local_git(
+        directory, {"rev-parse", "--verify", source.catalog.commit + "^{tree}"}, {}, 1024, options.stop);
+    return written_oid(result, "cannot read Git migration tree");
+  }
+  std::map<std::string, detail::TreeEntry> changes;
+  for (const auto &asset : source.catalog.assets) {
+    throw_if_cancelled(options.stop);
+    auto found = imported.find(asset.pointer.oid);
+    if (found == imported.end()) {
+      auto path = cached_object(objects, asset.pointer);
+      require(path.has_value(), "Git LFS object is missing; fetch it before migration");
+      require(fs::file_size(*path) == asset.pointer.size, "Git LFS object size mismatch");
+      std::ifstream file(*path, std::ios::binary);
+      require(file.is_open(), "cannot read Git LFS object");
+      HashBuffer hashed(file.rdbuf());
+      std::istream input(&hashed);
+      auto file_options = options;
+      file_options.progress = [&](const ProgressEvent &event) {
+        if (options.progress) {
+          auto contextual = event;
+          contextual.path = asset.path;
+          if (contextual.phase == ProgressPhase::ingesting)
+            contextual.total_bytes = asset.pointer.size;
+          options.progress(contextual);
+        }
+      };
+      auto [id, stats] = store.ingest(input, {}, file_options);
+      require(stats.file_bytes == asset.pointer.size && hashed.size() == asset.pointer.size,
+              "Git LFS object size mismatch");
+      require(hashed.finish() == asset.pointer.oid, "Git LFS object SHA-256 mismatch");
+      found = imported.emplace(asset.pointer.oid, Pointer{id, stats.file_bytes}).first;
+    }
+    auto pointer = found->second.encode();
+    auto blob = write_blob(directory, pointer, options.stop);
+    changes[asset.path] = {asset.path, blob, asset.executable ? "100755" : "100644", "blob", pointer.size()};
+    converted.push_back(Json{{"path", asset.path},
+                             {"oid", asset.pointer.oid},
+                             {"manifest", found->second.manifest},
+                             {"size", asset.pointer.size}});
+  }
+  std::map<std::string, Tree> directories;
+  directories[""];
+  for (const auto &entry : source.tree) {
+    auto [parent, basename] = split_path(entry.path);
+    require(directories[parent].emplace(basename, entry).second, "invalid Git tree response");
+  }
+  for (const auto &[name, value] : rules) {
+    auto [parent, basename] = split_path(name);
+    auto existing = directories[parent].find(basename);
+    auto mode = existing == directories[parent].end() ? "100644" : existing->second.mode;
+    changes[name] = {name, write_blob(directory, value, options.stop), mode, "blob", value.size()};
+  }
+  std::set<std::string> dirty;
+  for (const auto &[path, entry] : changes) {
+    auto [parent, basename] = split_path(path);
+    directories[parent][basename] = entry;
+    for (;;) {
+      dirty.insert(parent);
+      if (parent.empty())
+        break;
+      parent = split_path(parent).first;
+    }
+  }
+  std::string tree;
+  for (auto at = dirty.rbegin(); at != dirty.rend(); ++at) {
+    throw_if_cancelled(options.stop);
+    std::string input;
+    for (const auto &[name, entry] : directories.at(*at))
+      input += entry.mode + ' ' + entry.type + ' ' + entry.oid + '\t' + name + '\0';
+    tree = written_oid(detail::local_git(directory, {"mktree", "-z"}, input, 1024, options.stop),
+                       "cannot write migrated Git tree");
+    if (!at->empty()) {
+      auto [parent, basename] = split_path(*at);
+      directories[parent].at(basename).oid = tree;
+    }
+  }
+  return tree;
 }
 std::string new_reference(const fs::path &directory, std::string_view name, std::stop_token stop) {
   require(!name.empty() && name.size() <= 200 && name != "HEAD" && name.front() != '-' &&
@@ -223,6 +311,221 @@ std::string new_reference(const fs::path &directory, std::string_view name, std:
   }
   return reference;
 }
+
+constexpr std::size_t history_commit_bytes = 1024 * 1024;
+constexpr std::size_t history_metadata_bytes = 64 * 1024 * 1024;
+struct HistoryCommit {
+  std::string id, tree, message;
+  std::vector<std::string> parents;
+  std::vector<std::pair<std::string, std::string>> headers;
+  std::size_t signatures = 0;
+  bool rewritten = false;
+};
+bool signature_header(std::string_view name) {
+  return name == "gpgsig" || name == "gpgsig-sha256" || name == "mergetag";
+}
+HistoryCommit read_history_commit(const fs::path &directory, const std::string &id,
+                                  OperationOptions operation, std::size_t &budget) {
+  auto raw =
+      detail::local_git(directory, {"cat-file", "commit", id}, {}, history_commit_bytes, operation.stop);
+  require(raw.status == 0, "cannot read complete Git LFS history");
+  require(raw.out.size() + 512 <= history_metadata_bytes - budget, "Git LFS history metadata exceeds 64 MiB");
+  budget += raw.out.size() + 512;
+  const auto split = raw.out.find("\n\n");
+  require(split != raw.out.npos && raw.out.find('\0') == raw.out.npos,
+          "unsupported Git commit headers for LFS history");
+  HistoryCommit result;
+  result.id = id;
+  result.message = raw.out.substr(split + 2);
+  std::size_t at = 0;
+  unsigned authors = 0, committers = 0;
+  while (at < split) {
+    const auto end = raw.out.find('\n', at);
+    require(end != raw.out.npos && end <= split, "unsupported Git commit headers for LFS history");
+    const auto line = raw.out.substr(at, end - at);
+    if (line.starts_with(' ')) {
+      require(!result.headers.empty() && result.headers.back().first != "tree" &&
+                  result.headers.back().first != "parent" && result.headers.back().first != "author" &&
+                  result.headers.back().first != "committer",
+              "unsupported Git commit headers for LFS history");
+      result.headers.back().second += line + '\n';
+    } else {
+      const auto space = line.find(' ');
+      require(space != line.npos && space > 0 && space + 1 < line.size(),
+              "unsupported Git commit headers for LFS history");
+      const auto name = line.substr(0, space), value = line.substr(space + 1);
+      require(std::all_of(name.begin(), name.end(),
+                          [](unsigned char c) {
+                            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                   (c >= '0' && c <= '9') || c == '-';
+                          }),
+              "unsupported Git commit headers for LFS history");
+      if (name == "tree") {
+        require(result.headers.empty(), "unsupported Git commit headers for LFS history");
+        detail::validate_oid(value);
+        result.tree = value;
+      } else if (name == "parent") {
+        detail::validate_oid(value);
+        require(result.parents.size() < 1024 && value.size() == id.size(),
+                "unsupported Git commit headers for LFS history");
+        result.parents.push_back(value);
+      } else if (name == "author")
+        ++authors;
+      else if (name == "committer")
+        ++committers;
+      if (signature_header(name))
+        ++result.signatures;
+      result.headers.emplace_back(name, line + '\n');
+    }
+    at = end + 1;
+  }
+  require(!result.tree.empty() && result.tree.size() == id.size() && authors == 1 && committers == 1,
+          "unsupported Git commit headers for LFS history");
+  return result;
+}
+struct HistoryPlan {
+  std::string source;
+  std::map<std::string, HistoryCommit> commits;
+  std::vector<std::string> order;
+  Json report;
+};
+HistoryPlan history_plan(const fs::path &directory, std::string_view revision, const fs::path &objects,
+                         LfsHistoryOptions limits, OperationOptions operation, const Store *store) {
+  throw_if_cancelled(operation.stop);
+  require(limits.max_commits >= 1 && limits.max_commits <= 100000,
+          "Git LFS history commit limit must be in 1..100000");
+  HistoryPlan plan;
+  plan.source = detail::resolve_commit(directory, revision, operation.stop);
+  std::vector<std::string> pending{plan.source};
+  std::size_t budget = 0;
+  while (!pending.empty()) {
+    throw_if_cancelled(operation.stop);
+    auto id = std::move(pending.back());
+    pending.pop_back();
+    if (plan.commits.contains(id))
+      continue;
+    require(plan.commits.size() < limits.max_commits, "Git LFS history commit limit exceeded");
+    auto node = read_history_commit(directory, id, operation, budget);
+    pending.insert(pending.end(), node.parents.begin(), node.parents.end());
+    plan.commits.emplace(id, std::move(node));
+  }
+  std::map<std::string, std::size_t> remaining;
+  std::map<std::string, std::vector<std::string>> children;
+  std::set<std::string> ready;
+  for (const auto &[id, node] : plan.commits) {
+    remaining[id] = node.parents.size();
+    for (const auto &parent : node.parents)
+      children[parent].push_back(id);
+    if (node.parents.empty())
+      ready.insert(id);
+  }
+  while (!ready.empty()) {
+    auto id = *ready.begin();
+    ready.erase(ready.begin());
+    plan.order.push_back(id);
+    for (const auto &child : children[id])
+      if (--remaining.at(child) == 0)
+        ready.insert(child);
+  }
+  require(plan.order.size() == plan.commits.size(), "Git LFS history contains a cycle");
+  struct TreeAudit {
+    std::size_t assets;
+  };
+  std::map<std::string, TreeAudit> trees;
+  std::map<std::string, std::pair<LfsPointer, std::string>> checked;
+  std::size_t report_budget = 4096;
+  std::uint64_t versions = 0, stripped = 0, rewritten = 0;
+  Json rows = Json::array();
+  bool valid = true;
+  for (const auto &id : plan.order) {
+    throw_if_cancelled(operation.stop);
+    auto &node = plan.commits.at(id);
+    auto found = trees.find(node.tree);
+    if (found == trees.end()) {
+      const auto source = snapshot(directory, id, operation);
+      require(source.catalog.assets.size() <= 65536, "Git LFS migration asset limit exceeded");
+      (void)attributes(source, directory, operation);
+      for (const auto &asset : source.catalog.assets) {
+        auto existing = checked.find(asset.pointer.oid);
+        if (existing == checked.end()) {
+          require(checked.size() < 65536, "Git LFS history object limit exceeded");
+          existing = checked
+                         .emplace(asset.pointer.oid,
+                                  std::pair{asset.pointer, audit(objects, asset.pointer, operation)})
+                         .first;
+        }
+        require(existing->second.first.size == asset.pointer.size, "inconsistent Git LFS object size");
+        valid &= existing->second.second == "verified";
+      }
+      if (store)
+        verify_assets(*store, git::catalog(directory, id, operation), operation);
+      found = trees.emplace(node.tree, TreeAudit{source.catalog.assets.size()}).first;
+    }
+    node.rewritten = found->second.assets != 0;
+    for (const auto &parent : node.parents)
+      node.rewritten |= plan.commits.at(parent).rewritten;
+    rewritten += node.rewritten;
+    stripped += node.rewritten ? node.signatures : 0;
+    versions += found->second.assets;
+    Json row{{"source", id},
+             {"parents", node.parents},
+             {"tree", node.tree},
+             {"converted_assets", found->second.assets},
+             {"rewritten", node.rewritten},
+             {"signature_headers_to_strip", node.rewritten ? node.signatures : 0}};
+    const auto cost = row.dump().size() + 1;
+    require(cost <= max_object_size - report_budget, "Git LFS history report exceeds 16 MiB");
+    report_budget += cost;
+    rows.push_back(std::move(row));
+    report_progress(operation, {ProgressPhase::planning, id, rows.size(), plan.order.size()});
+  }
+  Json assets = Json::array();
+  for (const auto &[id, checked_object] : checked) {
+    Json row{{"oid", id}, {"size", checked_object.first.size}, {"status", checked_object.second}};
+    const auto cost = row.dump().size() + 1;
+    require(cost <= max_object_size - report_budget, "Git LFS history report exceeds 16 MiB");
+    report_budget += cost;
+    assets.push_back(std::move(row));
+  }
+  plan.report = Json{{"version", 1},
+                     {"operation", "lfs-history"},
+                     {"source", plan.source},
+                     {"commits", std::move(rows)},
+                     {"commits_scanned", plan.order.size()},
+                     {"rewritten_commits", rewritten},
+                     {"asset_versions", versions},
+                     {"unique_objects", checked.size()},
+                     {"objects", utf8(objects)},
+                     {"assets", std::move(assets)},
+                     {"signature_headers_to_strip", stripped},
+                     {"strip_signatures", limits.strip_signatures},
+                     {"ready", valid && !checked.empty() && (stripped == 0 || limits.strip_signatures)}};
+  require(plan.report.dump().size() <= max_object_size, "Git LFS history report exceeds 16 MiB");
+  report_progress(operation, {ProgressPhase::planning, {}, plan.order.size(), plan.order.size(), true});
+  return plan;
+}
+std::string rewrite_history_commit(const fs::path &directory, const HistoryCommit &node,
+                                   const std::string &tree, const std::map<std::string, std::string> &mapped,
+                                   std::stop_token stop) {
+  std::string raw;
+  std::size_t parent = 0;
+  for (const auto &[name, header] : node.headers) {
+    if (signature_header(name))
+      continue;
+    if (name == "tree")
+      raw += "tree " + tree + '\n';
+    else if (name == "parent")
+      raw += "parent " + mapped.at(node.parents.at(parent++)) + '\n';
+    else
+      raw += header;
+  }
+  raw += '\n';
+  raw += node.message;
+  return written_oid(
+      detail::local_git(directory, {"hash-object", "-w", "-t", "commit", "--stdin"}, raw, 1024, stop),
+      "cannot create Git migration commit");
+}
+
 } // namespace
 
 std::string LfsPointer::encode() const {
@@ -313,78 +616,7 @@ Json migrate_lfs(const Store &store, const fs::path &directory, std::string_view
   auto rules = attributes(source, directory, operation);
   std::map<std::string, Pointer> imported;
   Json converted = Json::array();
-  std::map<std::string, detail::TreeEntry> changes;
-  for (const auto &asset : source.catalog.assets) {
-    throw_if_cancelled(options.stop);
-    auto found = imported.find(asset.pointer.oid);
-    if (found == imported.end()) {
-      auto path = cached_object(objects, asset.pointer);
-      require(path.has_value(), "Git LFS object is missing; fetch it before migration");
-      require(fs::file_size(*path) == asset.pointer.size, "Git LFS object size mismatch");
-      std::ifstream file(*path, std::ios::binary);
-      require(file.is_open(), "cannot read Git LFS object");
-      HashBuffer hashed(file.rdbuf());
-      std::istream input(&hashed);
-      auto file_options = options;
-      file_options.progress = [&](const ProgressEvent &event) {
-        if (options.progress) {
-          auto contextual = event;
-          contextual.path = asset.path;
-          if (contextual.phase == ProgressPhase::ingesting)
-            contextual.total_bytes = asset.pointer.size;
-          options.progress(contextual);
-        }
-      };
-      auto [id, stats] = store.ingest(input, {}, file_options);
-      require(stats.file_bytes == asset.pointer.size && hashed.size() == asset.pointer.size,
-              "Git LFS object size mismatch");
-      require(hashed.finish() == asset.pointer.oid, "Git LFS object SHA-256 mismatch");
-      found = imported.emplace(asset.pointer.oid, Pointer{id, stats.file_bytes}).first;
-    }
-    auto pointer = found->second.encode();
-    auto blob = write_blob(directory, pointer, options.stop);
-    changes[asset.path] = {asset.path, blob, asset.executable ? "100755" : "100644", "blob", pointer.size()};
-    converted.push_back(Json{{"path", asset.path},
-                             {"oid", asset.pointer.oid},
-                             {"manifest", found->second.manifest},
-                             {"size", asset.pointer.size}});
-  }
-  std::map<std::string, Tree> directories;
-  directories[""];
-  for (const auto &entry : source.tree) {
-    auto [parent, basename] = split_path(entry.path);
-    require(directories[parent].emplace(basename, entry).second, "invalid Git tree response");
-  }
-  for (const auto &[name, value] : rules) {
-    auto [parent, basename] = split_path(name);
-    auto existing = directories[parent].find(basename);
-    auto mode = existing == directories[parent].end() ? "100644" : existing->second.mode;
-    changes[name] = {name, write_blob(directory, value, options.stop), mode, "blob", value.size()};
-  }
-  std::set<std::string> dirty;
-  for (const auto &[path, entry] : changes) {
-    auto [parent, basename] = split_path(path);
-    directories[parent][basename] = entry;
-    for (;;) {
-      dirty.insert(parent);
-      if (parent.empty())
-        break;
-      parent = split_path(parent).first;
-    }
-  }
-  std::string tree;
-  for (auto at = dirty.rbegin(); at != dirty.rend(); ++at) {
-    throw_if_cancelled(options.stop);
-    std::string input;
-    for (const auto &[name, entry] : directories.at(*at))
-      input += entry.mode + ' ' + entry.type + ' ' + entry.oid + '\t' + name + '\0';
-    tree = written_oid(detail::local_git(directory, {"mktree", "-z"}, input, 1024, options.stop),
-                       "cannot write migrated Git tree");
-    if (!at->empty()) {
-      auto [parent, basename] = split_path(*at);
-      directories[parent].at(basename).oid = tree;
-    }
-  }
+  const auto tree = migrate_tree(store, directory, source, objects, rules, imported, converted, options);
   auto message = "Migrate Git LFS assets to Syrnck\n\nSource: " + source.catalog.commit + '\n';
   auto commit = written_oid(
       detail::local_git(directory,
@@ -425,4 +657,82 @@ Json migrate_lfs(const Store &store, const fs::path &directory, std::string_view
     throw;
   }
 }
+
+Json preview_lfs_history(const fs::path &directory, std::string_view revision, const fs::path &objects,
+                         LfsHistoryOptions limits, OperationOptions operation) {
+  return history_plan(directory, revision, objects, limits, operation, nullptr).report;
+}
+Json migrate_lfs_history(const Store &store, const fs::path &directory, std::string_view revision,
+                         const fs::path &objects, std::string_view new_branch, LfsHistoryOptions limits,
+                         IngestOptions options) {
+  const OperationOptions operation{options.stop, options.progress};
+  const auto reference = new_reference(directory, new_branch, options.stop);
+  auto plan = history_plan(directory, revision, objects, limits, operation, &store);
+  require(plan.report["ready"].get<bool>(), "Git LFS history is not ready; inspect the history preview");
+  Json result{{"version", 1},
+              {"operation", "lfs-history"},
+              {"source", plan.source},
+              {"branch", new_branch},
+              {"commits_scanned", plan.order.size()},
+              {"rewritten_commits", plan.report["rewritten_commits"]},
+              {"asset_versions", plan.report["asset_versions"]},
+              {"unique_objects", plan.report["unique_objects"]},
+              {"stripped_signature_headers", plan.report["signature_headers_to_strip"]},
+              {"commits", Json::array()},
+              {"reconciled", false}};
+  plan.report = Json{};
+  std::map<std::string, Pointer> imported;
+  std::map<std::string, std::string> trees, mapped;
+  std::size_t budget = 4096;
+  for (const auto &id : plan.order) {
+    throw_if_cancelled(options.stop);
+    const auto &node = plan.commits.at(id);
+    auto tree = node.tree;
+    if (auto found = trees.find(node.tree); found != trees.end())
+      tree = found->second;
+    else {
+      const auto source = snapshot(directory, id, operation);
+      Json converted = Json::array();
+      tree = migrate_tree(store, directory, source, objects, attributes(source, directory, operation),
+                          imported, converted, options);
+      trees.emplace(node.tree, tree);
+    }
+    const auto target =
+        node.rewritten ? rewrite_history_commit(directory, node, tree, mapped, options.stop) : id;
+    mapped.emplace(id, target);
+    const auto catalog = git::catalog(directory, target, operation);
+    Json bundle;
+    if (!catalog.assets.empty())
+      bundle = key_json(prepare_bundle(store, catalog, operation));
+    Json row{{"source", id}, {"commit", target}, {"tree", tree}, {"bundle", std::move(bundle)}};
+    const auto cost = row.dump().size() + 1;
+    require(cost <= max_object_size - budget, "Git LFS history report exceeds 16 MiB");
+    budget += cost;
+    result["commits"].push_back(std::move(row));
+    report_progress(operation, {ProgressPhase::planning, id, result["commits"].size(), plan.order.size()});
+  }
+  const auto commit = mapped.at(plan.source);
+  result["commit"] = commit;
+  require(result.dump().size() <= max_object_size, "Git LFS history report exceeds 16 MiB");
+  report_progress(operation, {ProgressPhase::publishing, reference});
+  throw_if_cancelled(options.stop);
+  try {
+    detail::create_branch(
+        directory, reference, commit, [&] { (void)new_reference(directory, new_branch, options.stop); },
+        options.stop);
+  } catch (const LfsPublicationUncertain &) {
+    try {
+      const auto inspect = detail::local_git(
+          directory, {"rev-parse", "--verify", "--quiet", "--end-of-options", reference}, {}, 1024);
+      if (inspect.status == 0 && detail::trim_line(inspect.out) == commit) {
+        result["reconciled"] = true;
+        return result;
+      }
+    } catch (const std::exception &) {
+    }
+    throw;
+  }
+  return result;
+}
+
 } // namespace syrnck::git
