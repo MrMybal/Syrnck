@@ -108,8 +108,22 @@ overflow and native backend failure request a full scan and discard incomplete
 path lists. The next query clears the hash cache and reads all selected bytes.
 Non-UTF-8 native names also discard hints and request a full scan; diagnostic
 display text replaces invalid encoding instead of breaking the JSON stream.
-Linux directory topology changes rebuild registrations and request a full scan
-to cover the registration gap. Native backend failures can switch to polling.
+Linux directory creation and move-in events extend registrations on the same
+inotify instance before returning their subtree hints. Each new directory is
+armed before its children are enumerated; the subsequent complete observation
+of that subtree covers earlier writes, and later events stay queued. Unrelated
+registrations and descriptor/path mappings remain intact. Overlapping additions
+coalesce, and the persistent directory count/name budget includes both existing
+watches and queued additions.
+
+Deletion, move-out, self-move, ignored-watch and unmount events still rebuild
+the instance and request a complete byte scan. Existing descriptor paths are
+never relabeled from rename cookies. Unknown descriptors, malformed records,
+overflow, path/descriptor aliasing and failed/over-budget additive registration
+also require recovery; unavailable/quota-limited registration can fall back to
+polling. Partial native instances are closed before recovery, and cancellation
+during extension invalidates continuity for the next wait. Native backend
+failures can switch to polling.
 
 Independent periodic audits also read all selected working bytes. Normal
 notifications and polling queries do not postpone their schedule. These scans
@@ -266,7 +280,13 @@ Journal coverage includes encrypted/plain persistence,
 interrupted pending records, session exclusion, unavailable/recovered states,
 quiet polling and corruption recovery. Twenty process termination boundaries
 cover initial/replacement checkpoint writes with a separate production reader.
-Linux native execution and macOS fallback execution still
+The shared directory-registration policy is exercised locally with a synthetic
+native-arm callback: additive coverage, arm-before-enumerate races, unchanged
+existing mappings, protected Store/Git exclusions, queue-time quotas,
+descriptor/path alias refusal and cancellation. These tests run under Windows
+and do not execute Linux syscalls. Linux-only native cases cover newly created
+and moved-in descendant notifications, quota recovery and the conservative
+rename rebuild; Linux native execution and macOS fallback execution still
 need confirmation by CI.
 
 ## Synthetic performance measurement
@@ -295,9 +315,10 @@ or an Unreal project result. Retained in-memory map checks and immutable
 revision metadata still contribute to each scoped comparison.
 
 File and subtree changes use targeted observation when event continuity is
-preserved. Linux directory topology still rebuilds inotify registrations and
-forces a complete byte scan to cover the gap; incremental registration updates
-and real Linux/macOS validation remain pending. Replayable event history, causal version
+preserved. Linux creates/imports extend inotify registration per subtree;
+removals and moves of existing watched directories still rebuild the instance
+and force a complete byte scan. Incremental removal/rename reconciliation and
+real Linux/macOS validation remain pending. Replayable event history, causal version
 tracking, tombstones, transfer scheduling, OS service packaging and full
 Syncthing daemon/folder interoperability remain separate work.
 

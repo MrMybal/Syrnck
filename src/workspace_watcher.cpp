@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <poll.h>
 #include <sys/inotify.h>
+#include "watch_directories.hpp"
 #endif
 #endif
 namespace syrnck {
@@ -90,10 +91,14 @@ struct WorkspaceWatcher::Impl {
   bool pending = false;
 #elif defined(__linux__)
   int fd = -1;
-  std::map<int, std::string> directories;
+  WatchDirectories directories;
 #endif
   Impl(const fs::path &directory, const fs::path &storage, WorkspaceWatchOptions value)
-      : root(fs::canonical(directory)), store(fs::canonical(storage)), options(value), anchor(root) {
+      : root(fs::canonical(directory)), store(fs::canonical(storage)), options(value), anchor(root)
+#if defined(__linux__) && !defined(_WIN32)
+      , directories(root, store, value.max_directories)
+#endif
+  {
     require(options.max_paths >= 1 && options.max_paths <= 65536 && options.max_directories >= 1 &&
                 options.max_directories <= 65536, "invalid workspace watcher limits");
     require(root != store && below(store, root), "native store must be below watched workspace");
@@ -191,52 +196,31 @@ struct WorkspaceWatcher::Impl {
     return pending;
   }
 #elif defined(__linux__)
+  int watch_directory(const fs::path &directory) const {
+    return inotify_add_watch(fd, directory.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE |
+        IN_ATTRIB | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT |
+        IN_ONLYDIR | IN_DONT_FOLLOW);
+  }
   bool arm(std::stop_token stop) {
     fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (fd < 0) return false;
-    std::vector<std::pair<fs::path, unsigned>> pending{{root, 0}};
-    std::size_t budget = 64, requested = 1;
-    while (!pending.empty()) {
+    return directories.start([&](const fs::path &directory) { return watch_directory(directory); }, stop);
+  }
+  bool extend(const std::set<std::string> &additions, std::stop_token stop) {
+    std::set<std::string> completed;
+    for (const auto &relative : additions) {
       throw_if_cancelled(stop);
-      const auto [directory, depth] = std::move(pending.back());
-      pending.pop_back();
-      const auto relative = directory == root ? std::string{} : utf8(directory.lexically_relative(root));
-      const auto wd = inotify_add_watch(fd, directory.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE |
-          IN_ATTRIB | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT |
-          IN_ONLYDIR | IN_DONT_FOLLOW);
-      if (wd < 0) return false;
-      directories.insert_or_assign(wd, relative);
-      if (directory == store) continue;
-      for (const auto &entry : fs::directory_iterator(directory)) {
-        throw_if_cancelled(stop);
-        const auto status = entry.symlink_status();
-        if (!fs::is_directory(status) || native_link_like(entry.path(), status)) continue;
-        const auto path = entry.path();
-        const auto name = utf8(path.filename());
-        if (path != store && (name == ".git" || name == ".syrnck" || below(path, store))) continue;
-        if (depth == 128) return false;
-        const auto cost = utf8(path.lexically_relative(root)).size() + 64;
-        if (requested == options.max_directories || cost > max_object_size - budget) return false;
-        ++requested;
-        budget += cost;
-        pending.emplace_back(path, depth + 1);
-      }
-    }
-    // A Store can be below another protected directory; its reference table
-    // still needs a direct watch even though that subtree is not enumerated.
-    if (std::none_of(directories.begin(), directories.end(), [&](const auto &entry) {
-          return entry.second == store_relative;
-        })) {
-      const auto cost = store_relative.size() + 64;
-      if (directories.size() == options.max_directories || cost > max_object_size - budget) return false;
-      const auto wd = inotify_add_watch(fd, store.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE |
-          IN_ATTRIB | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT |
-          IN_ONLYDIR | IN_DONT_FOLLOW);
-      if (wd < 0) return false;
-      directories.insert_or_assign(wd, store_relative);
+      bool covered = false;
+      for (auto slash = relative.find('/'); slash != relative.npos; slash = relative.find('/', slash + 1))
+        if (completed.contains(relative.substr(0, slash))) { covered = true; break; }
+      if (covered) continue;
+      if (!directories.extend(relative, [&](const fs::path &directory) { return watch_directory(directory); }, stop))
+        return false;
+      completed.insert(relative);
     }
     return true;
   }
+
 #endif
   void start(std::stop_token stop = {}) {
     throw_if_cancelled(stop);
@@ -342,6 +326,7 @@ struct WorkspaceWatcher::Impl {
           const auto count = ::read(fd, data.data(), data.size());
           if (count < 0 && (errno == EAGAIN || errno == EINTR)) continue;
           bool topology = false;
+          std::set<std::string> additions;
           if (count <= 0) batch.full_scan = batch.overflow = true;
           for (std::size_t offset = 0; count > 0 && offset < static_cast<std::size_t>(count);) {
             if (static_cast<std::size_t>(count) - offset < sizeof(inotify_event)) {
@@ -354,18 +339,22 @@ struct WorkspaceWatcher::Impl {
             }
             if (entry.mask & IN_Q_OVERFLOW) batch.full_scan = batch.overflow = true;
             const auto found = directories.find(entry.wd);
-            if (found != directories.end()) {
+            if (found) {
               const auto *begin = reinterpret_cast<const char *>(data.data() + offset + sizeof(entry));
               const auto *end = static_cast<const char *>(std::memchr(begin, 0, entry.len));
               if (entry.len && !end) { batch.full_scan = batch.overflow = true; break; }
               const std::string name = entry.len ? std::string(begin, end) : std::string{};
-              auto path = found->second;
+              auto path = *found;
               if (!name.empty()) path += (path.empty() ? "" : "/") + name;
               const bool structural = entry.mask & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO |
                                                      IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT | IN_IGNORED);
               if (interesting(path, structural)) {
-                add(batch, paths, budget, std::move(path), structural);
-                if ((entry.mask & IN_ISDIR) && structural) topology = true;
+                add(batch, paths, budget, path, structural);
+                if ((entry.mask & IN_ISDIR) && structural) {
+                  if (entry.mask & (IN_DELETE | IN_MOVED_FROM | IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT | IN_IGNORED))
+                    topology = true;
+                  else if (entry.mask & (IN_CREATE | IN_MOVED_TO)) additions.insert(path);
+                }
                 if (entry.mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT | IN_IGNORED)) {
                   topology = true; batch.full_scan = true;
                 }
@@ -373,7 +362,19 @@ struct WorkspaceWatcher::Impl {
             } else if (!(entry.mask & IN_Q_OVERFLOW)) batch.full_scan = batch.overflow = true;
             offset += sizeof(entry) + entry.len;
           }
-          if (topology || batch.overflow) { batch.full_scan = true; start(stop); }
+          if (!topology && !batch.overflow && !additions.empty()) {
+            try { topology = !extend(additions, stop); }
+            catch (const Cancelled &) {
+              // Partial registration cannot be resumed as an intact journal.
+              close_native(); mode = "polling"; invalidated = true; throw;
+            } catch (const Error &) { topology = true; }
+              catch (const fs::filesystem_error &) { topology = true; }
+          }
+          if (topology || batch.overflow) {
+            batch.full_scan = true;
+            try { start(stop); }
+            catch (...) { invalidated = true; throw; }
+          }
           if (batch.overflow) paths.clear();
           batch.paths.assign(paths.begin(), paths.end());
           if (batch.changed()) return batch;

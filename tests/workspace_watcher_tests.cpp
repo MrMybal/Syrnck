@@ -138,6 +138,48 @@ void store_alias(const fs::path &project) {
   write(project / "Vault/work", "tracked namespace outside the Store");
   path(watcher, "Vault/work");
 }
+#ifdef __linux__
+void linux_additions(const fs::path &project) {
+  create(project);
+  write(project / "existing/before", "original directory");
+  WorkspaceWatcher watcher(project, project / ".syrnck");
+  require(watcher.backend() == "inotify", "Linux additions need native notifications");
+  write(project / "new/deep/early", "present before descendant registration");
+  auto batch = path(watcher, "new");
+  require(!batch.full_scan && !batch.overflow && watcher.backend() == "inotify",
+          "new directory discarded intact native notification continuity");
+  drain(watcher);
+  write(project / "new/deep/late", "registered descendant");
+  require(!path(watcher, "new/deep/late").full_scan, "late descendant required a global rebuild");
+  drain(watcher);
+  write(project / "existing/after", "old descriptor still works");
+  path(watcher, "existing/after");
+  drain(watcher);
+  auto outside = project;
+  outside += "-outside";
+  write(outside / "nested/early", "imported contents");
+  fs::rename(outside, project / "imported");
+  batch = path(watcher, "imported");
+  require(!batch.full_scan && watcher.backend() == "inotify", "moved-in subtree discarded existing registrations");
+  drain(watcher);
+  write(project / "imported/nested/late", "registered moved-in descendant");
+  path(watcher, "imported/nested/late");
+  drain(watcher);
+  fs::rename(project / "new", project / "renamed");
+  require(path(watcher, "renamed").full_scan, "existing directory rename did not recover descriptor paths");
+  drain(watcher);
+  write(project / "renamed/deep/after", "renamed descendant still watched");
+  path(watcher, "renamed/deep/after");
+}
+void linux_addition_quota(const fs::path &project) {
+  create(project);
+  WorkspaceWatcher watcher(project, project / ".syrnck", {false, 4096, 3});
+  require(watcher.backend() == "inotify", "quota fixture did not initially arm native notifications");
+  fs::create_directories(project / "new/deep");
+  const auto batch = path(watcher, "new");
+  require(batch.full_scan && watcher.backend() == "polling", "partial registration quota failure did not recover fully");
+}
+#endif
 } // namespace
 int main(int argc, char **argv) {
   if (argc == 3 && std::string_view(argv[1]) == "hold") {
@@ -157,6 +199,10 @@ int main(int argc, char **argv) {
     cancellation(root / "cancel-polling", true);
     replacement(root / "replace");
     store_alias(root / "store-alias");
+#ifdef __linux__
+    linux_additions(root / "linux-additions");
+    linux_addition_quota(root / "linux-quota");
+#endif
     std::cout << "workspace notifications, bounds, cancellation and root identity passed\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

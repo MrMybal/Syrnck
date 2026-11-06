@@ -678,6 +678,8 @@ SYRNCK_MESSAGE("cannot clear workspace watch journal", "impossible de vider le j
 SYRNCK_MESSAGE("workspace watch journal generation overflow", "dépassement de la génération du journal de surveillance du dossier de travail")
 SYRNCK_MESSAGE("cannot inspect watched workspace", "impossible d'inspecter le dossier de travail surveillé")
 SYRNCK_MESSAGE("invalid workspace watcher limits", "limites de surveillance du dossier de travail invalides")
+SYRNCK_MESSAGE("directory watches must be rebuilt after registration failure", "les surveillances de dossiers doivent être reconstruites après un échec d'inscription")
+SYRNCK_MESSAGE("invalid watched directory path", "chemin de dossier surveillé invalide")
 SYRNCK_MESSAGE("native store must be below watched workspace", "le stockage natif doit se trouver sous le dossier de travail surveillé")
 SYRNCK_MESSAGE("watch wait must be in 0..60000 milliseconds", "l'attente de surveillance doit être comprise entre 0 et 60000 millisecondes")
 SYRNCK_MESSAGE("watched workspace identity changed; restart watcher", "l'identité du dossier de travail surveillé a changé ; redémarrez la surveillance")

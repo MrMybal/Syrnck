@@ -220,6 +220,38 @@ class NativeWatch(unittest.TestCase):
             self.assertEqual(transitioned["status"]["workspace_files"], 3)
             self.assertTrue(transitioned["journal"]["durable"])
 
+    def test_new_and_moved_in_subtrees_are_scoped_and_descendants_remain_watched(self):
+        (self.root / "large").write_bytes(b"x" * (4 * 1024 * 1024))
+        self.baseline()
+        with self.watch("--journal", "--duration-ms", 5000) as run:
+            initial = run.until(lambda f: f["type"] == "status")
+            if initial["backend"] == "polling":
+                self.skipTest("scoped additions require a native backend")
+            (self.root / "new/deep").mkdir(parents=True)
+            (self.root / "new/deep/early").write_bytes(b"one")
+            added = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "new/deep/early" for r in f["status"]["changes"]))
+            self.assertFalse(added["full_scan"])
+            self.assertLess(added["status"]["hashed_bytes"], 64)
+            (self.root / "new/deep/late").write_bytes(b"two")
+            late = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "new/deep/late" for r in f["status"]["changes"]))
+            self.assertFalse(late["full_scan"])
+            # The protected directory supplies an unwatched external source
+            # for the move. Its contents must be selected after entering root.
+            (self.root / ".git/import/nested").mkdir(parents=True)
+            (self.root / ".git/import/nested/early").write_bytes(b"new")
+            (self.root / ".git/import").rename(self.root / "imported")
+            imported = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "imported/nested/early" for r in f["status"]["changes"]))
+            self.assertFalse(imported["full_scan"])
+            self.assertLess(imported["status"]["hashed_bytes"], 64)
+            (self.root / "imported/nested/late").write_bytes(b"end")
+            imported_late = run.until(lambda f: f["type"] == "status" and any(
+                r["path"] == "imported/nested/late" for r in f["status"]["changes"]))
+            self.assertFalse(imported_late["full_scan"])
+            self.assertTrue(imported_late["journal"]["durable"])
+
     def test_invalid_ignore_range_reports_error_without_terminating_resident_observer(self):
         self.baseline()
         with self.watch("--journal", "--max-updates", 2, "--duration-ms", 4000) as run:

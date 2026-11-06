@@ -113,10 +113,12 @@ and full audits, with bounded hints and overflow recovery. Its complete session
 inventory supports targeted file/subtree replacement for edits, creations,
 removals, renames, type transitions and nested ignore changes, without unrelated
 subtree enumeration. Root rules, lost continuity and ambiguous selection still
-force complete byte scans. Linux directory topology changes also force a full
-scan to cover inotify registration gaps. The watcher offers an optional
-persistent checkpoint journal; replayable event history and incremental native
-watch registrations remain separate work. C ABI
+force complete byte scans. Linux creation/import events extend registrations
+before returning targeted subtree hints. Directory removals and moves of
+existing watched directories still force a full scan to cover inotify recovery
+gaps. The watcher offers an optional persistent checkpoint journal; replayable
+event history and incremental native-watch removal/rename reconciliation remain
+separate work. C ABI
 and Go bindings do not yet expose this native workspace cache.
 
 Local regression coverage includes plain/encrypted Stores with loose,
