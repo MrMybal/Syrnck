@@ -167,7 +167,7 @@ Voir les [transitions récupérables du workspace](docs/NATIVE_CHECKOUT.md#recov
 
 `native status --indexed` conserve un cache optionnel des empreintes de travail, avec identité du fichier, date de changement, relecture des écritures récentes et reconstruction après GC. Le statut combiné reste disponible ; les opérations de remplacement gardent leurs lectures complètes. Voir l'[index de travail](docs/WORKING_INDEX.md).
 
-`native watch` surveille le workspace avec notifications Windows/Linux, lectures ciblées des fichiers connus modifiés, repli par scrutation, regroupement borné et scans complets de reprise/vérification. Le Store est libéré entre les observations ; `--combined` inclut le staging. Voir la [surveillance résidente](docs/NATIVE_WATCH.md).
+`native watch` surveille le workspace avec notifications Windows/Linux, lectures ciblées des fichiers connus modifiés, repli par scrutation, regroupement borné et scans complets de reprise/vérification. Le Store est libéré entre les observations ; `--combined` inclut le staging et `--journal` conserve des checkpoints de reprise consultables avec `native watch-journal`. Voir la [surveillance résidente](docs/NATIVE_WATCH.md).
 
 `native add CHEMIN...` fige les fichiers et suppressions sélectionnés ; `native staged` les inspecte et `native reset [CHEMIN...]` retire des sélections sans modifier les fichiers de travail. `native commit --staged -m MESSAGE` publie ces octets préparés et consomme le staging dans une transaction atomique. Le GC conserve les données préparées ; un déplacement de la branche impose une réinitialisation explicite. Voir le [staging natif et les commits sélectionnés](docs/NATIVE_STAGING.md). La sélection de patches textuels reste à développer.
 

@@ -4,6 +4,8 @@
 #include "object_cache.hpp"
 #include "pack_storage.hpp"
 #include "object_marks.hpp"
+#include "watch_journal.hpp"
+#include "native_workspace.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -170,6 +172,55 @@ static Bytes encode_object(const ObjectKey &key, std::span<const std::uint8_t> d
   } else
     std::copy_n(compressed.begin(), n, envelope.begin() + 5);
   return envelope;
+}
+namespace {
+std::optional<Bytes> watch_journal_bytes(const Store &store) {
+  const auto path = store.root() / "watch-journal";
+  const auto status = fs::symlink_status(path);
+  if (!fs::exists(status)) return {};
+  require(fs::is_regular_file(status) && !native_link_like(path, status), "invalid workspace watch journal file");
+  return read_bytes(path, watch_journal_limit + 1024 * 1024);
+}
+} // namespace
+Json Store::workspace_watch_journal(OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  const auto original = watch_journal_bytes(*this);
+  if (!original) return {};
+  require(original->size() >= 73 && std::equal(original->begin(), original->begin() + 4, "SYW1"),
+          "invalid workspace watch journal file");
+  const auto id = text(std::span(*original).subspan(4, 64));
+  validate_id(id);
+  const auto decoded = decode_envelope({Kind::chunk, id}, std::span(*original).subspan(68));
+  require(decoded.size() <= watch_journal_limit, "workspace watch journal exceeds 2 MiB");
+  const auto value = parse_json(decoded);
+  validate_watch_journal(value, options);
+  require(value.dump() == text(decoded), "invalid workspace watch journal");
+  return value;
+}
+void Store::write_workspace_watch_journal(const Json &value, OperationOptions options) const {
+  validate_watch_journal(value, options);
+  const auto original = watch_journal_bytes(*this);
+  const auto data = value.dump();
+  const auto id = object_id(Kind::chunk, bytes(data));
+  auto document = Bytes{'S', 'Y', 'W', '1'};
+  document.insert(document.end(), id.begin(), id.end());
+  const auto envelope = encode_object({Kind::chunk, id}, bytes(data), impl_->key);
+  document.insert(document.end(), envelope.begin(), envelope.end());
+  report_progress(options, {ProgressPhase::publishing, "watch-journal", 0, 1});
+  require(watch_journal_bytes(*this) == original, "workspace watch journal changed; retry operation");
+  atomic_write(root() / "watch-journal", document, true, options.stop);
+}
+Json Store::clear_workspace_watch_journal(OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  auto lock = lock_watch_journal(root());
+  const auto original = watch_journal_bytes(*this);
+  report_progress(options, {ProgressPhase::publishing, "watch-journal", 0, 1});
+  require(watch_journal_bytes(*this) == original, "workspace watch journal changed; retry operation");
+  if (original) {
+    require(fs::remove(root() / "watch-journal"), "cannot clear workspace watch journal");
+    sync_directory(root());
+  }
+  return Json{{"version", 1}, {"state", original ? "cleared" : "absent"}};
 }
 std::pair<ObjectKey, bool> Store::put(Kind kind, std::span<const std::uint8_t> data) const {
   validate_object(kind, data);

@@ -4,7 +4,7 @@
 namespace syrnck::cli {
 struct NativeWatchCommand {
   std::optional<std::string> branch, revision;
-  bool combined = false, polling = false;
+  bool combined = false, polling = false, journal = false;
   std::uint64_t max_paths = 4096;
   std::uint64_t interval_ms = 500, debounce_ms = 75, audit_ms = 300000, duration_ms = 0, max_updates = 0;
 };

@@ -298,6 +298,11 @@ public:
   StoreIoStats io_stats() const;
   void reset_io_stats() const;
   void clear_cache() const;
+  // Local observation checkpoint, independent of retained object roots. Null
+  // when absent; compressed and encrypted with this Store's envelope key.
+  Json workspace_watch_journal(OperationOptions = {}) const;
+  void write_workspace_watch_journal(const Json &, OperationOptions = {}) const;
+  Json clear_workspace_watch_journal(OperationOptions = {}) const;
   bool contains(const ObjectKey &) const;
   Bytes get(const ObjectKey &) const;
   std::pair<ObjectKey, bool> put(Kind, std::span<const std::uint8_t>) const;

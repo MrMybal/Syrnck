@@ -111,8 +111,9 @@ so additions, removals, renamed paths and ignore changes are observed. The
 [resident watcher](NATIVE_WATCH.md) triggers queries from native notifications
 and full audits, with bounded hints and overflow recovery. Its complete session
 inventory also supports targeted reads for known-file edits without unrelated
-subtree enumeration. Namespace changes still enumerate fully. Persistent event
-journals and incremental topology updates remain separate work. C ABI
+subtree enumeration. Namespace changes still enumerate fully. The watcher offers an optional
+persistent checkpoint journal; replayable event history and incremental
+topology updates remain separate work. C ABI
 and Go bindings do not yet expose this native workspace cache.
 
 Local regression coverage includes plain/encrypted Stores with loose,

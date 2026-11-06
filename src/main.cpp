@@ -350,9 +350,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCHE] [--directory .] [--indexed]
   native index-clear
-  native watch [--combined] [--branch BRANCHE | --revision RÉVISION]
+  native watch [--combined] [--journal] [--branch BRANCHE | --revision RÉVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
     [--audit-ms 300000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
+  native watch-journal [--clear]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
   native checkout RÉVISION [--branch BRANCHE] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -532,9 +533,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native status [--branch BRANCH | --revision REVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCH] [--directory .] [--indexed]
   native index-clear
-  native watch [--combined] [--branch BRANCH | --revision REVISION]
+  native watch [--combined] [--journal] [--branch BRANCH | --revision REVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
     [--audit-ms 300000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
+  native watch-journal [--clear]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
   native checkout REVISION [--branch BRANCH] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -714,6 +716,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     cli::NativeWatchCommand request;
     request.combined = args.flag("--combined");
     request.polling = args.flag("--polling");
+    request.journal = args.flag("--journal");
     request.branch = args.option("--branch");
     request.revision = args.option("--revision");
     request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
@@ -926,7 +929,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
         sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
         sub == "branch-restore-plan" || sub == "branch-restore" || sub == "push" || sub == "fetch" ||
-        sub == "checkout-receipts" || sub == "index-clear" || sub == "stash" || sub == "log-file" || sub.starts_with("bisect-"))) ||
+        sub == "checkout-receipts" || sub == "index-clear" || sub == "watch-journal" || sub == "stash" || sub == "log-file" || sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
                             sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
@@ -1440,6 +1443,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "index-clear") {
       args.count(0);
       print(clear_native_working_index(store, {control->token(), observe}));
+    } else if (sub == "watch-journal") {
+      const auto clear = args.flag("--clear");
+      args.count(0);
+      if (clear) print(store.clear_workspace_watch_journal({control->token(), observe}));
+      else {
+        const auto journal = store.workspace_watch_journal({control->token(), observe});
+        print(journal.is_null() ? Json{{"version", 1}, {"state", "absent"}} : journal);
+      }
     } else if (sub == "checkout") {
       const auto directory = workspace();
       const auto branch = selected_branch();

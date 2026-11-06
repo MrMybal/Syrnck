@@ -11,6 +11,9 @@ syrnck native watch --combined --branch main --progress
 syrnck native watch --directory PROJECT --max-updates 10
 syrnck native watch --polling --interval-ms 1000 --duration-ms 10000
 syrnck native watch --audit-ms 60000 --debounce-ms 150 --max-paths 2048
+syrnck native watch --journal --combined
+syrnck native watch-journal
+syrnck native watch-journal --clear
 ```
 
 The command emits one compact JSON document per line and flushes each frame.
@@ -112,6 +115,60 @@ The command still observes a changing filesystem. It does not provide a locked
 or atomic filesystem snapshot, does not preserve intermediate file versions,
 and does not authorize other operations to skip their own validation.
 
+## Optional persistent checkpoint journal
+
+`--journal` records the current coalesced batch before processing native hints
+or a full scan. It writes an `observed` checkpoint before emitting successful
+status, or an `unavailable` checkpoint after a scan error when storage remains
+accessible. A checkpoint is one bounded replacement record, not a replayable
+history of individual filesystem writes. It contains the workspace and query
+selection digests, random session identity, session generation, previous
+session/state, backend, bounded path hints and the semantic status digest,
+base revision, clean flag and file count. It does not store working contents
+or the complete status report.
+
+The stream additionally contains `journal: {session, generation, durable,
+previous}`. `durable: true` means the corresponding checkpoint was saved before
+output; it does not acknowledge delivery to the consumer. `sequence` remains
+process-local. A process can terminate after checkpoint publication but before
+stdout delivery, so consumers must reestablish current state after reconnecting.
+A busy/unavailable Store can prevent error checkpointing; the error frame then
+has `durable: false`. Corrupt journals are preserved and block journal mode
+until explicitly cleared. Ordinary observation without `--journal` remains
+available.
+
+`native watch-journal` reads the last checkpoint, or reports `state: absent`.
+An `observed` record means the last query finished, not that an observer is
+currently alive or that its result is still current. A `pending` record can
+remain after interruption. Startup always creates a new session and performs
+a complete byte scan, whether the previous record was pending, observed or
+unavailable; offline edits never resume from the old inventory. The first
+checkpoint records the old session/state for diagnosis.
+
+`native watch-journal --clear` explicitly removes the local record, including
+malformed records within the file-size bound. It does not alter refs, staging,
+objects or working files. Journal mode holds a separate `watch.lock` for the
+session, preventing another journal owner or a clear while it runs. The Store
+lock is still released between queries; checkpoint inspection and other CLI
+operations remain available. Non-journal observers need no session lock.
+
+The `watch-journal` file is self-contained: `SYW1`, a 64-byte chunk digest and
+the existing compressed Store envelope. Payloads use the Store's existing
+AEAD key when encrypted, including hint names. The digest and encryption mode
+remain visible. The plaintext record is limited to 2 MiB, the stored file to
+3 MiB, and paths to 65,536 entries with the same 1 MiB accounting budget as
+coalesced hints. Writes use the normal temporary-file flush and atomic durable
+replacement, with a publication fence after progress callbacks. There is no
+object reference or temporary retained root; GC and pack compaction cannot
+remove the checkpoint. Logical backups omit this machine-local record.
+
+Native idle waits perform no checkpoint writes. Unchanged polling also keeps
+the last observed checkpoint without pending writes or repeated flushes. Changed
+polling results are checkpointed before output, and full audits write pending
+then observed. The journal is recovery metadata for the observer; causal
+versions, transfer outboxes and exactly-once network publication are separate
+work.
+
 ## Limits and resource use
 
 The workspace and Store directories must exist. An unreadable root or
@@ -176,12 +233,16 @@ bounded overflow, cancellation and root replacement. CLI scenarios cover
 plain/encrypted custom Stores, equal-size/restored-mtime edits, staging,
 idle Store-lock availability, occupied Store recovery, periodic audits,
 restart/offline edits, file/directory transitions, error suppression and
-French diagnostics. Linux native execution and macOS fallback execution still
+French diagnostics. Journal coverage includes encrypted/plain persistence,
+interrupted pending records, session exclusion, unavailable/recovered states,
+quiet polling and corruption recovery. Twenty process termination boundaries
+cover initial/replacement checkpoint writes with a separate production reader.
+Linux native execution and macOS fallback execution still
 need confirmation by CI.
 
 Existing-file edits use targeted observation; namespace changes still rebuild
-directory inventories. A persistent change journal, incremental directory
-topology updates, causal version
+directory inventories. Incremental directory
+topology updates, replayable event history, causal version
 tracking, tombstones, transfer scheduling, OS service packaging and full
 Syncthing daemon/folder interoperability remain separate work.
 

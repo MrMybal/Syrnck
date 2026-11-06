@@ -73,7 +73,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Index de travail persistant optionnel pour le statut natif : empreintes liées aux identités/changements du système de fichiers, relecture des écritures récentes, reconstruction après corruption/GC et staging distinct ; les opérations destructives gardent les lectures complètes.
 - [x] Watcher C++/CLI résident : notifications Windows/Linux, repli par scrutation, regroupement borné, vérifications complètes après perte d’événements et périodiques, reprise après indisponibilité du Store et verrou libéré entre observations ; validation locale Windows.
 - [x] Inventaire complet de session : observation ciblée des modifications de fichiers connus, sans parcours des sous-dossiers sans rapport ni relecture de leurs contenus ; repli complet pour les changements d’espace de noms/exclusions et perte de continuité.
-- [ ] Journal de changements persistant et mise à jour incrémentale de la topologie des dossiers ; validations réelles Linux/macOS du watcher et du repli.
+- [x] Journal de checkpoints de surveillance optionnel : lots en cours et empreintes de status terminés, fichier autonome chiffré avec le Store, lecture/effacement explicite, propriétaire unique et redémarrage par scan complet après interruption.
+- [ ] Historique rejouable des événements et mise à jour incrémentale de la topologie des dossiers ; validations réelles Linux/macOS du watcher et du repli.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
 - [x] Compression réseau Zstandard négociée, repli brut, décodage borné, budgets de préparation et compteurs logiques/réseau distincts.
 - [ ] Cache des présences et validation de charge de la compression sur des corpus réels.

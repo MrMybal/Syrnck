@@ -14,6 +14,7 @@ import unittest
 import native_workflows as base
 from workflows import CLI
 HOLDER = str(Path(sys.argv.pop(1)).resolve())
+JOURNAL_HELPER = str(Path(sys.argv.pop(1)).resolve())
 
 
 class Running:
@@ -156,14 +157,18 @@ class NativeWatch(unittest.TestCase):
 
     def test_busy_store_after_event_is_retried_without_losing_working_change(self):
         self.baseline()
-        with self.watch("--duration-ms", 5000, "--interval-ms", 40) as run:
+        with self.watch("--journal", "--duration-ms", 5000, "--interval-ms", 40) as run:
             run.until(lambda f: f["type"] == "status")
+            journal = (self.store / "watch-journal").read_bytes()
             with self.hold_store():
                 (self.root / "asset").write_bytes(b"changed!")
                 frame = run.until(lambda f: f["type"] == "error")
                 self.assertEqual(frame["code"], "scan_failed")
+                self.assertFalse(frame["journal"]["durable"])
+                self.assertEqual((self.store / "watch-journal").read_bytes(), journal)
             frame = run.until(lambda f: f["type"] == "status" and f["reason"] == "recovered")
             self.assertTrue(frame["full_scan"])
+            self.assertTrue(frame["journal"]["durable"])
             self.assertFalse(frame["status"]["clean"])
             self.assertEqual((self.root / "asset").read_bytes(), b"changed!")
 
@@ -196,6 +201,102 @@ class NativeWatch(unittest.TestCase):
             self.assertFalse(frame["status"]["clean"])
             self.assertEqual(frame["status"]["hashed_bytes"], 8)
             self.assertEqual(frame["status"]["working_index"]["reused_files"], 0)
+
+    def test_journal_plain_encrypted_persistence_offline_edit_and_clear(self):
+        for encrypted in (False, True):
+            with self.subTest(encrypted=encrypted):
+                if encrypted:
+                    self.store = self.root / "vault"
+                    self.env["SYRNCK_KEY"] = "47" * 32
+                    self.call("init", "--encrypted")
+                self.baseline()
+                with self.watch("--journal", "--max-updates", 1) as run:
+                    first = run.finish()[0]
+                self.assertTrue(first["journal"]["durable"])
+                self.assertEqual(first["journal"]["generation"], 2)
+                self.assertEqual(first["journal"]["previous"]["state"], "missing")
+                journal = json.loads(self.cmd("native", "watch-journal"))
+                self.assertEqual(journal["state"], "observed")
+                self.assertEqual(journal["session"], first["journal"]["session"])
+                self.assertEqual(journal["observation"]["base"], first["status"]["base"])
+                self.assertTrue(journal["observation"]["clean"])
+                self.call("gc", "--delete")
+                self.assertEqual(json.loads(self.cmd("native", "watch-journal")), journal)
+                (self.root / "asset").write_bytes(b"offline!")
+                with self.watch("--journal", "--max-updates", 1) as run:
+                    restarted = run.finish()[0]
+                self.assertTrue(restarted["full_scan"])
+                self.assertEqual(restarted["status"]["hashed_bytes"], 8)
+                self.assertFalse(restarted["status"]["clean"])
+                self.assertEqual(restarted["journal"]["previous"],
+                                 {"state": "observed", "session": first["journal"]["session"]})
+                self.assertNotEqual(restarted["journal"]["session"], first["journal"]["session"])
+                self.assertEqual(json.loads(self.cmd("native", "watch-journal", "--clear"))["state"], "cleared")
+                self.assertEqual(json.loads(self.cmd("native", "watch-journal"))["state"], "absent")
+
+    def test_journal_pending_recovery_and_quiet_polling(self):
+        self.baseline()
+        seed = subprocess.run([JOURNAL_HELPER, "pending", str(self.store)], capture_output=True, timeout=5)
+        self.assertEqual(seed.returncode, 0, seed.stderr.decode("utf-8", "replace"))
+        with self.watch("--journal", "--polling", "--interval-ms", 40, "--duration-ms", 1200) as run:
+            frame = run.until(lambda f: f["type"] == "status")
+            self.assertEqual(frame["journal"]["previous"]["state"], "pending")
+            self.assertTrue(frame["full_scan"])
+            original = (self.store / "watch-journal").read_bytes()
+            time.sleep(0.25)
+            self.assertEqual((self.store / "watch-journal").read_bytes(), original,
+                             "quiet polling rewrote durable checkpoint")
+            self.assertEqual(len(run.finish()), 1)
+
+    def test_journal_session_lock_allows_inspection_but_refuses_clear_or_second_owner(self):
+        self.baseline()
+        with self.watch("--journal", "--duration-ms", 1400) as run:
+            initial = run.until(lambda f: f["type"] == "status")
+            if initial["backend"] == "polling":
+                self.skipTest("idle Store assertion requires a native backend")
+            journal = json.loads(self.cmd("native", "watch-journal"))
+            self.assertEqual(journal["session"], initial["journal"]["session"])
+            self.call("native", "watch-journal", "--clear", ok=False)
+            self.call("native", "watch", "--journal", "--max-updates", 1, ok=False)
+            self.assertEqual(len(run.finish()), 1)
+
+    def test_corrupt_journal_is_preserved_until_explicit_clear(self):
+        self.baseline()
+        (self.store / "watch-journal").write_bytes(b"corrupt")
+        with self.watch("--journal", "--duration-ms", 1200) as run:
+            frames = run.finish(expected=1)
+            self.assertEqual([f["type"] for f in frames], ["error"])
+            self.assertFalse(frames[0]["journal"]["durable"])
+        self.assertEqual((self.store / "watch-journal").read_bytes(), b"corrupt")
+        self.call("native", "watch-journal", ok=False)
+        self.call("native", "watch-journal", "--clear")
+        with self.watch("--journal", "--max-updates", 1) as run:
+            self.assertTrue(run.finish()[0]["status"]["clean"])
+
+    def test_failed_scan_persists_unavailable_before_recovering(self):
+        self.baseline()
+        rules = self.root / ".syrnckignore"
+        with self.watch("--journal", "--duration-ms", 4500, "--interval-ms", 40) as run:
+            run.until(lambda f: f["type"] == "status")
+            rules.write_bytes(b"[\n")
+            frame = run.until(lambda f: f["type"] == "error")
+            self.assertTrue(frame["journal"]["durable"])
+            journal = json.loads(self.cmd("native", "watch-journal"))
+            self.assertEqual(journal["state"], "unavailable")
+            self.assertIsNone(journal["observation"])
+            rules.unlink()
+            run.until(lambda f: f["type"] == "status" and f["reason"] == "recovered")
+
+    def test_journal_modified_during_session_is_preserved(self):
+        self.baseline()
+        with self.watch("--journal", "--duration-ms", 2200) as run:
+            run.until(lambda f: f["type"] == "status")
+            (self.store / "watch-journal").write_bytes(b"modified externally")
+            (self.root / "asset").write_bytes(b"changed!")
+            frame = run.until(lambda f: f["type"] == "error")
+            self.assertFalse(frame["journal"]["durable"])
+            run.finish(expected=1)
+        self.assertEqual((self.store / "watch-journal").read_bytes(), b"modified externally")
 
     def test_directory_rename_and_file_directory_transition_are_observed(self):
         (self.root / "folder").mkdir()
