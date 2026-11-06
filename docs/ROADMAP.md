@@ -163,7 +163,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Plans de cherry-pick/revert à trois voies par fichier : contenu/mode et représentations distincts, conflits de contenu/ajouts/suppressions et collisions du résultat, parent principal explicite pour les merges, contrôle du workspace et vérification optionnelle sans écriture.
 - [x] Amendement du dernier commit natif par dossier, index préparé ou message seul ; parents conservés, tête attendue et publication atomique branche/archive/index, reconstruction après GC et arrêts forcés.
 - [x] Cherry-pick et revert par fichier avec commit enfant et application récupérable : tête attendue, données vérifiées, conflits bloquants, branche source intacte, reprise/annulation et conservation après GC.
-- [ ] Rebase interactif/préservant les merges, reset hard et stash ; résolution interactive des conflits de rejeu et fusion textuelle.
+- [x] Rebase linéaire avec séquence modifiable et saisie interactive anglais/français : réordonner, pick/drop/reword/squash/fixup, contexte figé, conflits après retrait d'une dépendance et checkout récupérable.
+- [ ] Rebase préservant les merges, arrêts edit/split, reset hard et stash ; résolution interactive des conflits de rejeu.
 - [x] Plan de rebase linéaire natif sur base explicite : rejeu virtuel déterministe, messages/dates et commits vides conservés, conflits bloquants par étape, parcours/rapport bornés et contrôle du workspace sans écriture.
 - [x] Application du rebase linéaire : vérification complète avant création des candidats, IDs conformes au plan, checkout final récupérable, ancienne tête archivée, reprise/annulation et reconstruction des anciennes versions après GC.
 - [x] Résolutions explicites par étape du rebase : tête/deux bases et parents virtuels attendus, choix complets ou manifestes personnalisés, validation stricte, vérification des blocs et conservation après GC ; tests d'arrêts forcés pendant création et application.

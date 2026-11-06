@@ -208,11 +208,25 @@ struct NativeReplayOptions {
   std::optional<NativeResolutionSet> resolutions{};
   std::optional<TextDiffOptions> text_merge{};
 };
+struct NativeRebaseTodoStep {
+  std::string source, action = "pick";
+  std::optional<std::string> message{};
+};
+struct NativeRebaseTodo {
+  std::string head, base, onto;
+  std::vector<NativeRebaseTodoStep> steps;
+  void validate() const;
+  Json json() const;
+  static NativeRebaseTodo parse(const Json &);
+  static NativeRebaseTodo decode(std::span<const std::uint8_t>);
+};
 struct NativeRebaseOptions {
   std::size_t max_commits = 1000;
   std::optional<NativeRebaseResolutionSet> resolutions{};
   // One shared text budget covers the entire range, including virtual results.
   std::optional<TextDiffOptions> text_merge{};
+  // Explicit complete sequence: pick/drop/reword/squash/fixup, with reordering.
+  std::optional<NativeRebaseTodo> todo{};
 };
 struct NativeStageRebaseOptions {
   std::optional<NativeResolutionSet> resolutions{};

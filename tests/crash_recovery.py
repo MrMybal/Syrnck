@@ -14,6 +14,9 @@ import unittest
 PROBE = Path(sys.argv.pop(1)).resolve(strict=True)
 READER = Path(sys.argv.pop(1)).resolve(strict=True)
 PRODUCTION = Path(sys.argv.pop(1)).resolve(strict=True)
+REBASE_TODO_ONLY = "--rebase-todo-only" in sys.argv
+if REBASE_TODO_ONLY:
+    sys.argv.remove("--rebase-todo-only")
 ENV = {key: value for key, value in os.environ.items()
        if key.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced",
@@ -127,12 +130,12 @@ def cases():
         atomic(rewrite, ("refs",))
         if rewrite.startswith("reset-soft") or rewrite.startswith("squash"):
             atomic(rewrite, ("revision",))
-    for rebase in ("rebase", "rebase-resolved", "rebase-move", "rebase-text"):
+    for rebase in ("rebase", "rebase-resolved", "rebase-move", "rebase-text", "rebase-todo"):
         result.extend((rebase if operation == "checkout" else rebase + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         if rebase != "rebase-move":
-            for occurrence in (1, 2):
+            for occurrence in ((1,) if rebase == "rebase-todo" else (1, 2)):
                 atomic(rebase, ("revision",), occurrence)
         if rebase == "rebase-text":
             for occurrence in (1, 2):
@@ -166,7 +169,7 @@ def cases():
         for operation in ("checkout-namespace", "checkout-namespace-abort"):
             for phase in ("checkout.directory_created", "checkout.directory_removed"):
                 result.append((operation, phase, "namespace-entry", occurrence))
-    return result
+    return [row for row in result if row[0].startswith("rebase-todo")] if REBASE_TODO_ONLY else result
 
 
 def command(mode, root, *args, ok=True):

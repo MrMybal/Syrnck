@@ -16,7 +16,9 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
   require(plan.report["ready"].get<bool>(), "native rebase is blocked; inspect native rebase-plan");
   const auto mode = plan.report["mode"].get<std::string>();
   const auto target = plan.target;
-  const auto count = plan.report["commits"].size();
+  const auto count = plan.report["completed_commits"].get<std::size_t>();
+  const auto created = plan.report["result_commits"].get<std::size_t>();
+  const auto dropped = plan.report["dropped_commits"].get<std::size_t>();
   materialize_native_text(*this, plan.generated, options);
   plan.generated.clear();
   plan.files.clear();
@@ -44,6 +46,8 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
   result["base"] = base;
   result["onto"] = onto;
   result["replayed_commits"] = mode == "rebase" ? count : 0;
+  result["result_commits"] = created;
+  result["dropped_commits"] = dropped;
   return result;
 }
 } // namespace syrnck

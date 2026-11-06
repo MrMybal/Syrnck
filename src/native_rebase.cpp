@@ -68,7 +68,27 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
       report_progress(options, {ProgressPhase::planning, {}, range.size()});
   }
   std::reverse(range.begin(), range.end());
-  const std::string_view mode = base == onto ? "up_to_date" : state.head.id == base ? "move" : "rebase";
+  NativeRebaseTodo sequence{state.head.id, std::string(base), std::string(onto), {}};
+  for (const auto &source : range)
+    sequence.steps.push_back({source, "pick", {}});
+  if (settings.todo) {
+    settings.todo->validate();
+    require(settings.todo->head == state.head.id && settings.todo->base == base &&
+                settings.todo->onto == onto,
+            "native rebase todo context changed; refresh the plan");
+    require(id == base && settings.todo->steps.size() == range.size(),
+            "native rebase todo must name every commit in the linear range");
+    for (const auto &step : settings.todo->steps) {
+      require(seen.contains(step.source), "native rebase todo source is outside the range");
+      require(step.action != "drop" || !settings.resolutions ||
+                  !settings.resolutions->steps.contains(step.source),
+              "native rebase resolutions cannot target a dropped commit");
+    }
+    sequence = *settings.todo;
+  }
+  const std::string_view mode = base == onto && !settings.todo ? "up_to_date"
+                                : state.head.id == base        ? "move"
+                                                               : "rebase";
   const NativeRebaseResolutionSet context{state.head.id, std::string(base), std::string(onto), {}};
   if (settings.resolutions) {
     require(mode != "up_to_date" || settings.resolutions->steps.empty(),
@@ -80,7 +100,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
   }
   NativeRebasePlan plan{state.head.id, std::string(onto), {}, {}};
   Json steps = Json::array(), workspace;
-  std::size_t budget = 4096, completed = 0;
+  std::size_t budget = 4096, completed = 0, created = 0, dropped = 0;
   std::set<ObjectKey> extra_roots;
   for (const auto &source : range)
     budget += source.size() + 3;
@@ -90,13 +110,41 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
       plan.target = state.head.id;
       plan.files = read_native_snapshot(store, state.head.id, options);
     } else {
-      auto original = read_native_snapshot(store, base, options);
       auto current = read_native_snapshot(store, onto, options);
-      for (const auto &source : range) {
+      NativeSnapshot previous;
+      std::string previous_id;
+      std::optional<Json> pending;
+      const auto flush = [&] {
+        if (pending && sink) {
+          const auto encoded = pending->dump();
+          sink(*pending, object_id(Kind::revision, bytes(encoded)));
+        }
+        pending.reset();
+      };
+      for (const auto &todo : sequence.steps) {
         throw_if_cancelled(options.stop);
+        const auto &source = todo.source;
+        if (todo.action == "drop") {
+          Json row{{"source", source},
+                   {"action", "drop"},
+                   {"head", plan.target},
+                   {"target", plan.target},
+                   {"empty", true},
+                   {"changes", Json::array()},
+                   {"conflicts", Json::array()},
+                   {"resolved", Json::array()}};
+          const auto cost = row.dump().size() + 1;
+          require(cost <= max_object_size - budget, "native rebase report exceeds 16 MiB");
+          budget += cost;
+          steps.push_back(std::move(row));
+          ++dropped;
+          continue;
+        }
         auto incoming = read_native_snapshot(store, source, options);
         const auto revision = store.metadata(Kind::revision, source);
         const auto parent = revision["parents"][0].get<std::string>();
+        const auto original =
+            previous_id == parent ? std::move(previous) : read_native_snapshot(store, parent, options);
         const NativeResolutionSet step_context{"rebase", plan.target, source, parent, parent, {}};
         const NativeResolutionSet *resolution = nullptr;
         if (settings.resolutions) {
@@ -110,6 +158,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                                            text ? &*text : nullptr);
         extra_roots.insert(combined.extra_roots.begin(), combined.extra_roots.end());
         Json row{{"source", source},
+                 {"action", todo.action},
                  {"head", plan.target},
                  {"parent", revision["parents"][0]},
                  {"empty", combined.changes.empty()},
@@ -120,14 +169,36 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
         if (text)
           row["text_merge"] = std::move(combined.text_merge);
         if (row["conflicts"].empty()) {
-          const auto next = candidate(revision, plan.target, combined.files, options);
+          const bool fold = todo.action == "squash" || todo.action == "fixup";
+          auto metadata = revision;
+          auto attach = plan.target;
+          if (fold) {
+            require(pending.has_value(), "native rebase fold requires a preceding picked commit");
+            metadata = *pending;
+            attach = metadata["parents"][0].get<std::string>();
+            row["replaces"] = plan.target;
+            if (todo.action == "squash") {
+              auto message = metadata["message"].get<std::string>();
+              const auto incoming_message = revision["message"].get<std::string>();
+              require(message.size() <= 1024 * 1024 &&
+                          incoming_message.size() <= 1024 * 1024 - message.size() &&
+                          incoming_message.size() + message.size() <= 1024 * 1024 - 2,
+                      "native rebase message exceeds 1 MiB");
+              metadata["message"] = message + "\n\n" + incoming_message;
+            }
+          } else {
+            flush();
+            ++created;
+            if (todo.message)
+              metadata["message"] = *todo.message;
+          }
+          const auto next = candidate(std::move(metadata), attach, combined.files, options);
           const auto encoded = next.dump();
           const auto data = bytes(encoded);
           validate_object(Kind::revision, data);
           plan.target = object_id(Kind::revision, data);
           row["target"] = plan.target;
-          if (sink)
-            sink(next, plan.target);
+          pending = next;
           ++completed;
         } else {
           row["target"] = Json{};
@@ -142,8 +213,11 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
           break;
         }
         current = std::move(combined.files);
-        original = std::move(incoming);
+        previous = std::move(incoming);
+        previous_id = source;
       }
+      if (blockers.empty())
+        flush();
       plan.files = std::move(current);
     }
     if (blockers.empty())
@@ -168,6 +242,9 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                      {"commits", range},
                      {"steps", std::move(steps)},
                      {"completed_commits", completed},
+                     {"result_commits", created},
+                     {"dropped_commits", dropped},
+                     {"todo", id == base ? sequence.json() : Json{}},
                      {"target", blockers.empty() ? Json(plan.target) : Json{}},
                      {"result_files", blockers.empty() ? Json(plan.files.size()) : Json{}},
                      {"ready", ready},

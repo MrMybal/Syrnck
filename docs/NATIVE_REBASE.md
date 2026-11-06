@@ -4,6 +4,10 @@ Native rebase planning replays the explicitly selected linear range `(BASE, HEAD
 onto another revision. `BASE` is excluded and must be reached by following the
 branch's single-parent chain. There is no implicit merge-base selection.
 
+An [editable or interactive sequence](NATIVE_REBASE_TODO.md) can reorder, drop,
+reword, squash and fix up commits. The ordinary behavior below applies when no
+explicit sequence is supplied.
+
 ```text
 syrnck native rebase-plan OLD_BASE --onto upstream --verify
 syrnck native rebase-plan OLD_BASE --onto NEW_BASE --max-commits 500

@@ -191,6 +191,11 @@ Voir les [transitions récupérables du workspace](docs/NATIVE_CHECKOUT.md#recov
 
 `native rebase BASE --onto RÉVISION --expect ANCIEN_ID` crée la chaîne de candidats vérifiée puis applique son snapshot final via le checkout récupérable. L'ancien historique reste archivé après GC ; les branches et tags sources sont conservés. Voir [l'application du rebase et sa reprise](docs/NATIVE_REBASE.md#apply-and-recover).
 
+`native rebase-todo BASE --onto RÉVISION` exporte une séquence modifiable à fournir
+avec `--todo FICHIER_JSON`. `--interactive` permet de la saisir au terminal en
+anglais ou français. Les actions pick/drop/reword/squash/fixup et le changement
+d'ordre conservent l'archive source. Voir le [rebase modifiable et interactif](docs/NATIVE_REBASE_TODO.md).
+
 Le rebase accepte aussi `--resolutions FICHIER_JSON` : une série de choix explicites par fichier liée à la tête initiale, aux deux bases et à chaque étape virtuelle. Des choix incomplets ou périmés bloquent toute l'opération. Voir la [résolution des conflits du rebase](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
 
 `native rebase-index-plan --verify` prépare le rejeu d'un index figé périmé sur la tête courante de sa branche, sans lire les fichiers de travail ni écrire de candidats. Voir le [rebase de l'index natif](docs/NATIVE_STAGE_REBASE.md).

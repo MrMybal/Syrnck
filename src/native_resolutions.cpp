@@ -150,6 +150,33 @@ NativeRebaseResolutionSet rebase_from_tree(const nlohmann::json &value) {
   result.validate();
   return result;
 }
+NativeRebaseTodo todo_from_tree(const nlohmann::json &value) {
+  require(value.is_object() && value.size() == 6 && value.contains("version") &&
+              value["version"].is_number_integer() && value["version"] == 1 && value.contains("type") &&
+              value["type"] == "native-rebase-todo" && value.contains("head") && value["head"].is_string() &&
+              value.contains("base") && value["base"].is_string() && value.contains("onto") &&
+              value["onto"].is_string() && value.contains("steps") && value["steps"].is_array() &&
+              value["steps"].size() <= 100000,
+          "invalid native rebase todo document");
+  NativeRebaseTodo result{value["head"].get<std::string>(),
+                          value["base"].get<std::string>(),
+                          value["onto"].get<std::string>(),
+                          {}};
+  for (const auto &row : value["steps"]) {
+    require(row.is_object() && row.contains("source") && row["source"].is_string() &&
+                row.contains("action") && row["action"].is_string() &&
+                ((row.size() == 2 && !row.contains("message")) ||
+                 (row.size() == 3 && row.contains("message") && row["message"].is_string())),
+            "invalid native rebase todo document");
+    NativeRebaseTodoStep step{row["source"].get<std::string>(), row["action"].get<std::string>(), {}};
+    if (row.contains("message"))
+      step.message = row["message"].get<std::string>();
+    result.steps.push_back(std::move(step));
+  }
+  result.validate();
+  return result;
+}
+
 } // namespace
 void NativeResolutionSet::validate() const {
   require(operation == "merge" || operation == "cherry-pick" || operation == "revert" ||
@@ -234,4 +261,60 @@ NativeRebaseResolutionSet NativeRebaseResolutionSet::decode(std::span<const std:
           "invalid native rebase resolution document");
   return rebase_from_tree(nlohmann::json::parse(data.begin(), data.end()));
 }
+void NativeRebaseTodo::validate() const {
+  validate_id(head);
+  validate_id(base);
+  validate_id(onto);
+  require(steps.size() <= 100000, "native rebase todo step limit exceeded");
+  std::set<std::string> seen;
+  bool previous = false;
+  std::size_t total = 512;
+  for (const auto &step : steps) {
+    validate_id(step.source);
+    require(seen.insert(step.source).second, "duplicate native rebase todo source");
+    require(step.action == "pick" || step.action == "drop" || step.action == "reword" ||
+                step.action == "squash" || step.action == "fixup",
+            "invalid native rebase todo action");
+    require(step.message.has_value() == (step.action == "reword"), "invalid native rebase todo message");
+    if (step.action == "squash" || step.action == "fixup")
+      require(previous, "native rebase fold requires a preceding picked commit");
+    if (step.action != "drop")
+      previous = true;
+    Json row{{"source", step.source}, {"action", step.action}};
+    if (step.message) {
+      require(step.message->size() <= 1024 * 1024, "native rebase message exceeds 1 MiB");
+      row["message"] = *step.message;
+    }
+    std::size_t cost;
+    try {
+      cost = row.dump().size() + 1;
+    } catch (const nlohmann::json::exception &) {
+      throw Error("invalid native rebase todo message");
+    }
+    require(cost <= max_object_size - total, "native rebase todo document exceeds 16 MiB");
+    total += cost;
+  }
+}
+Json NativeRebaseTodo::json() const {
+  validate();
+  Json entries = Json::array();
+  for (const auto &step : steps) {
+    Json row{{"source", step.source}, {"action", step.action}};
+    if (step.message)
+      row["message"] = *step.message;
+    entries.push_back(std::move(row));
+  }
+  return Json{{"version", 1}, {"type", "native-rebase-todo"}, {"head", head}, {"base", base},
+              {"onto", onto}, {"steps", std::move(entries)}};
+}
+NativeRebaseTodo NativeRebaseTodo::parse(const Json &value) {
+  return todo_from_tree(nlohmann::json(value));
+}
+NativeRebaseTodo NativeRebaseTodo::decode(std::span<const std::uint8_t> data) {
+  require(data.size() <= max_object_size, "native rebase todo document exceeds 16 MiB");
+  Keys guard(300010);
+  require(nlohmann::json::sax_parse(data.begin(), data.end(), &guard), "invalid native rebase todo document");
+  return todo_from_tree(nlohmann::json::parse(data.begin(), data.end()));
+}
+
 } // namespace syrnck

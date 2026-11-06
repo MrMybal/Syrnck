@@ -206,13 +206,22 @@ NativeMergeOptions merge_settings(const Json &info) {
 }
 bool rebase_operation(std::string_view op) {
   return op == "rebase" || op == "rebase-abort" || op == "rebase-resolved" || op == "rebase-resolved-abort" ||
-         op == "rebase-move" || op == "rebase-move-abort" || op == "rebase-text" || op == "rebase-text-abort";
+         op == "rebase-move" || op == "rebase-move-abort" || op == "rebase-text" ||
+         op == "rebase-text-abort" || op == "rebase-todo" || op == "rebase-todo-abort";
 }
 bool rebase_abort(std::string_view op) {
   return rebase_operation(op) && op.ends_with("-abort");
 }
 NativeRebaseOptions rebase_settings(const Store &store, const Json &info) {
   NativeRebaseOptions settings;
+  if (info["operation"].get<std::string>().starts_with("rebase-todo")) {
+    const auto head = parse_key(info["old_revision"]).id;
+    const auto first = store.metadata(Kind::revision, head)["parents"][0].get<std::string>();
+    settings.todo = NativeRebaseTodo{head,
+                                     parse_key(info["rebase_base"]).id,
+                                     parse_key(info["rebase_onto"]).id,
+                                     {{first, "reword", "Crash-safe folded replay"}, {head, "fixup", {}}}};
+  }
   if (info["operation"].get<std::string>().starts_with("rebase-text"))
     settings.text_merge.emplace();
   if (info["operation"].get<std::string>().starts_with("rebase-resolved")) {
@@ -1012,7 +1021,11 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       if (refs.at("heads/main") != old) {
         check(refs.at("heads/main").id == info["rebase_target"].get<std::string>(),
               "rebase published another virtual target");
-        if (!op.starts_with("rebase-move")) {
+        if (op.starts_with("rebase-todo")) {
+          check(head["parents"] == Json::array({parse_key(info["rebase_onto"]).id}) &&
+                    head["message"] == "Crash-safe folded replay" && head["timestamp"] == 0,
+                "edited rebase lost its folded metadata or parent");
+        } else if (!op.starts_with("rebase-move")) {
           auto next = refs.at("heads/main").id;
           auto source = old.id;
           for (unsigned step = 0; step < 2; ++step) {

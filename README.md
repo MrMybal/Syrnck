@@ -144,6 +144,11 @@ Tracked file/directory conversions and file/parent case changes use a [namespace
 
 `native rebase BASE --onto REVISION --expect OLD_ID` creates the verified candidate chain and applies its final snapshot through the recoverable checkout journal. The complete old history stays archived through GC; source branches and tags remain unchanged. See [rebase application and recovery](docs/NATIVE_REBASE.md#apply-and-recover).
 
+Use `native rebase-todo BASE --onto REVISION` to export an editable sequence,
+then pass `--todo JSON_FILE`, or choose `--interactive` to enter it at the terminal.
+Reordering, pick/drop/reword/squash/fixup preserve the original history archive.
+See [editable and interactive rebase](docs/NATIVE_REBASE_TODO.md).
+
 Rebase also accepts `--resolutions JSON_FILE`: a series of explicit file choices bound to the original head, both bases and each virtual replay step. Partial or stale choices block the whole operation. See [rebase conflict resolution](docs/NATIVE_REBASE.md#resolve-conflicts-by-step).
 
 Add `--text-merge` to `rebase-plan`/`rebase` to compose independent UTF-8 edits across virtual steps. A shared budget covers the complete range; generated intermediate versions remain reconstructible after GC. See [bounded text rebase](docs/NATIVE_REBASE.md#optional-bounded-text-composition).

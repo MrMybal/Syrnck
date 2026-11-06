@@ -17,6 +17,7 @@
 #include <syrnck/bisect.hpp>
 #include <syrnck/history.hpp>
 #ifdef _WIN32
+#include <Windows.h>
 #include <fcntl.h>
 #include <io.h>
 #endif
@@ -98,6 +99,107 @@ std::optional<Key> read_key() {
 }
 void print(const Json &j) {
   std::cout << j.dump(2) << '\n';
+}
+
+#ifdef _WIN32
+std::string utf8_cli_text(std::wstring_view wide) {
+  require(wide.size() <= static_cast<std::size_t>(std::numeric_limits<int>::max()),
+          "cannot decode command line text");
+  if (wide.empty())
+    return {};
+  const auto size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(),
+                                        static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
+  require(size > 0, "cannot decode command line text");
+  std::string result(static_cast<std::size_t>(size), '\0');
+  require(WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), static_cast<int>(wide.size()),
+                              result.data(), size, nullptr, nullptr) == size,
+          "cannot decode command line text");
+  return result;
+}
+#endif
+std::string rebase_input_line(std::size_t &total, std::stop_token stop) {
+  std::string line;
+#ifdef _WIN32
+  const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stdin)));
+  DWORD mode = 0;
+  if (GetConsoleMode(handle, &mode)) {
+    // Read UTF-16 console input directly without changing the user's code page.
+    // Redirected input follows the portable UTF-8 byte path below.
+    std::wstring wide;
+    for (;;) {
+      throw_if_cancelled(stop);
+      wchar_t character = 0;
+      DWORD count = 0;
+      const auto success = ReadConsoleW(handle, &character, 1, &count, nullptr);
+      throw_if_cancelled(stop);
+      require(success && count == 1, "native rebase interactive input ended before confirmation");
+      require(wide.size() < 1024 * 1024 + 80, "native rebase interactive input exceeds size limit");
+      if (character == L'\n')
+        break;
+      wide += character;
+    }
+    line = utf8_cli_text(wide);
+    require(line.size() < 1024 * 1024 + 80 && line.size() + 1 <= max_object_size - total,
+            "native rebase interactive input exceeds size limit");
+    total += line.size() + 1;
+    return line;
+  }
+#endif
+  char c;
+  while (std::cin.get(c)) {
+    throw_if_cancelled(stop);
+    require(++total <= max_object_size && line.size() < 1024 * 1024 + 80,
+            "native rebase interactive input exceeds size limit");
+    if (c == '\n')
+      return line;
+    line += c;
+  }
+  throw Error("native rebase interactive input ended before confirmation");
+}
+NativeRebaseTodo interactive_rebase_todo(const Store &store, NativeRebaseTodo initial, Language language,
+                                         std::stop_token stop) {
+  std::cerr << localize("Rebase sources (oldest first):\n", language);
+  for (const auto &step : initial.steps) {
+    const auto metadata = store.metadata(Kind::revision, step.source);
+    auto message = metadata["message"].get<std::string>();
+    auto end = std::min<std::size_t>(80, message.size());
+    if (end < message.size())
+      while (end && (static_cast<unsigned char>(message[end]) & 0xc0) == 0x80)
+        --end;
+    std::cerr << step.source << ' ' << Json(message.substr(0, end)).dump() << '\n';
+  }
+  std::cerr << localize("Enter action REVISION per line; reword adds a message. Actions: pick, drop, reword, "
+                        "squash, fixup.\nEnd with '.'; '.' alone keeps the original sequence.\n",
+                        language)
+            << std::flush;
+  require(std::cerr.good(), "output write failed");
+  auto result = initial;
+  result.steps.clear();
+  std::size_t total = 0;
+  for (;;) {
+    throw_if_cancelled(stop);
+    auto line = rebase_input_line(total, stop);
+    if (line.ends_with('\r'))
+      line.pop_back();
+    if (line == ".") {
+      if (result.steps.empty())
+        return initial;
+      result.validate();
+      return result;
+    }
+    if (line.empty())
+      continue;
+    require(result.steps.size() < 100000, "native rebase todo step limit exceeded");
+    const auto space = line.find(' ');
+    require(space != line.npos && line.size() >= space + 65, "invalid native rebase interactive line");
+    NativeRebaseTodoStep step{line.substr(space + 1, 64), line.substr(0, space), {}};
+    if (step.action == "reword") {
+      require(line.size() >= space + 66 && line[space + 65] == ' ', "invalid native rebase interactive line");
+      step.message = line.substr(space + 66);
+    } else
+      require(line.size() == space + 65, "invalid native rebase interactive line");
+    result.steps.push_back(std::move(step));
+  }
 }
 std::uint64_t integer(const std::string &s) {
   require(!s.empty() && std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; }),
@@ -279,6 +381,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
+  native rebase-todo BASE --onto RÉVISION    Exporter la séquence modifiable
+    --todo FICHIER_JSON ou --interactive : ordre, pick/drop/reword/squash/fixup.
     --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
   native cherry-pick-plan RÉVISION [--mainline N] [--verify] [--text-merge]
@@ -444,6 +548,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
+  native rebase-todo BASE --onto REVISION    Export an editable sequence
+    --todo JSON_FILE or --interactive: order, pick/drop/reword/squash/fixup.
     --resolutions JSON_FILE: per-step choices bound to the head and both bases.
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
   native cherry-pick-plan REVISION [--mainline N] [--verify] [--text-merge]
@@ -758,11 +864,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
-        sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
-        sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
-        sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
-        sub == "branch-restore" || sub == "push" || sub == "fetch" || sub == "log-file" ||
-        sub.starts_with("bisect-"))) ||
+        sub == "rebase-plan" || sub == "rebase-todo" || sub == "rebase" || sub == "rebase-index-plan" ||
+        sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
+        sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
+        sub == "branch-restore-plan" || sub == "branch-restore" || sub == "push" || sub == "fetch" ||
+        sub == "log-file" || sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
                             sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
@@ -1439,8 +1545,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto tip = expected ? *expected : resolve("heads/" + branch);
       print(store.merge_directory(directory, branch, tip, source, message.value_or("Merge " + source),
                                   settings, {control->token(), observe}));
-    } else if (sub == "rebase-plan" || sub == "rebase") {
-      const bool planning = sub == "rebase-plan";
+    } else if (sub == "rebase-plan" || sub == "rebase-todo" || sub == "rebase") {
+      const bool planning = sub != "rebase", exporting = sub == "rebase-todo";
       const auto directory = workspace();
       const auto branch = selected_branch();
       const auto onto = args.option("--onto");
@@ -1458,10 +1564,28 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       const bool verify = planning && args.flag("--verify");
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      const auto todo_file = args.option("--todo");
+      const bool interactive = args.flag("--interactive");
+      require(!todo_file || !interactive, "choose a rebase todo file or interactive input");
+      require(!exporting || (!todo_file && !interactive), "native rebase todo export cannot take a sequence");
+      require(!interactive || !json_progress, "interactive rebase cannot use JSON progress");
       args.count(1);
       settings.max_commits = static_cast<std::size_t>(limit);
       settings.resolutions = std::move(resolutions);
       const auto base = resolve(args.values[0]), target = resolve(*onto);
+      if (todo_file)
+        settings.todo = NativeRebaseTodo::decode(read_bytes(path_from_utf8(*todo_file), max_object_size));
+      if (exporting || interactive) {
+        const auto original =
+            store.plan_rebase(directory, branch, base, target, settings, verify, {control->token(), observe});
+        require(!original["todo"].is_null(), "native rebase todo requires a linear range");
+        if (exporting) {
+          print(original["todo"]);
+          return 0;
+        }
+        settings.todo = interactive_rebase_todo(store, NativeRebaseTodo::parse(original["todo"]), language,
+                                                control->token());
+      }
       if (planning) {
         const auto plan =
             store.plan_rebase(directory, branch, base, target, settings, verify, {control->token(), observe});
@@ -1832,8 +1956,13 @@ int wmain(int argc, wchar_t **argv) {
   _setmode(_fileno(stdin), _O_BINARY);
   _setmode(_fileno(stdout), _O_BINARY);
   Args args;
-  for (int i = 1; i < argc; ++i)
-    args.values.push_back(syrnck::utf8(argv[i]));
+  try {
+    for (int i = 1; i < argc; ++i)
+      args.values.push_back(utf8_cli_text(argv[i]));
+  } catch (const std::exception &error) {
+    std::cerr << "Error: " << error.what() << '\n';
+    return 1;
+  }
   return entry(std::move(args));
 }
 #else
