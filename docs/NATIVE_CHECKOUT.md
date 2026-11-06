@@ -224,3 +224,12 @@ dirty/untracked/ignored obstructions, namespace-aware switching, cancellation,
 interrupted rollback and retained source versions after GC. The namespace
 executor enumerates parent names during recovery/moves to verify exact spelling;
 this is not yet a persistent workspace index or a rename optimization.
+
+Version 6 supports [stash application](NATIVE_STASH.md): the branch head stays
+fixed while the working target, optional frozen index and stash pop are
+published together. All previous journal versions remain readable.
+
+[Completed receipt retirement](CHECKOUT_RETENTION.md) removes selected
+receipt/target groups only after independent backup coverage. Historical receipt
+inspection does not require an obsolete HEAD selection or deliberately retired
+source snapshot; active recovery keeps the full binding/snapshot checks.

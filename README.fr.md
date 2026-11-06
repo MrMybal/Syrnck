@@ -127,6 +127,12 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+Les [reçus de checkout terminés](docs/CHECKOUT_RETENTION.md) disposent d’un inventaire
+et d’un retrait atomique conditionné à une sauvegarde vérifiée, avec archives sources optionnelles.
+
+Le [stash récupérable](docs/NATIVE_STASH.md) conserve séparément le travail et l’index,
+puis les réapplique avec un plan de conflits sans déplacer la branche.
+
 L’historique autonome propose une [bisection persistante sans checkout](docs/NATIVE_BISECT.md),
 avec prise en compte des merges, ambiguïtés des révisions ignorées et historique protégé.
 [`native diff --renames` et `native log-file`](docs/NATIVE_FILE_HISTORY.md) ajoutent

@@ -1,6 +1,7 @@
 #include "native_workspace.hpp"
 #include "native_checkout_layout.hpp"
 #include "native_hard_reset.hpp"
+#include "native_stash.hpp"
 #include "io_checkpoint.hpp"
 #include <algorithm>
 #include <charconv>
@@ -102,12 +103,15 @@ struct Record {
   std::optional<std::string> source;
   std::optional<std::string> destination_branch;
   std::optional<ObjectKey> previous_head, next_head;
-  bool namespace_transition = false, hard_reset = false;
+  bool namespace_transition = false, hard_reset = false, restore_worktree = false, pop_stash = false;
+  std::optional<ObjectKey> target_index;
+  std::string stash_id, stash_work, stash_record;
   std::optional<ObjectKey> original_head, original_index;
   std::set<std::string> source_directories;
   ObjectKey key{Kind::chunk, {}};
   Json identity() const {
-    auto result = Json{{"version", hard_reset             ? 5
+    auto result = Json{{"version", restore_worktree       ? 6
+                                   : hard_reset           ? 5
                                    : namespace_transition ? (destination_branch ? 4 : 3)
                                                           : (destination_branch ? 2 : 1)},
                        {"type", "native-checkout"},
@@ -121,7 +125,7 @@ struct Record {
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
       result["next_head"] = next_head->id;
     }
-    if (hard_reset) {
+    if (hard_reset || restore_worktree) {
       result["original_head"] = original_head->id;
       result["original_index"] = original_index ? Json(original_index->id) : Json{};
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
@@ -129,6 +133,13 @@ struct Record {
       result["namespace_transition"] = namespace_transition;
     } else if (namespace_transition)
       result["namespace_transition"] = true;
+    if (restore_worktree) {
+      result["target_index"] = target_index ? Json(target_index->id) : Json{};
+      result["stash"] = stash_id;
+      result["stash_work"] = stash_work;
+      result["stash_record"] = stash_record;
+      result["pop"] = pop_stash;
+    }
     return result;
   }
   Json json() const {
@@ -144,10 +155,20 @@ struct Record {
     return source ? std::optional{ObjectKey{Kind::revision, *source}} : std::optional<ObjectKey>{};
   }
   std::optional<ObjectKey> branch_origin() const {
-    return hard_reset ? original_head : origin();
+    return hard_reset || restore_worktree ? original_head : origin();
+  }
+  std::optional<ObjectKey> branch_destination() const {
+    return restore_worktree ? original_head : std::optional{destination()};
+  }
+  NativeStashEntry stash() const {
+    NativeStashEntry entry;
+    entry.id = stash_id;
+    entry.work = stash_work;
+    entry.record = {Kind::chunk, stash_record};
+    return entry;
   }
   std::optional<ObjectKey> index_origin() const {
-    return hard_reset ? original_index : std::optional<ObjectKey>{};
+    return hard_reset || restore_worktree ? original_index : std::optional<ObjectKey>{};
   }
   std::string pin(std::string_view suffix) const {
     return "checkouts/pending/" + id + '/' + std::string(suffix);
@@ -168,7 +189,7 @@ struct Record {
     return store.put(Kind::chunk, bytes(json().dump())).first;
   }
 };
-Record parse_record(const Store &store, const ObjectKey &key) {
+Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery = true) {
   require(key.kind == Kind::chunk, "invalid native checkout record");
   const auto data = store.get(key);
   const auto value = parse_json(data);
@@ -176,7 +197,7 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   require(value.is_object() &&
               ((version == 1 && value.size() == 9) || (version == 2 && value.size() == 12) ||
                (version == 3 && value.size() == 10) || (version == 4 && value.size() == 13) ||
-               (version == 5 && value.size() == 14)) &&
+               (version == 5 && value.size() == 14) || (version == 6 && value.size() == 19)) &&
               value.value("type", "") == "native-checkout",
           "invalid native checkout record");
   Record record;
@@ -187,8 +208,24 @@ Record parse_record(const Store &store, const ObjectKey &key) {
   record.target = value.at("target").get<std::string>();
   record.state = value.at("state").get<std::string>();
   record.hard_reset = version == 5;
+  record.restore_worktree = version == 6;
+  if (record.restore_worktree) {
+    record.stash_id = value.at("stash").get<std::string>();
+    record.stash_work = value.at("stash_work").get<std::string>();
+    record.stash_record = value.at("stash_record").get<std::string>();
+    validate_id(record.stash_id);
+    validate_id(record.stash_work);
+    validate_id(record.stash_record);
+    require(value.at("pop").is_boolean(), "invalid native checkout record");
+    record.pop_stash = value.at("pop").get<bool>();
+    if (!value.at("target_index").is_null()) {
+      const auto id = value.at("target_index").get<std::string>();
+      validate_id(id);
+      record.target_index = ObjectKey{Kind::revision, id};
+    }
+  }
   record.namespace_transition = version == 3 || version == 4;
-  if (record.hard_reset) {
+  if (record.hard_reset || record.restore_worktree) {
     require(value.at("namespace_transition").is_boolean(), "invalid native checkout record");
     record.namespace_transition = value.at("namespace_transition").get<bool>();
     const auto head = value.at("original_head").get<std::string>();
@@ -250,18 +287,41 @@ Record parse_record(const Store &store, const ObjectKey &key) {
               record.workspace != store.root() && inside(store.root(), record.workspace) &&
               record.id == hash(bytes(record.identity().dump())) && record.json().dump() == text(data),
           "invalid native checkout record");
-  if (record.hard_reset) {
+  if (record.hard_reset || record.restore_worktree)
+    require(record.source.has_value(), "invalid native checkout record");
+  if (record.restore_worktree)
+    require(record.origin() == record.original_head && !record.original_index &&
+                record.source_directories.empty(),
+            "invalid native checkout record");
+  if (for_recovery && (record.hard_reset || record.restore_worktree)) {
     const auto selection = read_head(store, record.previous_head);
     require(selection.branch == record.branch && (!selection.key || selection.workspace == record.workspace),
             "invalid native checkout record");
     require(record.source.has_value(), "invalid native checkout record");
-    const auto recovery = store.metadata(Kind::revision, *record.source);
-    Json parents = Json::array({record.original_head->id});
-    if (record.original_index && record.original_index != record.original_head)
-      parents.push_back(record.original_index->id);
-    require(recovery["parents"] == parents && recovery["timestamp"] == 0 &&
-                recovery["message"] == "Syrnck hard reset recovery v1: " + record.branch,
-            "invalid native checkout record");
+    if (record.hard_reset) {
+      const auto recovery = store.metadata(Kind::revision, *record.source);
+      Json parents = Json::array({record.original_head->id});
+      if (record.original_index && record.original_index != record.original_head)
+        parents.push_back(record.original_index->id);
+      require(recovery["parents"] == parents && recovery["timestamp"] == 0 &&
+                  recovery["message"] == "Syrnck hard reset recovery v1: " + record.branch,
+              "invalid native checkout record");
+    } else {
+      const auto target = store.metadata(Kind::revision, record.target);
+      const auto index =
+          record.target_index ? std::optional{record.target_index->id} : std::optional<std::string>{};
+      require(target["parents"] ==
+                      native_stash_working_parents(record.original_head->id, record.stash_work, index) &&
+                  target["timestamp"] == 0 &&
+                  target["message"] == "Syrnck stash working v1: " + record.branch,
+              "invalid native checkout record");
+      if (record.target_index) {
+        const auto staged = store.metadata(Kind::revision, record.target_index->id);
+        require(staged["parents"] == Json::array({record.original_head->id}) && staged["timestamp"] == 0 &&
+                    staged["message"] == "Syrnck staging v1: " + record.branch,
+                "invalid native checkout record");
+      }
+    }
   }
   return record;
 }
@@ -274,6 +334,14 @@ std::optional<Record> active(const Store &store) {
   require(lookup(refs, record.pin("target")) == record.destination() &&
               lookup(refs, record.pin("source")) == record.origin(),
           "native checkout retention changed");
+  if (record.restore_worktree) {
+    const auto entry = record.stash();
+    const bool archived = record.state == "committed" && record.pop_stash;
+    require(lookup(refs, archived ? entry.archive_name() : entry.name()) == entry.record &&
+                lookup(refs, archived ? entry.archive_work() : entry.work_name()) ==
+                    ObjectKey{Kind::revision, entry.work},
+            "native stash protection reference changed");
+  }
   if (record.destination_branch) {
     const auto head = read_head(store, record.next_head);
     require(head.branch == *record.destination_branch && head.workspace == record.workspace,
@@ -406,7 +474,7 @@ public:
     require(lookup(refs, "heads/" + record.branch) == record.branch_origin() &&
                 lookup(refs, "staging/" + record.branch) == record.index_origin(),
             "native checkout branch or staging changed");
-    if (record.hard_reset)
+    if (record.hard_reset || record.restore_worktree)
       require(lookup(refs, head_name) == record.previous_head, "native checkout branch or staging changed");
     if (record.destination_branch)
       require(lookup(refs, head_name) == record.previous_head &&
@@ -524,19 +592,24 @@ void Transaction::apply(OperationOptions options) {
   auto committed = record;
   committed.state = "committed";
   const auto key = committed.save(store_);
-  std::vector<RefUpdate> updates{{"heads/" + record.branch, record.branch_origin(), record.destination()},
-                                 {std::string(active_name), record.key, key},
-                                 {record.receipt(), {}, key},
-                                 {record.retained(), {}, record.destination()}};
+  std::vector<RefUpdate> updates{
+      {"heads/" + record.branch, record.branch_origin(), record.branch_destination()},
+      {std::string(active_name), record.key, key},
+      {record.receipt(), {}, key},
+      {record.retained(), {}, record.destination()}};
   if (record.destination_branch) {
     updates[0].value = record.origin();
     updates.push_back({"heads/" + *record.destination_branch, record.destination(), record.destination()});
     updates.push_back({std::string(head_name), record.previous_head, record.next_head});
     updates.push_back({"staging/" + *record.destination_branch, {}, {}});
   }
-  if (record.hard_reset) {
-    updates.push_back({"staging/" + record.branch, record.original_index, {}});
+  if (record.hard_reset || record.restore_worktree) {
+    updates.push_back({"staging/" + record.branch, record.original_index, record.target_index});
     updates.push_back({std::string(head_name), record.previous_head, record.previous_head});
+  }
+  if (record.restore_worktree) {
+    const auto extra = native_stash_guard(store_, record.stash(), record.pop_stash);
+    updates.insert(updates.end(), extra.begin(), extra.end());
   }
   if (record.source)
     updates.push_back({record.archive(), {}, record.origin()});
@@ -862,6 +935,11 @@ Json Transaction::run(bool abort, OperationOptions options) {
   return result;
 }
 } // namespace
+Json read_native_checkout_receipt(const Store &store, const ObjectKey &key, std::string_view id) {
+  const auto record = parse_record(store, key, false);
+  require(record.id == id && record.state == "committed", "invalid native checkout record");
+  return record.json();
+}
 Json Store::native_head() const {
   const auto head = read_head(*this);
   const auto revision = lookup(refs(), "heads/" + head.branch);
@@ -993,7 +1071,10 @@ Json Store::checkout_status(const std::optional<std::string> &transaction) const
     if (!record || record->id != *transaction) {
       const auto key = lookup(refs(), "checkouts/receipts/" + *transaction);
       require(key.has_value(), "unknown native checkout transaction");
-      record = parse_record(*this, *key);
+      // Receipts retain the immutable record, source/target IDs and result.
+      // Old HEAD selections and explicitly retired source archives are not
+      // receipt dependencies. Only active recovery requires those objects.
+      record = parse_record(*this, *key, false);
       require(record->id == *transaction && record->state == "committed", "invalid native checkout record");
       pending = false;
     }
@@ -1003,6 +1084,13 @@ Json Store::checkout_status(const std::optional<std::string> &transaction) const
   auto result = record->json();
   result["pending"] = pending;
   result["data_directory"] = utf8(record->data(*this));
+  // An explicitly retired source can be collected while its local receipt
+  // remains. Keep immutable status readable without inventing a file diff.
+  if (!pending && record->source && !lookup(refs(), record->archive()) && !contains(*record->origin())) {
+    result["files"] = Json{};
+    result["files_available"] = false;
+    return result;
+  }
   Json files = Json::array();
   const auto changes = actions(*this, *record, {});
   for (std::size_t i = 0; i < changes.size(); ++i)
@@ -1010,14 +1098,15 @@ Json Store::checkout_status(const std::optional<std::string> &transaction) const
   result["files"] = std::move(files);
   return result;
 }
-Json native_hard_reset(const Store &store, const fs::path &workspace, std::string_view branch,
-                       std::string_view expected_head, std::string_view target,
-                       std::string_view expected_plan, OperationOptions options) {
+Json capture_native_hard_reset(const Store &store, const fs::path &workspace, std::string_view branch,
+                               std::string_view expected_head, std::string_view target,
+                               std::string_view expected_plan, const std::set<std::string> &additional_files,
+                               const NativeCapturePublisher &publisher, OperationOptions options) {
   throw_if_cancelled(options.stop);
   validate_id(expected_head);
   validate_id(expected_plan);
   require_no_native_checkout(store);
-  auto plan = prepare_native_hard_reset(store, workspace, branch, target, true, options);
+  auto plan = prepare_native_hard_reset(store, workspace, branch, target, true, options, additional_files);
   require(plan.head == expected_head, "native hard reset tip changed; inspect the plan and retry");
   require(plan.report["plan"].get<std::string>() == expected_plan,
           "native hard reset plan changed; inspect the plan and retry");
@@ -1077,15 +1166,17 @@ Json native_hard_reset(const Store &store, const fs::path &workspace, std::strin
     directory(store.root() / "checkouts", false);
   require(!present(record.data(store)), "native checkout transaction directory already exists");
   record.key = record.save(store);
-  require(
-      store.compare_update_refs({{std::string(active_name), {}, record.key},
+  std::vector<RefUpdate> updates{{std::string(active_name), {}, record.key},
                                  {std::string(head_name), record.previous_head, record.previous_head},
                                  {"heads/" + record.branch, record.original_head, record.original_head},
                                  {"staging/" + record.branch, record.original_index, record.original_index},
                                  {record.pin("target"), {}, record.destination()},
-                                 {record.pin("source"), {}, source}},
-                                options),
-      "native checkout references changed");
+                                 {record.pin("source"), {}, source}};
+  if (publisher) {
+    const auto extra = publisher(source.id, plan);
+    updates.insert(updates.end(), extra.begin(), extra.end());
+  }
+  require(store.compare_update_refs(updates, options), "native checkout references changed");
   auto result = Transaction(store, std::move(record), options).run(false, options);
   result["operation"] = "reset";
   result["mode"] = "hard";
@@ -1094,6 +1185,53 @@ Json native_hard_reset(const Store &store, const fs::path &workspace, std::strin
   result["recovery_revision"] = source.id;
   result["plan"] = expected_plan;
   return result;
+}
+
+Json native_hard_reset(const Store &store, const fs::path &workspace, std::string_view branch,
+                       std::string_view expected_head, std::string_view target,
+                       std::string_view expected_plan, OperationOptions options) {
+  return capture_native_hard_reset(store, workspace, branch, expected_head, target, expected_plan, {}, {},
+                                   options);
+}
+
+Json checkout_native_stash(const Store &store, const fs::path &workspace, std::string_view branch,
+                           const NativeStashApplyPlan &planned, bool pop, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  require_no_native_checkout(store);
+  const auto plan = store.plan_checkout(workspace, branch, planned.target, false, options);
+  require(plan["ready"] == true && plan["source"].get<std::string>() == planned.head,
+          "native stash workspace changed; refresh the plan");
+  Record record;
+  record.restore_worktree = true;
+  record.workspace = fs::canonical(workspace);
+  record.nonce = hex(random_bytes(32));
+  record.branch = branch;
+  record.source = planned.head;
+  record.target = planned.target;
+  record.namespace_transition = plan.value("namespace_transition", false);
+  record.original_head = ObjectKey{Kind::revision, planned.head};
+  record.previous_head = planned.selection;
+  if (planned.index)
+    record.target_index = ObjectKey{Kind::revision, *planned.index};
+  record.stash_id = planned.saved.id;
+  record.stash_work = planned.saved.work;
+  record.stash_record = planned.saved.record.id;
+  record.pop_stash = pop;
+  record.id = hash(bytes(record.identity().dump()));
+  if (present(store.root() / "checkouts"))
+    directory(store.root() / "checkouts", false);
+  require(!present(record.data(store)), "native checkout transaction directory already exists");
+  record.key = record.save(store);
+  std::vector<RefUpdate> updates{{std::string(active_name), {}, record.key},
+                                 {std::string(head_name), record.previous_head, record.previous_head},
+                                 {"heads/" + record.branch, record.original_head, record.original_head},
+                                 {"staging/" + record.branch, {}, {}},
+                                 {record.pin("target"), {}, record.destination()},
+                                 {record.pin("source"), {}, record.origin()}};
+  const auto guard = native_stash_guard(store, planned.saved, false);
+  updates.insert(updates.end(), guard.begin(), guard.end());
+  require(store.compare_update_refs(updates, options), "native checkout references changed");
+  return Transaction(store, std::move(record), options).run(false, options);
 }
 
 } // namespace syrnck

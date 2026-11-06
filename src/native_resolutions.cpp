@@ -180,7 +180,8 @@ NativeRebaseTodo todo_from_tree(const nlohmann::json &value) {
 } // namespace
 void NativeResolutionSet::validate() const {
   require(operation == "merge" || operation == "cherry-pick" || operation == "revert" ||
-              operation == "rebase" || operation == "rebase-index",
+              operation == "rebase" || operation == "rebase-index" || operation == "stash" ||
+              operation == "stash-index",
           "invalid native resolution operation");
   validate_id(head);
   validate_id(source);

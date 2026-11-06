@@ -39,6 +39,25 @@ void retirement(const fs::path &root, std::optional<Key> key, unsigned layout) {
                      }});
   });
   require(f.physical() == before, "cancelled archive retirement published references");
+  const auto descriptor = read_bytes(backup.root() / "backup.json");
+  fails([&] {
+    retire_archives(f.store, backup, names, fresh["plan"].get<std::string>(),
+                    {{}, [&](const ProgressEvent &) {
+                       auto changed = descriptor;
+                       changed.push_back(' ');
+                       atomic_write(backup.root() / "backup.json", changed, true);
+                     }});
+  });
+  atomic_write(backup.root() / "backup.json", descriptor, true);
+  require(f.physical() == before, "backup mutation in observer retired archive roots");
+  fails([&] {
+    retire_archives(
+        f.store, backup, names, fresh["plan"].get<std::string>(),
+        {{}, [&](const ProgressEvent &) { f.store.set_ref("observer/pin", {Kind::revision, current}); }});
+  });
+  require(f.store.refs().contains(archive) && f.store.refs().contains("observer/pin"),
+          "source mutation in observer lost roots or overwrote the observer update");
+  f.store.remove_ref("observer/pin");
   const auto applied = retire_archives(f.store, backup, names, fresh["plan"].get<std::string>());
   require(applied["applied"] == true && !f.store.refs().contains(archive) &&
               !f.store.refs().contains(retained) && f.store.refs().at("heads/main").id == current,

@@ -17,6 +17,8 @@
 #include <syrnck/bisect.hpp>
 #include <syrnck/history.hpp>
 #include <syrnck/workspace.hpp>
+#include <syrnck/stash.hpp>
+#include <syrnck/checkout_retention.hpp>
 #ifdef _WIN32
 #include <Windows.h>
 #include <fcntl.h>
@@ -347,6 +349,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native status --combined [--branch BRANCHE] [--directory .]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
   native checkout RÉVISION [--branch BRANCHE] [--directory .]
+  native checkout-receipts [--after ID] [--limit 100] [--verify]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
   native head                       Afficher la branche courante
@@ -416,6 +419,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   backup repair STORE_SAUVEGARDE [--apply]   Prévisualiser/réparer les objets absents
   backup repair-copy-plan STORE_SAUVEGARDE  Vérifier les objets récupérables
   backup repair-copy STORE_SAUVEGARDE NOUVEAU_STORE  Reconstruire une copie vérifiée
+  backup checkout-retire-plan ID... --from SAUVEGARDE [--include-source-archives]
+  backup checkout-retire ID... --from SAUVEGARDE --expect-plan PLAN [--include-source-archives]
   backup retire-plan ARCHIVE... --from SAUVEGARDE
   backup retire ARCHIVE... --from SAUVEGARDE --expect-plan ID
   locks identity --remote URL        Afficher l’identité authentifiée
@@ -427,6 +432,12 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve --access FICHIER             Identités, droits et règles de branches
   native push URL [--branch NOM] [--remote-branch NOM] [--lock-claims FICHIER]
   native fetch URL [--remote-branch NOM] [--remote-name origin]
+  native stash push [-m MESSAGE] [--include-untracked]
+  native stash list [--before GÉNÉRATION] [--limit N]
+  native stash show|archive ID [--verify]
+  native stash apply-plan ID [--index] [--text-merge] [--verify]
+  native stash apply|pop ID --expect-plan PLAN [--index]
+  native stash drop ID --expect-record OBJET | restore ID
   native bisect-start BON MAUVAIS | bisect-status
   native bisect-good|bisect-bad|bisect-skip RÉVISION --expect-state ID
   native bisect-reset --expect-state ID   Archiver la recherche sans toucher aux fichiers
@@ -516,6 +527,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native status --combined [--branch BRANCH] [--directory .]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
   native checkout REVISION [--branch BRANCH] [--directory .]
+  native checkout-receipts [--after ID] [--limit 100] [--verify]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
   native head                       Show the current branch
@@ -585,6 +597,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   backup repair BACKUP_STORE [--apply]   Preview/repair missing objects
   backup repair-copy-plan BACKUP_STORE  Inspect recoverable retained objects
   backup repair-copy BACKUP_STORE NEW_STORE  Rebuild a verified Store from both inputs
+  backup checkout-retire-plan ID... --from BACKUP [--include-source-archives]
+  backup checkout-retire ID... --from BACKUP --expect-plan PLAN [--include-source-archives]
   backup retire-plan ARCHIVE... --from BACKUP
   backup retire ARCHIVE... --from BACKUP --expect-plan ID
   locks identity --remote URL        Show the authenticated identity
@@ -596,6 +610,12 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve --access FILE                Identities, permissions and branch policies
   native push URL [--branch NAME] [--remote-branch NAME] [--lock-claims FILE]
   native fetch URL [--remote-branch NAME] [--remote-name origin]
+  native stash push [-m MESSAGE] [--include-untracked]
+  native stash list [--before GENERATION] [--limit N]
+  native stash show|archive ID [--verify]
+  native stash apply-plan ID [--index] [--text-merge] [--verify]
+  native stash apply|pop ID --expect-plan PLAN [--index]
+  native stash drop ID --expect-record OBJECT | restore ID
   native bisect-start GOOD BAD | bisect-status
   native bisect-good|bisect-bad|bisect-skip REVISION --expect-state ID
   native bisect-reset --expect-state ID   Archive the search without changing files
@@ -873,7 +893,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-index" || sub == "branch" || sub == "branches" || sub == "branch-delete-plan" ||
         sub == "branch-delete" || sub == "branch-archives" || sub == "branch-archive" ||
         sub == "branch-restore-plan" || sub == "branch-restore" || sub == "push" || sub == "fetch" ||
-        sub == "log-file" || sub.starts_with("bisect-"))) ||
+        sub == "checkout-receipts" || sub == "stash" || sub == "log-file" || sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" && (sub == "clean" || sub == "smudge" || sub == "prepare-assets" ||
                             sub == "push-assets" || sub == "pull-assets" || sub == "pre-push" ||
@@ -1044,7 +1064,72 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       return {};
     };
-    if (sub.starts_with("bisect-")) {
+    if (sub == "checkout-receipts") {
+      const auto after = args.option("--after");
+      const auto limit = integer(args.option("--limit").value_or("100"));
+      require(limit >= 1 && limit <= 1000, "native checkout receipt page limit must be in 1..1000");
+      const bool verify = args.flag("--verify");
+      args.count(0);
+      print(native_checkout_receipts(store, after, static_cast<std::size_t>(limit), verify,
+                                     {control->token(), observe}));
+    } else if (sub == "stash") {
+      NativeStash saved(store);
+      const OperationOptions operation{control->token(), observe};
+      const auto action = args.pop();
+      if (action == "push") {
+        const auto directory = workspace();
+        const auto branch = selected_branch();
+        const auto message = args.option("--message", "-m").value_or("Work in progress");
+        const bool untracked = args.flag("--include-untracked");
+        args.count(0);
+        print(saved.save(directory, branch, message, {untracked}, operation));
+      } else if (action == "list") {
+        const auto before = args.option("--before");
+        const auto limit = integer(args.option("--limit").value_or("100"));
+        require(limit >= 1 && limit <= 1000, "native stash page limit must be in 1..1000");
+        args.count(0);
+        print(saved.list(before ? std::optional{integer(*before)} : std::optional<std::uint64_t>{},
+                         static_cast<std::size_t>(limit), operation));
+      } else if (action == "show" || action == "archive") {
+        const bool verify = args.flag("--verify");
+        args.count(1);
+        print(action == "show" ? saved.show(args.values[0], verify, operation)
+                               : saved.archived(args.values[0], verify, operation));
+      } else if (action == "drop") {
+        const auto expected = args.option("--expect-record");
+        require(expected.has_value(), "native stash drop requires --expect-record");
+        args.count(1);
+        print(saved.drop(args.values[0], *expected, operation));
+      } else if (action == "restore") {
+        args.count(1);
+        print(saved.restore(args.values[0], operation));
+      } else {
+        require(action == "apply-plan" || action == "apply" || action == "pop",
+                "unknown native stash command");
+        const bool planning = action == "apply-plan";
+        const auto directory = workspace();
+        const auto branch = selected_branch();
+        const bool verify = planning && args.flag("--verify");
+        NativeStashApplyOptions settings;
+        settings.restore_index = args.flag("--index");
+        settings.resolutions = resolutions_input();
+        if (const auto input = args.option("--index-resolutions"))
+          settings.index_resolutions =
+              NativeResolutionSet::decode(read_bytes(path_from_utf8(*input), max_object_size));
+        if (args.flag("--text-merge"))
+          settings.text_merge = text_diff_options(args);
+        const auto expected = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+        require(planning || expected.has_value(), "native stash apply requires --expect-plan");
+        args.count(1);
+        if (planning) {
+          const auto plan = saved.plan_apply(directory, branch, args.values[0], settings, verify, operation);
+          print(plan);
+          return plan["ready"].get<bool>() ? 0 : 1;
+        }
+        print(
+            saved.apply(directory, branch, args.values[0], *expected, action == "pop", settings, operation));
+      }
+    } else if (sub.starts_with("bisect-")) {
       NativeBisect search(store);
       const OperationOptions operation{control->token(), observe};
       if (sub == "bisect-start") {
@@ -1770,6 +1855,18 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto destination = path_from_utf8(args.values[0]);
       print(sub == "create" ? create_backup(store, destination, secondary, operation)
                             : restore_backup(store, destination, secondary, operation));
+    } else if (sub == "checkout-retire-plan" || sub == "checkout-retire") {
+      const auto from = args.option("--from");
+      const auto expected = args.option("--expect-plan");
+      const bool sources = args.flag("--include-source-archives");
+      require(from.has_value(), "checkout retirement requires --from BACKUP");
+      require(sub == "checkout-retire-plan" || expected.has_value(),
+              "checkout retirement requires --expect-plan");
+      const auto ids = args.paths();
+      Store backup(path_from_utf8(*from), secondary);
+      print(sub == "checkout-retire-plan"
+                ? plan_checkout_retirement(store, backup, ids, sources, operation)
+                : retire_checkouts(store, backup, ids, *expected, sources, operation));
     } else if (sub == "retire-plan" || sub == "retire") {
       const auto from = args.option("--from");
       const auto expected = args.option("--expect-plan");

@@ -143,7 +143,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Application atomique du rejeu d'index : tête et index attendus, candidat conforme au plan, ancien index archivé avec ses blocs et sa base, aucune modification des fichiers de travail et commit ultérieur des sélections.
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.
 - [x] Checkout et changement de branche récupérables avec transitions fichier/dossier et changements de casse des fichiers/dossiers : évacuation complète avant installation, phases durables d’annulation, protection des données non suivies et rétention après GC.
-- [ ] HEAD détaché, workspaces multiples/partiels et index de travail persistant ; nettoyage explicite des reçus/archives de checkout, tags et amendements.
+- [x] Inventaire paginé et retrait atomique des reçus/cibles de checkout, avec archives sources optionnelles : sauvegarde indépendante vérifiée, plan attendu, refus de récupération active/données privées et conservation des versions hors ligne.
+- [ ] HEAD détaché, workspaces multiples/partiels et index de travail persistant ; nettoyage structuré des archives de tags/branches.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.
@@ -165,7 +166,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Cherry-pick et revert par fichier avec commit enfant et application récupérable : tête attendue, données vérifiées, conflits bloquants, branche source intacte, reprise/annulation et conservation après GC.
 - [x] Rebase linéaire avec séquence modifiable et saisie interactive anglais/français : réordonner, pick/drop/reword/squash/fixup, contexte figé, conflits après retrait d'une dépendance et checkout récupérable.
 - [x] Reset hard récupérable : empreinte du contenu réel, sauvegarde des modifications locales/index/obstructions ordinaires avant remplacement, publication atomique et restitution des dossiers vides à l'annulation.
-- [ ] Rebase préservant les merges, arrêts edit/split et stash ; résolution interactive des conflits de rejeu.
+- [x] Stash natif : captures travail/index complètes, portée untracked explicite, réapplication trois voies et index distinct, conflits/résolutions, archivage, récupération et pop atomique sans déplacer la branche.
+- [ ] Rebase préservant les merges et arrêts edit/split ; résolution interactive des conflits de rejeu.
 - [x] Plan de rebase linéaire natif sur base explicite : rejeu virtuel déterministe, messages/dates et commits vides conservés, conflits bloquants par étape, parcours/rapport bornés et contrôle du workspace sans écriture.
 - [x] Application du rebase linéaire : vérification complète avant création des candidats, IDs conformes au plan, checkout final récupérable, ancienne tête archivée, reprise/annulation et reconstruction des anciennes versions après GC.
 - [x] Résolutions explicites par étape du rebase : tête/deux bases et parents virtuels attendus, choix complets ou manifestes personnalisés, validation stricte, vérification des blocs et conservation après GC ; tests d'arrêts forcés pendant création et application.

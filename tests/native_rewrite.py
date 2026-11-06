@@ -114,7 +114,7 @@ class NativeRewrite(unittest.TestCase):
         self.call("native", "branch", "feature", second)
         self.call("native", "reset-plan", first, ok=False)
         self.call("native", "reset", first, "--soft", "--mixed", ok=False)
-        self.call("native", "reset", first, "--hard", ok=False)
+        self.call("native", "reset", first, "--hard", "--branch", "feature", ok=False)
         self.call("native", "reset", first, "--mixed", "--branch", "feature")
         refs = json.loads(self.cmd("refs"))
         self.assertEqual(refs["heads/main"]["id"], second)

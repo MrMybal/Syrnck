@@ -383,7 +383,8 @@ bool intersects(const std::set<std::string> &paths, const std::string &path) {
 } // namespace
 NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path &directory,
                                               std::string_view branch, std::string_view target,
-                                              bool verify_objects, OperationOptions options) {
+                                              bool verify_objects, OperationOptions options,
+                                              const std::set<std::string> &additional_files) {
   throw_if_cancelled(options.stop);
   validate_id(target);
   const NativeRewriteState state(store, branch, options);
@@ -449,7 +450,8 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
       require(cost <= max_object_size - metadata_budget, "native hard reset profile exceeds 16 MiB");
       metadata_budget += cost;
     }
-    if (node.type != Type::file || (!tracked.contains(folded) && !obstructing))
+    if (node.type != Type::file ||
+        (!tracked.contains(folded) && !obstructing && !additional_files.contains(folded)))
       continue;
     validate_path(path);
     const NativeFile file{inventory.base / path_from_utf8(path), path, node.size, node.modified,

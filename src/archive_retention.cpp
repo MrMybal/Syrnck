@@ -57,12 +57,15 @@ Json plan_archive_retirement(const Store &store, const Store &backup, const std:
 }
 Json retire_archives(const Store &store, const Store &backup, const std::vector<std::string> &names,
                      std::string_view expected_plan, OperationOptions options) {
+  throw_if_cancelled(options.stop);
   validate_id(expected_plan);
-  auto prepared = prepare(store, backup, names, options);
+  // No observer may invalidate coverage after the final backup verification.
+  report_progress(options, {ProgressPhase::publishing, "archive-retirement", 0, names.size()});
+  auto prepared = prepare(store, backup, names, {options.stop});
   require(prepared.report["plan"].get<std::string>() == expected_plan,
           "archive retirement plan changed; refresh the plan");
   prepared.report["applied"] = true;
-  require(store.compare_update_refs(prepared.updates, options),
+  require(store.compare_update_refs(prepared.updates, {options.stop}),
           "archive retirement references changed; retry operation");
   return std::move(prepared.report);
 }

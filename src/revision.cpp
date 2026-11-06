@@ -136,8 +136,10 @@ void visit_native_files(const fs::path &directory, const fs::path &store_root,
   require(inside(store_root, base), "native store must be inside committed directory");
   std::set<std::string> folded;
   std::size_t metadata_bytes = 2;
-  std::function<void(const fs::path &, std::vector<Rule>)> scan = [&](const fs::path &dir,
-                                                                      std::vector<Rule> rules) {
+  std::function<void(const fs::path &, std::vector<Rule>, unsigned)> scan = [&](const fs::path &dir,
+                                                                                std::vector<Rule> rules,
+                                                                                unsigned depth) {
+    require(depth <= 128, "native workspace directory nesting exceeds 128 levels");
     throw_if_cancelled(options.stop);
     auto rel = dir.lexically_relative(base);
     std::string prefix = rel == "." ? "" : utf8(rel) + "/";
@@ -156,9 +158,9 @@ void visit_native_files(const fs::path &directory, const fs::path &store_root,
       bool isdir = fs::is_directory(status);
       if (ignored(relative, isdir, rules))
         continue;
-      require(!fs::is_symlink(status), "native symlink support is not implemented");
+      require(!native_link_like(path, status), "native symlink support is not implemented");
       if (isdir) {
-        scan(path, rules);
+        scan(path, rules, depth + 1);
         continue;
       }
       require(fs::is_regular_file(status), "special files cannot be committed");
@@ -180,7 +182,7 @@ void visit_native_files(const fs::path &directory, const fs::path &store_root,
       visit({path, relative, entry.file_size(), entry.last_write_time(), executable});
     }
   };
-  scan(base, {});
+  scan(base, {}, 0);
   for (const auto &path : folded) {
     throw_if_cancelled(options.stop);
     for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))

@@ -27,7 +27,7 @@ delete payloads or run GC; inspect a later GC preview separately.
 
 Supported roots are the simple revision archives recognized by `native archives`:
 `reset`, `reset-index`, `rebase-index`, `stage-index`, `squash`, `amend`, `checkout`,
-`fetch`, `publish`, `bisect` and detached-history archives. Exact `native-fetch/REVISION` roots are
+`fetch`, `publish`, `bisect`, `stash` and detached-history archives. Exact `native-fetch/REVISION` roots are
 also supported. Select 1..1024 unique references. Heads, tags, indexes,
 asset-lock roots and multi-reference tag/branch archive records are refused.
 Those structured records need separate retirement workflows.
@@ -50,3 +50,12 @@ Tests cover all six combinations of plaintext/encrypted and
 loose/single-pack/multi-pack source storage, no-write planning, stale plans,
 cancelled publication, missing backup coverage and reconstruction from the
 unchanged backup after local GC.
+
+[Completed checkout retirement](CHECKOUT_RETENTION.md) handles receipt/target
+pairs and optional checkout-source archives together. It also supports retained
+target roots restored from a backup without local workspace receipts.
+
+Apply runs its final progress observer before revalidating the backup and exact
+plan. Final verification/publication uses cancellation without further callbacks,
+so observer mutations of source refs or backup evidence cannot authorize stale
+retirement. Tests exercise both mutation cases.

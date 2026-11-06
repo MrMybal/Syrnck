@@ -2,7 +2,8 @@
 
 The C++ API in `syrnck/backup.hpp` creates logical Store snapshots. A backup
 contains every object reachable from its retained roots, including parent
-revisions, archived heads, tags, staging snapshots and the asset-lock fencing
+revisions, archived heads, tags, staging snapshots, [stashes](NATIVE_STASH.md)
+and the asset-lock fencing
 counter. Complete file hashes are verified before a destination becomes visible.
 The source remains unchanged.
 

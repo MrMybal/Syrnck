@@ -1,6 +1,10 @@
 #pragma once
 #include "internal.hpp"
 namespace syrnck {
+// Decode an immutable completed receipt without old workspace dependencies or
+// rereading the full reference table for each entry in a paginated inventory.
+Json read_native_checkout_receipt(const Store &, const ObjectKey &, std::string_view id);
+
 struct NativeFile {
   fs::path path;
   std::string relative;

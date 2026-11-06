@@ -178,6 +178,12 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 ## Git and synchronization
 
+Completed workspace receipts have [explicit backup-fenced retirement](docs/CHECKOUT_RETENTION.md),
+including restored target roots and optional source archives.
+
+Native history includes [recoverable stash save/apply/pop](docs/NATIVE_STASH.md),
+with independent working/index snapshots, explicit conflict plans and an unchanged branch head.
+
 Native history also supports [persistent no-checkout bisection](docs/NATIVE_BISECT.md),
 with merge-aware candidate selection, skipped-build ambiguity and retained history.
 [`native diff --renames` and `native log-file`](docs/NATIVE_FILE_HISTORY.md) add
