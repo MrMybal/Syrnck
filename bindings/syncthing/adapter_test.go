@@ -20,7 +20,7 @@ func openStore(t testing.TB, encrypted bool) *syrnck.Store {
 	if encrypted {
 		key = bytes.Repeat([]byte{57}, 32)
 	}
-	store, err := syrnck.Open(filepath.Join(t.TempDir(), "store"), syrnck.Options{Create: true, Key: key})
+	store, err := syrnck.Open(filepath.Join(tempDirectory(t), "store"), syrnck.Options{Create: true, Key: key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func openStore(t testing.TB, encrypted bool) *syrnck.Store {
 
 func ingest(t testing.TB, store *syrnck.Store, data []byte, fixed bool) string {
 	t.Helper()
-	name := filepath.Join(t.TempDir(), "source")
+	name := filepath.Join(tempDirectory(t), "source")
 	if err := os.WriteFile(name, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestReferenceScannerAndDifferentialReconstruction(t *testing.T) {
 			if result.Stats.Requests != 1 || result.Stats.TransferredBytes != protocol.MinBlockSize {
 				t.Fatalf("unexpected transfer: %+v", result.Stats)
 			}
-			restored := filepath.Join(t.TempDir(), "restored")
+			restored := filepath.Join(tempDirectory(t), "restored")
 			if err := destination.Restore(result.Manifest, restored); err != nil {
 				t.Fatal(err)
 			}
@@ -102,7 +102,7 @@ func TestResumeValidatesPersistedRangesAndRefusesAnotherIndex(t *testing.T) {
 	source, destination := openStore(t, false), openStore(t, true)
 	data := bytes.Join([][]byte{block(1), block(2), block(3)}, nil)
 	incoming := file(t, source, ingest(t, source, data, false))
-	resume := filepath.Join(t.TempDir(), "resume")
+	resume := filepath.Join(tempDirectory(t), "resume")
 	ctx, cancel := context.WithCancel(context.Background())
 	calls := 0
 	request := func(ctx context.Context, req *protocol.Request) ([]byte, error) {

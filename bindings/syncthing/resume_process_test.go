@@ -53,7 +53,7 @@ func TestResumeProcessChild(t *testing.T) {
 }
 
 func TestResumeAfterHardProcessTermination(t *testing.T) {
-	root := t.TempDir()
+	root := tempDirectory(t)
 	source, err := syrnck.Open(filepath.Join(root, "source"), syrnck.Options{Create: true})
 	if err != nil {
 		t.Fatal(err)

@@ -185,6 +185,15 @@ func TestReferenceBEPConnectionOverMutualTLS13(t *testing.T) {
 				_ = right.Close()
 				client.Close(errors.New("test complete"))
 				server.Close(errors.New("test complete"))
+				// Close starts asynchronous teardown. The model notification follows
+				// dispatcher shutdown; wait before Store cleanup closes native handles.
+				for _, model := range []*wireModel{clientModel, serverModel} {
+					select {
+					case <-model.closed:
+					case <-time.After(2 * time.Second):
+						t.Error("BEP dispatcher did not shut down")
+					}
+				}
 			})
 			client.Start()
 			server.Start()
@@ -217,7 +226,7 @@ func TestReferenceBEPConnectionOverMutualTLS13(t *testing.T) {
 			if result.Stats.Requests != 1 || result.Stats.TransferredBytes != protocol.MinBlockSize {
 				t.Fatalf("wire sent unchanged blocks: %+v", result.Stats)
 			}
-			output := filepath.Join(t.TempDir(), "received")
+			output := filepath.Join(tempDirectory(t), "received")
 			if err := destination.Restore(result.Manifest, output); err != nil {
 				t.Fatal(err)
 			}
