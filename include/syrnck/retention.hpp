@@ -1,8 +1,10 @@
 #pragma once
 #include <syrnck/core.hpp>
 namespace syrnck {
-// Retire simple native revision archives or immutable native-fetch roots only
-// after a separate verified backup can reconstruct their complete closures.
+// Select simple revision/native-fetch roots or complete archive/branches/ID and
+// archive/tags/ID groups. Groups require the exact validated roots in the backup,
+// including descriptor/index/annotation. Member-by-member retirement is refused.
+// A separate verified backup must reconstruct every complete selected closure.
 // Objects are not deleted; GC remains a separate operation.
 Json plan_archive_retirement(const Store &, const Store &backup, const std::vector<std::string> &references,
                              OperationOptions = {});

@@ -94,6 +94,11 @@ authorizes archiving exactly that snapshot. Changed tip/index values fail before
 publication. There is no automatic dropping of unmerged versions: deletion retains
 the entire archived history, without requiring an ancestor relationship.
 
+Explicit [backup-protected retirement](ARCHIVE_RETENTION.md) can later remove a
+complete `archive/branches/ID` group. Its descriptor, tip and optional frozen
+index must all be retained in the verified independent backup. This does not
+delete a recreated live branch with the original name or run GC automatically.
+
 The read-only plan reports `branch`, a proposed `archive` ID, `archive_existing`,
 `archive_index`, `ready`, `objects_verified` and `blockers`. A ready plan exits 0;
 a blocked plan exits 1 with JSON on stdout. Invalid arguments or missing required

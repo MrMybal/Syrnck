@@ -148,6 +148,9 @@ export ; la réplication continue reste à développer.
 avec conservation des versions récentes intactes et récupération des objets
 isolés/enveloppes de packs corrompus.
 `backup retire-plan` / `backup retire` ajoutent le [retrait d’archives protégé par sauvegarde](docs/ARCHIVE_RETENTION.md).
+Ces commandes acceptent aussi les groupes complets d’archives de branches/tags :
+leurs index figés et annotations restent restaurables depuis la sauvegarde indépendante vérifiée.
+`native tag-archives` permet de retrouver les tags supprimés par pages.
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` et `prune` gèrent les
 [baux locaux d’assets](docs/ASSET_LOCKS.md) : groupes atomiques, expiration et

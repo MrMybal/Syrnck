@@ -57,11 +57,22 @@ they do not prove file chunks or historical revisions are available. Missing or
 invalid annotations, mismatched target IDs and incomplete archive root sets are
 refused. Inspection does not repair or write Store data.
 
+`native tag-archives [--after ID] [--limit N] [--verify]` lists deleted tags in
+archive-ID order. It returns `version`, `archives`, `has_more`, `next_after` and
+`objects_verified`. Each row contains `archive`, `tag` and `deleted_at`. Limits
+are 1..1,000 (default 100), with the same 16 MiB escaped-JSON bound. The exclusive
+ID cursor remains usable if that archive is later retired. Every page uses one
+reference snapshot and validates complete archive groups and their annotations.
+`--verify` audits the complete closures of the displayed groups only; default
+listing avoids revision trees and file payloads. It does not create an inventory
+snapshot across requests.
+
 ## Archived deletion and restoration
 
 ```text
 syrnck native tag-show release/v1
 syrnck native tag-delete release/v1 --expect EXACT_REVISION_ID
+syrnck native tag-archives --verify
 syrnck native tag-archive ARCHIVE_ID --verify
 syrnck gc --delete
 syrnck native tag-restore ARCHIVE_ID
@@ -75,10 +86,9 @@ the archive ID. If verification or the expected-target check fails, no tag is
 removed. Archives retain complete target history and shared chunks during GC,
 even after all branch and public tag roots disappear.
 
-If interruption loses the deletion response, inspect the public tag and `refs`.
-An archived deletion has `archive/tags/ID/record` entries; inspect those IDs with
-`native tag-archive ID` to identify the original name and target. A dedicated
-archive-list command is not implemented yet.
+If interruption loses the deletion response, inspect the public tag and
+`native tag-archives`, then use `native tag-archive ID` to identify the original
+name and target. An archived deletion has `archive/tags/ID/record` entries.
 
 Restoration verifies the archive and recreates its original name, target,
 message and annotation time in one reference transaction. It refuses a name
@@ -86,6 +96,9 @@ already occupied by a tag or annotation root. The archive itself remains
 retained. Tags can be deleted and recreated at another revision deliberately;
 the deleted version remains available through its archive.
 
+Explicit [backup-protected retirement](ARCHIVE_RETENTION.md) accepts
+`archive/tags/ID` and removes its complete root group atomically. The verified
+independent backup retains its original recipe and payloads for later restoration.
 Automatic archive pruning is not implemented. Generic reference/admin APIs can
 remove these roots, so API-level immutability is not an authorization or signature
 policy. Removing every protecting root and running destructive GC intentionally
@@ -148,6 +161,7 @@ auto created = store.create_native_tag("release/v1", selected, "Release notes", 
 auto page = store.native_tags({}, 100, operation);
 auto shown = store.native_tag("release/v1", true, operation);
 auto removed = store.delete_native_tag("release/v1", selected, operation);
+auto archived_page = store.native_tag_archives({}, 100, true, operation);
 auto saved = store.native_tag_archive(removed["archive"].get<std::string>(), true, operation);
 auto restored = store.restore_native_tag(removed["archive"].get<std::string>(), operation);
 ```

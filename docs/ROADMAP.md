@@ -152,7 +152,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Résolutions explicites du rejeu d'index : choix par fichier liés à la tête/index/base, manifestes et modes personnalisés, collisions recalculées et payloads vérifiés ; arrêts forcés pendant création du candidat et publication atomique.
 - [x] Checkout et changement de branche récupérables avec transitions fichier/dossier et changements de casse des fichiers/dossiers : évacuation complète avant installation, phases durables d’annulation, protection des données non suivies et rétention après GC.
 - [x] Inventaire paginé et retrait atomique des reçus/cibles de checkout, avec archives sources optionnelles : sauvegarde indépendante vérifiée, plan attendu, refus de récupération active/données privées et conservation des versions hors ligne.
-- [ ] HEAD détaché, workspaces multiples/partiels et index de travail persistant ; nettoyage structuré des archives de tags/branches.
+- [x] Retrait atomique des groupes complets d’archives de branches/tags avec sauvegarde indépendante vérifiée : index figés et annotations conservés, plan attendu, inventaire paginé des tags supprimés et reprise après arrêts forcés.
+- [ ] HEAD détaché et workspaces multiples/partiels.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.

@@ -1,4 +1,4 @@
-#include "internal.hpp"
+#include "native_tag_archive.hpp"
 #include <algorithm>
 namespace syrnck {
 namespace {
@@ -78,6 +78,12 @@ struct Archive {
   std::string prefix() const {
     return "archive/tags/" + record.id;
   }
+  Refs roots() const {
+    Refs result{{prefix() + "/record", record}, {prefix() + "/target", tag.target()}};
+    if (tag.annotation)
+      result.emplace(prefix() + "/annotation", *tag.annotation);
+    return result;
+  }
   Json json() const {
     return Json{{"version", 1},
                 {"type", "native-tag-archive"},
@@ -122,9 +128,72 @@ Archive read_archive(const Store &store, const Refs &refs, std::string_view id) 
               lookup(refs, archive.prefix() + "/annotation") == archive.tag.annotation,
           "invalid native tag archive");
   read_annotation(store, archive.tag);
+  const auto wanted = archive.roots();
+  const auto prefix = archive.prefix() + '/';
+  std::size_t count = 0;
+  for (auto it = refs.lower_bound(prefix); it != refs.end() && it->first.starts_with(prefix); ++it) {
+    const auto expected = wanted.find(it->first);
+    require(expected != wanted.end() && expected->second == it->second, "invalid native tag archive");
+    ++count;
+  }
+  require(count == wanted.size(), "invalid native tag archive");
   return archive;
 }
 } // namespace
+NativeTagArchiveRoots read_native_tag_archive_roots(const Store &store, const Refs &refs, std::string_view id,
+                                                    OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  const auto archive = read_archive(store, refs, id);
+  return {archive.tag.name, archive.tag.target(), archive.roots()};
+}
+Json Store::native_tag_archives(const std::optional<std::string> &after, std::size_t limit,
+                                bool verify_objects, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  require(limit >= 1 && limit <= 1000, "native tag page limit must be in 1..1000");
+  if (after)
+    validate_id(*after);
+  const auto all = refs();
+  const std::string prefix = "archive/tags/";
+  // IDs have exactly 64 hex characters; '0' sorts after the '/' member group.
+  auto it = all.lower_bound(after ? prefix + *after + '0' : prefix);
+  Json rows = Json::array();
+  std::vector<ObjectKey> roots;
+  std::size_t budget = 4096;
+  for (; it != all.end() && it->first.starts_with(prefix) && rows.size() < limit;) {
+    throw_if_cancelled(options.stop);
+    const auto rest = it->first.substr(prefix.size());
+    const auto slash = rest.find('/');
+    require(slash != rest.npos, "invalid native tag archive");
+    const auto archive = read_archive(*this, all, rest.substr(0, slash));
+    auto row = archive.report(false);
+    row.erase("version");
+    row.erase("objects_verified");
+    const auto size = row.dump().size() + 1;
+    if (size > max_object_size - budget)
+      break;
+    budget += size;
+    rows.push_back(std::move(row));
+    for (const auto &[name, key] : archive.roots()) {
+      (void)name;
+      roots.push_back(key);
+    }
+    const auto group = archive.prefix() + '/';
+    do {
+      ++it;
+    } while (it != all.end() && it->first.starts_with(group));
+    report_progress(options, {ProgressPhase::planning, archive.record.id, rows.size()});
+  }
+  if (verify_objects)
+    (void)closure(roots, true, options.stop, options.progress);
+  const bool more = it != all.end() && it->first.starts_with(prefix);
+  const auto next = more && !rows.empty() ? rows.back()["archive"] : Json{};
+  report_progress(options, {ProgressPhase::planning, {}, rows.size(), rows.size(), true});
+  return Json{{"version", 1},
+              {"archives", std::move(rows)},
+              {"has_more", more},
+              {"next_after", next},
+              {"objects_verified", verify_objects}};
+}
 Json Store::native_tags(const std::optional<std::string> &after, std::size_t limit,
                         OperationOptions options) const {
   throw_if_cancelled(options.stop);

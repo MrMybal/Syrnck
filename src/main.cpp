@@ -381,6 +381,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native tag NOM [RÉVISION] [-m MESSAGE]   Nommer une version (HEAD par défaut)
   native tags [--after NOM] [--limit 100] | tag-show NOM [--verify]
   native tag-delete NOM --expect RÉVISION
+  native tag-archives [--after ID] [--limit 100] [--verify]
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCHE] [--limit 50]
   native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
@@ -467,7 +468,7 @@ Révisions natives : ID, HEAD, branche/tag non ambigu, heads/NOM ou tags/NOM.
 Progression : --progress ou --progress-json sur stderr pour put, get, compare, pack, gc,
               fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/merge-text/export,
               git clean/smudge/filter-process,
-              native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native tag/tags/tag-show/tag-delete/tag-archives/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
               native branch-restore-plan/branch-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
@@ -564,6 +565,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native tag NAME [REVISION] [-m MESSAGE]   Label a version (defaults to HEAD)
   native tags [--after NAME] [--limit 100] | tag-show NAME [--verify]
   native tag-delete NAME --expect REVISION
+  native tag-archives [--after ID] [--limit 100] [--verify]
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
   native log [--branch BRANCH] [--limit 50]
   native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
@@ -650,7 +652,7 @@ Native revisions: ID, HEAD, unambiguous branch/tag, heads/NAME or tags/NAME.
 Progress: --progress or --progress-json on stderr for put, get, compare, pack, gc,
               fsck, native commit/add/add-patch-plan/add-patch/add-hunks-plan/add-hunks/reset-hunks-plan/reset-hunks/add-lines-plan/add-lines/reset-lines-plan/reset-lines/staged/reset/status/checkout-plan/checkout/checkout-recover/switch-plan/switch/diff/diff-text/merge-text/export,
               git clean/smudge/filter-process,
-              native tag/tags/tag-show/tag-delete/tag-archive/tag-restore,
+              native tag/tags/tag-show/tag-delete/tag-archives/tag-archive/tag-restore,
               native branch/branches/branch-delete-plan/branch-delete/branch-archives/branch-archive,
               native branch-restore-plan/branch-restore,
               native ancestry/merge-plan/merge/cherry-pick-plan/revert-plan/cherry-pick/revert,
@@ -922,7 +924,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "staged" || sub == "reset" || sub == "reset-plan" || sub == "checkout-plan" ||
         sub == "checkout" || sub == "checkout-recover" || sub == "switch-plan" || sub == "switch" ||
         sub == "tag" || sub == "tags" || sub == "tag-show" || sub == "tag-delete" || sub == "tag-archive" ||
-        sub == "tag-restore" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
+        sub == "tag-restore" || sub == "tag-archives" || sub == "ancestry" || sub == "cherry-pick-plan" || sub == "revert-plan" ||
         sub == "cherry-pick" || sub == "revert" || sub == "merge-plan" || sub == "merge" ||
         sub == "squash-plan" || sub == "squash" || sub == "archives" || sub == "archive-show" ||
         sub == "rebase-plan" || sub == "rebase-todo" || sub == "rebase" || sub == "rebase-index-plan" ||
@@ -1623,12 +1625,16 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
               "unexpected or missing arguments; use --help");
       const auto revision = resolve(args.values.size() == 2 ? args.values[1] : "HEAD");
       print(store.create_native_tag(args.values[0], revision, message, {control->token(), observe}));
-    } else if (sub == "tags") {
+    } else if (sub == "tags" || sub == "tag-archives") {
       const auto after = args.option("--after");
       const auto limit = integer(args.option("--limit").value_or("100"));
       require(limit >= 1 && limit <= 1000, "native tag page limit must be in 1..1000");
+      const bool verify = sub == "tag-archives" && args.flag("--verify");
       args.count(0);
-      print(store.native_tags(after, static_cast<std::size_t>(limit), {control->token(), observe}));
+      print(sub == "tags"
+                ? store.native_tags(after, static_cast<std::size_t>(limit), {control->token(), observe})
+                : store.native_tag_archives(after, static_cast<std::size_t>(limit), verify,
+                                            {control->token(), observe}));
     } else if (sub == "tag-show" || sub == "tag-archive") {
       const auto verify = args.flag("--verify");
       args.count(1);

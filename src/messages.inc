@@ -981,3 +981,6 @@ SYRNCK_MESSAGE("invalid workspace status mode", "mode de statut du dossier de tr
 
 SYRNCK_MESSAGE("null cancellation handle", "handle d'annulation nul")
 SYRNCK_MESSAGE("invalid operation progress phase", "phase de progression de l'opération invalide")
+SYRNCK_MESSAGE("structured archive retirement requires a complete group selector", "le retrait d'une archive structurée exige un sélecteur de groupe complet")
+SYRNCK_MESSAGE("backup archive group does not match selected archive", "le groupe d'archive de la sauvegarde ne correspond pas à l'archive sélectionnée")
+SYRNCK_MESSAGE("archive retirement report exceeds 16 MiB", "le rapport de retrait des archives dépasse 16 Mio")

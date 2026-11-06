@@ -478,6 +478,8 @@ public:
   Json delete_native_tag(std::string_view name, std::string_view expected_revision,
                          OperationOptions = {}) const;
   Json native_tag_archive(std::string_view id, bool verify_objects = false, OperationOptions = {}) const;
+  Json native_tag_archives(const std::optional<std::string> &after = {}, std::size_t limit = 100,
+                           bool verify_objects = false, OperationOptions = {}) const;
   Json restore_native_tag(std::string_view archive_id, OperationOptions = {}) const;
   // Exact ID, HEAD, heads/NAME, tags/NAME, or an unambiguous bare branch/tag.
   // Resolves a revision's metadata only; complete closure verification is separate.

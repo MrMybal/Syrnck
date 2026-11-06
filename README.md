@@ -202,6 +202,9 @@ replication or end-to-end encryption.
 [verified new Store from damaged current storage and a backup](docs/REPAIR_COPY.md),
 preserving newer intact history and recovering corrupt loose/packed envelopes.
 `backup retire-plan` / `backup retire` add [backup-protected archive retirement](docs/ARCHIVE_RETENTION.md).
+They accept complete branch/tag archive groups as well as simple revision roots,
+preserving frozen indexes and annotations in the verified independent backup.
+`native tag-archives` provides paginated discovery of deleted tags.
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide
 [repository-local asset leases](docs/ASSET_LOCKS.md), with atomic groups, expiry
