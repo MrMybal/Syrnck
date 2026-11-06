@@ -71,7 +71,8 @@ Critère de sortie : un clone neuf peut récupérer un projet et un push ne peut
 - [x] Tables de références sans parcours quadratique de la table, sérialisation triée locale/HTTP et garde de profondeur JSON en SAX ; validation de 32 768 pins en clair/chiffré et mesure CLI reproductible.
 - [ ] Arbres Merkle paginés, manifestes hiérarchiques et index de plages persistant.
 - [x] Index de travail persistant optionnel pour le statut natif : empreintes liées aux identités/changements du système de fichiers, relecture des écritures récentes, reconstruction après corruption/GC et staging distinct ; les opérations destructives gardent les lectures complètes.
-- [ ] Watcher résident, journal borné et inventaire incrémental des dossiers pour éviter les rescans ; reprise explicite après perte d’événements.
+- [x] Watcher C++/CLI résident : notifications Windows/Linux, repli par scrutation, regroupement borné, vérifications complètes après perte d’événements et périodiques, reprise après indisponibilité du Store et verrou libéré entre observations ; validation locale Windows.
+- [ ] Journal de changements persistant et inventaire incrémental des dossiers ; validations réelles Linux/macOS du watcher et du repli.
 - [x] Requêtes HTTP d'objets parallèles, plafonds de requêtes et de buffers, imports coordonnés et déduplication des requêtes en vol.
 - [x] Compression réseau Zstandard négociée, repli brut, décodage borné, budgets de préparation et compteurs logiques/réseau distincts.
 - [ ] Cache des présences et validation de charge de la compression sur des corpus réels.
@@ -104,7 +105,8 @@ Critère de sortie : deux artistes ne peuvent pas publier silencieusement des mo
 
 ## 4 — Synchronisation continue et Syncthing
 
-- [ ] Agent résident avec watcher, rescans de récupération, exclusions et journal persistant.
+- [x] Observation résidente du workspace avec watcher, exclusions partagées, rescans de récupération et audits : flux JSON canonique, staging optionnel et reprise après indisponibilité sans publier d’état périmé.
+- [ ] Agent résident de transfert, journal persistant et reprise des publications réseau ; intégration avec l’observation du workspace.
 - [ ] Modèle causal des versions, tombstones, détection de modifications concurrentes et copies de conflit.
 - [ ] Publication cohérente de plusieurs fichiers, suppressions et renommages.
 - [ ] Planificateur multi-source, découverte et identité des appareils, gestion hors ligne.

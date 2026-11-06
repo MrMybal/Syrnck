@@ -107,10 +107,11 @@ and actual content bytes hashed, and checks an equal-size edit with restored
 mtime. It is not a real Unreal corpus or cold-cache throughput measurement.
 
 Directory enumeration and ignore evaluation still run on every indexed query,
-so additions, removals, renamed paths and ignore changes are observed. A resident
-watcher with bounded event journals, overflow recovery and incremental directory
-enumeration remains separate work. C ABI and Go bindings do not yet expose this
-native workspace cache.
+so additions, removals, renamed paths and ignore changes are observed. The
+[resident watcher](NATIVE_WATCH.md) triggers queries from native notifications
+and full audits, with bounded hints and overflow recovery. Persistent event
+journals and incremental directory enumeration remain separate work. C ABI
+and Go bindings do not yet expose this native workspace cache.
 
 Local regression coverage includes plain/encrypted Stores with loose,
 single-pack and multi-pack cache reads, persistence across Store lifetimes,

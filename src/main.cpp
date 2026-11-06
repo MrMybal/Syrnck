@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include "cli_control.hpp"
+#include "cli_watch.hpp"
 #include "cli_text_diff.hpp"
 #include <algorithm>
 #include <fstream>
@@ -349,6 +350,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCHE] [--directory .] [--indexed]
   native index-clear
+  native watch [--combined] [--branch BRANCHE | --revision RÉVISION]
+    [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
+    [--audit-ms 300000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
   native checkout-plan RÉVISION [--branch BRANCHE] [--directory .] [--verify]
   native checkout RÉVISION [--branch BRANCHE] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -528,6 +532,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native status [--branch BRANCH | --revision REVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCH] [--directory .] [--indexed]
   native index-clear
+  native watch [--combined] [--branch BRANCH | --revision REVISION]
+    [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
+    [--audit-ms 300000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
   native checkout-plan REVISION [--branch BRANCH] [--directory .] [--verify]
   native checkout REVISION [--branch BRANCH] [--directory .]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
@@ -703,6 +710,29 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "git" || command == "native" || command == "agent" || command == "config" ||
       command == "leases" || command == "locks" || command == "backup")
     sub = args.pop();
+  if (command == "native" && sub == "watch") {
+    cli::NativeWatchCommand request;
+    request.combined = args.flag("--combined");
+    request.polling = args.flag("--polling");
+    request.branch = args.option("--branch");
+    request.revision = args.option("--revision");
+    request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
+    request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
+    request.audit_ms = integer(args.option("--audit-ms").value_or("300000"));
+    request.duration_ms = integer(args.option("--duration-ms").value_or("0"));
+    request.max_updates = integer(args.option("--max-updates").value_or("0"));
+    request.max_paths = integer(args.option("--max-paths").value_or("4096"));
+    const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    const auto text = args.flag("--progress"), json = args.flag("--progress-json");
+    require(!(text && json), "choose one progress output mode");
+    args.count(0);
+    control = std::make_unique<cli::OperationControl>(language, json ? cli::ProgressMode::json
+                                                                : text ? cli::ProgressMode::text
+                                                                       : cli::ProgressMode::none);
+    return cli::watch_native(directory, root, request,
+        [&] { return std::make_unique<Store>(root, read_key(), false, store_options); }, language,
+        {control->token(), [&](const ProgressEvent &event) { control->report(event); }});
+  }
   if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
     auto configured = args.flag("--checkout-policy");
