@@ -73,8 +73,8 @@ class AssetLocks(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         help_en = self.call("--lang", "en", "--help").stdout.decode("utf-8")
         help_fr = self.call("--lang", "fr", "--help").stdout.decode("utf-8")
-        self.assertIn("List local asset locks", help_en)
-        self.assertIn("verrous locaux", help_fr)
+        self.assertIn("List asset locks", help_en)
+        self.assertIn("verrous d’assets", help_fr)
 
 
 if __name__ == "__main__":

@@ -123,8 +123,11 @@ logiques et trafic des corps d'objets.
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` et `prune` gèrent les
 [baux locaux d’assets](docs/ASSET_LOCKS.md) : groupes atomiques, expiration et
-générations conservées après GC. Le propriétaire vient de l’appelant ; le raccordement
-aux identités et aux validations de publication du serveur reste à développer.
+générations conservées après GC. Les [droits serveur](docs/SERVER_ACCESS.md)
+raccordent les propriétaires authentifiés, les verrous distants, les rôles, les
+permissions d’écriture par chemin et les règles de publication des branches.
+`native push` transfère l’historique autonome ; `native fetch` met à jour les
+références de suivi archivées sans modifier les fichiers de travail.
 
 Le checkout et le changement de branche prennent en charge les transitions
 fichier/dossier et les changements de casse des fichiers et de leurs parents.

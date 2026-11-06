@@ -9,6 +9,7 @@
 #include <syrnck/git_lfs.hpp>
 #include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
+#include <syrnck/native_net.hpp>
 #include <syrnck/i18n.hpp>
 #include <syrnck/asset_locks.hpp>
 #ifdef _WIN32
@@ -137,6 +138,16 @@ TextDiffOptions text_diff_options(Args &args) {
 }
 net::TransferOptions transfer_options(Args &args) {
   net::TransferOptions limits;
+  if (const auto path = args.option("--lock-claims")) {
+    const auto value = parse_json(read_bytes(path_from_utf8(*path), 1024 * 1024));
+    require(value.is_array() && value.size() <= 1024, "invalid server asset lock claims");
+    for (const auto &claim : value) {
+      require(claim.is_object() && claim.size() == 2 && claim.contains("path") && claim["path"].is_string() &&
+                  claim.contains("fence") && claim["fence"].is_number_unsigned(),
+              "invalid server asset lock claims");
+      limits.asset_locks.push_back({claim["path"].get<std::string>(), claim["fence"].get<std::uint64_t>()});
+    }
+  }
   if (auto compression = args.option("--compression")) {
     require(*compression == "auto" || *compression == "off" || *compression == "zstd",
             "compression must be auto, off or zstd");
@@ -289,10 +300,16 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve [--listen 127.0.0.1:7437]      HTTP local ; publier derrière un proxy HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Gérer les baux du store serveur
-  locks list [--after CHEMIN] [--limit 100]   Lister les verrous locaux d’assets
+  token-hash                         Empreinte du jeton SYRNCK_TOKEN (sans store)
+  locks identity --remote URL        Afficher l’identité authentifiée
+  locks list [--after CHEMIN] [--limit 100]   Lister les verrous d’assets
   locks acquire-plan|acquire --owner ID [--seconds 3600] CHEMIN...
   locks renew --owner ID --fence N [--seconds 3600] CHEMIN...
   locks release --owner ID --fence N CHEMIN... | locks prune [--delete]
+    --remote URL utilise l’identité serveur ; omettre --owner.
+  serve --access FICHIER             Identités, droits et règles de branches
+  native push URL [--branch NOM] [--remote-branch NOM] [--lock-claims FICHIER]
+  native fetch URL [--remote-branch NOM] [--remote-name origin]
   agent push URL RÉF_LOCALE RÉF_DISTANTE
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
@@ -437,10 +454,16 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve [--listen 127.0.0.1:7437]      Loopback HTTP; publish behind HTTPS
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Manage server store leases
-  locks list [--after PATH] [--limit 100]   List local asset locks
+  token-hash                         Hash SYRNCK_TOKEN (no store needed)
+  locks identity --remote URL        Show the authenticated identity
+  locks list [--after PATH] [--limit 100]   List asset locks
   locks acquire-plan|acquire --owner ID [--seconds 3600] PATH...
   locks renew --owner ID --fence N [--seconds 3600] PATH...
   locks release --owner ID --fence N PATH... | locks prune [--delete]
+    --remote URL uses the server identity; omit --owner.
+  serve --access FILE                Identities, permissions and branch policies
+  native push URL [--branch NAME] [--remote-branch NAME] [--lock-claims FILE]
+  native fetch URL [--remote-branch NAME] [--remote-name origin]
   agent push URL LOCAL_REF REMOTE_REF
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
@@ -505,6 +528,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "keygen") {
     args.count(0);
     std::cout << hex(random_bytes(32)) << '\n';
+    return 0;
+  }
+  if (command == "token-hash") {
+    args.count(0);
+    require(
+        token && token->size() >= 32 && token->size() <= 4096 &&
+            std::all_of(token->begin(), token->end(), [](unsigned char c) { return c >= 33 && c <= 126; }),
+        "set SYRNCK_TOKEN to at least 32 printable characters");
+    std::cout << hash(bytes(*token)) << '\n';
     return 0;
   }
   std::string sub;
@@ -690,7 +722,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
         sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
         sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
-        sub == "branch-restore")) ||
+        sub == "branch-restore" || sub == "push" || sub == "fetch")) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -861,7 +893,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       return {};
     };
-    if (sub == "commit") {
+    if (sub == "push" || sub == "fetch") {
+      const auto branch = selected_branch();
+      const auto remote_branch = args.option("--remote-branch").value_or(branch);
+      const auto remote_name = args.option("--remote-name").value_or("origin");
+      const auto limits = transfer_options(args);
+      args.count(1);
+      require(token.has_value(), "set SYRNCK_TOKEN");
+      net::Remote remote(args.values[0], *token, ca_path);
+      print(sub == "push" ? net::push_native_branch(store, remote, branch, remote_branch,
+                                                    {control->token(), observe}, limits)
+                          : net::fetch_native_branch(store, remote, remote_branch, remote_name,
+                                                     {control->token(), observe}, limits));
+    } else if (sub == "commit") {
       const auto staged = args.flag("--staged");
       const auto amend = args.flag("--amend");
       const auto message_only = args.flag("--message-only");
@@ -1470,6 +1514,44 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else
       throw Error("unknown Git command");
   } else if (command == "locks") {
+    if (const auto url = args.option("--remote")) {
+      require(token.has_value(), "set SYRNCK_TOKEN");
+      net::Remote remote(*url, *token, ca_path);
+      const OperationOptions operation{control->token(), observe};
+      Json request = Json::object();
+      if (sub == "identity") {
+        args.count(0);
+        print(remote.identity(operation));
+        return 0;
+      } else if (sub == "list") {
+        const auto after = args.option("--after");
+        const auto limit = integer(args.option("--limit").value_or("100"));
+        args.count(0);
+        request = Json{{"after", after ? Json(*after) : Json{}}, {"limit", limit}};
+      } else if (sub == "prune") {
+        const auto remove = args.flag("--delete");
+        args.count(0);
+        request = Json{{"delete", remove}};
+      } else {
+        const auto generation = args.option("--fence");
+        const auto seconds = integer(args.option("--seconds").value_or("3600"));
+        const auto paths = args.paths();
+        if (sub == "acquire" || sub == "acquire-plan")
+          request = Json{{"paths", paths}, {"seconds", seconds}};
+        else {
+          require(generation.has_value(), "asset lock command requires --fence");
+          request["claims"] = Json::array();
+          for (const auto &path : paths)
+            request["claims"].push_back(Json{{"path", path}, {"fence", integer(*generation)}});
+          if (sub == "renew")
+            request["seconds"] = seconds;
+        }
+      }
+      const auto result = remote.locks(sub, request, operation);
+      print(result);
+      require(std::cout.good(), "output write failed");
+      return sub == "acquire-plan" && !result.at("ready").get<bool>() ? 1 : 0;
+    }
     AssetLocks locks(store);
     const OperationOptions operation{control->token(), observe};
     if (sub == "list") {
@@ -1535,6 +1617,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       throw Error("unknown lease command");
   } else if (command == "serve") {
     net::ServeOptions limits;
+    if (const auto path = args.option("--access"))
+      limits.access = parse_json(read_bytes(path_from_utf8(*path), 1024 * 1024));
     limits.object_compression = !args.flag("--no-compression");
     limits.require_upload_lease = args.flag("--require-lease");
     if (auto seconds = args.option("--lease-seconds"))
@@ -1543,8 +1627,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       limits.read_lease_seconds = integer(*seconds);
     auto listen = args.option("--listen").value_or("127.0.0.1:7437");
     args.count(0);
-    require(token.has_value(), "set SYRNCK_TOKEN");
-    net::serve(store, *token, listen, language, limits);
+    require(limits.access.has_value() || token.has_value(), "set SYRNCK_TOKEN");
+    net::serve(store, token.value_or(""), listen, language, limits);
   } else if (command == "agent") {
     if (sub == "sessions") {
       args.count(0);

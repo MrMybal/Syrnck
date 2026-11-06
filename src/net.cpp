@@ -3,6 +3,7 @@
 #include "object_compression.hpp"
 #include "upload_transport.hpp"
 #include "read_transport.hpp"
+#include "server_access.hpp"
 #include <curl/curl.h>
 #include <exception>
 #include <httplib.h>
@@ -156,6 +157,11 @@ Bytes Remote::request(std::string_view method, std::string_view path, std::span<
   }
 }
 void TransferOptions::validate() const {
+  require(asset_locks.size() <= 1024, "invalid server asset lock claims");
+  Json claims = Json::array();
+  for (const auto &claim : asset_locks)
+    claims.push_back(Json{{"path", claim.path}, {"fence", claim.fence}});
+  (void)detail::decode_lock_claims(claims);
   require(max_requests >= 1 && max_requests <= 32, "transfer requests must be in 1..32");
   require(max_in_flight_bytes >= max_object_size + 4096 && max_in_flight_bytes <= 1024ULL * 1024 * 1024,
           "transfer buffer must fit a maximum object and response and be at most 1 GiB");
@@ -197,16 +203,34 @@ Refs Remote::refs(OperationOptions options, TransferOptions limits) const {
   return parse_refs(request("GET", "v1/refs", {}, std::move(options), &limits),
                     "invalid references response");
 }
+Json Remote::identity(OperationOptions options) const {
+  return parse_json(request("GET", "v1/identity", {}, std::move(options)));
+}
+Json Remote::locks(std::string_view action, const Json &value, OperationOptions options) const {
+  require(action == "list" || action == "acquire-plan" || action == "acquire" || action == "renew" ||
+              action == "release" || action == "prune",
+          "unknown remote asset lock command");
+  const auto body = value.dump();
+  require(body.size() <= 1024 * 1024, "server asset lock request exceeds size limit");
+  return parse_json(request("POST", "v1/locks/" + std::string(action), bytes(body), std::move(options)));
+}
 void ServeOptions::validate() const {
   require(upload_lease_seconds >= 1 && upload_lease_seconds <= 86400,
           "upload lease duration must be in 1..86400 seconds");
   require(read_lease_seconds >= 1 && read_lease_seconds <= 86400,
           "read lease duration must be in 1..86400 seconds");
+  if (access)
+    (void)detail::ServerAccess(*access);
 }
 Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
   limits.validate();
   require(!limits.require_read_lease, "read lease requirement is only available for pull");
+  if (!limits.asset_locks.empty()) {
+    const auto caps = parse_json(request("GET", "v1/capabilities", {}, options, &limits));
+    require(caps.is_object() && caps.contains("branch_policies") && caps["branch_policies"] == 1,
+            "server does not enforce asset lock publications");
+  }
   throw_if_cancelled(options.stop);
   validate_ref(name);
   require(name.find('/') == name.npos, "remote reference must be a single component");
@@ -291,6 +315,11 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
                           {"expected", session.expected ? key_json(*session.expected) : Json(nullptr)}};
   if (!protection.publication().is_null())
     publication["upload"] = protection.publication();
+  if (!limits.asset_locks.empty()) {
+    publication["locks"] = Json::array();
+    for (const auto &claim : limits.asset_locks)
+      publication["locks"].push_back(Json{{"path", claim.path}, {"fence", claim.fence}});
+  }
   auto body = publication.dump();
   report_progress(options, {ProgressPhase::publishing, name});
   session.state = "publishing";
@@ -302,8 +331,8 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   } catch (const detail::HttpStatusError &error) {
     const bool lease_rejection =
         !protection.publication().is_null() && (error.status == 412 || error.status == 428);
-    if (error.status != 401 && error.status != 403 && error.status != 404 && error.status != 409 &&
-        !lease_rejection) {
+    if (error.status != 400 && error.status != 401 && error.status != 403 && error.status != 404 &&
+        error.status != 409 && !lease_rejection) {
       save_failure(store, session, "uncertain");
       throw PublicationUncertain(
           "remote reference publication outcome is unknown; inspect the remote reference before retrying");
@@ -328,6 +357,7 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
                   TransferOptions limits) const {
   limits.validate();
   require(!limits.immutable_reference, "immutable reference option is only available for push");
+  require(limits.asset_locks.empty(), "asset lock claims are only available for push");
   require(!limits.require_upload_lease, "upload lease requirement is only available for push");
   throw_if_cancelled(options.stop);
   validate_ref(name);
@@ -421,7 +451,11 @@ Json Remote::resume(const Store &store, std::string_view id, OperationOptions op
 void serve(Store &store, std::string_view token, std::string_view listen, Language language,
            ServeOptions limits) {
   limits.validate();
-  validate_token(token);
+  std::optional<detail::ServerAccess> access;
+  if (limits.access)
+    access.emplace(*limits.access);
+  else
+    validate_token(token);
   auto colon = listen.rfind(':');
   require(colon != listen.npos, "listen address must include a port");
   auto host = std::string(listen.substr(0, colon));
@@ -438,8 +472,10 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   // Captured state outlives the server and its queued handlers during teardown.
   std::mutex mutex;
   auto expected = unhex(hash(bytes(token)));
-  auto lease_reply = [&](const UploadLease &lease, auto &response) {
-    response.set_content(Json{{"lease", lease.json()}, {"lease_seconds", limits.upload_lease_seconds}}.dump(),
+  auto lease_reply = [&](const UploadLease &lease, auto &response, std::string_view external) {
+    auto value = lease.json();
+    value["id"] = external;
+    response.set_content(Json{{"lease", value}, {"lease_seconds", limits.upload_lease_seconds}}.dump(),
                          "application/json");
   };
   httplib::Server server;
@@ -453,7 +489,9 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
   auto authenticate = [&](const httplib::Request &request, httplib::Response &response) {
     auto auth = request.get_header_value("Authorization");
     if (request.get_header_value_count("Authorization") != 1 || !auth.starts_with("Bearer ") ||
-        crypto_verify32(unhex(hash(bytes(std::string_view(auth).substr(7)))).data(), expected.data()) != 0) {
+        (access ? !access->authenticate(std::string_view(auth).substr(7))
+                : crypto_verify32(unhex(hash(bytes(std::string_view(auth).substr(7)))).data(),
+                                  expected.data()) != 0)) {
       response.status = 401;
       response.set_header("WWW-Authenticate", "Bearer realm=\"Syrnck\"");
       return httplib::Server::HandlerResponse::Handled;
@@ -468,6 +506,16 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
     return response.status == 404 ? authenticate(request, response)
                                   : httplib::Server::HandlerResponse::Unhandled;
   });
+  auto principal = [&](const httplib::Request &request) -> const detail::Principal * {
+    return access
+               ? access->authenticate(std::string_view(request.get_header_value("Authorization")).substr(7))
+               : nullptr;
+  };
+  auto lease_id = [&](const httplib::Request &request, const std::string &external) {
+    validate_id(external);
+    return access ? hash(bytes("Syrnck lease principal v1:" + principal(request)->id + ':' + external))
+                  : external;
+  };
   auto guarded = [&](auto handler) {
     return [&, handler](const httplib::Request &request, httplib::Response &response) {
       // The bounded body has been consumed before this handler. Rejecting a
@@ -484,7 +532,14 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
       }
       std::lock_guard lock(mutex);
       try {
+        if (access && principal(request)->role == "reader" &&
+            (request.path.starts_with("/v1/uploads/") || request.path.starts_with("/v1/refs/") ||
+             (request.path.starts_with("/v1/objects/") && request.method == "PUT")))
+          throw detail::AccessDenied("server permission denied");
         handler(request, response);
+      } catch (const detail::AccessDenied &e) {
+        response.status = 403;
+        response.set_content(e.what(), "text/plain");
       } catch (const LeaseRejected &e) {
         response.status = 412;
         response.set_content(e.what(), "text/plain");
@@ -503,18 +558,89 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                                          {"object_zstd", limits.object_compression ? 1 : 0},
                                          {"lease_seconds", limits.upload_lease_seconds},
                                          {"read_leases", 1},
+                                         {"asset_locks", access ? 1 : 0},
+                                         {"branch_policies", access ? 1 : 0},
                                          {"read_lease_seconds", limits.read_lease_seconds}}
                                         .dump(),
                                     "application/json");
              }));
+  server.Get("/v1/identity", guarded([&](const auto &request, auto &response) {
+               const auto *user = principal(request);
+               response.set_content(Json{{"version", 1},
+                                         {"id", user ? Json(user->id) : Json{}},
+                                         {"role", user ? user->role : "legacy"}}
+                                        .dump(),
+                                    "application/json");
+             }));
+  server.Post(
+      R"(/v1/locks/(list|acquire-plan|acquire|renew|release|prune))",
+      guarded([&](const auto &request, auto &response) {
+        if (!access)
+          throw detail::AccessDenied("remote asset locks require server identities");
+        require(request.body.size() <= 1024 * 1024, "server asset lock request exceeds size limit");
+        const auto value = parse_json(bytes(request.body));
+        require(value.is_object(), "invalid server asset lock request");
+        const auto action = request.matches[1].str();
+        const auto &user = *principal(request);
+        AssetLocks locks(store);
+        Json report;
+        if (action == "list") {
+          require(value.size() == 2 && value.contains("after") &&
+                      (value["after"].is_null() || value["after"].is_string()) && value.contains("limit") &&
+                      value["limit"].is_number_unsigned(),
+                  "invalid server asset lock request");
+          const auto limit = value["limit"].template get<std::uint64_t>();
+          require(limit >= 1 && limit <= 1000, "asset lock page limit must be in 1..1000");
+          report =
+              locks.list(value["after"].is_null() ? std::nullopt
+                                                  : std::optional{value["after"].template get<std::string>()},
+                         static_cast<std::size_t>(limit));
+        } else if (action == "prune") {
+          if (user.role != "admin")
+            throw detail::AccessDenied("server permission denied");
+          require(value.size() == 1 && value.contains("delete") && value["delete"].is_boolean(),
+                  "invalid server asset lock request");
+          report = locks.prune(value["delete"].template get<bool>());
+        } else {
+          const bool acquisition = action == "acquire" || action == "acquire-plan";
+          require(value.size() == (action == "release" ? 1 : 2) &&
+                      value.contains(acquisition ? "paths" : "claims") &&
+                      (action == "release" ||
+                       (value.contains("seconds") && value["seconds"].is_number_unsigned())),
+                  "invalid server asset lock request");
+          const auto seconds = action == "release" ? 0 : value["seconds"].template get<std::uint64_t>();
+          if (acquisition) {
+            require(value["paths"].is_array() && !value["paths"].empty() && value["paths"].size() <= 1024,
+                    "invalid server asset lock request");
+            std::vector<std::string> paths;
+            for (const auto &path : value["paths"]) {
+              require(path.is_string(), "invalid server asset lock request");
+              paths.push_back(path.template get<std::string>());
+              validate_path(paths.back());
+              access->write_path(user, paths.back());
+            }
+            report = action == "acquire" ? locks.acquire(user.id, paths, seconds)
+                                         : locks.acquire_plan(user.id, paths, seconds);
+          } else {
+            const auto claims = detail::decode_lock_claims(value["claims"]);
+            for (const auto &claim : claims)
+              access->write_path(user, claim.path);
+            report =
+                action == "renew" ? locks.renew(user.id, claims, seconds) : locks.release(user.id, claims);
+          }
+        }
+        response.set_content(report.dump(), "application/json");
+      }));
   server.Get(R"(/v1/reads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
-               auto lease = store.read_lease(request.matches[1].str());
+               auto lease = store.read_lease(lease_id(request, request.matches[1].str()));
                if (!lease) {
                  response.status = 404;
                  return;
                }
+               auto value = lease->json();
+               value["id"] = request.matches[1].str();
                response.set_content(
-                   Json{{"lease", lease->json()}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
+                   Json{{"lease", value}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
                    "application/json");
              }));
   server.Put(R"(/v1/reads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
@@ -526,10 +652,12 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                std::optional<std::string> fence;
                if (!j["fence"].is_null())
                  fence = j["fence"].template get<std::string>();
-               auto lease = store.acquire_read_lease(request.matches[1].str(), parse_key(j["root"]),
-                                                     limits.read_lease_seconds, fence);
+               auto lease = store.acquire_read_lease(lease_id(request, request.matches[1].str()),
+                                                     parse_key(j["root"]), limits.read_lease_seconds, fence);
+               auto value = lease.json();
+               value["id"] = request.matches[1].str();
                response.set_content(
-                   Json{{"lease", lease.json()}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
+                   Json{{"lease", value}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
                    "application/json");
              }));
   server.Post(R"(/v1/reads/([a-f0-9]{64})/release)", guarded([&](const auto &request, auto &response) {
@@ -537,20 +665,21 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                 auto j = parse_json(bytes(request.body));
                 require(j.is_object() && j.size() == 1 && j.contains("fence") && j["fence"].is_string(),
                         "invalid read lease request");
-                auto id = request.matches[1].str();
+                auto id = lease_id(request, request.matches[1].str());
                 store.release_read_lease(id, j["fence"].template get<std::string>());
-                response.set_content(Json{{"lease", store.read_lease(id)->json()},
-                                          {"lease_seconds", limits.read_lease_seconds}}
-                                         .dump(),
-                                     "application/json");
+                auto value = store.read_lease(id)->json();
+                value["id"] = request.matches[1].str();
+                response.set_content(
+                    Json{{"lease", value}, {"lease_seconds", limits.read_lease_seconds}}.dump(),
+                    "application/json");
               }));
   server.Get(R"(/v1/uploads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
-               auto lease = store.upload_lease(request.matches[1].str());
+               auto lease = store.upload_lease(lease_id(request, request.matches[1].str()));
                if (!lease) {
                  response.status = 404;
                  return;
                }
-               lease_reply(*lease, response);
+               lease_reply(*lease, response, request.matches[1].str());
              }));
   server.Put(R"(/v1/uploads/([a-f0-9]{64}))", guarded([&](const auto &request, auto &response) {
                require(request.body.size() <= 16384, "upload lease request exceeds size limit");
@@ -568,10 +697,13 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                std::optional<std::string> fence;
                if (!j["fence"].is_null())
                  fence = j["fence"].template get<std::string>();
+               if (access)
+                 access->write_branch(*principal(request), j["reference"].template get<std::string>());
                auto lease = store.acquire_upload_lease(
-                   request.matches[1].str(), parse_key(j["root"]), j["reference"].template get<std::string>(),
-                   expected, limits.upload_lease_seconds, fence, j.contains("inventory"));
-               lease_reply(lease, response);
+                   lease_id(request, request.matches[1].str()), parse_key(j["root"]),
+                   j["reference"].template get<std::string>(), expected, limits.upload_lease_seconds, fence,
+                   j.contains("inventory"));
+               lease_reply(lease, response, request.matches[1].str());
              }));
   server.Put(R"(/v1/uploads/([a-f0-9]{64})/inventory/([0-9]{1,4}))",
              guarded([&](const auto &request, auto &response) {
@@ -585,7 +717,7 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                for (const auto &key : j["objects"])
                  objects.push_back(parse_key(key));
                store.register_upload_inventory(
-                   request.matches[1].str(), j["fence"].template get<std::string>(),
+                   lease_id(request, request.matches[1].str()), j["fence"].template get<std::string>(),
                    static_cast<std::uint32_t>(std::stoul(request.matches[2].str())), objects);
                response.status = 204;
              }));
@@ -594,9 +726,9 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                 auto j = parse_json(bytes(request.body));
                 require(j.is_object() && j.size() == 1 && j.contains("fence") && j["fence"].is_string(),
                         "invalid upload lease request");
-                auto id = request.matches[1].str();
+                auto id = lease_id(request, request.matches[1].str());
                 store.confirm_upload_lease(id, j["fence"].template get<std::string>());
-                lease_reply(*store.upload_lease(id), response);
+                lease_reply(*store.upload_lease(id), response, request.matches[1].str());
               }));
   server.Post("/v1/missing", guarded([&](const auto &request, auto &response) {
                 auto input = parse_json(bytes(request.body));
@@ -644,40 +776,57 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
                }
              }));
   server.Get("/v1/refs", guarded([&](const auto &, auto &response) {
-               response.set_content(encode_refs(store.refs()).dump(), "application/json");
+               auto refs = store.refs();
+               if (access)
+                 for (auto it = refs.begin(); it != refs.end();)
+                   if (!access->visible(it->first))
+                     it = refs.erase(it);
+                   else
+                     ++it;
+               response.set_content(encode_refs(refs).dump(), "application/json");
              }));
-  server.Put(R"(/v1/refs/([A-Za-z0-9._-]+))", guarded([&](const auto &request, auto &response) {
-               auto name = request.matches[1].str();
-               validate_ref(name);
-               auto j = parse_json(bytes(request.body));
-               require(j.is_object() && (j.size() == 2 || (j.size() == 3 && j.contains("upload"))) &&
-                           j.contains("root") && j.contains("expected"),
-                       "invalid publication request");
-               auto root = parse_key(j.at("root"));
-               std::optional<ObjectKey> previous;
-               if (!j.at("expected").is_null())
-                 previous = parse_key(j.at("expected"));
-               if (j.contains("upload")) {
-                 const auto &u = j["upload"];
-                 require(u.is_object() && u.size() == 2 && u.contains("id") && u["id"].is_string() &&
-                             u.contains("fence") && u["fence"].is_string(),
-                         "invalid upload lease request");
-                 auto id = u["id"].template get<std::string>();
-                 auto lease = store.upload_lease(id);
-                 if (!lease) {
-                   response.status = 404;
-                   return;
-                 }
-                 require(lease->root == root && lease->reference == name && lease->expected == previous,
-                         "upload lease descriptor mismatch");
-                 response.status =
-                     store.publish_upload_lease(id, u["fence"].template get<std::string>()) ? 204 : 409;
-               } else if (limits.require_upload_lease) {
-                 response.status = 428;
-               } else {
-                 response.status = store.compare_set_ref(name, previous, root) ? 204 : 409;
-               }
-             }));
+  server.Put(
+      R"(/v1/refs/([A-Za-z0-9._-]+))", guarded([&](const auto &request, auto &response) {
+        auto name = request.matches[1].str();
+        validate_ref(name);
+        auto j = parse_json(bytes(request.body));
+        require(j.is_object() && j.size() == 2 + j.count("upload") + j.count("locks") && j.contains("root") &&
+                    j.contains("expected"),
+                "invalid publication request");
+        auto root = parse_key(j.at("root"));
+        std::optional<ObjectKey> previous;
+        if (!j.at("expected").is_null())
+          previous = parse_key(j.at("expected"));
+        auto claims =
+            j.contains("locks") ? detail::decode_lock_claims(j["locks"]) : std::vector<AssetLockClaim>{};
+        if (access && reference(store.refs(), name) != previous) {
+          response.status = 409;
+          return;
+        }
+        const auto check = access
+                               ? access->publication(store, *principal(request), name, root, previous, claims)
+                               : ProgressCallback{};
+        if (j.contains("upload")) {
+          const auto &u = j["upload"];
+          require(u.is_object() && u.size() == 2 && u.contains("id") && u["id"].is_string() &&
+                      u.contains("fence") && u["fence"].is_string(),
+                  "invalid upload lease request");
+          auto id = lease_id(request, u["id"].template get<std::string>());
+          auto lease = store.upload_lease(id);
+          if (!lease) {
+            response.status = 404;
+            return;
+          }
+          require(lease->root == root && lease->reference == name && lease->expected == previous,
+                  "upload lease descriptor mismatch");
+          response.status =
+              store.publish_upload_lease(id, u["fence"].template get<std::string>(), {{}, check}) ? 204 : 409;
+        } else if (limits.require_upload_lease) {
+          response.status = 428;
+        } else {
+          response.status = store.compare_update_refs({{name, previous, root}}, {{}, check}) ? 204 : 409;
+        }
+      }));
   std::cerr << localize("Syrnck listening at http://", language) << host << ':' << port << '\n';
   require(server.listen(host, port), "HTTP server failed to listen");
 }

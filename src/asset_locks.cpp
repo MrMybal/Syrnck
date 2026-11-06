@@ -268,6 +268,17 @@ Json AssetLocks::release(std::string_view owner, const std::vector<AssetLockClai
   publish(store_, state, updates, options);
   return report;
 }
+std::uint64_t AssetLocks::validate(std::string_view owner, const std::vector<AssetLockClaim> &values,
+                                   OperationOptions options) const {
+  const State state(store_, options);
+  const auto selected = claims(state, owner, values, clock_(), true);
+  auto deadline = max_time;
+  for (const auto &[name, entry] : selected) {
+    (void)name;
+    deadline = std::min(deadline, entry->expires);
+  }
+  return deadline;
+}
 Json AssetLocks::prune(bool remove, OperationOptions options) const {
   const State state(store_, options);
   const auto now = clock_();

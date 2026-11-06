@@ -2,9 +2,9 @@
 
 `syrnck::AssetLocks` provides an atomic lease table in an existing Store. The C++
 API and bilingual CLI support grouped acquisition, renewal, release and expiry
-pruning. This is the local foundation for team locking: authenticated remote
-identities, HTTP lock endpoints and server-side publication enforcement remain
-to be connected. The caller supplies a trusted owner identifier. A fence is a
+pruning. [Server access](SERVER_ACCESS.md) connects this table to authenticated
+HTTP identities, remote lock operations and branch-publication enforcement.
+The local C++ caller supplies a trusted owner identifier. A fence is a
 stale-operation guard, not an authentication credential.
 
 ## Acquire and inspect

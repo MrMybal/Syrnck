@@ -2,8 +2,8 @@
 #include <algorithm>
 namespace syrnck {
 namespace {
-constexpr std::array<std::string_view, 7> kinds{"reset",  "reset-index", "rebase-index", "stage-index",
-                                                "squash", "amend",       "checkout"};
+constexpr std::array<std::string_view, 8> kinds{"reset",  "reset-index", "rebase-index", "stage-index",
+                                                "squash", "amend",       "checkout",     "fetch"};
 bool valid_kind(std::string_view kind) {
   return kind == "detached" || std::find(kinds.begin(), kinds.end(), kind) != kinds.end();
 }

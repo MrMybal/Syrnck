@@ -217,7 +217,8 @@ void Store::register_upload_inventory(std::string_view id, std::string_view fenc
     write(*this, lease); // Commit the page before acknowledging it to the sender.
   }
 }
-bool Store::publish_upload_lease(std::string_view id, std::string_view fence) const {
+bool Store::publish_upload_lease(std::string_view id, std::string_view fence,
+                                 OperationOptions options) const {
   auto lease = checked(*this, id, fence);
   if (lease.state == "published")
     return true; // A receipt never republishes a reference changed later.
@@ -228,7 +229,14 @@ bool Store::publish_upload_lease(std::string_view id, std::string_view fence) co
   }
   if (lease.state != "active")
     throw LeaseRejected("upload lease is expired, released or fenced");
-  if (!compare_set_ref(lease.reference, lease.expected, lease.root))
+  const auto observer = options.progress;
+  options.progress = [&, observer](const ProgressEvent &event) {
+    if (observer)
+      observer(event);
+    if (event.phase == ProgressPhase::publishing && lease.expires_at <= unix_seconds())
+      throw LeaseRejected("upload lease expired before publication");
+  };
+  if (!compare_update_refs({{lease.reference, lease.expected, lease.root}}, options))
     return false;
   lease.state = "published";
   write(*this, lease);

@@ -23,6 +23,9 @@ public:
   Json renew(std::string_view owner, const std::vector<AssetLockClaim> &, std::uint64_t seconds = 3600,
              OperationOptions = {}) const;
   Json release(std::string_view owner, const std::vector<AssetLockClaim> &, OperationOptions = {}) const;
+  // Read-only validation of an active fenced group; returns the earliest expiry.
+  std::uint64_t validate(std::string_view owner, const std::vector<AssetLockClaim> &,
+                         OperationOptions = {}) const;
   Json prune(bool remove = false, OperationOptions = {}) const;
 };
 } // namespace syrnck

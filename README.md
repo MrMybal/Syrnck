@@ -170,8 +170,10 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide
 [repository-local asset leases](docs/ASSET_LOCKS.md), with atomic groups, expiry
-and persistent fencing generations. The caller supplies a trusted owner identity;
-remote authentication and publication enforcement remain future integration work.
+and persistent fencing generations. [Configured server access](docs/SERVER_ACCESS.md)
+adds authenticated owners, remote leases, repository roles, write-path permissions
+and branch publication checks. `native push` transfers autonomous history;
+`native fetch` updates archived tracking references without changing working files.
 
 In an existing Git repository, run `syrnck git install`, then add the appropriate rules from [examples/unreal.gitattributes](examples/unreal.gitattributes). An opt-in [pre-push hook](docs/GIT_ASSETS.md#opt-in-pre-push-hook) can verify and upload assets throughout the history being pushed before Git proceeds. Install it explicitly and configure a separate block URL. [Checkout policies](docs/GIT_ASSETS.md#on-demand-checkout-and-pointer-only-clones) support verified local reconstruction, opt-in downloads of missing blocks, and pointer-only clones for code work. The [resident filter](docs/GIT_FILTER_PROCESS.md) keeps one Store and its bounded verified cache across files in a Git command. Deferred hydration and a watcher remain future work.
 

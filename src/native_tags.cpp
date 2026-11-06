@@ -247,7 +247,7 @@ std::string Store::resolve_native_revision(std::string_view selector, OperationO
     const auto all = refs();
     if (selector.starts_with(tag_prefix))
       target = read_tag(*this, all, selector.substr(tag_prefix.size())).target();
-    else if (selector.starts_with("heads/"))
+    else if (selector.starts_with("heads/") || selector.starts_with("remotes/"))
       target = lookup(all, std::string(selector));
     else {
       const auto branch = lookup(all, "heads/" + std::string(selector));

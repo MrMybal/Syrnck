@@ -324,7 +324,7 @@ public:
                                    bool inventory = false) const;
   void register_upload_inventory(std::string_view id, std::string_view fence, std::uint32_t page,
                                  const std::vector<ObjectKey> &) const;
-  bool publish_upload_lease(std::string_view id, std::string_view fence) const;
+  bool publish_upload_lease(std::string_view id, std::string_view fence, OperationOptions = {}) const;
   void confirm_upload_lease(std::string_view id, std::string_view fence) const;
   void release_upload_lease(std::string_view id) const;
   std::size_t prune_upload_leases() const;

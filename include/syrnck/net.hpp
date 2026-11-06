@@ -1,6 +1,7 @@
 #pragma once
 #include <syrnck/core.hpp>
 #include <syrnck/i18n.hpp>
+#include <syrnck/asset_locks.hpp>
 namespace syrnck::net {
 // The server may have committed its CAS, but the client received no usable reply.
 struct PublicationUncertain : Error {
@@ -23,6 +24,7 @@ struct TransferOptions {
   ObjectCompression compression = ObjectCompression::automatic;
   // Push-only: refuse replacing an existing reference with another object.
   bool immutable_reference = false;
+  std::vector<AssetLockClaim> asset_locks;
   void validate() const;
 };
 struct ServeOptions {
@@ -30,6 +32,8 @@ struct ServeOptions {
   bool require_upload_lease = false;
   std::uint64_t read_lease_seconds = 3600;
   bool object_compression = true;
+  // Strict identity/branch/write-path configuration. No legacy token fallback.
+  std::optional<Json> access;
   void validate() const;
 };
 void serve(Store &, std::string_view token, std::string_view listen = "127.0.0.1:7437",
@@ -38,6 +42,8 @@ class Remote {
 public:
   Remote(std::string url, std::string token, std::optional<fs::path> ca = {});
   Refs refs(OperationOptions = {}, TransferOptions = {}) const;
+  Json identity(OperationOptions = {}) const;
+  Json locks(std::string_view action, const Json &request = Json::object(), OperationOptions = {}) const;
   Json push(const Store &, const ObjectKey &, std::string_view remote_ref, OperationOptions = {},
             TransferOptions = {}) const;
   Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {},

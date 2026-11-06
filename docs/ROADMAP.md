@@ -88,9 +88,10 @@ Critère de sortie : budgets CPU/RAM/IO documentés, débits p50/p95 et octets t
 ## 3 — Équipes et Unreal Engine
 
 - [x] Socle local C++/CLI des verrous d’assets : propriétaire fourni par l’appelant, acquisition/renouvellement/libération groupés atomiques, expiration, compteur de générations conservé après GC et purge explicite.
-- [ ] API distante de verrous, propriétaires issus des identités authentifiées et coordination des clients.
-- [ ] Validation serveur des verrous à la publication ; gestion des branches et mode hors ligne.
-- [ ] Rôles et ACL par dépôt/chemin, audit et identité des appareils/utilisateurs.
+- [x] API distante de verrous et CLI/C++ : propriétaires issus de jetons par identité, groupes atomiques, expiration, renouvellement, séparation des baux de transfert par identité et validations sur serveur réel.
+- [x] Validation serveur des verrous à la publication de branches autonomes : propriétaire/génération/expiration, chemins obligatoires et verrous actifs, contrôle final après vérification complète des blocs.
+- [x] Rôles lecteur/rédacteur/administrateur par dépôt, permissions d’écriture par chemin et branche, contrôles des commits intermédiaires et avance rapide ; configuration stricte sans repli sur le jeton partagé.
+- [ ] Audit persistant, gestion distante des comptes/appareils, isolation de lecture par chemin, coordination hors ligne et règles de publication Git.
 - [ ] Plugin Unreal : état, historique, locks, submit, revert et résolution des conflits.
 - [ ] Workspaces partiels, sélection de Content/Plugins et téléchargement à la demande.
 - [ ] Prise en charge des ensembles `.uasset/.uexp/.ubulk`, World Partition et external actors.
@@ -168,7 +169,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.
 - [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
-- [ ] Push/pull des références avec validation d'ascendance et politiques serveur.
+- [x] Push de branches autonomes et fetch de références de suivi : fermeture complète, baux/reprise, publication CAS, règles serveur d’ascendance et de chemins ; têtes de suivi précédentes archivées et workspace intact.
+- [ ] Synchronisation des tags/annotations/politiques, intégration automatique du pull, administration de la rétention des racines de fetch et tests d’arrêts forcés de cette publication.
 - [ ] Import/export Git préservant l'information représentable dans les deux modèles.
 
 Critère de sortie : scénarios de travail complets comparés à Git, avec historique et résolution des conflits vérifiables. La représentation actuelle des révisions ne suffit pas à annoncer ces fonctions comme disponibles.
