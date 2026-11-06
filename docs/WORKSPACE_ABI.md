@@ -31,8 +31,10 @@ using the workspace-then-Store order. A caller can still keep a Store open while
 waiting; that caller would keep its exclusive Store lock unnecessarily.
 
 The session retains every batch consumed by a wait until a successful status.
-Multiple waits, an ignored wait result and a Go wait cancelled after consuming a
-native batch do not lose its hints. Coalescing deduplicates paths, preserves
+Multiple successful waits and an ignored wait result do not lose hints. Native
+cancellation invalidates continuity even if it interrupts batch processing; the
+next successful status performs a complete byte scan instead of trusting a
+partial inventory. Coalescing deduplicates paths, preserves
 full-scan/polling flags and requests a full scan after exceeding the configured
 path count or 1 MiB accounting budget. Failed native waits, status queries and
 JSON allocation/serialization invalidate inventory continuity. Pending hints are
@@ -103,9 +105,59 @@ if (result == 0) {
 /* The next wait holds no Store lock. Free its JSON result in the same way. */
 ```
 
+## Cooperative cancellation and C progress
+
+The existing calls keep their signatures and delegate to `*_ex` with no
+cancellation source/callback. Additional ABI 1 calls are:
+
+- `syrnck_cancellation_create`, `syrnck_cancellation_request` and
+  `syrnck_cancellation_close` manage one-shot sources.
+- `syrnck_workspace_open_ex` and `syrnck_workspace_wait_json_ex` accept a
+  nullable cancellation source, including recursive registration/recovery.
+- `syrnck_workspace_status_json_ex` accepts a nullable `SyrnckOperation` with a
+  source, synchronous progress callback and caller-owned user pointer.
+
+Request is idempotent and may run concurrently with the using operation or
+other requests. All using calls and requests must return before closing the
+source. There is no reset: create a fresh source for another operation. Request
+on NULL fails; close on NULL succeeds. No source is stored in the workspace.
+
+Cancellation observed by the native operation returns `SYRNCK_CANCELLED` (3),
+with NULL output and zero length. A cancelled open returns no handle. A cancelled
+wait/status invalidates the session; retry without a requested source requires
+a complete observation. A request after the final output check can follow a
+successful result. Individual OS IO, filesystem metadata operations and JSON
+encoding may finish before a cooperative checkpoint; there is no hard latency
+bound. Cancellation can leave updated/cleared disposable hash caches or
+collectible cache objects. References, staging, retained file data and working
+contents are not changed by these advisory observations.
+
+Progress callbacks execute synchronously on the caller's thread. `SyrnckProgress`
+contains the stable `SyrnckProgressPhase` number, borrowed path bytes and
+length, byte count, optional total, completion flag and buffered-block count.
+Paths are not necessarily NUL terminated. Copy anything needed after the callback
+returns; neither the event nor the callback/user pointer is retained. Never
+reenter/close the Store or workspace, throw, or unwind through the ABI from a
+callback. It may call `syrnck_cancellation_request` safely. These callbacks are
+available in C; the Go context API does not yet expose progress callbacks.
+
+```c
+static void stop_after_first_chunk(const SyrnckProgress *event, void *user) {
+    if (event->phase == SYRNCK_PHASE_VERIFYING && event->bytes >= 1024 * 1024)
+        syrnck_cancellation_request((SyrnckCancellation *)user);
+}
+/* Keep cancellation and operation alive for the complete status call. */
+SyrnckOperation operation = {cancellation, stop_after_first_chunk, cancellation};
+int result = syrnck_workspace_status_json_ex(workspace, store, NULL, 0,
+                                            &operation, &json, &length);
+/* Inspect/copy diagnostics first. Close cancellation only after all request
+   threads have also returned. Free json only when the result owns it. */
+```
+
 ## Go usage
 
-`OpenWorkspace`, `Wait`, `Status`, `Invalidate` and `Close` wrap those operations.
+`OpenWorkspace`, `OpenWorkspaceContext`, `Wait`, `Status`, `StatusContext`,
+`Invalidate` and `Close` wrap those operations.
 `Wait` returns typed `WorkspaceChanges`; `Status` returns `json.RawMessage` so
 all current status fields remain available. Its zero `WorkspaceSelection`
 follows HEAD, `Branch` overrides it, `Revision` selects an exact/resolved
@@ -114,13 +166,13 @@ other two options. `Close` is idempotent; calls on a closed workspace return
 `ErrWorkspaceClosed`.
 
 ```go
-w, err := syrnck.OpenWorkspace(project, storePath, syrnck.WorkspaceOptions{})
+w, err := syrnck.OpenWorkspaceContext(ctx, project, storePath, syrnck.WorkspaceOptions{})
 if err != nil { return err }
 defer w.Close()
 
 s, err := syrnck.Open(storePath, syrnck.Options{Key: key})
 if err != nil { return err }
-report, err := w.Status(s, syrnck.WorkspaceSelection{Combined: true})
+report, err := w.StatusContext(ctx, s, syrnck.WorkspaceSelection{Combined: true})
 closeErr := s.Close()
 if err != nil { return err }
 if closeErr != nil { return closeErr }
@@ -135,13 +187,24 @@ _ = changes
 Go validates UTF-8/NUL inputs, normalizes zero option limits, serializes calls,
 copies native output into Go memory, frees native allocations and reads
 thread-local errors on the same OS thread as the failed call. Wait accepts
-0..one minute and checks its context between native waits of at most 50 ms.
-Polling becomes actionable at the requested deadline, rather than every internal
-slice. Close waits for any active call; cancel a long idle Wait first.
+0..one minute and passes cancellation into a single native wait. Native idle
+waits check stop requests about every 50 ms; polling becomes actionable at the
+requested deadline. Registration and status hashing also use cooperative stop
+checks. `OpenWorkspace` and `Status` use `context.Background()` for compatibility.
 
-The context does not interrupt native directory registration/recovery already
-underway. Status hashing and registration are not yet cancellable/progress-aware
-through this ABI. The C++ APIs retain their existing stop-token support.
+Context cancellation maps native status 3 to `context.Canceled` or
+`context.DeadlineExceeded`. The callback that requests the native source is
+stopped/joined before the source is released. Each call owns a fresh source;
+a late request cannot cancel a later query. A completed native success/error
+wins over cancellation arriving after its final check. A context that expires
+before native execution returns its error without starting the operation.
+
+Wait/StatusContext can also abandon the workspace/Store serialization wait when
+the context expires. Lock order remains workspace-then-Store, with the existing
+stable Store order retained by differential copying. Close still waits for any
+active call, so cancel a long call before closing. Ordinary Store methods keep
+their existing cancellation behavior; this context bridge currently applies to
+workspace opening, waiting and status only.
 
 ## Scope and validation
 
@@ -156,6 +219,11 @@ Local Windows tests exercise static/shared C linking, output ownership/null
 failures, native and polling observation with plain/encrypted Stores, retained
 batches, targeted reads beside a 4 MiB file, coalesced overflow, revision/combined
 selection, query failure recovery, explicit audits, Store reopening, context
-cancellation, concurrent Go calls and closed handles. The Go tests also run with
+cancellation, concurrent Go calls and closed handles. Additional static/shared
+C tests cancel at scanning, mid-file hashing and cache-publication progress
+checkpoints, verify null outputs and full recovery, preserve refs/staging/working
+data through GC, and exercise concurrent one-shot requests. Go coverage includes
+an active native scan, native idle waits, cancelled serialization waits, source
+lifetime/completion races and pre-cancelled opening. The Go tests also run with
 `-d=checkptr=2`. Linux/macOS cgo and native execution require the existing CI
 matrix; Windows DLL tests do not validate those backends.

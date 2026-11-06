@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"runtime"
-	"sync"
 	"time"
 )
 
@@ -46,11 +45,20 @@ type WorkspaceSelection struct {
 // Store for each query, and close that Store before waiting again. Schedule
 // periodic Invalidate calls for complete audits independently of notifications.
 type Workspace struct {
-	mu     sync.Mutex
+	mu     contextMutex
 	handle nativeWorkspaceHandle
 }
 
 func OpenWorkspace(directory, storage string, options WorkspaceOptions) (*Workspace, error) {
+	return OpenWorkspaceContext(context.Background(), directory, storage, options)
+}
+
+// OpenWorkspaceContext can cancel native recursive registration. Both paths
+// must exist; individual OS filesystem calls may finish before a stop check.
+func OpenWorkspaceContext(ctx context.Context, directory, storage string, options WorkspaceOptions) (*Workspace, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root, err := text(directory)
 	if err != nil {
 		return nil, err
@@ -71,7 +79,12 @@ func OpenWorkspace(directory, storage string, options WorkspaceOptions) (*Worksp
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	handle, err := nativeWorkspaceOpen(root, store, &config)
+	var handle nativeWorkspaceHandle
+	err = withNativeCancellation(ctx, func(cancellation nativeCancellationHandle) error {
+		var failure error
+		handle, failure = nativeWorkspaceOpen(root, store, &config, cancellation)
+		return failure
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -102,53 +115,51 @@ func (w *Workspace) Invalidate() error {
 	return nativeWorkspaceInvalidate(w.handle)
 }
 
-// Wait accepts 0..one minute. Context is checked between native waits of at most
-// 50 ms; a native registration/recovery already underway must finish first.
-// A cancelled result does not discard internally retained hints. Close waits
-// for the active call; cancel the context to finish a long idle Wait early.
+// Wait accepts 0..one minute. Context can interrupt native waits and recursive
+// registration/recovery at cooperative checkpoints. Native cancellation
+// invalidates continuity for a complete byte scan on the next Status.
+// Close waits for the active call. A native result completed before cancellation
+// was observed is returned normally, even if the context expires just afterwards.
 func (w *Workspace) Wait(ctx context.Context, timeout time.Duration) (WorkspaceChanges, error) {
 	var result WorkspaceChanges
 	if timeout < 0 || timeout > time.Minute {
 		return result, errors.New("syrnck: workspace wait must be in 0..one minute")
 	}
-	w.mu.Lock()
+	if err := w.mu.LockContext(ctx); err != nil {
+		return result, err
+	}
 	defer w.mu.Unlock()
 	if w.handle == zeroWorkspaceHandle {
 		return result, ErrWorkspaceClosed
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	deadline := time.Now().Add(timeout)
-	for {
-		if err := ctx.Err(); err != nil {
-			return WorkspaceChanges{}, err
-		}
-		remaining := time.Until(deadline)
-		var tick uint32
-		if remaining > 0 {
-			tick = uint32((min(remaining, 50*time.Millisecond) + time.Millisecond - 1) / time.Millisecond)
-		}
-		data, err := nativeWorkspaceWait(w.handle, tick)
-		if err != nil {
-			return WorkspaceChanges{}, err
-		}
-		if err = json.Unmarshal(data, &result); err != nil {
-			return WorkspaceChanges{}, err
-		}
-		if err = ctx.Err(); err != nil {
-			return WorkspaceChanges{}, err
-		}
-		if result.FullScan || result.Overflow || len(result.Paths) != 0 || !time.Now().Before(deadline) {
-			return result, nil
-		}
-		// Polling is returned at the caller's deadline, rather than every 50 ms.
+	milliseconds := uint32((timeout + time.Millisecond - 1) / time.Millisecond)
+	var data []byte
+	err := withNativeCancellation(ctx, func(cancellation nativeCancellationHandle) error {
+		var failure error
+		data, failure = nativeWorkspaceWait(w.handle, milliseconds, cancellation)
+		return failure
+	})
+	if err != nil {
+		return result, err
 	}
+	if err = json.Unmarshal(data, &result); err != nil {
+		return WorkspaceChanges{}, err
+	}
+	return result, nil
 }
 
 // Status returns the canonical native status JSON (combined or working).
-// Status and native registration are not cancellable inside an ABI call yet.
-// Failed queries invalidate continuity; the next success reads all file bytes.
+// It is equivalent to StatusContext with context.Background().
 func (w *Workspace) Status(store *Store, selection WorkspaceSelection) (json.RawMessage, error) {
+	return w.StatusContext(context.Background(), store, selection)
+}
+
+// StatusContext propagates cancellation through scanning, file hashing and
+// metadata comparison. Individual filesystem calls/JSON encoding may finish
+// before the next check. Failure invalidates continuity for full recovery.
+func (w *Workspace) StatusContext(ctx context.Context, store *Store, selection WorkspaceSelection) (json.RawMessage, error) {
 	if store == nil {
 		return nil, errors.New("syrnck: nil store")
 	}
@@ -170,16 +181,20 @@ func (w *Workspace) Status(store *Store, selection WorkspaceSelection) (json.Raw
 			return nil, err
 		}
 	}
-	w.mu.Lock()
+	if err := w.mu.LockContext(ctx); err != nil {
+		return nil, err
+	}
 	defer w.mu.Unlock()
 	if w.handle == zeroWorkspaceHandle {
 		return nil, ErrWorkspaceClosed
 	}
 	var data []byte
-	err := store.with(func() error {
-		var failure error
-		data, failure = nativeWorkspaceStatus(w.handle, store.handle, selected, mode)
-		return failure
+	err := store.withContext(ctx, func() error {
+		return withNativeCancellation(ctx, func(cancellation nativeCancellationHandle) error {
+			var failure error
+			data, failure = nativeWorkspaceStatus(w.handle, store.handle, selected, mode, cancellation)
+			return failure
+		})
 	})
 	if err != nil {
 		// Store.with can fail before entering the ABI (for example, Close).

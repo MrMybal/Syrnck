@@ -11,6 +11,7 @@ struct SyrnckStore {
   SyrnckStore(const syrnck::fs::path &p, std::optional<syrnck::Key> key, bool create)
       : store(p, key, create) {}
 };
+struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
   syrnck::fs::path directory;
   syrnck::WorkspaceWatcher watcher;
@@ -18,8 +19,8 @@ struct SyrnckWorkspace {
   syrnck::WorkspaceChanges pending;
   std::size_t max_paths;
   SyrnckWorkspace(const syrnck::fs::path &root, const syrnck::fs::path &storage,
-                  syrnck::WorkspaceWatchOptions options)
-      : directory(syrnck::fs::canonical(root)), watcher(directory, storage, options),
+                  syrnck::WorkspaceWatchOptions options, std::stop_token stop)
+      : directory(syrnck::fs::canonical(root)), watcher(directory, storage, options, stop),
         observation(directory, storage), max_paths(options.max_paths) { invalidate(); }
   void invalidate() {
     observation.invalidate();
@@ -40,6 +41,9 @@ template <class Operation> int boundary(const Operation &operation) noexcept {
     operation();
     last_error[0] = 0;
     return 0;
+  } catch (const syrnck::Cancelled &e) {
+    set_error(e.what());
+    return SYRNCK_CANCELLED;
   } catch (const std::exception &e) {
     set_error(e.what());
     return 1;
@@ -60,11 +64,47 @@ SyrnckWorkspace &checked(SyrnckWorkspace *p) {
   syrnck::require(p != nullptr, "null workspace handle");
   return *p;
 }
-void json_output(const syrnck::Json &value, char **out, std::size_t *length) {
+std::stop_token stop_token(const SyrnckCancellation *cancellation) {
+  return cancellation ? cancellation->source.get_token() : std::stop_token{};
+}
+std::uint32_t progress_phase(syrnck::ProgressPhase phase) {
+  switch (phase) {
+  case syrnck::ProgressPhase::scanning: return SYRNCK_PHASE_SCANNING;
+  case syrnck::ProgressPhase::ingesting: return SYRNCK_PHASE_INGESTING;
+  case syrnck::ProgressPhase::reconstructing: return SYRNCK_PHASE_RECONSTRUCTING;
+  case syrnck::ProgressPhase::publishing: return SYRNCK_PHASE_PUBLISHING;
+  case syrnck::ProgressPhase::verifying: return SYRNCK_PHASE_VERIFYING;
+  case syrnck::ProgressPhase::exporting: return SYRNCK_PHASE_EXPORTING;
+  case syrnck::ProgressPhase::transferring: return SYRNCK_PHASE_TRANSFERRING;
+  case syrnck::ProgressPhase::planning: return SYRNCK_PHASE_PLANNING;
+  case syrnck::ProgressPhase::packing: return SYRNCK_PHASE_PACKING;
+  }
+  throw syrnck::Error("invalid operation progress phase");
+}
+syrnck::OperationOptions operation_options(const SyrnckOperation *operation) {
+  syrnck::OperationOptions result;
+  if (!operation) return result;
+  result.stop = stop_token(operation->cancellation);
+  if (operation->progress) {
+    const auto callback = operation->progress;
+    const auto user = operation->user;
+    result.progress = [callback, user](const syrnck::ProgressEvent &event) {
+      const SyrnckProgress value{progress_phase(event.phase), event.path.data(), event.path.size(),
+          event.bytes, event.total_bytes.value_or(0), event.total_bytes ? 1u : 0u,
+          event.complete ? 1u : 0u, event.buffered_blocks};
+      callback(&value, user);
+    };
+  }
+  return result;
+}
+void json_output(const syrnck::Json &value, char **out, std::size_t *length, std::stop_token stop) {
+  syrnck::throw_if_cancelled(stop);
   auto text = value.dump();
+  syrnck::throw_if_cancelled(stop);
   syrnck::require(text.size() <= 128 * 1024 * 1024, "workspace output exceeds 128 MiB");
   auto result = std::make_unique<char[]>(text.size() + 1);
   std::memcpy(result.get(), text.c_str(), text.size() + 1);
+  syrnck::throw_if_cancelled(stop);
   *length = text.size() + 1;
   *out = result.release();
 }
@@ -292,18 +332,42 @@ int syrnck_store_verify(SyrnckStore *p, std::size_t *objects) {
     *objects = checked(p).fsck();
   });
 }
-int syrnck_workspace_open(const char *directory, const char *storage, const SyrnckWorkspaceOptions *options,
-                           SyrnckWorkspace **out) {
+int syrnck_cancellation_create(SyrnckCancellation **out) {
   return boundary([&] {
     syrnck::require(out != nullptr, "null output handle");
     *out = nullptr;
+    *out = new SyrnckCancellation;
+  });
+}
+int syrnck_cancellation_request(SyrnckCancellation *cancellation) {
+  return boundary([&] {
+    syrnck::require(cancellation != nullptr, "null cancellation handle");
+    cancellation->source.request_stop();
+  });
+}
+int syrnck_cancellation_close(SyrnckCancellation *cancellation) {
+  return boundary([&] { delete cancellation; });
+}
+int syrnck_workspace_open(const char *directory, const char *storage, const SyrnckWorkspaceOptions *options,
+                           SyrnckWorkspace **out) {
+  return syrnck_workspace_open_ex(directory, storage, options, nullptr, out);
+}
+int syrnck_workspace_open_ex(const char *directory, const char *storage, const SyrnckWorkspaceOptions *options,
+                              const SyrnckCancellation *cancellation, SyrnckWorkspace **out) {
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    *out = nullptr;
+    const auto stop = stop_token(cancellation);
+    syrnck::throw_if_cancelled(stop);
     syrnck::WorkspaceWatchOptions selected;
     if (options) {
       syrnck::require(options->polling <= 1, "invalid workspace polling flag");
       selected = {options->polling != 0, options->max_paths, options->max_directories};
     }
-    *out = new SyrnckWorkspace(syrnck::path_from_utf8(checked(directory)),
-                                syrnck::path_from_utf8(checked(storage)), selected);
+    auto result = std::make_unique<SyrnckWorkspace>(syrnck::path_from_utf8(checked(directory)),
+                                                    syrnck::path_from_utf8(checked(storage)), selected, stop);
+    syrnck::throw_if_cancelled(stop);
+    *out = result.release();
   });
 }
 int syrnck_workspace_close(SyrnckWorkspace *workspace) {
@@ -311,33 +375,45 @@ int syrnck_workspace_close(SyrnckWorkspace *workspace) {
 }
 int syrnck_workspace_wait_json(SyrnckWorkspace *workspace, std::uint32_t timeout, char **out,
                                std::size_t *length) {
+  return syrnck_workspace_wait_json_ex(workspace, timeout, nullptr, out, length);
+}
+int syrnck_workspace_wait_json_ex(SyrnckWorkspace *workspace, std::uint32_t timeout,
+                                  const SyrnckCancellation *cancellation, char **out, std::size_t *length) {
   return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
-    auto changes = session.watcher.wait(std::chrono::milliseconds(timeout));
+    const auto stop = stop_token(cancellation);
+    auto changes = session.watcher.wait(std::chrono::milliseconds(timeout), stop);
     session.pending.merge(changes, session.max_paths);
     json_output(syrnck::Json{{"version", 1}, {"backend", session.watcher.backend()}, {"paths", changes.paths},
                   {"full_scan", changes.full_scan}, {"overflow", changes.overflow}, {"polling", changes.polling}},
-                out, length);
+                out, length, stop);
   });
 }
 int syrnck_workspace_status_json(SyrnckWorkspace *workspace, SyrnckStore *p, const char *selector,
                                  std::uint32_t mode, char **out, std::size_t *length) {
+  return syrnck_workspace_status_json_ex(workspace, p, selector, mode, nullptr, out, length);
+}
+int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, const char *selector,
+                                    std::uint32_t mode, const SyrnckOperation *operation, char **out,
+                                    std::size_t *length) {
   return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
     auto &store = checked(p);
     syrnck::require(mode <= 2, "invalid workspace status mode");
     // Identity checks and newly queued hints apply even without an explicit wait.
-    session.pending.merge(session.watcher.wait(std::chrono::milliseconds(0)), session.max_paths);
+    session.pending.merge(session.watcher.wait(std::chrono::milliseconds(0), options.stop), session.max_paths);
     const auto head = store.native_head();
     syrnck::require(head["directory"].is_null() || head["directory"].get<std::string>() == syrnck::utf8(session.directory),
                     "native HEAD belongs to another workspace");
     syrnck::require_no_native_checkout(store);
     syrnck::Json report;
     if (mode == 1) {
-      const auto revision = store.resolve_native_revision(checked(selector));
-      report = session.observation.status(store, revision, session.pending);
+      const auto revision = store.resolve_native_revision(checked(selector), options);
+      report = session.observation.status(store, revision, session.pending, options);
     } else {
       const auto branch = selector ? std::string(selector) : head["branch"].get<std::string>();
       syrnck::validate_ref(branch);
-      if (mode == 2) report = session.observation.workspace_status(store, branch, session.pending);
+      if (mode == 2) report = session.observation.workspace_status(store, branch, session.pending, options);
       else {
         std::optional<std::string> revision;
         const auto refs = store.refs();
@@ -345,10 +421,10 @@ int syrnck_workspace_status_json(SyrnckWorkspace *workspace, SyrnckStore *p, con
           syrnck::require(found->second.kind == syrnck::Kind::revision, "branch must point to a revision");
           revision = found->second.id;
         }
-        report = session.observation.status(store, revision, session.pending);
+        report = session.observation.status(store, revision, session.pending, options);
       }
     }
-    json_output(report, out, length);
+    json_output(report, out, length, options.stop);
     session.pending = {};
   });
 }

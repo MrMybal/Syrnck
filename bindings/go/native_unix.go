@@ -126,12 +126,12 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 
 type nativeWorkspaceHandle = *C.SyrnckWorkspace
 
-func nativeWorkspaceOpen(root, store []byte, config *[3]uint32) (nativeWorkspaceHandle, error) {
+func nativeWorkspaceOpen(root, store []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
 	if C.syrnck_abi_version() != 1 {
 		return nil, errors.New("unsupported Syrnck ABI")
 	}
 	var result nativeWorkspaceHandle
-	err := status(int(C.syrnck_workspace_open(ctext(root), ctext(store), (*C.SyrnckWorkspaceOptions)(unsafe.Pointer(config)), &result)))
+	err := status(int(C.syrnck_workspace_open_ex(ctext(root), ctext(store), (*C.SyrnckWorkspaceOptions)(unsafe.Pointer(config)), cancellation, &result)))
 	return result, err
 }
 func nativeWorkspaceClose(h nativeWorkspaceHandle) error {
@@ -157,15 +157,33 @@ func workspaceJSONResult(code int, ptr *C.char, length C.size_t) ([]byte, error)
 	}
 	return data[:len(data)-1], nil
 }
-func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32) ([]byte, error) {
+func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32, cancellation nativeCancellationHandle) ([]byte, error) {
 	var ptr *C.char
 	var length C.size_t
-	code := int(C.syrnck_workspace_wait_json(h, C.uint32_t(timeout), &ptr, &length))
+	code := int(C.syrnck_workspace_wait_json_ex(h, C.uint32_t(timeout), cancellation, &ptr, &length))
 	return workspaceJSONResult(code, ptr, length)
 }
-func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32) ([]byte, error) {
+func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32, cancellation nativeCancellationHandle) ([]byte, error) {
 	var ptr *C.char
 	var length C.size_t
-	code := int(C.syrnck_workspace_status_json(h, store, ctext(selector), C.uint32_t(mode), &ptr, &length))
+	operation := C.SyrnckOperation{cancellation: cancellation}
+	code := int(C.syrnck_workspace_status_json_ex(h, store, ctext(selector), C.uint32_t(mode), &operation, &ptr, &length))
 	return workspaceJSONResult(code, ptr, length)
+}
+
+type nativeCancellationHandle = *C.SyrnckCancellation
+
+func nativeCancellationCreate() (nativeCancellationHandle, error) {
+	if C.syrnck_abi_version() != 1 {
+		return nil, errors.New("unsupported Syrnck ABI")
+	}
+	var result nativeCancellationHandle
+	err := status(int(C.syrnck_cancellation_create(&result)))
+	return result, err
+}
+func nativeCancellationRequest(h nativeCancellationHandle) error {
+	return status(int(C.syrnck_cancellation_request(h)))
+}
+func nativeCancellationClose(h nativeCancellationHandle) error {
+	return status(int(C.syrnck_cancellation_close(h)))
 }

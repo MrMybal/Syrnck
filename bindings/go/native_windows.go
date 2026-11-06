@@ -34,7 +34,7 @@ func loadLibrary() error {
 			return
 		}
 		library.functions = make(map[string]*syscall.Proc)
-		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify", "string_free", "workspace_open", "workspace_close", "workspace_wait_json", "workspace_status_json", "workspace_invalidate"} {
+		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify", "string_free", "workspace_open", "workspace_close", "workspace_wait_json", "workspace_status_json", "workspace_invalidate", "cancellation_create", "cancellation_request", "cancellation_close", "workspace_open_ex", "workspace_wait_json_ex", "workspace_status_json_ex"} {
 			p, err := library.dll.FindProc("syrnck_" + name)
 			if err != nil {
 				library.err = err
@@ -212,12 +212,12 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 
 type nativeWorkspaceHandle uintptr
 
-func nativeWorkspaceOpen(root, store []byte, config *[3]uint32) (nativeWorkspaceHandle, error) {
+func nativeWorkspaceOpen(root, store []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
 	if err := loadLibrary(); err != nil {
 		return 0, err
 	}
 	var result nativeWorkspaceHandle
-	r, _, _ := library.functions["workspace_open"].Call(uintptr(unsafe.Pointer(&root[0])), uintptr(unsafe.Pointer(&store[0])), uintptr(unsafe.Pointer(config)), uintptr(unsafe.Pointer(&result)))
+	r, _, _ := library.functions["workspace_open_ex"].Call(uintptr(unsafe.Pointer(&root[0])), uintptr(unsafe.Pointer(&store[0])), uintptr(unsafe.Pointer(config)), uintptr(cancellation), uintptr(unsafe.Pointer(&result)))
 	runtime.KeepAlive(root)
 	runtime.KeepAlive(store)
 	runtime.KeepAlive(config)
@@ -248,14 +248,35 @@ func workspaceJSONResult(code int, ptr, length uintptr) ([]byte, error) {
 	}
 	return append([]byte(nil), data[:len(data)-1]...), nil
 }
-func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32) ([]byte, error) {
+func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32, cancellation nativeCancellationHandle) ([]byte, error) {
 	var ptr, length uintptr
-	r, _, _ := library.functions["workspace_wait_json"].Call(uintptr(h), uintptr(timeout), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	r, _, _ := library.functions["workspace_wait_json_ex"].Call(uintptr(h), uintptr(timeout), uintptr(cancellation), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	return workspaceJSONResult(int(r), ptr, length)
 }
-func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32) ([]byte, error) {
+func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32, cancellation nativeCancellationHandle) ([]byte, error) {
 	var ptr, length uintptr
-	r, _, _ := library.functions["workspace_status_json"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(selector))), uintptr(mode), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	operation := [3]uintptr{uintptr(cancellation), 0, 0}
+	r, _, _ := library.functions["workspace_status_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(selector))), uintptr(mode), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	runtime.KeepAlive(operation)
 	runtime.KeepAlive(selector)
 	return workspaceJSONResult(int(r), ptr, length)
+}
+
+type nativeCancellationHandle uintptr
+
+func nativeCancellationCreate() (nativeCancellationHandle, error) {
+	if err := loadLibrary(); err != nil {
+		return 0, err
+	}
+	var result nativeCancellationHandle
+	r, _, _ := library.functions["cancellation_create"].Call(uintptr(unsafe.Pointer(&result)))
+	return result, status(int(r))
+}
+func nativeCancellationRequest(h nativeCancellationHandle) error {
+	r, _, _ := library.functions["cancellation_request"].Call(uintptr(h))
+	return status(int(r))
+}
+func nativeCancellationClose(h nativeCancellationHandle) error {
+	r, _, _ := library.functions["cancellation_close"].Call(uintptr(h))
+	return status(int(r))
 }

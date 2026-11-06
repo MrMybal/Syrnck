@@ -82,8 +82,13 @@ requests a complete audit; schedule those independently of notifications.
 The zero options use native Windows/Linux notifications with polling fallback,
 4096 path hints and 65536 registrations. Calls and `Close` are serialized;
 close explicitly. `Status` returns the canonical JSON as `json.RawMessage`.
-Wait checks context between native slices; status hashing/registration are not
-yet cancellable inside an ABI call. See the English
+`OpenWorkspaceContext` and `StatusContext` pass the context into recursive native
+registration and status hashing; `Wait` can interrupt its native wait directly.
+Context cancellation can also abandon workspace/Store serialization waits. The
+native source is private to each call and is released only after its context
+callback has stopped/completed. Completed native results win over later context
+cancellation. OS IO/JSON encoding may finish before the next cooperative check.
+C progress callbacks are not exposed to Go yet. See the English
 [ownership, lifecycle, examples and limits](../../docs/WORKSPACE_ABI.md).
 
 ## Windows test cleanup

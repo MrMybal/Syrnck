@@ -42,6 +42,15 @@ int main(void) {
         json != NULL || required != 0 || syrnck_workspace_wait_json(NULL, 0, NULL, &required) != 1)
       return 1;
   }
+  {
+    SyrnckCancellation *cancel = NULL;
+    if (SYRNCK_CANCELLED != 3 || syrnck_cancellation_create(NULL) != 1 ||
+        syrnck_cancellation_request(NULL) != 1 || syrnck_cancellation_close(NULL) != 0 ||
+        syrnck_cancellation_create(&cancel) != 0 || !cancel ||
+        syrnck_cancellation_request(cancel) != 0 || syrnck_cancellation_request(cancel) != 0 ||
+        syrnck_cancellation_close(cancel) != 0)
+      return 1;
+  }
   puts("C ABI declarations, linking and null/error handling verified");
   return 0;
 }

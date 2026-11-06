@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"unicode/utf8"
 )
@@ -40,7 +39,7 @@ type Chunking struct {
 // Store must not be copied. Calls and Close are serialized. Close explicitly:
 // the process-wide exclusive store lock is held for the handle's lifetime.
 type Store struct {
-	mu     sync.Mutex
+	mu     contextMutex
 	handle nativeHandle
 	order  uint64
 }
@@ -62,6 +61,9 @@ func keyText(k ObjectKey) ([]byte, []byte, error) {
 }
 
 func status(code int) error {
+	if code == 3 {
+		return errNativeCancelled
+	}
 	if code == 0 {
 		return nil
 	}
@@ -87,7 +89,12 @@ func Open(path string, options Options) (*Store, error) {
 }
 
 func (s *Store) with(operation func() error) error {
-	s.mu.Lock()
+	return s.withContext(context.Background(), operation)
+}
+func (s *Store) withContext(ctx context.Context, operation func() error) error {
+	if err := s.mu.LockContext(ctx); err != nil {
+		return err
+	}
 	defer s.mu.Unlock()
 	if s.handle == zeroHandle {
 		return ErrClosed

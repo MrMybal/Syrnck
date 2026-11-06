@@ -978,3 +978,6 @@ SYRNCK_MESSAGE("null workspace handle", "handle de dossier de travail nul")
 SYRNCK_MESSAGE("workspace output exceeds 128 MiB", "la sortie du dossier de travail dépasse 128 Mio")
 SYRNCK_MESSAGE("invalid workspace polling flag", "indicateur de scrutation du dossier de travail invalide")
 SYRNCK_MESSAGE("invalid workspace status mode", "mode de statut du dossier de travail invalide")
+
+SYRNCK_MESSAGE("null cancellation handle", "handle d'annulation nul")
+SYRNCK_MESSAGE("invalid operation progress phase", "phase de progression de l'opération invalide")
