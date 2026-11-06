@@ -533,7 +533,8 @@ bool Store::compare_set_ref(std::string_view name, const std::optional<ObjectKey
 }
 bool Store::compare_update_refs(const std::vector<RefUpdate> &updates, OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  auto all = refs();
+  const auto original = read_bytes(root() / "refs.json", max_object_size);
+  auto all = parse_refs(original, "invalid refs document");
   std::set<std::string> names;
   std::set<ObjectKey> roots;
   for (const auto &update : updates) {
@@ -561,6 +562,12 @@ bool Store::compare_update_refs(const std::vector<RefUpdate> &updates, Operation
     return true;
   (void)closure(std::vector<ObjectKey>(roots.begin(), roots.end()), true, options.stop, options.progress);
   report_progress(options, {ProgressPhase::publishing, "refs"});
+  throw_if_cancelled(options.stop);
+  // Observers can call reference APIs. Reject stale publication after the last
+  // observer instead of overwriting even an unrelated completed update. This
+  // is a bounded linear byte comparison, without reparsing a second refs DOM.
+  if (read_bytes(root() / "refs.json", max_object_size) != original)
+    return false;
   write_refs(all, options.stop);
   return true;
 }

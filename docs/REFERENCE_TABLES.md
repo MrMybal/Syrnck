@@ -65,3 +65,21 @@ python scripts/benchmark_refs.py --before-exe PATH_TO_BASELINE --after-exe PATH_
 updates, reopening, dependency audits, wide JSON arrays, depth boundaries and
 parser compatibility. `server_authentication` additionally tests the production
 HTTP listing and native agent pull with 16,384 references.
+
+## Observer changes during batch publication
+
+Batch CAS retains the original bounded reference document while validating its
+candidate closures and reporting progress. After the last observer, it checks
+that the persisted document still matches those original bytes. An observer's
+reference insertion, removal or replacement therefore makes the batch return
+`false` without overwriting that update, including references outside the batch.
+A fresh retry uses the resulting table. Rewriting an identical canonical table
+is a no-op and can proceed. Cancellation still precedes publication.
+
+The additional check is a linear read/byte comparison of at most 16 MiB; it does
+not parse another reference DOM or change the disk format. This fences reference
+changes through callbacks, not arbitrary filesystem tampering or general
+concurrent access to one Store handle. Normal exclusive Store locking remains
+required. Tests cover 48 combinations of verification/publishing callbacks,
+insertions/replacements/removals/no-ops and all six encryption/storage layouts,
+followed by retry, GC and dependency verification.
