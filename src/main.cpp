@@ -414,6 +414,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   token-hash                         Empreinte du jeton SYRNCK_TOKEN (sans store)
   backup create NOUVEAU_STORE | verify | restore NOUVEAU_STORE
   backup repair STORE_SAUVEGARDE [--apply]   Prévisualiser/réparer les objets absents
+  backup repair-copy-plan STORE_SAUVEGARDE  Vérifier les objets récupérables
+  backup repair-copy STORE_SAUVEGARDE NOUVEAU_STORE  Reconstruire une copie vérifiée
   backup retire-plan ARCHIVE... --from SAUVEGARDE
   backup retire ARCHIVE... --from SAUVEGARDE --expect-plan ID
   locks identity --remote URL        Afficher l’identité authentifiée
@@ -581,6 +583,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   token-hash                         Hash SYRNCK_TOKEN (no store needed)
   backup create NEW_STORE | verify | restore NEW_STORE
   backup repair BACKUP_STORE [--apply]   Preview/repair missing objects
+  backup repair-copy-plan BACKUP_STORE  Inspect recoverable retained objects
+  backup repair-copy BACKUP_STORE NEW_STORE  Rebuild a verified Store from both inputs
   backup retire-plan ARCHIVE... --from BACKUP
   backup retire ARCHIVE... --from BACKUP --expect-plan ID
   locks identity --remote URL        Show the authenticated identity
@@ -1775,6 +1779,24 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       Store backup(path_from_utf8(*from), secondary);
       print(sub == "retire-plan" ? plan_archive_retirement(store, backup, names, operation)
                                  : retire_archives(store, backup, names, *expected, operation));
+    } else if (sub == "repair-copy" || sub == "repair-copy-plan") {
+      args.count(sub == "repair-copy" ? 2 : 1);
+      Store backup(path_from_utf8(args.values[0]), secondary);
+      if (sub == "repair-copy-plan")
+        print(plan_repaired_copy(store, backup, operation));
+      else {
+        auto destination_key = read_key();
+        if (!destination_key && backup.encrypted())
+          destination_key = secondary;
+        if (const auto encoded = environment("SYRNCK_RECOVERY_KEY")) {
+          const auto value = unhex(*encoded);
+          require(value.size() == 32, "SYRNCK_RECOVERY_KEY must encode exactly 32 bytes");
+          destination_key.emplace();
+          std::copy(value.begin(), value.end(), destination_key->begin());
+        }
+        print(
+            create_repaired_copy(store, backup, path_from_utf8(args.values[1]), destination_key, operation));
+      }
     } else if (sub == "repair") {
       const auto apply = args.flag("--apply");
       args.count(1);

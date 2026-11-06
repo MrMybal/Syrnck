@@ -137,6 +137,10 @@ des [sauvegardes hors ligne vérifiées et la réparation des objets absents](do
 avec publication dans un nouveau dossier, changement possible de clé et
 conservation de l’historique protégé. Les fichiers de travail se récupèrent par
 export ; la réplication continue reste à développer.
+`backup repair-copy-plan` / `backup repair-copy` créent une
+[copie vérifiée depuis le dépôt abîmé et une sauvegarde](docs/REPAIR_COPY.md),
+avec conservation des versions récentes intactes et récupération des objets
+isolés/enveloppes de packs corrompus.
 `backup retire-plan` / `backup retire` ajoutent le [retrait d’archives protégé par sauvegarde](docs/ARCHIVE_RETENTION.md).
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` et `prune` gèrent les

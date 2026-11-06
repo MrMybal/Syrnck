@@ -143,9 +143,9 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
                       {"snapshot", hash(bytes(descriptor.dump()))}};
       },
       [&] {
+        report_progress(options, {ProgressPhase::publishing, utf8(target), completed, objects.size(), true});
         require(source.refs() == original && source.settings().json() == settings.json(),
                 "backup source changed before publication");
-        report_progress(options, {ProgressPhase::publishing, utf8(target), completed, objects.size(), true});
       },
       options.stop);
   return report;
@@ -185,16 +185,26 @@ Json restore_backup(const Store &store, const fs::path &destination, std::option
   (void)verify_backup(store, options);
   return copy(store, destination, key, false, options);
 }
-Json repair_from_backup(const Store &destination, const Store &backup, bool apply, OperationOptions options) {
+
+namespace {
+struct RepairPlan {
+  Refs original, portable;
+  Json excluded;
+  std::set<ObjectKey> missing, corrupt, objects;
+  std::uint64_t logical_bytes;
+  std::string backup_snapshot;
+};
+RepairPlan prepare_repair(const Store &destination, const Store &backup, OperationOptions options) {
   throw_if_cancelled(options.stop);
   require(destination.root() != backup.root(), "backup repair requires distinct stores");
   quiescent(destination, options);
-  (void)verify_backup(backup, options);
+  const auto verified_backup = verify_backup(backup, options);
   const auto refs = destination.refs();
   Json excluded = Json::array();
   const auto portable = portable_refs(refs, excluded);
   std::set<ObjectKey> selected, damaged, seen;
   std::size_t budget = 4096;
+  std::uint64_t logical_bytes = 0;
   auto record = [&](std::set<ObjectKey> &set, const ObjectKey &key) {
     if (set.insert(key).second) {
       const auto cost = key.id.size() + 128;
@@ -221,6 +231,8 @@ Json repair_from_backup(const Store &destination, const Store &backup, bool appl
       continue;
     report_progress(options, {ProgressPhase::verifying, key.id, seen.size()});
     const auto data = load(key);
+    require(data.size() <= UINT64_MAX - logical_bytes, "backup logical size overflow");
+    logical_bytes += data.size();
     auto children = dependencies(key.kind, data);
     pending.insert(pending.end(), children.begin(), children.end());
     if (key.kind == Kind::manifest) {
@@ -237,6 +249,53 @@ Json repair_from_backup(const Store &destination, const Store &backup, bool appl
       require(hex(digest) == manifest["file_hash"].get<std::string>(), "backup repair file hash mismatch");
     }
   }
+
+  return {refs,
+          portable,
+          excluded,
+          std::move(selected),
+          std::move(damaged),
+          std::move(seen),
+          logical_bytes,
+          verified_backup["snapshot"].get<std::string>()};
+}
+Json keys(const std::set<ObjectKey> &objects) {
+  Json result = Json::array();
+  for (const auto &key : objects)
+    result.push_back(key_json(key));
+  return result;
+}
+Json copy_repair_report(const RepairPlan &plan) {
+  auto report = Json{{"version", 1},
+                     {"operation", "repair-copy"},
+                     {"ready", true},
+                     {"references_hash", refs_hash(plan.original)},
+                     {"backup_snapshot", plan.backup_snapshot},
+                     {"references", plan.portable.size()},
+                     {"objects", plan.objects.size()},
+                     {"logical_bytes", plan.logical_bytes},
+                     {"missing", keys(plan.missing)},
+                     {"corrupt", keys(plan.corrupt)},
+                     {"excluded_refs", plan.excluded}};
+  require(report.dump().size() <= max_object_size, "backup repair report exceeds 16 MiB");
+  return report;
+}
+Bytes recovered_object(const Store &source, const Store &backup, const ObjectKey &key,
+                       OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  try {
+    return source.get(key);
+  } catch (const Error &) {
+    return backup.get(key);
+  }
+}
+} // namespace
+Json repair_from_backup(const Store &destination, const Store &backup, bool apply, OperationOptions options) {
+  const auto plan = prepare_repair(destination, backup, options);
+  const auto &selected = plan.missing;
+  const auto &damaged = plan.corrupt;
+  const auto &refs = plan.original;
+  const auto &portable = plan.portable;
   Json missing = Json::array(), blockers = Json::array();
   for (const auto &key : selected)
     missing.push_back(key_json(key));
@@ -264,4 +323,52 @@ Json repair_from_backup(const Store &destination, const Store &backup, bool appl
   }
   return report;
 }
+Json plan_repaired_copy(const Store &source, const Store &backup, OperationOptions options) {
+  return copy_repair_report(prepare_repair(source, backup, options));
+}
+Json create_repaired_copy(const Store &source, const Store &backup, const fs::path &destination,
+                          std::optional<Key> key, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  require((!source.encrypted() && !backup.encrypted()) || key.has_value(),
+          "encrypted repair inputs require a destination encryption key");
+  const auto target = destination_path(source, destination);
+  require(!inside(target, backup.root()), "repair copy destination must be outside the backup store");
+  const auto plan = prepare_repair(source, backup, options);
+  const auto settings = source.settings();
+  auto report = copy_repair_report(plan);
+  std::size_t completed = 0;
+  atomic_directory(
+      target,
+      [&](const fs::path &temporary) {
+        Store output(temporary, key, true);
+        output.set_settings(settings);
+        for (const auto &object : plan.objects) {
+          report_progress(options, {ProgressPhase::transferring, object.id, completed, plan.objects.size()});
+          output.import(object, recovered_object(source, backup, object, options));
+          ++completed;
+        }
+        std::vector<RefUpdate> updates;
+        for (const auto &[name, object] : plan.portable)
+          updates.push_back({name, {}, object});
+        require(output.compare_update_refs(updates, {options.stop}),
+                "backup references changed during creation");
+        require(output.fsck({options.stop}) == plan.objects.size(),
+                "backup object inventory changed during creation");
+      },
+      [&] {
+        report_progress(options,
+                        {ProgressPhase::publishing, utf8(target), completed, plan.objects.size(), true});
+        require(source.refs() == plan.original && source.settings().json() == settings.json(),
+                "backup source changed before publication");
+        require(hash(bytes(marker(backup).dump())) == plan.backup_snapshot,
+                "backup repair donor changed before publication");
+      },
+      options.stop);
+  report["state"] = "recovered";
+  report["destination"] = utf8(target);
+  report["encrypted"] = key.has_value();
+  report["recovered_objects"] = plan.missing.size() + plan.corrupt.size();
+  return report;
+}
+
 } // namespace syrnck

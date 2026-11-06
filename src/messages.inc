@@ -890,3 +890,8 @@ SYRNCK_MESSAGE("native hard reset is blocked; inspect native reset-plan --hard",
 SYRNCK_MESSAGE("working file changed during native hard reset", "le fichier de travail a changé pendant le reset hard natif")
 SYRNCK_MESSAGE("choose only one native reset mode", "choisissez un seul mode de reset natif")
 SYRNCK_MESSAGE("native hard reset requires the selected branch", "le reset hard natif exige la branche sélectionnée")
+SYRNCK_MESSAGE("encrypted repair inputs require a destination encryption key", "les sources chiffrées de réparation exigent une clé de chiffrement de destination")
+SYRNCK_MESSAGE("repair copy destination must be outside the backup store", "la copie réparée doit être placée hors du stockage de sauvegarde")
+SYRNCK_MESSAGE("backup repair donor changed before publication", "la sauvegarde utilisée pour la réparation a changé avant publication")
+SYRNCK_MESSAGE("backup repair report exceeds 16 MiB", "le rapport de réparation depuis sauvegarde dépasse 16 Mio")
+SYRNCK_MESSAGE("SYRNCK_RECOVERY_KEY must encode exactly 32 bytes", "SYRNCK_RECOVERY_KEY doit représenter exactement 32 octets")

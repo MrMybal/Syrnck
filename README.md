@@ -188,6 +188,9 @@ exact-content rename detection and paged first-parent file lineage.
 new destination publication, optional envelope key changes and preservation of
 retained history. Restore exports working files separately; this is not live
 replication or end-to-end encryption.
+`backup repair-copy-plan` / `backup repair-copy` add a
+[verified new Store from damaged current storage and a backup](docs/REPAIR_COPY.md),
+preserving newer intact history and recovering corrupt loose/packed envelopes.
 `backup retire-plan` / `backup retire` add [backup-protected archive retirement](docs/ARCHIVE_RETENTION.md).
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide

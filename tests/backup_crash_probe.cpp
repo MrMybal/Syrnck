@@ -16,7 +16,7 @@ std::optional<Key> key(bool encrypted, std::uint8_t fill) {
 }
 std::string kind(const fs::path &target) {
   const auto name = utf8(target.filename());
-  if (name == "backup" || name == "restored")
+  if (name == "backup" || name == "restored" || name == "repaired")
     return name;
   if (name == "backup.json")
     return "descriptor";
@@ -42,11 +42,15 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   const auto refs = f.store.refs();
   if (operation != "create" && !bisect)
     create_backup(f.store, root / "backup", key(encrypted, 65));
-  if (operation == "repair") {
+  if (operation == "repair" || operation == "repair-copy") {
     const auto manifest = new_file["manifest"].get<std::string>();
     const auto metadata = f.store.metadata(Kind::manifest, manifest);
     const auto chunk = metadata["blocks"][0]["id"].get<std::string>();
-    fs::remove(f.store.root() / "objects/chunk" / chunk.substr(0, 2) / chunk);
+    if (operation == "repair-copy")
+      atomic_write(f.store.root() / "objects/chunk" / chunk.substr(0, 2) / chunk,
+                   bytes("preserved corrupt envelope"), true);
+    else
+      fs::remove(f.store.root() / "objects/chunk" / chunk.substr(0, 2) / chunk);
     fs::remove(f.store.root() / "objects/manifest" / manifest.substr(0, 2) / manifest);
   }
   const auto info = Json{{"encrypted", encrypted},
@@ -84,6 +88,10 @@ void perform(const fs::path &root, const Json &info) {
     if (operation == "restore") {
       if (!fs::exists(root / "restored"))
         restore_backup(backup, root / "restored", key(encrypted, 67));
+    } else if (operation == "repair-copy") {
+      Store source(root / "source/.syrnck", key(encrypted, 57));
+      if (!fs::exists(root / "repaired"))
+        create_repaired_copy(source, backup, root / "repaired", key(encrypted, 67));
     } else {
       Store destination(root / "source/.syrnck", key(encrypted, 57));
       repair_from_backup(destination, backup, true);
@@ -130,14 +138,21 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
     const auto plan = repair_from_backup(source, backup);
     require(plan["ready"] == true && (!resumed || plan["missing"].empty()),
             "missing repair objects after resume");
+  } else if (operation == "repair-copy") {
+    Store backup(root / "backup", key(encrypted, 65));
+    const auto plan = plan_repaired_copy(source, backup);
+    require(plan["ready"] == true && plan["missing"].size() == 1 && plan["corrupt"].size() == 1,
+            "repair-copy changed damaged source objects");
   } else
     source.fsck();
-  const auto target = root / (operation == "restore" ? "restored" : "backup");
+  const auto target = root / (operation == "repair-copy" ? "repaired"
+                              : operation == "restore"   ? "restored"
+                                                         : "backup");
   const auto present = fs::exists(target);
   require(!resumed || present, "resumed backup destination is absent");
   if (present) {
-    Store result(target, key(encrypted, operation == "restore" ? 67 : 65));
-    if (operation != "restore")
+    Store result(target, key(encrypted, operation == "restore" || operation == "repair-copy" ? 67 : 65));
+    if (operation != "restore" && operation != "repair-copy")
       verify_backup(result);
     result.fsck();
     require(encode_refs(result.refs()) == info["refs"], "backup crash lost retained references");

@@ -192,7 +192,8 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
 - [x] Sauvegardes logiques hors ligne restaurables : objets conservés et paramètres vérifiés, publication exclusive dans un nouveau dossier, changement de clé d’enveloppe et reconstruction des anciennes versions après GC.
 - [x] Réparation des objets manquants depuis une sauvegarde vérifiée : plan sans écriture, validation des fichiers sur lecture combinée, import atomique reprenable sans déplacement des références ; les objets existants corrompus bloquent l’ensemble.
-- [ ] Réplication continue/failover, scrubbing périodique, réparation des packs/objets corrompus et restauration des workspaces/sessions opérationnelles.
+- [x] Copie de récupération des références actuelles depuis source + sauvegarde vérifiée : remplacement logique des objets isolés/enveloppes de packs corrompus dans un nouveau Store, données récentes conservées, clés indépendantes et entrées intactes.
+- [ ] Réplication continue/failover, scrubbing périodique, reconstruction des index/en-têtes de packs et restauration des workspaces/sessions opérationnelles.
 - [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
 - [x] Refus HTTP 401 après réception du corps borné, avant accès au stockage ; régression Windows avec corps différés, framing chunked, authentification dupliquée et requêtes concurrentes.
 - [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.

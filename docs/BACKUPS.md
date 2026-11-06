@@ -109,6 +109,11 @@ inspection. This first repair API does not replace corrupt loose objects,
 rebuild lost/corrupt packs or repair a corrupt reference table/configuration.
 Restore into a new Store when existing storage cannot be safely repaired.
 
+[`backup repair-copy-plan` and `backup repair-copy`](REPAIR_COPY.md) can rebuild
+the current retained graph in a new verified Store, recovering missing/corrupt
+objects from an older backup while keeping intact newer source data. Neither
+input's existing objects, pack files or references are replaced.
+
 ## Validation and limits
 
 Native tests cover plain/encrypted sources on loose/single-pack/multi-pack

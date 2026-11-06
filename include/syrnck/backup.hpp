@@ -13,4 +13,10 @@ Json restore_backup(const Store &, const fs::path &destination, std::optional<Ke
 // the entire repair before writes. References, packs and unknown bytes survive.
 Json repair_from_backup(const Store &destination, const Store &backup, bool apply = false,
                         OperationOptions = {});
+// Rebuild portable current roots in a new Store, using a verified backup for
+// missing/corrupt objects. Neither input's files, packs nor refs are replaced.
+// Current objects absent from an older backup are preserved when still valid.
+Json plan_repaired_copy(const Store &source, const Store &backup, OperationOptions = {});
+Json create_repaired_copy(const Store &source, const Store &backup, const fs::path &destination,
+                          std::optional<Key> destination_key = {}, OperationOptions = {});
 } // namespace syrnck
