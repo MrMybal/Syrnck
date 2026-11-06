@@ -16,6 +16,7 @@
 #include <syrnck/retention.hpp>
 #include <syrnck/bisect.hpp>
 #include <syrnck/history.hpp>
+#include <syrnck/workspace.hpp>
 #ifdef _WIN32
 #include <Windows.h>
 #include <fcntl.h>
@@ -333,8 +334,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native rebase-index [--branch BRANCHE] [--expect ID] [--expect-index ID] [--text-merge]
     --resolutions FICHIER_JSON : choix liés à la tête, à l'index et à sa base.
   native reset [CHEMIN...] [--branch BRANCHE]
-  native reset-plan RÉVISION --soft|--mixed [--branch BRANCHE] [--verify]
-  native reset RÉVISION --soft|--mixed [--branch BRANCHE] [--expect ID]
+  native reset-plan RÉVISION --soft|--mixed|--hard [--branch BRANCHE] [--verify]
+  native reset RÉVISION --soft|--mixed|--hard [--branch BRANCHE] [--expect ID]
     Déplace la branche sans écrire les fichiers ; archive l'historique et l'index.
   native squash-plan NOMBRE [--branch BRANCHE] [--verify]
   native squash NOMBRE -m MESSAGE [--branch BRANCHE] [--expect ID]
@@ -500,8 +501,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native rebase-index [--branch BRANCH] [--expect ID] [--expect-index ID] [--text-merge]
     --resolutions JSON_FILE: choices bound to the head, index and its baseline.
   native reset [PATH...] [--branch BRANCH]
-  native reset-plan REVISION --soft|--mixed [--branch BRANCH] [--verify]
-  native reset REVISION --soft|--mixed [--branch BRANCH] [--expect ID]
+  native reset-plan REVISION --soft|--mixed|--hard [--branch BRANCH] [--verify]
+  native reset REVISION --soft|--mixed|--hard [--branch BRANCH] [--expect ID]
     Moves the branch without writing files; archives previous history and index.
   native squash-plan COUNT [--branch BRANCH] [--verify]
   native squash COUNT -m MESSAGE [--branch BRANCH] [--expect ID]
@@ -1214,8 +1215,29 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "reset" || sub == "reset-plan") {
       const auto branch = selected_branch();
       const bool soft = args.flag("--soft"), mixed = args.flag("--mixed"), planning = sub == "reset-plan";
+      const bool hard = args.flag("--hard");
       require(!(soft && mixed), "choose either --soft or --mixed");
-      if (soft || mixed || planning) {
+      require(!hard || (!soft && !mixed), "choose only one native reset mode");
+      if (hard) {
+        const auto directory = workspace();
+        const bool verify = planning && args.flag("--verify");
+        const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+        const auto expected_plan = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+        args.count(1);
+        const auto target = resolve(args.values[0]);
+        if (planning) {
+          const auto plan =
+              plan_native_hard_reset(store, directory, branch, target, verify, {control->token(), observe});
+          print(plan);
+          return plan["ready"].get<bool>() ? 0 : 1;
+        }
+        const auto tip = expected ? *expected : resolve("heads/" + branch);
+        const auto plan_id = expected_plan ? *expected_plan
+                                           : plan_native_hard_reset(store, directory, branch, target, false,
+                                                                    {control->token(), observe})["plan"]
+                                                 .get<std::string>();
+        print(native_hard_reset(store, directory, branch, tip, target, plan_id, {control->token(), observe}));
+      } else if (soft || mixed || planning) {
         require(soft || mixed, "native reset-plan requires --soft or --mixed");
         const bool verify = planning && args.flag("--verify");
         const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");

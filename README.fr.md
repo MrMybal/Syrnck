@@ -181,6 +181,11 @@ Voir les [transitions récupérables du workspace](docs/NATIVE_CHECKOUT.md#recov
 
 `native reset-plan RÉVISION --soft|--mixed` prépare un déplacement de branche ; `native reset RÉVISION --soft|--mixed` l'applique sans écrire les fichiers de travail. Soft conserve les entrées préparées sur la nouvelle base ; mixed archive puis retire l'index. L'ancien historique et les blocs du staging restent conservés après GC. Voir le [reset de branche natif](docs/NATIVE_RESET.md).
 
+`native reset-plan RÉVISION --hard` prépare le remplacement du travail local.
+L'application sauvegarde auparavant les fichiers modifiés, l'index et les
+obstructions non suivies ; la reprise, l'annulation et la reconstruction après
+GC restent disponibles. Voir le [reset hard récupérable](docs/NATIVE_HARD_RESET.md).
+
 `native squash-plan NOMBRE` prépare le regroupement de commits linéaires ; `native squash NOMBRE -m MESSAGE` crée un commit contenant le snapshot exact de l'ancienne tête. Tout l'ancien historique reste archivé après GC. Un merge dans la plage ou un index présent bloque l'opération. Voir le [squash de commits natifs](docs/NATIVE_SQUASH.md).
 
 `native archives` liste l'historique conservé par pages bornées, avec filtre reset, index préparé, squash, amendement, checkout ou détachement. `native archive-show RÉFÉRENCE --verify` vérifie une version conservée avant export ou récupération. Voir les [archives de l'historique natif](docs/NATIVE_ARCHIVES.md).

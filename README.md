@@ -136,6 +136,11 @@ Tracked file/directory conversions and file/parent case changes use a [namespace
 
 `native reset-plan REVISION --soft|--mixed` previews a branch move; `native reset REVISION --soft|--mixed` applies it without writing working files. Soft preserves prepared entries on the new baseline; mixed archives and clears the index. Old history and staging blocks stay retained through GC. See [native branch reset](docs/NATIVE_RESET.md).
 
+`native reset-plan REVISION --hard` previews replacing local work. Application
+captures dirty files, the frozen index and untracked obstructions before their
+replacement, with recover/abort and retained old bytes after GC. See
+[recoverable hard reset](docs/NATIVE_HARD_RESET.md).
+
 `native squash-plan COUNT` previews regrouping linear tip commits; `native squash COUNT -m MESSAGE` creates one commit with the exact previous tip snapshot. The complete old history remains archived through GC. Merge commits in the range and any staging index block the operation. See [native commit squash](docs/NATIVE_SQUASH.md).
 
 `native archives` lists retained history in bounded pages, optionally filtered by reset, prepared index, squash, amendment, checkout or detachment. `native archive-show REFERENCE --verify` audits a stored version before export or recovery. See [native history archives](docs/NATIVE_ARCHIVES.md).

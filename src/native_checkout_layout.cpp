@@ -2,7 +2,8 @@
 namespace syrnck {
 namespace {
 using Names = std::map<std::string, std::pair<std::string, bool>>;
-Names names(const NativeSnapshot &files, std::set<std::string> &directories, OperationOptions options) {
+Names names(const NativeSnapshot &files, std::set<std::string> &directories, OperationOptions options,
+            const std::set<std::string> &extra = {}) {
   Names result;
   std::size_t budget = 0;
   auto add = [&](const std::string &path, bool directory) {
@@ -17,6 +18,13 @@ Names names(const NativeSnapshot &files, std::set<std::string> &directories, Ope
     if (directory)
       directories.insert(path);
   };
+  for (const auto &path : extra) {
+    throw_if_cancelled(options.stop);
+    validate_path(path);
+    add(path, true);
+    for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
+      add(path.substr(0, n), true);
+  }
   for (const auto &[path, entry] : files) {
     (void)entry;
     throw_if_cancelled(options.stop);
@@ -39,8 +47,9 @@ void descendants(const std::set<std::string> &directories, const std::string &ro
 }
 } // namespace
 NativeCheckoutLayout::NativeCheckoutLayout(const NativeSnapshot &source, const NativeSnapshot &target,
-                                           OperationOptions options) {
-  const auto before = names(source, source_directories, options);
+                                           OperationOptions options,
+                                           const std::set<std::string> &extra_source_directories) {
+  const auto before = names(source, source_directories, options, extra_source_directories);
   const auto after = names(target, target_directories, options);
   for (const auto &entry : before) {
     throw_if_cancelled(options.stop);

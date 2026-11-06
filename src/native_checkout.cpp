@@ -1,5 +1,7 @@
 #include "native_workspace.hpp"
 #include "native_checkout_layout.hpp"
+#include "native_hard_reset.hpp"
+#include "native_rewrite.hpp"
 #include <tuple>
 #ifdef _WIN32
 #include <windows.h>
@@ -91,6 +93,9 @@ public:
   }
   std::size_t size() const {
     return nodes_.size();
+  }
+  const Nodes &nodes() const {
+    return nodes_;
   }
   const Node *find(const std::string &path) const {
     const auto found = nodes_.find(path);
@@ -207,21 +212,32 @@ void verify_native_checkout_namespace(const Store &store, const fs::path &direct
 namespace {
 Json plan_checkout_impl(const Store &store, const fs::path &directory, std::string_view branch,
                         const NativeSnapshot *supplied, std::optional<std::string_view> target,
-                        bool verify_objects, OperationOptions options) {
+                        bool verify_objects, OperationOptions options,
+                        const NativeSnapshot *source_override = nullptr,
+                        const std::optional<std::string> &override_id = {},
+                        const std::set<std::string> &source_directories = {},
+                        const Inventory *supplied_inventory = nullptr) {
   throw_if_cancelled(options.stop);
   auto staging = store.staged_status(branch, options);
-  const auto source_id = staging["head"].is_null() ? std::optional<std::string>{}
-                                                   : std::optional{staging["head"].get<std::string>()};
-  const auto source = source_id ? read_native_snapshot(store, *source_id, options) : NativeSnapshot{};
+  const auto source_id = source_override             ? override_id
+                         : staging["head"].is_null() ? std::optional<std::string>{}
+                                                     : std::optional{staging["head"].get<std::string>()};
+  const auto stored_source = source_override ? NativeSnapshot{}
+                             : source_id     ? read_native_snapshot(store, *source_id, options)
+                                             : NativeSnapshot{};
+  const auto &source = source_override ? *source_override : stored_source;
   const bool same = target && source_id && *source_id == *target;
   const auto other = supplied || same ? NativeSnapshot{} : read_native_snapshot(store, *target, options);
   const auto &destination = supplied ? *supplied : same ? source : other;
-  const NativeCheckoutLayout layout(source, destination, options);
-  const Inventory inventory(directory, store.root(), options);
+  const NativeCheckoutLayout layout(source, destination, options, source_directories);
+  const auto owned_inventory =
+      supplied_inventory ? std::optional<Inventory>{}
+                         : std::optional<Inventory>{std::in_place, directory, store.root(), options};
+  const auto &inventory = supplied_inventory ? *supplied_inventory : *owned_inventory;
   Conflicts conflicts;
   if (store.refs().contains("checkouts/active"))
     conflicts.emplace("", "checkout_pending", "");
-  if (!staging["snapshot"].is_null())
+  if (!source_override && !staging["snapshot"].is_null())
     conflicts.emplace("", staging["stale"].get<bool>() ? "stale_staging" : "staging_present", "");
   Bytes buffer(1024 * 1024);
   std::uint64_t hashed_bytes = 0;
@@ -237,9 +253,10 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
       conflicts.emplace(path, "tracked_missing", path);
       continue;
     }
-    const auto content = hash_native_file(
-        {inventory.base / path_from_utf8(path), path, node->size, node->modified, node->executable}, buffer,
-        options);
+    const auto content = supplied_inventory ? entry.content
+                                            : hash_native_file({inventory.base / path_from_utf8(path), path,
+                                                                node->size, node->modified, node->executable},
+                                                               buffer, options);
     require(content.size <= UINT64_MAX - hashed_bytes, "native comparison byte count overflow");
     hashed_bytes += content.size;
     if (content != entry.content)
@@ -347,4 +364,162 @@ Json plan_native_checkout_files(const Store &store, const fs::path &directory, s
                                 const NativeSnapshot &destination, OperationOptions options) {
   return plan_checkout_impl(store, directory, branch, &destination, {}, false, options);
 }
+namespace {
+bool beneath(const std::set<std::string> &prefixes, const std::string &path) {
+  if (prefixes.contains(path))
+    return true;
+  for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
+    if (prefixes.contains(path.substr(0, n)))
+      return true;
+  return false;
+}
+bool intersects(const std::set<std::string> &paths, const std::string &path) {
+  if (beneath(paths, path))
+    return true;
+  const auto prefix = path + '/';
+  const auto found = paths.lower_bound(prefix);
+  return found != paths.end() && found->starts_with(prefix);
+}
+} // namespace
+NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path &directory,
+                                              std::string_view branch, std::string_view target,
+                                              bool verify_objects, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  validate_id(target);
+  const NativeRewriteState state(store, branch, options);
+  const auto head = store.native_head();
+  require(head["branch"].get<std::string>() == branch, "native hard reset requires the selected branch");
+  require(head["directory"].is_null() ||
+              utf8(fs::canonical(directory)) == head["directory"].get<std::string>(),
+          "native HEAD belongs to another workspace");
+  const auto original = read_native_snapshot(store, state.head.id, options);
+  const auto staged = state.index ? read_native_snapshot(store, state.index->id, options) : NativeSnapshot{};
+  const auto destination = read_native_snapshot(store, target, options);
+  std::set<std::string> tracked, targets, displaced;
+  std::map<std::string, std::pair<std::string, bool>> target_names;
+  std::size_t budget = 0;
+  for (const auto *snapshot : {&original, &staged})
+    for (const auto &[path, entry] : *snapshot) {
+      (void)entry;
+      tracked.insert(portable_fold(path));
+    }
+  const auto add_target = [&](const std::string &path, bool is_directory) {
+    const auto folded = portable_fold(path);
+    const auto [found, added] = target_names.emplace(folded, std::pair{path, is_directory});
+    require(added || found->second == std::pair{path, is_directory}, "case-insensitive path collision");
+    if (added) {
+      const auto cost = path.size() + folded.size() + 64;
+      require(cost <= max_object_size - budget, "native checkout inventory exceeds 16 MiB budget");
+      budget += cost;
+    }
+  };
+  for (const auto &[path, entry] : destination) {
+    (void)entry;
+    targets.insert(portable_fold(path));
+    add_target(path, false);
+    for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
+      add_target(path.substr(0, n), true);
+  }
+  const Inventory inventory(directory, store.root(), options);
+  for (const auto &[path, node] : inventory.nodes())
+    if (node.type == Type::directory) {
+      const auto folded = portable_fold(path);
+      const auto found = target_names.find(folded);
+      if (found != target_names.end() && (!found->second.second || found->second.first != path))
+        displaced.insert(folded);
+    }
+  NativeHardResetPlan plan{state.head.id, state.index, {}, {}, {}, {}};
+  plan.selection = state.lookup("workspace/HEAD");
+  Bytes buffer(1024 * 1024);
+  std::map<std::string, std::vector<const NativeSnapshotFile *>> existing;
+  for (const auto *snapshot : {&original, &staged, &destination})
+    for (const auto &[path, file] : *snapshot)
+      existing[portable_fold(path)].push_back(&file);
+  Json untracked = Json::array(), working = Json::object();
+  std::size_t metadata_budget = 4096;
+  for (const auto &[path, node] : inventory.nodes()) {
+    throw_if_cancelled(options.stop);
+    const auto folded = portable_fold(path);
+    const bool obstructing = intersects(targets, folded) || beneath(displaced, folded);
+    if (node.type == Type::directory && obstructing) {
+      validate_path(path);
+      require(plan.directories.size() < 100000, "native hard reset profile path limit exceeded");
+      plan.directories.insert(path);
+      const auto cost = path.size() + 64;
+      require(cost <= max_object_size - metadata_budget, "native hard reset profile exceeds 16 MiB");
+      metadata_budget += cost;
+    }
+    if (node.type != Type::file || (!tracked.contains(folded) && !obstructing))
+      continue;
+    validate_path(path);
+    const NativeFile file{inventory.base / path_from_utf8(path), path, node.size, node.modified,
+                          node.executable};
+    const auto content = hash_native_file(file, buffer, options);
+    NativeSnapshotFile entry{{}, content, node.executable};
+    for (const auto *candidate : existing[folded])
+      if (candidate->content == content) {
+        entry.manifest = candidate->manifest;
+        break;
+      }
+    const Json profile{{"size", content.size}, {"file_hash", content.hash}, {"executable", node.executable}};
+    const auto cost = Json(path).dump().size() + profile.dump().size() + 128;
+    require(cost <= max_object_size - metadata_budget, "native hard reset profile exceeds 16 MiB");
+    metadata_budget += cost;
+    working.get_ref<Json::object_t &>().emplace_back(path, profile);
+    plan.files.emplace(path, entry);
+    plan.working.push_back(file);
+    if (!tracked.contains(folded))
+      untracked.push_back(path);
+  }
+  const auto workspace = plan_checkout_impl(store, directory, branch, &destination, target, false, options,
+                                            &plan.files, {}, plan.directories, &inventory);
+  if (verify_objects) {
+    std::vector<ObjectKey> roots{state.head, {Kind::revision, std::string(target)}};
+    if (state.index)
+      roots.push_back(*state.index);
+    (void)store.closure(roots, true, options.stop, options.progress);
+  }
+  const Json context{
+      {"version", 1},
+      {"type", "native-hard-reset-plan"},
+      {"directory", utf8(inventory.base)},
+      {"store", utf8(store.root())},
+      {"branch", branch},
+      {"head", state.head.id},
+      {"target", target},
+      {"index", state.index ? Json(state.index->id) : Json{}},
+      {"selection", state.lookup("workspace/HEAD") ? key_json(*state.lookup("workspace/HEAD")) : Json{}},
+      {"working", std::move(working)},
+      {"directories", plan.directories}};
+  plan.report =
+      Json{{"version", 1},
+           {"operation", "reset"},
+           {"mode", "hard"},
+           {"branch", branch},
+           {"head", state.head.id},
+           {"target", target},
+           {"index", context["index"]},
+           {"plan", hash(bytes("Syrnck hard reset plan v1:" + context.dump()))},
+           {"working", context["working"]},
+           {"source_directories", plan.directories},
+           {"obstructing_untracked", std::move(untracked)},
+           {"changed", state.head.id != target || state.index.has_value() || !workspace["actions"].empty()},
+           {"ready", workspace["ready"]},
+           {"objects_verified", verify_objects},
+           {"workspace", workspace}};
+  require(plan.report.dump().size() <= max_object_size, "native hard reset report exceeds 16 MiB");
+  return plan;
+}
+Json plan_native_hard_reset(const Store &store, const fs::path &directory, std::string_view branch,
+                            std::string_view target, bool verify_objects, OperationOptions options) {
+  return prepare_native_hard_reset(store, directory, branch, target, verify_objects, options).report;
+}
+Json plan_native_checkout_source(const Store &store, const fs::path &directory, std::string_view branch,
+                                 std::string_view source, std::string_view target,
+                                 const std::set<std::string> &directories, OperationOptions options) {
+  const auto files = read_native_snapshot(store, source, options);
+  return plan_checkout_impl(store, directory, branch, nullptr, target, false, options, &files,
+                            std::string(source), directories);
+}
+
 } // namespace syrnck

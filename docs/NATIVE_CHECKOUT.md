@@ -112,6 +112,10 @@ in version 2. Namespace checkout/switch journals use versions 3/4 and an explici
 `namespace_transition: true` flag; versions 1/2 remain supported. Each phase publishes
 a new journal object.
 
+[Hard reset](NATIVE_HARD_RESET.md) uses version 5, which distinguishes the
+captured working snapshot from the original branch head/index and records the
+source directory profile. Versions 1–4 keep their existing semantics.
+
 | Reference | Retained value |
 | --- | --- |
 | `checkouts/active` | Current journal object; at most one checkout per Store |
