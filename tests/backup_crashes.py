@@ -12,6 +12,9 @@ import threading
 import unittest
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
+BISECT_ONLY = "--bisect-only" in sys.argv
+if BISECT_ONLY:
+    sys.argv.remove("--bisect-only")
 ENV = {k: v for k, v in os.environ.items() if k.upper() not in
        ("SYRNCK_KEY", "SYRNCK_BACKUP_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced", "atomic.published", "atomic.durable")
@@ -33,17 +36,19 @@ class BackupCrashes(unittest.TestCase):
             parent = Path(temporary)
             count = 0
             for encrypted in (False, True):
-                for operation in ("create", "restore", "repair"):
+                for operation in (("bisect-start", "bisect-mark", "bisect-reset") if BISECT_ONLY else ("create", "restore", "repair")):
                     seed = parent / f"seed-{encrypted}-{operation}"
                     self.command("prepare", seed, "encrypted" if encrypted else "plain", operation)
                     kinds = ("chunk", "manifest") if operation == "repair" else (
                         "chunk", "manifest", "revision", "refs", "config", "settings")
                     if operation == "create":
                         kinds += ("descriptor",)
-                    cases = [(phase, kind, 2 if kind == "refs" else 1) for kind in kinds for phase in PHASES]
+                    if BISECT_ONLY:
+                        kinds = ("refs",) if operation == "bisect-reset" else ("chunk", "refs")
+                    cases = [(phase, kind, 2 if kind == "refs" and not BISECT_ONLY else 1) for kind in kinds for phase in PHASES]
                     if os.name != "nt":
                         cases += [("atomic.linked", kind, 1) for kind in kinds if kind != "refs"]
-                    if operation != "repair":
+                    if operation != "repair" and not BISECT_ONLY:
                         cases += [(phase, "backup" if operation == "create" else "restored", 1) for phase in
                                   ("directory.created", "directory.writer_finished", "directory.synced", "directory.published", "directory.durable")]
                     for phase, kind, occurrence in cases:
@@ -73,7 +78,7 @@ class BackupCrashes(unittest.TestCase):
                             self.assertTrue(self.command("verify", root)["verified"])
                             self.assertEqual(snapshot(root), before, "fresh reader modified crash evidence")
                             self.assertTrue(self.command("resume", root)["verified"])
-            print(f"{count} backup/restore/repair hard termination boundaries verified", flush=True)
+            print(f"{count} {'bisect' if BISECT_ONLY else 'backup/restore/repair'} hard termination boundaries verified", flush=True)
 
 
 if __name__ == "__main__":

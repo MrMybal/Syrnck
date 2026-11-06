@@ -168,6 +168,9 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 ## Git and synchronization
 
+Native history also supports [persistent no-checkout bisection](docs/NATIVE_BISECT.md),
+with merge-aware candidate selection, skipped-build ambiguity and retained history.
+
 `backup create`, `backup verify`, `backup restore` and `backup repair` provide
 [verified offline snapshots and missing-object repair](docs/BACKUPS.md), with
 new destination publication, optional envelope key changes and preservation of

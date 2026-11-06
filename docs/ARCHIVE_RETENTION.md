@@ -27,7 +27,7 @@ delete payloads or run GC; inspect a later GC preview separately.
 
 Supported roots are the simple revision archives recognized by `native archives`:
 `reset`, `reset-index`, `rebase-index`, `stage-index`, `squash`, `amend`, `checkout`,
-`fetch`, `publish` and detached-history archives. Exact `native-fetch/REVISION` roots are
+`fetch`, `publish`, `bisect` and detached-history archives. Exact `native-fetch/REVISION` roots are
 also supported. Select 1..1024 unique references. Heads, tags, indexes,
 asset-lock roots and multi-reference tag/branch archive records are refused.
 Those structured records need separate retirement workflows.

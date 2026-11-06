@@ -14,6 +14,7 @@
 #include <syrnck/asset_locks.hpp>
 #include <syrnck/backup.hpp>
 #include <syrnck/retention.hpp>
+#include <syrnck/bisect.hpp>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -316,6 +317,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   serve --access FICHIER             Identités, droits et règles de branches
   native push URL [--branch NOM] [--remote-branch NOM] [--lock-claims FICHIER]
   native fetch URL [--remote-branch NOM] [--remote-name origin]
+  native bisect-start BON MAUVAIS | bisect-status
+  native bisect-good|bisect-bad|bisect-skip RÉVISION --expect-state ID
+  native bisect-reset --expect-state ID   Archiver la recherche sans toucher aux fichiers
   agent push URL RÉF_LOCALE RÉF_DISTANTE
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
@@ -474,6 +478,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   serve --access FILE                Identities, permissions and branch policies
   native push URL [--branch NAME] [--remote-branch NAME] [--lock-claims FILE]
   native fetch URL [--remote-branch NAME] [--remote-name origin]
+  native bisect-start GOOD BAD | bisect-status
+  native bisect-good|bisect-bad|bisect-skip REVISION --expect-state ID
+  native bisect-reset --expect-state ID   Archive the search without changing files
   agent push URL LOCAL_REF REMOTE_REF
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
@@ -732,7 +739,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         sub == "rebase-plan" || sub == "rebase" || sub == "rebase-index-plan" || sub == "rebase-index" ||
         sub == "branch" || sub == "branches" || sub == "branch-delete-plan" || sub == "branch-delete" ||
         sub == "branch-archives" || sub == "branch-archive" || sub == "branch-restore-plan" ||
-        sub == "branch-restore" || sub == "push" || sub == "fetch")) ||
+        sub == "branch-restore" || sub == "push" || sub == "fetch" || sub.starts_with("bisect-"))) ||
       (command == "agent" && (sub == "push" || sub == "pull" || sub == "resume" || sub == "prune")) ||
       (command == "git" &&
        (sub == "clean" || sub == "smudge" || sub == "prepare-assets" || sub == "push-assets" ||
@@ -903,7 +910,29 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       return {};
     };
-    if (sub == "push" || sub == "fetch") {
+    if (sub.starts_with("bisect-")) {
+      NativeBisect search(store);
+      const OperationOptions operation{control->token(), observe};
+      if (sub == "bisect-start") {
+        args.count(2);
+        print(search.start(resolve(args.values[0]), resolve(args.values[1]), operation));
+      } else if (sub == "bisect-status") {
+        args.count(0);
+        print(search.status(operation));
+      } else {
+        const auto expected = args.option("--expect-state");
+        require(expected.has_value(), "native bisect requires --expect-state");
+        if (sub == "bisect-reset") {
+          args.count(0);
+          print(search.reset(*expected, operation));
+        } else {
+          require(sub == "bisect-good" || sub == "bisect-bad" || sub == "bisect-skip",
+                  "unknown native bisect command");
+          args.count(1);
+          print(search.mark(sub.substr(7), resolve(args.values[0]), *expected, operation));
+        }
+      }
+    } else if (sub == "push" || sub == "fetch") {
       const auto branch = selected_branch();
       const auto remote_branch = args.option("--remote-branch").value_or(branch);
       const auto remote_name = args.option("--remote-name").value_or("origin");

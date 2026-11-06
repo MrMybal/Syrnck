@@ -168,7 +168,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Reset de branche soft/mixed avec préparation en lecture seule : fichiers de travail intacts, index conservé sur la nouvelle base ou archivé puis retiré, tête attendue et publication atomique des anciennes racines ; reconstruction après GC.
 - [x] Squash des derniers commits linéaires avec plan borné, snapshot exact de tête, frontière conservée ou nouvelle racine, merges/index refusés, tête attendue et archive atomique de tout l'ancien historique.
 - [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.
-- [ ] Blame, bisect, suivi des renommages et recherche dans l'historique.
+- [x] Bisection native persistante sans checkout : graphe avec merges, suggestions équilibrées, bons/mauvais/skips, ambiguïtés explicites, état attendu et session distincte ; historique protégé et archivage atomique à la fin.
+- [ ] Blame, suivi des renommages, recherche dans l’historique et bisection avec checkout/exécution automatique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [x] Push de branches autonomes et fetch de références de suivi : fermeture complète, baux/reprise, publication CAS, règles serveur d’ascendance et de chemins ; têtes de suivi précédentes archivées et workspace intact.
 - [ ] Synchronisation des tags/annotations/politiques, intégration automatique du pull, administration de la rétention des racines de fetch et tests d’arrêts forcés de cette publication.

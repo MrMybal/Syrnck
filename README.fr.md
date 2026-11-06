@@ -121,6 +121,9 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+L’historique autonome propose une [bisection persistante sans checkout](docs/NATIVE_BISECT.md),
+avec prise en compte des merges, ambiguïtés des révisions ignorées et historique protégé.
+
 `backup create`, `backup verify`, `backup restore` et `backup repair` fournissent
 des [sauvegardes hors ligne vérifiées et la réparation des objets absents](docs/BACKUPS.md),
 avec publication dans un nouveau dossier, changement possible de clé et

@@ -1,5 +1,6 @@
 #include "native_history_fixture.hpp"
 #include <syrnck/backup.hpp>
+#include <syrnck/bisect.hpp>
 #include <iostream>
 using namespace native_test;
 namespace {
@@ -31,10 +32,15 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   Fixture f(root / "source", key(encrypted, 57));
   const auto old_file = f.file("original retained asset"), new_file = f.file("updated retained asset");
   const auto first = f.revision(Json{{"asset.bin", old_file}});
-  const auto last = f.revision(Json{{"asset.bin", new_file}}, Json::array({first}));
+  const bool bisect = operation.starts_with("bisect-");
+  const auto middle = bisect ? f.revision(Json{{"asset.bin", old_file}}, Json::array({first})) : first;
+  const auto last = f.revision(Json{{"asset.bin", new_file}}, Json::array({middle}));
   f.install(last);
+  Json state;
+  if (bisect && operation != "bisect-start")
+    state = NativeBisect(f.store).start(first, last);
   const auto refs = f.store.refs();
-  if (operation != "create")
+  if (operation != "create" && !bisect)
     create_backup(f.store, root / "backup", key(encrypted, 65));
   if (operation == "repair") {
     const auto manifest = new_file["manifest"].get<std::string>();
@@ -47,6 +53,8 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
                          {"operation", operation},
                          {"first", first},
                          {"last", last},
+                         {"middle", middle},
+                         {"bisect_state", bisect && operation != "bisect-start" ? state["state"] : Json{}},
                          {"old_manifest", old_file["manifest"]},
                          {"new_manifest", new_file["manifest"]},
                          {"refs", encode_refs(refs)}};
@@ -55,7 +63,19 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
 void perform(const fs::path &root, const Json &info) {
   const auto encrypted = info["encrypted"].get<bool>();
   const auto operation = info["operation"].get<std::string>();
-  if (operation == "create") {
+  if (operation.starts_with("bisect-")) {
+    Store source(root / "source/.syrnck", key(encrypted, 57));
+    NativeBisect search(source);
+    const auto state = search.status();
+    if (operation == "bisect-start") {
+      if (!state["active"].get<bool>())
+        search.start(info["first"].get<std::string>(), info["last"].get<std::string>());
+    } else if (operation == "bisect-mark") {
+      if (state["state"] == info["bisect_state"])
+        search.mark("good", info["middle"].get<std::string>(), info["bisect_state"].get<std::string>());
+    } else if (state["active"].get<bool>())
+      search.reset(info["bisect_state"].get<std::string>());
+  } else if (operation == "create") {
     Store source(root / "source/.syrnck", key(encrypted, 57));
     if (!fs::exists(root / "backup"))
       create_backup(source, root / "backup", key(encrypted, 65));
@@ -74,6 +94,36 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   const auto encrypted = info["encrypted"].get<bool>();
   const auto operation = info["operation"].get<std::string>();
   Store source(root / "source/.syrnck", key(encrypted, 57));
+  if (operation.starts_with("bisect-")) {
+    const auto refs = source.refs();
+    require(refs.at("heads/main") == parse_key(info["refs"]["heads/main"]), "bisect crash moved its branch");
+    const auto state = NativeBisect(source).status();
+    if (state["active"].get<bool>()) {
+      require(state["initial_good"] == info["first"] && state["initial_bad"] == info["last"],
+              "bisect crash changed its search roots");
+      require(refs.size() == 3, "bisect crash left unexpected protection references");
+      if (resumed && operation == "bisect-mark")
+        require(state["status"] == "found" && state["first_bad"] == info["last"],
+                "bisect mark did not resume");
+    } else {
+      const bool archived = refs.contains("archive/bisect/" + info["last"].get<std::string>());
+      require(operation == "bisect-reset" ? archived && refs.size() == 3
+                                          : operation == "bisect-start" && refs.size() == 1,
+              "bisect crash split its state and protection roots");
+    }
+    if (resumed)
+      require(state["active"].get<bool>() == (operation != "bisect-reset"),
+              "bisect crash did not resume its session state");
+    source.fsck();
+    for (const auto &field : {"old_manifest", "new_manifest"}) {
+      std::ostringstream bytes;
+      source.reconstruct(info[field].get<std::string>(), bytes);
+      require(bytes.str() == (std::string_view(field) == "old_manifest" ? "original retained asset"
+                                                                        : "updated retained asset"),
+              "bisect crash lost retained bytes");
+    }
+    return Json{{"verified", true}, {"published", state["active"]}};
+  }
   require(encode_refs(source.refs()) == info["refs"], "backup crash changed source references");
   if (operation == "repair") {
     Store backup(root / "backup", key(encrypted, 65));

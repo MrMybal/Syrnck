@@ -178,6 +178,11 @@ inherit configured sanitizer runtime options.
 
 ## Remaining durability work
 
+`native_bisect_crashes` uses the private Store/IO probe to terminate search
+start, mark and reset operations at metadata/reference publication boundaries.
+Fresh readers validate state/pin pairing, retained file bytes and restartable
+results before resuming the operation. Both plain and encrypted Stores are used.
+
 `backup_crashes` separately exercises offline backup creation, restore and
 missing-object repair with the same private instrumented IO objects. It kills
 writers during chunk/manifest/revision/reference/settings/configuration and
