@@ -68,6 +68,24 @@ et les headers doivent provenir de cette version ; le numéro ABI 1 est conserv�
 avec des symboles supplémentaires. Voir les contrats anglais des [plages](../../docs/FILE_RANGES.md)
 et [comparaisons](../../docs/FILE_COMPARISON.md).
 
+## Workspace observation
+
+`OpenWorkspace(project, storePath, WorkspaceOptions{})` arms the resident watcher
+and retains its complete observation inventory without keeping a Store open.
+Use `Status(store, WorkspaceSelection{})` for working status, or
+`WorkspaceSelection{Combined: true}` for staging plus working status. Close the
+caller-opened Store after each query, then use `Wait(ctx, timeout)` for typed
+native/polling hints. Batches remain in the native session until a successful
+status, even across multiple waits or a cancelled wait result. `Invalidate`
+requests a complete audit; schedule those independently of notifications.
+
+The zero options use native Windows/Linux notifications with polling fallback,
+4096 path hints and 65536 registrations. Calls and `Close` are serialized;
+close explicitly. `Status` returns the canonical JSON as `json.RawMessage`.
+Wait checks context between native slices; status hashing/registration are not
+yet cancellable inside an ABI call. See the English
+[ownership, lifecycle, examples and limits](../../docs/WORKSPACE_ABI.md).
+
 ## Windows test cleanup
 
 The tests close native handles before removing their owned temporary directories.

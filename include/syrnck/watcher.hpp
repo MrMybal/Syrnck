@@ -11,6 +11,8 @@ struct WorkspaceChanges {
   std::vector<std::string> paths;
   bool full_scan = false, overflow = false, polling = false;
   bool changed() const { return full_scan || polling || !paths.empty(); }
+  // Coalesce without losing a full-scan/polling hint. Overflow discards paths.
+  void merge(const WorkspaceChanges &, std::size_t max_paths = 4096);
 };
 // Change hints, never permission to replace files. Arm before the initial full
 // observation; a lost journal requires a full observation before using hints.

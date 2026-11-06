@@ -19,8 +19,8 @@ Two modes share the same engine: **Git integration**, retaining Git's workflow f
 | `syrnck_git_net` | Grouped Git asset push/pull, immutable catalogs and on-demand asset hydration |
 | `syrnck_net` | Authenticated HTTP v1 API, missing-object comparison, differential transfer, and compare-and-swap reference publication |
 | `syrnck` | Cross-platform CLI, loopback server, and push/pull agent |
-| `syrnck_ffi` / `syrnck_ffi_static` | Shared/static C ABI for blocks, verified import, dependencies, file/range reads, reuse plans and pins |
-| `bindings/go` | Go binding, verified ranges, file comparison and resumable differential copying; Windows DLL / Unix cgo backends |
+| `syrnck_ffi` / `syrnck_ffi_static` | Shared/static C ABI for blocks, verified import, dependencies, file/range reads, reuse plans, pins and workspace observation |
+| `bindings/go` | Go binding, verified ranges, file comparison, resumable differential copying and workspace sessions; Windows DLL / Unix cgo backends |
 
 XChaCha20-Poly1305 protects objects **at rest**. An authorized server can read their contents. The HTTP server binds to loopback and is intended to sit behind an HTTPS proxy.
 
@@ -110,7 +110,7 @@ Imports, native commit/add/staged/reset/status/checkout-plan/checkout/checkout-r
 
 `native status --indexed` persists an optional working hash cache with filesystem identity/change checks, recent-write fallback and automatic rebuild after GC. It supports combined staging status; destructive workspace preflights keep their full reads. See the [working index](docs/WORKING_INDEX.md).
 
-`native watch` streams workspace changes with native Windows/Linux notifications, targeted file/subtree observation for edits and namespace changes, polling fallback, bounded event coalescing and full recovery/audit scans. It releases the Store between observations, can include staging with `--combined`, and saves optional recovery checkpoints with `--journal`. Inspect them with `native watch-journal`. See [resident workspace observation](docs/NATIVE_WATCH.md).
+`native watch` streams workspace changes with native Windows/Linux notifications, targeted file/subtree observation for edits and namespace changes, polling fallback, bounded event coalescing and full recovery/audit scans. It releases the Store between observations, can include staging with `--combined`, and saves optional recovery checkpoints with `--journal`. Inspect them with `native watch-journal`. See [resident workspace observation](docs/NATIVE_WATCH.md). [C and Go workspace sessions](docs/WORKSPACE_ABI.md) expose the same inventory and retained notifications for embedding without holding an idle Store lock.
 
 `native add PATH...` freezes selected files and deletions; `native staged` inspects them, and `native reset [PATH...]` removes selections without changing working files. `native commit --staged -m MESSAGE` atomically publishes those prepared bytes and consumes the index. Staging roots protect prepared data against GC; a changed branch base requires an explicit reset. See [native staging and selected commits](docs/NATIVE_STAGING.md). Numbered text hunk selection is also available; see [partial staging](docs/NATIVE_HUNKS.md).
 

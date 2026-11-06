@@ -973,3 +973,8 @@ SYRNCK_MESSAGE("checkout retirement plan changed; refresh the plan", "le plan de
 SYRNCK_MESSAGE("checkout retirement references changed; retry operation", "les références de retrait des checkouts ont changé ; réessayez")
 SYRNCK_MESSAGE("checkout retirement requires --from BACKUP", "le retrait des checkouts exige --from BACKUP")
 SYRNCK_MESSAGE("checkout retirement requires --expect-plan", "le retrait des checkouts exige --expect-plan")
+
+SYRNCK_MESSAGE("null workspace handle", "handle de dossier de travail nul")
+SYRNCK_MESSAGE("workspace output exceeds 128 MiB", "la sortie du dossier de travail dépasse 128 Mio")
+SYRNCK_MESSAGE("invalid workspace polling flag", "indicateur de scrutation du dossier de travail invalide")
+SYRNCK_MESSAGE("invalid workspace status mode", "mode de statut du dossier de travail invalide")

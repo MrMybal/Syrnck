@@ -26,24 +26,6 @@ void output(const Json &value) {
   std::cout << value.dump(-1, ' ', false, Json::error_handler_t::replace) << '\n' << std::flush;
   require(std::cout.good(), "output write failed");
 }
-void merge(WorkspaceChanges &into, const WorkspaceChanges &other, std::size_t limit) {
-  into.full_scan |= other.full_scan;
-  into.overflow |= other.overflow;
-  into.polling |= other.polling;
-  if (into.overflow) { into.paths.clear(); return; }
-  std::set<std::string> paths(into.paths.begin(), into.paths.end());
-  std::size_t budget = 0;
-  for (const auto &path : paths) budget += path.size() + 64;
-  for (const auto &path : other.paths) {
-    if (paths.contains(path)) continue;
-    if (paths.size() == limit || path.size() + 64 > 1024 * 1024 - budget) {
-      into.paths.clear(); into.full_scan = into.overflow = true; return;
-    }
-    budget += path.size() + 64;
-    paths.insert(path);
-  }
-  into.paths.assign(paths.begin(), paths.end());
-}
 struct Journal {
   std::string workspace, session = hash(random_bytes(16)), selection, last_digest, state;
   std::uint64_t generation = 0;
@@ -225,13 +207,13 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
                                   static_cast<std::int64_t>(command.interval_ms)));
     const auto batch = watcher.wait(wait, operation.stop);
     if (batch.changed()) {
-      merge(changes, batch, static_cast<std::size_t>(command.max_paths));
+      changes.merge(batch, static_cast<std::size_t>(command.max_paths));
       pending = true;
       const auto coalesce = std::min(deadline, Clock::now() + Milliseconds(command.debounce_ms));
       while (Clock::now() < coalesce) {
         const auto remaining = std::chrono::duration_cast<Milliseconds>(coalesce - Clock::now());
         if (remaining.count() <= 0) break;
-        merge(changes, watcher.wait(remaining, operation.stop), static_cast<std::size_t>(command.max_paths));
+        changes.merge(watcher.wait(remaining, operation.stop), static_cast<std::size_t>(command.max_paths));
       }
     }
   }

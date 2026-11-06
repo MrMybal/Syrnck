@@ -118,8 +118,9 @@ before returning targeted subtree hints. Directory removals and moves of
 existing watched directories still force a full scan to cover inotify recovery
 gaps. The watcher offers an optional persistent checkpoint journal; replayable
 event history and incremental native-watch removal/rename reconciliation remain
-separate work. C ABI
-and Go bindings do not yet expose this native workspace cache.
+separate work. [C ABI and Go workspace sessions](WORKSPACE_ABI.md) expose the
+same native/polling observation and cache, retaining hints across waits while
+caller-owned Store handles reopen for each query.
 
 Local regression coverage includes plain/encrypted Stores with loose,
 single-pack and multi-pack cache reads, persistence across Store lifetimes,

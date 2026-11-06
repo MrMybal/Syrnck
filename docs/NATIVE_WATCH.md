@@ -23,7 +23,10 @@ until interrupted unless a duration or status-update limit is supplied.
 
 This observes changes. It does not create commits, replace files, publish
 references, transfer objects, acquire asset locks or resolve concurrent edits.
-It is the watcher foundation for a future resident synchronization agent.
+It is the watcher foundation for a future resident synchronization agent. The
+[C ABI and Go workspace sessions](WORKSPACE_ABI.md) expose the same watcher and
+inventory for embedding, with internally retained batches and caller-owned Store
+handles. The CLI checkpoint journal is not exposed by those sessions.
 
 ## Status and event lifecycle
 

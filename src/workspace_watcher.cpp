@@ -18,6 +18,27 @@
 #endif
 #endif
 namespace syrnck {
+void WorkspaceChanges::merge(const WorkspaceChanges &other, std::size_t limit) {
+  require(limit >= 1 && limit <= 65536, "watch path limit must be in 1..65536");
+  full_scan |= other.full_scan;
+  overflow |= other.overflow;
+  polling |= other.polling;
+  if (overflow) { paths.clear(); full_scan = true; return; }
+  std::set<std::string> merged;
+  std::size_t budget = 0;
+  const auto add = [&](const std::string &path) {
+    if (merged.contains(path)) return true;
+    if (merged.size() == limit || path.size() + 64 > 1024 * 1024 - budget) return false;
+    budget += path.size() + 64;
+    merged.insert(path);
+    return true;
+  };
+  const std::vector<std::string> *sources[]{&paths, &other.paths};
+  for (const auto *source : sources)
+    for (const auto &path : *source)
+      if (!add(path)) { paths.clear(); full_scan = overflow = true; return; }
+  paths.assign(merged.begin(), merged.end());
+}
 namespace {
 bool below(const fs::path &path, const fs::path &root) {
   auto p = path.begin();

@@ -123,3 +123,49 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 	err := status(int(C.syrnck_store_verify(h, &objects)))
 	return uint64(objects), err
 }
+
+type nativeWorkspaceHandle = *C.SyrnckWorkspace
+
+func nativeWorkspaceOpen(root, store []byte, config *[3]uint32) (nativeWorkspaceHandle, error) {
+	if C.syrnck_abi_version() != 1 {
+		return nil, errors.New("unsupported Syrnck ABI")
+	}
+	var result nativeWorkspaceHandle
+	err := status(int(C.syrnck_workspace_open(ctext(root), ctext(store), (*C.SyrnckWorkspaceOptions)(unsafe.Pointer(config)), &result)))
+	return result, err
+}
+func nativeWorkspaceClose(h nativeWorkspaceHandle) error {
+	return status(int(C.syrnck_workspace_close(h)))
+}
+func nativeWorkspaceInvalidate(h nativeWorkspaceHandle) error {
+	return status(int(C.syrnck_workspace_invalidate(h)))
+}
+func workspaceJSONResult(code int, ptr *C.char, length C.size_t) ([]byte, error) {
+	err := status(code)
+	if ptr != nil {
+		defer C.syrnck_string_free(ptr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if ptr == nil || length == 0 || length > 128*1024*1024+1 {
+		return nil, errors.New("invalid native workspace output size")
+	}
+	data := C.GoBytes(unsafe.Pointer(ptr), C.int(length))
+	if data[len(data)-1] != 0 {
+		return nil, errors.New("invalid native workspace output terminator")
+	}
+	return data[:len(data)-1], nil
+}
+func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32) ([]byte, error) {
+	var ptr *C.char
+	var length C.size_t
+	code := int(C.syrnck_workspace_wait_json(h, C.uint32_t(timeout), &ptr, &length))
+	return workspaceJSONResult(code, ptr, length)
+}
+func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32) ([]byte, error) {
+	var ptr *C.char
+	var length C.size_t
+	code := int(C.syrnck_workspace_status_json(h, store, ctext(selector), C.uint32_t(mode), &ptr, &length))
+	return workspaceJSONResult(code, ptr, length)
+}

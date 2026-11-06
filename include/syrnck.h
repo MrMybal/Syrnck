@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 typedef struct SyrnckStore SyrnckStore;
+typedef struct SyrnckWorkspace SyrnckWorkspace;
 /* ABI 1: 0 = success; 1 = error; 2 = unknown C++ exception.
  * All strings are NUL-terminated UTF-8. Handles are not thread safe.
  * Serialize calls including close. No input pointer is retained.
@@ -57,7 +58,7 @@ SYRNCK_API int syrnck_file_read_range(SyrnckStore *store, const char *id, uint64
 SYRNCK_API int syrnck_file_compare_json(SyrnckStore *store, const char *source, const char *target, char *out,
                                         size_t capacity, size_t *length);
 SYRNCK_API int syrnck_manifest_json(SyrnckStore *store, const char *id, char **out);
-/* Free only strings returned by syrnck_manifest_json, exactly once. */
+/* Free only strings returned by manifest_json or workspace_*_json, once. */
 SYRNCK_API int syrnck_string_free(char *value);
 /* kind is "chunk", "manifest" or "revision"; IDs are lowercase hex (64 bytes).
  * Reads return verified plaintext; imports verify ID and canonical format.
@@ -80,6 +81,41 @@ SYRNCK_API int syrnck_closure_json(SyrnckStore *store, const char *kind, const c
 SYRNCK_API int syrnck_ref_set(SyrnckStore *store, const char *name, const char *kind, const char *id);
 SYRNCK_API int syrnck_ref_remove(SyrnckStore *store, const char *name);
 SYRNCK_API int syrnck_store_verify(SyrnckStore *store, size_t *objects);
+
+/* Resident advisory workspace observation, ABI 1 additive symbols.
+ * Open arms notifications before the first full observation. It holds no Store
+ * handle/lock. Both directories must already exist; store_path must be below
+ * directory. NULL options selects defaults; supplied limits must be 1..65536.
+ * Handles are single-caller; serialize close, wait, status and invalidate. */
+typedef struct SyrnckWorkspaceOptions {
+  uint32_t polling; /* 0 = native with polling fallback, 1 = polling */
+  uint32_t max_paths; /* default 4096; coalesced hints, at most 1 MiB */
+  uint32_t max_directories; /* default 65536; native registration budget */
+} SyrnckWorkspaceOptions;
+SYRNCK_API int syrnck_workspace_open(const char *directory, const char *store_path,
+                                     const SyrnckWorkspaceOptions *options, SyrnckWorkspace **out);
+SYRNCK_API int syrnck_workspace_close(SyrnckWorkspace *workspace);
+/* One native wait (0..60000 ms). JSON: version, backend, paths, full_scan,
+ * overflow, polling. Hints are retained/coalesced internally until a successful
+ * status, even if the caller ignores this output or waits multiple times.
+ * Allocated JSON outputs include NUL in length; free with string_free.
+ * No size-query call: each success consumes one batch exactly once. On failure
+ * *out=NULL, *length=0 (when provided); continuity is invalidated. */
+SYRNCK_API int syrnck_workspace_wait_json(SyrnckWorkspace *workspace, uint32_t timeout_ms,
+                                          char **out, size_t *length);
+/* Uses a caller-opened Store only during this call; close it before idle waits
+ * to release its exclusive lock. mode: 0 = branch working status, 1 = revision
+ * working status, 2 = combined staging/working status. selector=NULL chooses
+ * selected HEAD branch for modes 0/2; mode 1 requires a revision selector.
+ * Drains one immediate native batch, then observes all retained hints. The
+ * first query and recovery always read all working bytes. Failure invalidates
+ * the inventory; the next successful query is full. Output <=128 MiB + NUL.
+ * No progress callback/cancellation inside native status/registration yet.
+ * Native hints are advisory; schedule independent full audits with invalidate.
+ * This API does not journal checkpoints or transfer/commit working files. */
+SYRNCK_API int syrnck_workspace_status_json(SyrnckWorkspace *workspace, SyrnckStore *store,
+                                            const char *selector, uint32_t mode, char **out, size_t *length);
+SYRNCK_API int syrnck_workspace_invalidate(SyrnckWorkspace *workspace);
 #ifdef __cplusplus
 }
 #endif

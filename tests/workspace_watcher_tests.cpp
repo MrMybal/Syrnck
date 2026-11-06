@@ -33,6 +33,23 @@ void drain(WorkspaceWatcher &watcher) {
     if (!watcher.wait(10ms).changed()) return;
   throw Error("watcher did not become idle");
 }
+void coalescing() {
+  WorkspaceChanges batch{{"b", "a"}};
+  batch.merge({{"b", "c"}, false, false, true}, 3);
+  require(batch.paths == std::vector<std::string>({"a", "b", "c"}) && batch.polling && !batch.full_scan,
+          "coalescing lost flags or duplicated path hints");
+  batch.merge({{"d"}}, 3);
+  require(batch.paths.empty() && batch.full_scan && batch.overflow, "coalescing path limit did not require audit");
+  batch.merge({{"later"}});
+  require(batch.paths.empty() && batch.overflow, "overflow resumed incomplete hints");
+  WorkspaceChanges bytes;
+  bytes.merge({{std::string(1024 * 1024, 'x')}});
+  require(bytes.overflow && bytes.full_scan && bytes.paths.empty(), "coalescing did not enforce byte budget");
+  WorkspaceChanges preexisting{{"one", "two"}};
+  preexisting.merge({}, 1);
+  require(preexisting.overflow && preexisting.paths.empty(), "coalescing ignored an already exceeded limit");
+  fails([&] { preexisting.merge({}, 0); });
+}
 void native(const fs::path &project) {
   create(project);
   WorkspaceWatcher watcher(project, project / ".syrnck");
@@ -193,6 +210,7 @@ int main(int argc, char **argv) {
   const auto root = fs::temp_directory_path() / ("syrnck-watcher-" + hex(random_bytes(16)));
   struct Cleanup { fs::path root; ~Cleanup() { std::error_code error; fs::remove_all(root, error); } } cleanup{root};
   try {
+    coalescing();
     native(root / "native");
     bounded(root / "bounded");
     cancellation(root / "cancel-native", false);

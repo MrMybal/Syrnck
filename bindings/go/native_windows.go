@@ -34,7 +34,7 @@ func loadLibrary() error {
 			return
 		}
 		library.functions = make(map[string]*syscall.Proc)
-		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify"} {
+		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify", "string_free", "workspace_open", "workspace_close", "workspace_wait_json", "workspace_status_json", "workspace_invalidate"} {
 			p, err := library.dll.FindProc("syrnck_" + name)
 			if err != nil {
 				library.err = err
@@ -208,4 +208,54 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 	var objects uintptr
 	r, _, _ := library.functions["store_verify"].Call(uintptr(h), uintptr(unsafe.Pointer(&objects)))
 	return uint64(objects), status(int(r))
+}
+
+type nativeWorkspaceHandle uintptr
+
+func nativeWorkspaceOpen(root, store []byte, config *[3]uint32) (nativeWorkspaceHandle, error) {
+	if err := loadLibrary(); err != nil {
+		return 0, err
+	}
+	var result nativeWorkspaceHandle
+	r, _, _ := library.functions["workspace_open"].Call(uintptr(unsafe.Pointer(&root[0])), uintptr(unsafe.Pointer(&store[0])), uintptr(unsafe.Pointer(config)), uintptr(unsafe.Pointer(&result)))
+	runtime.KeepAlive(root)
+	runtime.KeepAlive(store)
+	runtime.KeepAlive(config)
+	return result, status(int(r))
+}
+func nativeWorkspaceClose(h nativeWorkspaceHandle) error {
+	r, _, _ := library.functions["workspace_close"].Call(uintptr(h))
+	return status(int(r))
+}
+func nativeWorkspaceInvalidate(h nativeWorkspaceHandle) error {
+	r, _, _ := library.functions["workspace_invalidate"].Call(uintptr(h))
+	return status(int(r))
+}
+func workspaceJSONResult(code int, ptr, length uintptr) ([]byte, error) {
+	err := status(code) // Save thread-local diagnostics before freeing the result.
+	if ptr != 0 {
+		defer library.functions["string_free"].Call(ptr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if ptr == 0 || length == 0 || length > 128*1024*1024+1 {
+		return nil, errors.New("invalid native workspace output size")
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(ptr)), int(length))
+	if data[len(data)-1] != 0 {
+		return nil, errors.New("invalid native workspace output terminator")
+	}
+	return append([]byte(nil), data[:len(data)-1]...), nil
+}
+func nativeWorkspaceWait(h nativeWorkspaceHandle, timeout uint32) ([]byte, error) {
+	var ptr, length uintptr
+	r, _, _ := library.functions["workspace_wait_json"].Call(uintptr(h), uintptr(timeout), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	return workspaceJSONResult(int(r), ptr, length)
+}
+func nativeWorkspaceStatus(h nativeWorkspaceHandle, store nativeHandle, selector []byte, mode uint32) ([]byte, error) {
+	var ptr, length uintptr
+	r, _, _ := library.functions["workspace_status_json"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(selector))), uintptr(mode), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	runtime.KeepAlive(selector)
+	return workspaceJSONResult(int(r), ptr, length)
 }

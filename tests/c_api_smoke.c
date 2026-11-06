@@ -29,6 +29,19 @@ int main(void) {
       syrnck_restore_file_range(NULL, "bad", "destination", 0, 1) != 1 ||
       syrnck_file_verify(NULL, "bad") != 1)
     return 1;
+  {
+    SyrnckWorkspace *workspace = NULL;
+    char *json = NULL;
+    if (sizeof(SyrnckWorkspaceOptions) != 12 ||
+        syrnck_workspace_open(NULL, NULL, NULL, &workspace) != 1 || workspace != NULL ||
+        syrnck_workspace_invalidate(NULL) != 1 || syrnck_workspace_close(NULL) != 0)
+      return 1;
+    required = 123;
+    if (syrnck_workspace_wait_json(NULL, 0, &json, &required) != 1 || json != NULL || required != 0 ||
+        syrnck_workspace_status_json(NULL, NULL, NULL, 0, &json, &required) != 1 ||
+        json != NULL || required != 0 || syrnck_workspace_wait_json(NULL, 0, NULL, &required) != 1)
+      return 1;
+  }
   puts("C ABI declarations, linking and null/error handling verified");
   return 0;
 }
