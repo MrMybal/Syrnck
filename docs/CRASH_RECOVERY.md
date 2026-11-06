@@ -178,6 +178,16 @@ inherit configured sanitizer runtime options.
 
 ## Remaining durability work
 
+`backup_crashes` separately exercises offline backup creation, restore and
+missing-object repair with the same private instrumented IO objects. It kills
+writers during chunk/manifest/revision/reference/settings/configuration and
+backup-descriptor writes, plus exclusive destination-directory publication.
+A fresh production reader preserves crash evidence, verifies every visible
+backup/restore and resumes to a complete result. Plain/encrypted fixtures use
+different source, backup and restored envelope keys. Unpublished private sibling
+directories can remain after process termination and are not automatically
+retired. See [backup semantics](BACKUPS.md).
+
 These tests exercise process termination with the OS and filesystem running.
 They do not establish survival of power loss, storage-controller write-cache
 loss, filesystem corruption, disk exhaustion or failed flush/rename system calls.

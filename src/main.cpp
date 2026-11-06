@@ -12,6 +12,7 @@
 #include <syrnck/native_net.hpp>
 #include <syrnck/i18n.hpp>
 #include <syrnck/asset_locks.hpp>
+#include <syrnck/backup.hpp>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -301,6 +302,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Gérer les baux du store serveur
   token-hash                         Empreinte du jeton SYRNCK_TOKEN (sans store)
+  backup create NOUVEAU_STORE | verify | restore NOUVEAU_STORE
+  backup repair STORE_SAUVEGARDE [--apply]   Prévisualiser/réparer les objets absents
   locks identity --remote URL        Afficher l’identité authentifiée
   locks list [--after CHEMIN] [--limit 100]   Lister les verrous d’assets
   locks acquire-plan|acquire --owner ID [--seconds 3600] CHEMIN...
@@ -455,6 +458,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
         [--lease-seconds 3600] [--read-lease-seconds 3600] [--require-lease]
   leases list | release ID | prune [--read]   Manage server store leases
   token-hash                         Hash SYRNCK_TOKEN (no store needed)
+  backup create NEW_STORE | verify | restore NEW_STORE
+  backup repair BACKUP_STORE [--apply]   Preview/repair missing objects
   locks identity --remote URL        Show the authenticated identity
   locks list [--after PATH] [--limit 100]   List asset locks
   locks acquire-plan|acquire --owner ID [--seconds 3600] PATH...
@@ -541,7 +546,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   }
   std::string sub;
   if (command == "git" || command == "native" || command == "agent" || command == "config" ||
-      command == "leases" || command == "locks")
+      command == "leases" || command == "locks" || command == "backup")
     sub = args.pop();
   if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));
@@ -707,7 +712,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
-      command == "pack" || command == "gc" || command == "locks" ||
+      command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "native" &&
        (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
@@ -1513,6 +1518,35 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       git::clean(store, std::cin, std::cout, options);
     } else
       throw Error("unknown Git command");
+  } else if (command == "backup") {
+    const OperationOptions operation{control->token(), observe};
+    std::optional<Key> secondary;
+    if (const auto encoded = environment("SYRNCK_BACKUP_KEY")) {
+      const auto value = unhex(*encoded);
+      require(value.size() == 32, "SYRNCK_BACKUP_KEY must encode exactly 32 bytes");
+      secondary.emplace();
+      std::copy(value.begin(), value.end(), secondary->begin());
+    }
+    if (sub == "verify") {
+      args.count(0);
+      print(verify_backup(store, operation));
+    } else if (sub == "create" || sub == "restore") {
+      args.count(1);
+      if (!secondary && store.encrypted())
+        secondary = read_key();
+      const auto destination = path_from_utf8(args.values[0]);
+      print(sub == "create" ? create_backup(store, destination, secondary, operation)
+                            : restore_backup(store, destination, secondary, operation));
+    } else if (sub == "repair") {
+      const auto apply = args.flag("--apply");
+      args.count(1);
+      Store backup(path_from_utf8(args.values[0]), secondary);
+      const auto result = repair_from_backup(store, backup, apply, operation);
+      print(result);
+      require(std::cout.good(), "output write failed");
+      return result["ready"].get<bool>() ? 0 : 1;
+    } else
+      throw Error("unknown backup command");
   } else if (command == "locks") {
     if (const auto url = args.option("--remote")) {
       require(token.has_value(), "set SYRNCK_TOKEN");

@@ -121,6 +121,12 @@ logiques et trafic des corps d'objets.
 
 ## Validation et migration
 
+`backup create`, `backup verify`, `backup restore` et `backup repair` fournissent
+des [sauvegardes hors ligne vérifiées et la réparation des objets absents](docs/BACKUPS.md),
+avec publication dans un nouveau dossier, changement possible de clé et
+conservation de l’historique protégé. Les fichiers de travail se récupèrent par
+export ; la réplication continue reste à développer.
+
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` et `prune` gèrent les
 [baux locaux d’assets](docs/ASSET_LOCKS.md) : groupes atomiques, expiration et
 générations conservées après GC. Les [droits serveur](docs/SERVER_ACCESS.md)

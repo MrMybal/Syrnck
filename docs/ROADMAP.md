@@ -182,7 +182,9 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Modèle explicite de fuite d'égalité ; déduplication bornée au domaine autorisé.
 - [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
-- [ ] Backups restaurables, réplication, scrubbing périodique et réparation des blocs manquants.
+- [x] Sauvegardes logiques hors ligne restaurables : objets conservés et paramètres vérifiés, publication exclusive dans un nouveau dossier, changement de clé d’enveloppe et reconstruction des anciennes versions après GC.
+- [x] Réparation des objets manquants depuis une sauvegarde vérifiée : plan sans écriture, validation des fichiers sur lecture combinée, import atomique reprenable sans déplacement des références ; les objets existants corrompus bloquent l’ensemble.
+- [ ] Réplication continue/failover, scrubbing périodique, réparation des packs/objets corrompus et restauration des workspaces/sessions opérationnelles.
 - [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
 - [x] Refus HTTP 401 après réception du corps borné, avant accès au stockage ; régression Windows avec corps différés, framing chunked, authentification dupliquée et requêtes concurrentes.
 - [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.

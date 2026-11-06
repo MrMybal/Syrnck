@@ -168,6 +168,12 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 
 ## Git and synchronization
 
+`backup create`, `backup verify`, `backup restore` and `backup repair` provide
+[verified offline snapshots and missing-object repair](docs/BACKUPS.md), with
+new destination publication, optional envelope key changes and preservation of
+retained history. Restore exports working files separately; this is not live
+replication or end-to-end encryption.
+
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide
 [repository-local asset leases](docs/ASSET_LOCKS.md), with atomic groups, expiry
 and persistent fencing generations. [Configured server access](docs/SERVER_ACCESS.md)
