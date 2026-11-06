@@ -71,8 +71,9 @@ Cache load_cache(const Store &store, std::string_view workspace, OperationOption
   return cache;
 }
 } // namespace
-Json indexed_native_status(const Store &store, const fs::path &directory,
-                           const std::optional<std::string> &revision, OperationOptions options) {
+Json indexed_native_observation(const Store &store, const fs::path &directory,
+                                const std::optional<std::string> &revision, NativeSnapshot &observed,
+                                OperationOptions options) {
   throw_if_cancelled(options.stop);
   const auto workspace = hash(bytes(utf8(fs::canonical(directory))));
   auto cache = load_cache(store, workspace, options);
@@ -132,14 +133,21 @@ Json indexed_native_status(const Store &store, const fs::path &directory,
   const auto pointer = Json{{"version", 1}, {"workspace", workspace}, {"object", key.id}}.dump();
   if (!cache.pointer || text(*cache.pointer) != pointer)
     atomic_write(pointer_path(store), bytes(pointer), true, options.stop);
+  const auto workspace_files = current.size();
+  observed = std::move(current);
   return Json{{"version", 1}, {"base", revision ? Json(*revision) : Json{}},
               {"clean", comparison["changes"].empty()}, {"tracked_files", baseline.size()},
-              {"workspace_files", current.size()}, {"hashed_bytes", hashed_bytes},
+              {"workspace_files", workspace_files}, {"hashed_bytes", hashed_bytes},
               {"counts", std::move(comparison["counts"])}, {"changes", std::move(comparison["changes"])},
               {"working_index", Json{{"version", 1}, {"mode", "stat-v1"}, {"previous", cache.state},
                                       {"hashed_files", hashed_files}, {"reused_files", reused_files},
                                       {"supported_files", supported_files}, {"cached_files", next.size()},
                                       {"truncated", truncated}, {"object", key.id}}}};
+}
+Json indexed_native_status(const Store &store, const fs::path &directory,
+                           const std::optional<std::string> &revision, OperationOptions options) {
+  NativeSnapshot observed;
+  return indexed_native_observation(store, directory, revision, observed, options);
 }
 Json indexed_native_workspace_status(const Store &store, const fs::path &directory, std::string_view branch,
                                      OperationOptions options) {

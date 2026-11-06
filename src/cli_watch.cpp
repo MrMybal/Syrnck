@@ -11,9 +11,11 @@ Json semantic_status(Json value) {
   if (value.contains("unstaged")) {
     value["unstaged"].erase("working_index");
     value["unstaged"].erase("hashed_bytes");
+    value["unstaged"].erase("observation");
   } else {
     value.erase("working_index");
     value.erase("hashed_bytes");
+    value.erase("observation");
   }
   return value;
 }
@@ -59,6 +61,7 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
   if (command.branch) validate_ref("heads/" + *command.branch);
   WorkspaceWatcher watcher(directory, storage, {command.polling, static_cast<std::size_t>(command.max_paths)}, operation.stop);
   const auto root = fs::canonical(directory);
+  WorkspaceObservation observation(root, storage);
   const auto started = Clock::now();
   const auto deadline = command.duration_ms ? started + Milliseconds(command.duration_ms) : Clock::time_point::max();
   auto audit = started, retry = started;
@@ -84,9 +87,8 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
         require(head["directory"].is_null() || head["directory"].get<std::string>() == utf8(root),
                 "native HEAD belongs to another workspace");
         require_no_native_checkout(*store);
-        if (changes.full_scan) clear_native_working_index(*store, operation);
         const auto branch = command.branch ? *command.branch : head["branch"].get<std::string>();
-        if (command.combined) status = indexed_native_workspace_status(*store, root, branch, operation);
+        if (command.combined) status = observation.workspace_status(*store, branch, changes, operation);
         else {
           std::optional<std::string> revision;
           if (command.revision) revision = store->resolve_native_revision(*command.revision, operation);
@@ -97,13 +99,16 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
               revision = found->second.id;
             }
           }
-          status = indexed_native_status(*store, root, revision, operation);
+          status = observation.status(*store, revision, changes, operation);
         }
+        const auto &working = command.combined ? status["unstaged"] : status;
+        changes.full_scan |= working["observation"]["full_scan"].get<bool>();
       } catch (const Cancelled &) { throw; }
         catch (const Error &failure) { error = failure.what(); }
         catch (const fs::filesystem_error &failure) { error = failure.what(); }
         catch (const Json::exception &failure) { error = failure.what(); }
       if (!error.empty()) {
+        observation.invalidate();
         if (error != last_error)
           output(Json{{"version", 1}, {"sequence", ++sequence}, {"type", "error"},
                       {"code", "scan_failed"}, {"backend", watcher.backend()},

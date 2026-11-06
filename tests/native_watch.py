@@ -139,6 +139,21 @@ class NativeWatch(unittest.TestCase):
                 time.sleep(0.35)
             self.assertEqual(len(run.finish()), 1, "idle watcher attempted extra observations or fed back on cache writes")
 
+    def test_existing_file_edit_does_not_reread_large_unrelated_asset(self):
+        (self.root / "large").write_bytes(b"x" * (4 * 1024 * 1024))
+        self.baseline()
+        with self.watch("--max-updates", 2, "--duration-ms", 4000) as run:
+            initial = run.until(lambda f: f["type"] == "status")
+            if initial["backend"] == "polling":
+                self.skipTest("targeted observation requires native notifications")
+            (self.root / "asset").write_bytes(b"changed!")
+            frame = run.until(lambda f: f["type"] == "status" and not f["status"]["clean"])
+            self.assertFalse(frame["full_scan"])
+            self.assertEqual(frame["status"]["hashed_bytes"], 8)
+            self.assertEqual(frame["status"]["observation"]["mode"], "targeted")
+            self.assertEqual(frame["status"]["observation"]["retained_files"], 1)
+            run.finish()
+
     def test_busy_store_after_event_is_retried_without_losing_working_change(self):
         self.baseline()
         with self.watch("--duration-ms", 5000, "--interval-ms", 40) as run:

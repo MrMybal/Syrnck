@@ -30,8 +30,13 @@ files completely. Consequently a restart observes edits made while the watcher
 was offline, independently of an earlier cached hash.
 
 Normal notifications are coalesced for a fixed bounded interval. Each batch
-triggers an indexed status query using the ordinary ignore rules, source
-selection and namespace checks. Deletions and renamed paths are observed as
+updates a complete in-memory inventory. Edits to known regular files inspect
+their ancestor directories and reread only those files, even if their size and
+timestamps match. They do not enumerate unrelated subtrees or rewrite the
+persisted hash cache. Creations, deletions, renames, directory/file transitions,
+ignore-rule changes and uncertain targeted inspection use a complete byte scan
+with the ordinary ignore rules, source selection and namespace checks.
+Deletions and renamed paths are observed as
 current filesystem state; event names are hints, not a transaction log or
 guaranteed rename pairs. `--combined` preserves separate staging and working
 changes, including stale staging. `--branch` or `--revision` follow the same
@@ -55,7 +60,15 @@ interval, but unchanged semantic results are also quiet.
 {"version":1,"sequence":1,"type":"status","reason":"initial","backend":"windows","full_scan":true,"overflow":false,"paths":[],"status":{"version":1,"base":null,"clean":true,"tracked_files":0,"workspace_files":0,"hashed_bytes":0,"counts":{"untracked":0,"removed":0,"modified":0,"unchanged":0},"changes":[],"working_index":{"version":1,"mode":"stat-v1","previous":"missing","hashed_files":0,"reused_files":0,"supported_files":0,"cached_files":0,"truncated":false,"object":"INDEX_OBJECT_ID"}}}
 ```
 
-The nested `status` is the existing ordinary or combined indexed report.
+The nested `status` has the ordinary or combined status fields. Working reports
+also include `observation` with `mode: full|indexed|targeted`, `full_scan`,
+`inspected_files` and `retained_files`. Only enumerated queries include the
+persisted `working_index` metrics; targeted queries retain a complete session
+inventory, including files unsupported by the stat cache. A full fallback sets
+the frame's `full_scan` flag as well. Report comparison still visits the
+in-memory file maps and reads revision metadata; this is not constant-time
+status for large histories.
+
 `sequence` increases within this process, including error frames. Backends are
 `windows`, `inotify` and `polling`. Status reasons are:
 
@@ -148,6 +161,15 @@ does not discard pending notifications. `wait` accepts 0..60000 milliseconds;
 50 ms apart, apart from filesystem/syscall latency. The C ABI and Go binding
 do not yet expose this native workspace observer.
 
+`WorkspaceObservation(project, store_path)` provides `status(store, revision,
+hints, operation)` and `workspace_status(store, branch, hints, operation)`.
+Arm a watcher first, feed every batch without gaps, and request full scans for
+lost continuity. A new observation, `invalidate()`, any failed query and periodic
+audits discard incremental assumptions. Polling enumerates with the persisted
+stat cache between byte audits. Closing and reopening a Store does not lose the
+session inventory, and collecting its unrooted cache objects does not truncate
+that inventory. Mutation preflights continue to validate independently.
+
 Local Windows validation covers native create/edit/delete/rename notifications,
 Unicode paths, new and renamed directory trees, internal-noise filtering,
 bounded overflow, cancellation and root replacement. CLI scenarios cover
@@ -157,8 +179,9 @@ restart/offline edits, file/directory transitions, error suppression and
 French diagnostics. Linux native execution and macOS fallback execution still
 need confirmation by CI.
 
-Directory inventories are still rebuilt for each triggered indexed query.
-A persistent change journal, incremental directory inventory, causal version
+Existing-file edits use targeted observation; namespace changes still rebuild
+directory inventories. A persistent change journal, incremental directory
+topology updates, causal version
 tracking, tombstones, transfer scheduling, OS service packaging and full
 Syncthing daemon/folder interoperability remain separate work.
 

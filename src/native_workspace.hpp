@@ -47,6 +47,10 @@ Json compare_native_snapshots(const Store &, const std::optional<std::string> &s
                               const std::optional<std::string> &target, OperationOptions);
 Json compare_native_file_maps(const NativeSnapshot &, const NativeSnapshot &, OperationOptions);
 Json compare_native_workspace_maps(const NativeSnapshot &, const NativeSnapshot &, OperationOptions);
+// Also capture the complete selected inventory, including unsupported or
+// uncached entries. Output changes only after cache publication succeeds.
+Json indexed_native_observation(const Store &, const fs::path &, const std::optional<std::string> &,
+                                NativeSnapshot &, OperationOptions);
 Json plan_native_checkout_files(const Store &, const fs::path &, std::string_view branch,
                                 const NativeSnapshot &destination, OperationOptions);
 } // namespace syrnck

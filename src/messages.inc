@@ -662,6 +662,7 @@ SYRNCK_MESSAGE("invalid working index contents", "contenu de l'index de travail 
 SYRNCK_MESSAGE("working index exceeds 16 MiB", "l'index de travail dépasse 16 Mio")
 SYRNCK_MESSAGE("working index changed; retry operation", "l'index de travail a changé ; relancez l'opération")
 SYRNCK_MESSAGE("cannot clear working index", "impossible de vider l'index de travail")
+SYRNCK_MESSAGE("workspace observation belongs to another store", "l'observation du dossier de travail appartient à un autre stockage")
 SYRNCK_MESSAGE("cannot inspect watched workspace", "impossible d'inspecter le dossier de travail surveillé")
 SYRNCK_MESSAGE("invalid workspace watcher limits", "limites de surveillance du dossier de travail invalides")
 SYRNCK_MESSAGE("native store must be below watched workspace", "le stockage natif doit se trouver sous le dossier de travail surveillé")
