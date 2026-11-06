@@ -130,6 +130,14 @@ names. Expected-reference compare-and-swap protects concurrent publication;
 from the existing head. Uploaded objects may remain unreferenced on rejection,
 but the branch does not move.
 
+Before replacing an existing head, configured access mode retains it under
+`archive/publish/REVISION`, including for branches that permit a forced history
+replacement. The archive is durable before branch publication. A crash or a
+later rejected publication can leave an extra safety root; it cannot move the
+branch first and lose its previous history. These roots are hidden from remote
+branch listings and survive server GC. [Explicit archive retirement](ARCHIVE_RETENTION.md)
+requires a verified separate backup before removing selected protection roots.
+
 Write checks cover every newly reachable commit compared with every parent,
 plus changes between the published and proposed heads. Adding a forbidden path
 in an intermediate commit and removing it before push still fails. Merge

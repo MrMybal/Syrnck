@@ -173,6 +173,7 @@ Help, status messages, and owned diagnostics are localized at the interface boun
 new destination publication, optional envelope key changes and preservation of
 retained history. Restore exports working files separately; this is not live
 replication or end-to-end encryption.
+`backup retire-plan` / `backup retire` add [backup-protected archive retirement](docs/ARCHIVE_RETENTION.md).
 
 `locks acquire-plan`/`acquire`, `renew`, `release`, `list` and `prune` provide
 [repository-local asset leases](docs/ASSET_LOCKS.md), with atomic groups, expiry

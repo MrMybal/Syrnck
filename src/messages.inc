@@ -1,5 +1,16 @@
 // Canonical English keys, French translations. Only explicitly marked prefixes
 // translate a diagnostic with a dynamic suffix; user data is never translated.
+SYRNCK_MESSAGE("server publication archive changed", "L’archive de publication serveur a changé")
+SYRNCK_MESSAGE("archive retirement requires --from BACKUP", "Le retrait d’archives exige --from SAUVEGARDE")
+SYRNCK_MESSAGE("archive retirement requires --expect-plan", "Le retrait d’archives exige --expect-plan")
+SYRNCK_MESSAGE("archive retirement requires a separate backup store", "Le retrait d’archives exige un store de sauvegarde distinct")
+SYRNCK_MESSAGE("archive retirement requires 1..1024 references", "Le retrait d’archives exige 1 à 1024 références")
+SYRNCK_MESSAGE("duplicate archive retirement reference", "Référence de retrait d’archives en double")
+SYRNCK_MESSAGE("unknown archive retirement reference", "Référence de retrait d’archives inconnue")
+SYRNCK_MESSAGE("archive retirement requires revision roots", "Le retrait d’archives exige des racines de révisions")
+SYRNCK_MESSAGE("native fetch retirement identity mismatch", "Identité incohérente pour le retrait d’une racine de téléchargement natif")
+SYRNCK_MESSAGE("archive retirement plan changed; refresh the plan", "Le plan de retrait d’archives a changé ; actualisez le plan")
+SYRNCK_MESSAGE("archive retirement references changed; retry operation", "Les références de retrait d’archives ont changé ; réessayez l’opération")
 SYRNCK_MESSAGE("backup requires completed or retired transfer sessions", "La sauvegarde exige des sessions de transfert terminées ou retirées")
 SYRNCK_MESSAGE("backup requires quiescent upload leases", "La sauvegarde exige des baux d’envoi inactifs")
 SYRNCK_MESSAGE("backup requires quiescent read leases", "La sauvegarde exige des baux de lecture inactifs")

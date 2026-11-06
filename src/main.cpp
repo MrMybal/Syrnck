@@ -13,6 +13,7 @@
 #include <syrnck/i18n.hpp>
 #include <syrnck/asset_locks.hpp>
 #include <syrnck/backup.hpp>
+#include <syrnck/retention.hpp>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -304,6 +305,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   token-hash                         Empreinte du jeton SYRNCK_TOKEN (sans store)
   backup create NOUVEAU_STORE | verify | restore NOUVEAU_STORE
   backup repair STORE_SAUVEGARDE [--apply]   Prévisualiser/réparer les objets absents
+  backup retire-plan ARCHIVE... --from SAUVEGARDE
+  backup retire ARCHIVE... --from SAUVEGARDE --expect-plan ID
   locks identity --remote URL        Afficher l’identité authentifiée
   locks list [--after CHEMIN] [--limit 100]   Lister les verrous d’assets
   locks acquire-plan|acquire --owner ID [--seconds 3600] CHEMIN...
@@ -460,6 +463,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   token-hash                         Hash SYRNCK_TOKEN (no store needed)
   backup create NEW_STORE | verify | restore NEW_STORE
   backup repair BACKUP_STORE [--apply]   Preview/repair missing objects
+  backup retire-plan ARCHIVE... --from BACKUP
+  backup retire ARCHIVE... --from BACKUP --expect-plan ID
   locks identity --remote URL        Show the authenticated identity
   locks list [--after PATH] [--limit 100]   List asset locks
   locks acquire-plan|acquire --owner ID [--seconds 3600] PATH...
@@ -1537,6 +1542,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto destination = path_from_utf8(args.values[0]);
       print(sub == "create" ? create_backup(store, destination, secondary, operation)
                             : restore_backup(store, destination, secondary, operation));
+    } else if (sub == "retire-plan" || sub == "retire") {
+      const auto from = args.option("--from");
+      const auto expected = args.option("--expect-plan");
+      require(from.has_value(), "archive retirement requires --from BACKUP");
+      require(sub == "retire-plan" || expected.has_value(), "archive retirement requires --expect-plan");
+      const auto names = args.paths();
+      Store backup(path_from_utf8(*from), secondary);
+      print(sub == "retire-plan" ? plan_archive_retirement(store, backup, names, operation)
+                                 : retire_archives(store, backup, names, *expected, operation));
     } else if (sub == "repair") {
       const auto apply = args.flag("--apply");
       args.count(1);

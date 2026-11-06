@@ -806,6 +806,18 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
         const auto check = access
                                ? access->publication(store, *principal(request), name, root, previous, claims)
                                : ProgressCallback{};
+        // Retain the old head before a possible branch move. Interrupted or
+        // rejected publications may leave an extra safety root, never an
+        // unprotected former branch head.
+        auto archive_previous = [&] {
+          if (!access || !previous || *previous == root)
+            return;
+          const auto saved = "archive/publish/" + previous->id;
+          const auto existing = reference(store.refs(), saved);
+          require(!existing || *existing == *previous, "server publication archive changed");
+          if (!existing)
+            require(store.compare_update_refs({{saved, {}, previous}}), "server publication archive changed");
+        };
         if (j.contains("upload")) {
           const auto &u = j["upload"];
           require(u.is_object() && u.size() == 2 && u.contains("id") && u["id"].is_string() &&
@@ -819,11 +831,21 @@ void serve(Store &store, std::string_view token, std::string_view listen, Langua
           }
           require(lease->root == root && lease->reference == name && lease->expected == previous,
                   "upload lease descriptor mismatch");
+          if (access) {
+            const auto fence = u["fence"].template get<std::string>();
+            validate_id(fence);
+            if (lease->fence != fence || (lease->state != "active" && lease->state != "published") ||
+                (lease->state == "active" && lease->expires_at <= unix_seconds()))
+              throw LeaseRejected("upload lease is expired, released or fenced");
+            if (lease->state == "active")
+              archive_previous();
+          }
           response.status =
               store.publish_upload_lease(id, u["fence"].template get<std::string>(), {{}, check}) ? 204 : 409;
         } else if (limits.require_upload_lease) {
           response.status = 428;
         } else {
+          archive_previous();
           response.status = store.compare_update_refs({{name, previous, root}}, {{}, check}) ? 204 : 409;
         }
       }));

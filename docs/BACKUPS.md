@@ -71,6 +71,10 @@ Keep the original backup until restored revisions have been exported and checked
 
 ## Repair missing retained dependencies
 
+[Archive retirement](ARCHIVE_RETENTION.md) uses a verified backup to remove
+selected simple archive/fetch roots through a bound preview and one reference
+transaction. It does not run GC automatically.
+
 ```text
 syrnck --store damaged-store backup repair snapshot-001
 syrnck --store damaged-store backup repair snapshot-001 --apply

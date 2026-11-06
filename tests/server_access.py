@@ -252,6 +252,22 @@ class ServerAccess(unittest.TestCase):
             self.http("PUT", "/v1/refs/main", {"root": root, "expected": None}, actor="reader", expected=403)
             self.http("PUT", "/v1/uploads/" + "2" * 64, dict(request, reference="forbidden"), expected=403)
 
+    def test_forced_publication_retains_previous_remote_history_after_gc(self):
+        first = self.commit("Source/code.cpp", b"first source")
+        with self.serving(strict=True):
+            self.publish(first, name="scratch")
+            (self.project / "Source/code.cpp").write_bytes(b"independent new source")
+            self.cmd("native", "commit", "-m", "changed")
+            second = self.cmd("native", "detach-history", "-m", "independent history").stdout.decode().strip()
+            self.publish(second, name="scratch")
+            self.assertEqual(self.http("GET", "/v1/refs"), {"scratch": {"kind": "revision", "id": second}})
+        references = json.loads(self.cmd("refs", store=self.server, key=True).stdout)
+        self.assertEqual(references["archive/publish/" + first]["id"], first)
+        self.cmd("gc", "--delete", store=self.server, key=True)
+        exported = self.root / "old-published-history"
+        self.cmd("native", "export", first, exported, store=self.server, key=True)
+        self.assertEqual((exported / "Source/code.cpp").read_bytes(), b"first source")
+
 
 if __name__ == "__main__":
     unittest.main()

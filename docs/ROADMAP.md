@@ -181,6 +181,7 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Dérivation de clés, coffre système, rotation, révocation et récupération.
 - [ ] Modèle explicite de fuite d'égalité ; déduplication bornée au domaine autorisé.
 - [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.
+- [x] Retrait explicite de racines d’archives natives simples et de fetch : aperçu lié aux références et à une sauvegarde distincte vérifiée, couverture complète des versions, retrait atomique et GC séparé ; anciennes têtes serveur conservées avant remplacement.
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.
 - [x] Sauvegardes logiques hors ligne restaurables : objets conservés et paramètres vérifiés, publication exclusive dans un nouveau dossier, changement de clé d’enveloppe et reconstruction des anciennes versions après GC.
 - [x] Réparation des objets manquants depuis une sauvegarde vérifiée : plan sans écriture, validation des fichiers sur lecture combinée, import atomique reprenable sans déplacement des références ; les objets existants corrompus bloquent l’ensemble.
