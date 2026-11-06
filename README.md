@@ -259,4 +259,8 @@ The script scans a snapshot of the publishable working tree, including vendored 
 - [Usage](docs/USAGE.md), [architecture](docs/ARCHITECTURE.md), [formats](docs/PROTOCOL.md), [roadmap](docs/ROADMAP.md), [performance](docs/PERFORMANCE.md), and [migration](docs/MIGRATION_CPP.md) — French
 - [Go binding](bindings/go/README.md) — French
 
-The project has not selected its own distribution license yet. Dependency notices are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+## License
+
+Syrnck's original code is licensed under the [MIT License](LICENSE).
+Third-party components retain their respective licenses and notices; see
+[THIRD_PARTY.md](THIRD_PARTY.md).

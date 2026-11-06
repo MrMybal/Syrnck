@@ -1,5 +1,8 @@
 # Third-party components
 
+Syrnck's original code is distributed under the [MIT License](LICENSE).
+The components below retain their own licenses and copyright notices.
+
 Syrnck's implementation is C++20, with native C dependencies. No Rust compiler, Cargo package or Rust runtime is required to build or run it.
 
 | Component | Pinned version | Source | License / notice |
@@ -18,4 +21,15 @@ The small dependencies are vendored. CMake fetches Zstd and curl from versioned 
 
 PicoSHA2 is private to the Git LFS adapter and verifies the SHA-256 identities of imported LFS objects. The vendored files are copied verbatim from the pinned commit: `picosha2.h` SHA-256 `b13c180161ffac8d0adc81e033e493c409457c4d1258ab9781ac80579ba3bdd8`; `LICENSE` SHA-256 `6c30eb1f37554ec4199cb82a8c86d9e7a852da78a757832bebb03ac9ddc44ff1`.
 
-The source project still needs its own distribution license. Any release package must include these notices and applicable dependency licenses. No Lore or Syncthing implementation was copied into this project.
+Any release package must include these notices and the applicable dependency
+licenses. CMake installation copies the project license, this notice, vendored
+license files and the fetched Zstd/libcurl license files to
+`share/licenses/Syrnck` (or the configured data directory).
+
+The optional Go adapter in `bindings/syncthing` depends on Syncthing's upstream
+protocol library ([pinned module](bindings/syncthing/go.mod), based on v2.1.7).
+Syncthing remains an external [MPL-2.0 dependency](https://github.com/syncthing/syncthing/blob/v2.1.7/LICENSE),
+with its original notices. Its other Go module dependencies retain their own
+licenses. They are downloaded separately and are not part of the CMake engine
+installation. No Lore or Syncthing implementation is vendored into the C++ core;
+the MIT project license does not relicense any upstream component.

@@ -44,7 +44,14 @@ jobs:
             build/*syrnck_ffi*.so
             build/*syrnck_ffi*.dylib
             include/syrnck.h
+            LICENSE
             THIRD_PARTY.md
+            third_party/**/LICENSE*
+            third_party/**/LICENCE*
+            third_party/**/COPYING*
+            build/_deps/zstd-src/LICENSE
+            build/_deps/zstd-src/COPYING
+            build/_deps/curl-src/COPYING
           if-no-files-found: error
   sanitizers:
     runs-on: ubuntu-latest

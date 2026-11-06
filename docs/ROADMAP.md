@@ -199,6 +199,7 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Quotas, limitation de charge, métriques et journaux sans secrets.
 - [x] Refus HTTP 401 après réception du corps borné, avant accès au stockage ; régression Windows avec corps différés, framing chunked, authentification dupliquée et requêtes concurrentes.
 - [ ] Fuzzing des formats/protocoles, injections de pannes et audit de sécurité.
-- [ ] Choix de licence, provenance des dépendances, paquets signés et stratégie de migration de format.
+- [x] Licence MIT du code original, notices distinctes des dépendances et installation de leurs textes avec CMake.
+- [ ] Audit complet de provenance, paquets signés et stratégie de migration de format.
 
 Critère de sortie : restauration complète après perte d'un nœud et après rotation de clés ; aucune suppression ne précède la validation de toutes les racines protégées et des transferts en cours.

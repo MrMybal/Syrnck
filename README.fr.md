@@ -242,3 +242,9 @@ La compilation et les tests locaux sont validés sous Windows x64 avec MSVC. La 
 - [Binding Go et préparation Syncthing](bindings/go/README.md)
 
 Le projet s'inspire de [Lore](https://github.com/EpicGames/lore) pour le stockage fragmenté et de [Syncthing](https://github.com/syncthing/syncthing) pour les transferts différentiels. Aucun code de ces deux projets n'a été copié dans ce socle.
+
+## Licence
+
+Le code original de Syrnck est distribué sous [licence MIT](LICENSE).
+Les dépendances conservent leurs licences et notices respectives, détaillées
+dans [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -124,7 +124,7 @@ Json native_checkout_receipts(const Store &store, const std::optional<std::strin
     validate_id(*after);
   const auto refs = store.refs();
   std::set<std::string> ids;
-  for (const auto prefix : {std::string("checkouts/completed/"), std::string("checkouts/receipts/")})
+  for (const auto &prefix : {std::string("checkouts/completed/"), std::string("checkouts/receipts/")})
     for (auto at = refs.lower_bound(prefix); at != refs.end() && at->first.starts_with(prefix); ++at) {
       throw_if_cancelled(options.stop);
       const auto id = at->first.substr(prefix.size());

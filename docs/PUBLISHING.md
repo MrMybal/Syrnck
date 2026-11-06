@@ -1,6 +1,6 @@
 # Publishing Syrnck to GitHub
 
-Target: [MrMybal/Syrnck](https://github.com/MrMybal/Syrnck). Keep the current private visibility unless the owner explicitly requests a change. Publishing this C++ source repository uses ordinary Git; it does not require Syrnck pointers or Git LFS for the current source tree.
+Target: [MrMybal/Syrnck](https://github.com/MrMybal/Syrnck). Preserve the repository's configured visibility unless the owner explicitly requests a change. Publishing this C++ source repository uses ordinary Git; it does not require Syrnck pointers or Git LFS for the current source tree.
 
 ## Repository description
 
@@ -9,6 +9,13 @@ Use the text in [GITHUB_DESCRIPTION.txt](GITHUB_DESCRIPTION.txt) for GitHub's **
 > C++20 revision and block storage engine for large assets, with content-defined chunking, deduplication, Git integration, standalone history, and differential file sync.
 
 The primary README is English, with a link to the French README. The description intentionally describes the engine without claiming a finished Git replacement, an Unreal plugin, or implemented Syncthing interoperability.
+
+## License
+
+The original Syrnck code uses the [MIT License](../LICENSE). The root license
+is published with the source and installed alongside [third-party notices](../THIRD_PARTY.md).
+Upstream components keep their own licenses, including the optional Syncthing
+protocol dependency. A normal Git push does not change repository visibility.
 
 ## Before the first upload
 
@@ -55,7 +62,7 @@ git push --dry-run origin main
 git push -u origin main
 ```
 
-These commands preserve private repository visibility. A non-fast-forward rejection requires inspection and reconciliation, rather than a forced update. The GitHub Actions workflows run the build/test matrix and secret scan after the upload; confirm their actual results before describing a platform as validated.
+These commands do not change repository visibility. A non-fast-forward rejection requires inspection and reconciliation, rather than a forced update. The GitHub Actions workflows run the build/test matrix and secret scan after the upload; confirm their actual results before describing a platform as validated.
 
 ## Authentication
 
