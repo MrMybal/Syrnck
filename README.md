@@ -1,36 +1,107 @@
-# Syrnck
+<table width="100%">
+  <tr>
+    <td width="300" align="left" valign="top">
+      <a href="Documentation/Documentation.html#/en/overview">Local manual</a><br>
+      <a href="https://github.com/MrMybal/Syrnck">Repository</a><br>
+      <a href="https://github.com/MrMybal/Syrnck/issues">Report an issue</a><br><br>
+      <sub>README</sub><br>
+      <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
+    </td>
+    <td width="400" align="center" valign="middle">
+      <strong>Syrnck</strong><br><sub>C++20</sub>
+    </td>
+    <td width="300" align="right" valign="top">
+      <p><sub>Application license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.1.0</strong></a><br><strong>EXPERIMENTAL PROTOTYPE</strong></p>
+    </td>
+  </tr>
+</table>
 
-[English](README.md) · [Français](README.fr.md)
+<h1 align="center">Syrnck</h1>
 
-**A C++20 block storage and revision engine for large assets.**
+A C++20 storage and revision engine for developers working with large project assets. Reuse content-addressed blocks across file versions, keep source code in Git, or use the standalone history over the same storage engine.
 
-Syrnck splits files into reusable, content-addressed blocks. Complete manifests describe each version, so reconstruction never needs a chain of binary deltas. Git integration keeps ordinary Git history for code and stores selected assets as pointers. Standalone history uses the same blocks for commits, staging, branches, tags, recoverable checkout, merge, rebase, stash and inspection.
+> **EXPERIMENTAL PROTOTYPE · 0.1.0**
+>
+> This README describes the current source checkout. No prebuilt application release is published yet. Read the [version notes and documented limitations](VERSION.md) before adopting the formats.
 
-The engine also provides verified range reads, reuse plans, indexed packs, backups, retention, an authenticated block server and a resumable one-shot transfer agent. C++/C libraries, a Go binding and an optional regular-file Syncthing BEP adapter are available. No Unreal runtime is required.
+[![Syrnck’s English local manual, with navigation, search and workflow guides](assets/readme/manual-en.png)](assets/readme/manual-en.png)
 
-**Experimental formats.** Standalone mode does not implement every Git feature. End-to-end encryption, a complete resident synchronization service and complete Syncthing daemon/folder interoperability remain unfinished. At-rest encryption does not hide data from an authorized server. See the manual’s current limits.
+## About Syrnck
+
+Each file version has a complete manifest: its ordered blocks, size and whole-file hash. Versions can share blocks without replaying a chain of binary patches. Removing a commit from a branch does not automatically release its data: branches, tags, indexes, archives and pins retain their dependencies until explicitly retired.
+
+Two workflows share this engine. **Git integration** keeps ordinary code history, branches and merges in Git while selected assets become Syrnck pointers. **Standalone history** provides native commits, staging, branches, tags and recoverable workspace operations. Git asset hosting needs a separate Syrnck block server; GitHub does not supply that service automatically.
+
+Embed the engine through C++20. The C ABI and Go binding expose verified storage operations, ranges, reuse plans and workspace observation. The optional Go Syncthing adapter bridges regular-file BEP blocks; complete daemon/folder synchronization remains separate work. The engine has no Unreal runtime dependency and treats assets as ordinary file bytes.
+
+<a id="quick-start"></a>
+
+### Start a project
+
+With the binary on PATH, run from your project directory:
+
+```text
+syrnck init
+syrnck native commit --message "Initial project snapshot"
+syrnck native status --combined
+syrnck help usage
+```
+
+For an existing asset, `syrnck put Content/Map.uasset` retains its manifest and reports block reuse. `get MANIFEST NEW_FILE` reconstructs a version without overwriting a destination. `gc` previews collection; `gc --delete` physically removes unreachable objects. Keep the retention roots and verified backups for versions you need to reconstruct.
+
+## Features
+
+- **Reusable blocks:** FastCDC or fixed chunking, typed BLAKE3 IDs, Zstandard compression, complete-file verification and indexed immutable packs.
+- **Version control:** Git filters/catalogs and offline LFS migration; native staging, text differences, merge, linear/interactive rebase, cherry-pick, reset, stash, file history and bisect, within their documented limits.
+- **Team transfers:** authenticated block server, configured identities/permissions, expiring asset locks, missing-object transfers, resumable sessions and fenced reference publication.
+- **Retention and recovery:** archived history, verified backups/restores, repair copies and explicit retirement before collection.
+- **Local help:** a complete English/French CyDoc manual with search, stable section links and contextual CLI help.
+
+---
+
+## Installation
+
+Build from source using the steps below. Source configurations exist for Windows and Linux/macOS; the [version notes](VERSION.md#platforms) distinguish available configurations from platform validation. The repository currently has no published application ZIP or installer.
+
+```text
+cmake --install build --config Release --prefix dist
+```
+
+After building, this installs the CLI in `dist/bin`, the complete `Documentation/` folder beside it, and headers/libraries/license notices in their installation directories. Put `dist/bin` on PATH or use the executable’s full path. The CLI needs no Python or Node.js at runtime; Git features require Git and local help needs a browser.
 
 <a id="languages"></a>
 
-## Local manual
+### Local manual
 
-The full English/French CyDoc manual is included in `Documentation/` and beside the installed executable. It opens directly through file:// without a server, CDN or Internet connection. Keep the complete folder together.
+Run `syrnck help`, `syrnck help native tags` or `syrnck --lang fr help native-checkout`. You can also open [Documentation.html](Documentation/Documentation.html#/en/overview) from a local checkout or installation. Keep the whole documentation folder: the reader works through file:// without a web server, CDN or Internet connection. GitHub displays the HTML source rather than executing it.
 
-```text
-syrnck help
-syrnck help native tags
-syrnck --lang fr help native-checkout
-syrnck help packs --section memoire-du-gc --print-url
-syrnck --help
-```
-
-You can also open [Documentation.html](Documentation/Documentation.html) in a browser from a local checkout or installation. On GitHub, browse the [English source](.CyDocBuild/manual/en/overview.md) or [French source](.CyDocBuild/manual/fr/overview.md); GitHub does not execute the reader. Search, navigation, code references and section links work locally. English is default; `--lang` overrides `SYRNCK_LANG`. Commands, IDs, JSON and wire formats keep their canonical spelling.
+English is the default; `--lang` overrides `SYRNCK_LANG`. Commands, IDs, JSON and network formats remain language-independent. `syrnck --help` keeps the concise terminal reference.
 
 <a id="build-and-test"></a>
+<a id="build-test-and-install"></a>
 
-## Build, test and install
+## Source, build and required libraries
 
-Requirements: CMake 3.25+, C++20 and C compilers, Ninja, Python 3.9+, and Node.js 22+/npm for manual generation. Windows uses Visual Studio 2022 C++ tools and a Windows SDK. Linux/macOS network builds require OpenSSL **3.x** development libraries. The helper discovers MSVC/CMake/Ninja on Windows.
+<details>
+<summary>Requirements, source checkout and build commands</summary>
+
+### Requirements
+
+- CMake 3.25+, Ninja, a C++20 compiler and a C compiler.
+- Python 3.9+ for the build helper and tests; Node.js 22+/npm for manual generation.
+- Windows: Visual Studio 2022 C++ tools and a Windows SDK. The helper discovers MSVC/CMake/Ninja.
+- Linux/macOS network builds: OpenSSL **3.x** development libraries. On Homebrew use `ninja` and `openssl@3`; pass `-DOPENSSL_ROOT_DIR` if the desired OpenSSL is not found.
+- Git **2.45+** for Git integration. Optional Go binding: Go 1.22+; optional Syncthing adapter: Go 1.26.2+ and its separately downloaded module dependencies.
+
+### Get the source
+
+```sh
+git clone https://github.com/MrMybal/Syrnck.git
+cd Syrnck
+```
+
+### Build and install
 
 ```text
 python scripts/build.py configure
@@ -39,44 +110,60 @@ python scripts/build.py test
 cmake --install build --config Release --prefix dist
 ```
 
-The CLI is `build/Release/syrnck.exe` on Windows and `build/syrnck` on Unix. Installation puts it in `dist/bin` with `Documentation/`, public headers, libraries and license notices in the normal installation directories. CI packages this installed layout. CMake presets `windows` and `unix` are available in an initialized compiler environment.
+The CLI is `build/Release/syrnck.exe` on Windows and `build/syrnck` with the Unix preset. CMake presets `windows` and `unix` also work in an initialized compiler environment. Initial preparation downloads hash-verified Zstd/libcurl archives and npm’s locked dependencies unless cached; small native dependencies and the pinned CyDoc archive are included.
 
-Small native dependencies and the pinned CyDoc package are included. Initial configuration downloads hash-verified Zstd/libcurl archives and npm’s locked build dependencies unless cached. macOS Homebrew users need `ninja` and `openssl@3`; select its directory with `-DOPENSSL_ROOT_DIR` if necessary.
+For embedding, use `add_subdirectory`, [core.hpp](include/syrnck/core.hpp) or the [C ABI](include/syrnck.h). A minimal library build disables `SYRNCK_BUILD_CLI`, `SYRNCK_BUILD_NETWORK`, `SYRNCK_BUILD_TESTS` and `SYRNCK_BUILD_BENCHMARKS`. Documentation defaults off without the CLI; `SYRNCK_BUILD_DOCUMENTATION=OFF` disables it explicitly. Static C++ archives require their native dependencies at final link.
 
-For embedding use `add_subdirectory`, [core.hpp](include/syrnck/core.hpp) or the [C ABI](include/syrnck.h). Set `SYRNCK_BUILD_CLI=OFF`, `SYRNCK_BUILD_NETWORK=OFF`, `SYRNCK_BUILD_TESTS=OFF` and `SYRNCK_BUILD_BENCHMARKS=OFF` for a minimal build. Documentation then defaults off; `SYRNCK_BUILD_DOCUMENTATION=OFF` explicitly disables it. Installed help requires neither Node.js nor Python.
+The normal build generates and copies the local manual. Separate regeneration commands and authoring instructions are in the [documentation maintenance guide](.CyDocBuild/README.md).
 
-Regenerate the manual separately:
+</details>
 
-```text
-npm --prefix .CyDocBuild ci --no-audit --no-fund --cache .CyDocBuild/.cache/npm
-npm --prefix .CyDocBuild run build
-npm --prefix .CyDocBuild run check
-npm --prefix .CyDocBuild test
-```
+---
 
-Authoring, translations and browser checks: [.CyDocBuild/README.md](.CyDocBuild/README.md).
+<a id="development-and-license"></a>
 
-<a id="quick-start"></a>
+## License
 
-## Start a project
+Syrnck’s original code uses the [MIT license](LICENSE). Copyright © 2026 MrMybal and Syrnck contributors. Third-party components retain their own terms.
 
-With the binary on PATH, run from a project directory:
+### Native components
 
-```text
-syrnck init
-syrnck put Content/Map.uasset
-syrnck native commit --message "Initial project snapshot"
-syrnck refs
-syrnck fsck
-syrnck gc
-```
+| Library · source | License · terms | Use / scope |
+| --- | --- | --- |
+| [BLAKE3 C · 1.8.7](https://github.com/BLAKE3-team/BLAKE3) | [Apache-2.0](third_party/blake3/LICENSE_A2) / [CC0](third_party/blake3/LICENSE_CC0); [LLVM exception](third_party/blake3/LICENSE_A2LLVM) | Native content hashes and object IDs. |
+| [FastCDC 2020 · port from 5.0.0](https://crates.io/crates/fastcdc/5.0.0) | [MIT](third_party/fastcdc/LICENSE) | Native content-defined chunking. |
+| [Monocypher · 4.0.2](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Native authenticated encryption at rest. |
+| [nlohmann/json · 3.12.0](https://github.com/nlohmann/json/tree/v3.12.0) | [MIT](third_party/nlohmann/LICENSE.MIT) | Native manifests, revisions and metadata. |
+| [cpp-httplib · 0.28.0](https://github.com/yhirose/cpp-httplib/tree/v0.28.0) | [MIT](third_party/httplib/LICENSE) | HTTP server; network component. |
+| [utf8proc · 2.10.0](https://github.com/JuliaStrings/utf8proc/tree/v2.10.0) | [MIT and Unicode data terms](third_party/utf8proc/LICENSE.md) | Portable path normalization and collision checks. |
+| [PicoSHA2](https://github.com/okdshin/PicoSHA2/tree/161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29) | [MIT](third_party/picosha2/LICENSE) | SHA-256 verification in the Git LFS importer. |
+| [Zstandard · 1.5.7](https://github.com/meta/zstd/tree/v1.5.7) | [BSD-3-Clause](https://github.com/meta/zstd/blob/v1.5.7/LICENSE) / [GPL-2.0](https://github.com/meta/zstd/blob/v1.5.7/COPYING) | Native object and negotiated transfer compression. |
+| [libcurl · 8.16.0](https://curl.se/) | [curl license](https://github.com/curl/curl/blob/curl-8_16_0/COPYING) | HTTP client; Schannel on Windows, OpenSSL on Unix. |
+| [OpenSSL · 3.x](https://github.com/openssl/openssl) | [Apache-2.0](https://github.com/openssl/openssl/blob/openssl-3.0/LICENSE.txt) | System-provided dependency for Unix network builds. |
 
-`put` pins its manifest and reports reuse. `get MANIFEST NEW_FILE` reconstructs without overwriting. GC previews by default; `--delete` physically collects unreachable objects. Keep branches, archives, pins and verified backups for versions that must remain reconstructible. Start with `syrnck help usage`, then `help git-assets` or `help native-history`.
+### Optional Go adapter
 
-## Development and license
+| Library · source | License · terms | Use / scope |
+| --- | --- | --- |
+| [Syncthing · pinned module](bindings/syncthing/go.mod) | [MPL-2.0](https://github.com/syncthing/syncthing/blob/v2.1.7/LICENSE) | Optional regular-file BEP adapter; outside the C++ core. |
+| [golang.org/x/text · 0.42.0](https://pkg.go.dev/golang.org/x/text@v0.42.0) | [BSD-3-Clause](https://github.com/golang/text/blob/v0.42.0/LICENSE) | Unicode normalization in the optional Go adapter. |
 
-Local execution is Windows x64. CI is configured for Windows, Linux, macOS and Linux sanitizers; configuration alone does not establish remote results. Developer measurements and validation histories are outside the human manual under [.CyDocBuild/internal/records](.CyDocBuild/internal/records).
+The core Go binding has no external Go module dependency. The adapter’s other direct and transitive dependencies are pinned in [go.mod](bindings/syncthing/go.mod) and [go.sum](bindings/syncthing/go.sum), with their own notices. They are separate from the CMake engine installation.
 
-Before committing or publishing, run `python scripts/scan_secrets.py --gitleaks PATH_TO_GITLEAKS`; working-tree, staged and history modes are supported. Keep reports private under `.scratch`.
+### Documentation generation and reader
 
-Original code is [MIT](LICENSE). Dependencies keep their own [licenses and notices](THIRD_PARTY.md). Optional Syncthing remains an external MPL-2.0 dependency. [Lore](https://github.com/EpicGames/lore) and [Syncthing](https://github.com/syncthing/syncthing) inspire the design; Syrnck’s native object and network formats are distinct.
+| Library · source | License · terms | Use / scope |
+| --- | --- | --- |
+| [CyDoc · 0.1.0](https://github.com/MrMybal/CyDoc) | [MIT](.CyDocBuild/vendor/CyDoc.LICENSE) | Manual generation and distributed offline reader; pinned archive included. |
+| [marked · 17.0.6](https://github.com/markedjs/marked) | [MIT](Documentation/DocData/licenses/marked.txt) | Build-time Markdown compilation. |
+| [Prism · 1.30.0](https://github.com/PrismJS/prism) | [MIT](Documentation/DocData/licenses/Prism.txt) | Build-time code highlighting. |
+| [esbuild · 0.25.12](https://github.com/evanw/esbuild) | [MIT](Documentation/DocData/licenses/esbuild.txt) | Documentation build tool; does not run inside installed help. |
+
+No optional CyDoc media module or Three.js dependency is selected. Build tools are installed separately. These tables index the main components; retain the complete [third-party notices](THIRD_PARTY.md), the installed `share/licenses/Syrnck` directory and the reader’s `DocData/licenses` files.
+
+## References and links
+
+- [English local manual](Documentation/Documentation.html#/en/overview) · [Manuel local en français](Documentation/Documentation.html#/fr/overview).
+- [Version notes](VERSION.md) · [Source repository](https://github.com/MrMybal/Syrnck) · [Issue tracker](https://github.com/MrMybal/Syrnck/issues).
+- [Documentation maintenance](.CyDocBuild/README.md) · [Dependency notices](THIRD_PARTY.md).
+- Design references: [Lore](https://github.com/EpicGames/lore) and [Syncthing](https://github.com/syncthing/syncthing). Syrnck’s native formats and protocol are distinct; BEP integration belongs to the explicit optional adapter.
