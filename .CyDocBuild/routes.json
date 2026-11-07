@@ -1,0 +1,631 @@
+{
+  "files": {
+    "docs/ARCHITECTURE.md": "architecture",
+    "docs/ARCHIVE_RETENTION.md": "archive-retention",
+    "docs/ASSET_LOCKS.md": "asset-locks",
+    "docs/AUDIT.md": "audit",
+    "docs/BACKUPS.md": "backups",
+    "docs/CHECKOUT_RETENTION.md": "checkout-retention",
+    "docs/COMPACTION.md": "compaction",
+    "docs/EXPORT.md": "export",
+    "docs/FILE_COMPARISON.md": "file-comparison",
+    "docs/FILE_RANGES.md": "file-ranges",
+    "docs/GIT_ASSETS.md": "git-assets",
+    "docs/GIT_FILTER_PROCESS.md": "git-filter-process",
+    "docs/GIT_LFS_HISTORY.md": "git-lfs-history",
+    "docs/GIT_LFS_MIGRATION.md": "git-lfs-migration",
+    "docs/GIT_RETENTION.md": "git-retention",
+    "docs/INDEXES.md": "indexes",
+    "docs/LOCALIZATION.md": "localization",
+    "docs/MAINTENANCE.md": "maintenance",
+    "docs/NATIVE_AMEND.md": "native-amend",
+    "docs/NATIVE_ARCHIVES.md": "native-archives",
+    "docs/NATIVE_BISECT.md": "native-bisect",
+    "docs/NATIVE_BRANCHES.md": "native-branches",
+    "docs/NATIVE_CHECKOUT.md": "native-checkout",
+    "docs/NATIVE_COMPARISON.md": "native-comparison",
+    "docs/NATIVE_FILE_HISTORY.md": "native-file-history",
+    "docs/NATIVE_HARD_RESET.md": "native-hard-reset",
+    "docs/NATIVE_HISTORY.md": "native-history",
+    "docs/NATIVE_HUNKS.md": "native-hunks",
+    "docs/NATIVE_LINES.md": "native-lines",
+    "docs/NATIVE_MERGE.md": "native-merge",
+    "docs/NATIVE_REBASE.md": "native-rebase",
+    "docs/NATIVE_REBASE_TODO.md": "native-rebase-todo",
+    "docs/NATIVE_REPLAY.md": "native-replay",
+    "docs/NATIVE_RESET.md": "native-reset",
+    "docs/NATIVE_RESOLUTIONS.md": "native-resolutions",
+    "docs/NATIVE_SQUASH.md": "native-squash",
+    "docs/NATIVE_STAGE_REBASE.md": "native-stage-rebase",
+    "docs/NATIVE_STAGING.md": "native-staging",
+    "docs/NATIVE_STASH.md": "native-stash",
+    "docs/NATIVE_TAGS.md": "native-tags",
+    "docs/NATIVE_WATCH.md": "native-watch",
+    "docs/NATIVE_WORKSPACE.md": "native-workspace",
+    "docs/NETWORK_COMPRESSION.md": "network-compression",
+    "docs/OPERATIONS.md": "operations",
+    "docs/PACKS.md": "packs",
+    "docs/PARALLEL_TRANSFERS.md": "parallel-transfers",
+    "docs/PROTOCOL.md": "protocol",
+    "docs/REFERENCE_TABLES.md": "reference-tables",
+    "docs/REPAIR_COPY.md": "repair-copy",
+    "docs/SELECTIVE_RETENTION.md": "selective-retention",
+    "docs/SERVER_ACCESS.md": "server-access",
+    "docs/SERVER_READ_LEASES.md": "server-read-leases",
+    "docs/SERVER_UPLOAD_LEASES.md": "server-upload-leases",
+    "docs/SETTINGS.md": "settings",
+    "docs/TEXT_DIFF.md": "text-diff",
+    "docs/TEXT_MERGE.md": "text-merge",
+    "docs/TEXT_PATCHES.md": "text-patches",
+    "docs/TRANSFER_POLICY.md": "transfer-policy",
+    "docs/TRANSFER_SESSIONS.md": "transfer-sessions",
+    "docs/TRANSFERS.md": "transfers",
+    "docs/UPLOAD_INVENTORIES.md": "upload-inventories",
+    "docs/USAGE.md": "usage",
+    "docs/WORKING_INDEX.md": "working-index",
+    "docs/WORKSPACE_ABI.md": "workspace-abi",
+    "bindings/go/README.md": "go-binding",
+    "bindings/syncthing/README.md": "syncthing",
+    "README.md": "overview",
+    "README.fr.md": "overview",
+    "THIRD_PARTY.md": "licenses",
+    "LICENSE": "licenses",
+    "docs/PERFORMANCE.md": "performance",
+    "docs/ROADMAP.md": "limits",
+    "docs/CRASH_RECOVERY.md": "crash-recovery",
+    "docs/MIGRATION_CPP.md": "compatibility",
+    "docs/PUBLISHING.md": "licenses"
+  },
+  "anchors": {
+    "architecture": {
+      "integrite-et-limites-actuelles": "integrite-et-limites-actuelles",
+      "politique-de-decoupage": "politique-de-decoupage",
+      "conservation-et-suppression": "conservation-et-suppression",
+      "pipeline-d-ingestion": "pipeline-d-ingestion",
+      "mode-autonome": "mode-autonome",
+      "mode-git": "mode-git",
+      "synchronisation-et-serveur": "synchronisation-et-serveur",
+      "chiffrement": "chiffrement",
+      "fichiers-et-revisions": "fichiers-et-revisions",
+      "objectif-et-decisions": "objectif-et-decisions",
+      "stockage-physique-et-packs": "stockage-physique-et-packs",
+      "cache-et-parcours-de-validation": "cache-et-parcours-de-validation",
+      "architecture-de-syrnck": "architecture-de-syrnck",
+      "objectif-et-décisions": "objectif-et-decisions",
+      "fichiers-et-révisions": "fichiers-et-revisions",
+      "politique-de-découpage": "politique-de-decoupage",
+      "pipeline-dingestion": "pipeline-d-ingestion",
+      "intégrité-et-limites-actuelles": "integrite-et-limites-actuelles"
+    },
+    "archive-retention": {
+      "retire-native-archives-with-a-verified-backup": "retire-native-archives-with-a-verified-backup"
+    },
+    "asset-locks": {
+      "renew-release-and-prune": "renew-release-and-prune",
+      "acquire-and-inspect": "acquire-and-inspect",
+      "storage-and-api": "storage-and-api",
+      "repository-local-asset-leases": "repository-local-asset-leases"
+    },
+    "audit": {
+      "memory-and-lifetime": "memory-and-lifetime",
+      "verification-and-measurement": "verification-and-measurement",
+      "progress-and-cancellation": "progress-and-cancellation",
+      "streaming-integrity-audits": "streaming-integrity-audits"
+    },
+    "backups": {
+      "verified-offline-backups-restore-and-missing-object-repair": "verified-offline-backups-restore-and-missing-object-repair",
+      "validation-and-limits": "validation-and-limits",
+      "verify-and-change-encryption-keys": "verify-and-change-encryption-keys",
+      "repair-missing-retained-dependencies": "repair-missing-retained-dependencies"
+    },
+    "checkout-retention": {
+      "completed-checkout-receipt-retirement": "completed-checkout-receipt-retirement",
+      "historical-receipts": "historical-receipts",
+      "coverage-and-fences": "coverage-and-fences",
+      "validation-and-limits": "validation-and-limits"
+    },
+    "compaction": {
+      "tests-and-reproduction": "tests-and-reproduction",
+      "memory-and-remaining-limits": "memory-and-remaining-limits",
+      "streaming-packing-and-compaction": "streaming-packing-and-compaction",
+      "windows-x64-measurement-4-november-2026": "",
+      "ordered-input-and-two-passes": "ordered-input-and-two-passes",
+      "windows-x64-measurement--4-november-2026": ""
+    },
+    "export": {
+      "transactional-native-exports": "transactional-native-exports"
+    },
+    "file-comparison": {
+      "manifest-comparison-and-chunk-reuse-plans": "manifest-comparison-and-chunk-reuse-plans"
+    },
+    "file-ranges": {
+      "verified-file-ranges": "verified-file-ranges"
+    },
+    "git-assets": {
+      "git-asset-catalogs-and-retained-bundles": "git-asset-catalogs-and-retained-bundles",
+      "grouped-transfers": "grouped-transfers",
+      "bounds-and-local-git-requirements": "bounds-and-local-git-requirements",
+      "on-demand-checkout-and-pointer-only-clones": "on-demand-checkout-and-pointer-only-clones",
+      "opt-in-pre-push-hook": "opt-in-pre-push-hook"
+    },
+    "git-filter-process": {
+      "failures-and-shutdown": "failures-and-shutdown",
+      "streaming-and-bounds": "streaming-and-bounds",
+      "resident-git-filters": "resident-git-filters",
+      "behavior-and-performance-scope": "behavior-and-performance-scope"
+    },
+    "git-lfs-history": {
+      "complete-preflight": "complete-preflight",
+      "offline-conversion-of-complete-git-lfs-history": "offline-conversion-of-complete-git-lfs-history",
+      "retention-and-publication": "retention-and-publication",
+      "bounds-and-validation": "bounds-and-validation",
+      "preserved-history-and-signatures": "preserved-history-and-signatures"
+    },
+    "git-lfs-migration": {
+      "offline-git-lfs-migration": "offline-git-lfs-migration",
+      "cancellation-and-recovery": "cancellation-and-recovery",
+      "library-and-limits": "library-and-limits",
+      "prepare-and-inspect": "prepare-and-inspect",
+      "convert-a-snapshot": "convert-a-snapshot"
+    },
+    "git-retention": {
+      "transactions-cancellation-and-limits": "transactions-cancellation-and-limits",
+      "unobserved-does-not-mean-safe-to-delete": "unobserved-does-not-mean-safe-to-delete",
+      "what-the-scan-observes": "what-the-scan-observes",
+      "git-retention-inventory-and-verified-protection": "git-retention-inventory-and-verified-protection",
+      "preview-and-apply": "preview-and-apply"
+    },
+    "indexes": {
+      "memoire-et-limites": "memoire-et-limites",
+      "cache-et-snapshot": "cache-et-snapshot",
+      "lecture-paginee-des-index-de-packs": "lecture-paginee-des-index-de-packs",
+      "reglages-et-compteurs": "reglages-et-compteurs",
+      "validation-et-recherche": "validation-et-recherche",
+      "lecture-paginée-des-index-de-packs": "lecture-paginee-des-index-de-packs",
+      "réglages-et-compteurs": "reglages-et-compteurs",
+      "mémoire-et-limites": "memoire-et-limites"
+    },
+    "localization": {
+      "command-line-selection": "command-line-selection",
+      "maintaining-translations": "maintaining-translations",
+      "library-and-protocol-boundaries": "library-and-protocol-boundaries",
+      "language-and-localization-policy": "language-and-localization-policy"
+    },
+    "maintenance": {
+      "maintenance-progress-and-cancellation": "maintenance-progress-and-cancellation"
+    },
+    "native-amend": {
+      "native-commit-amendment": "native-commit-amendment",
+      "c-api-and-validation": "c-api-and-validation",
+      "retention-interruption-and-restoration": "retention-interruption-and-restoration",
+      "cli": "cli",
+      "replace-the-tips-snapshot-with-the-current-selected-directory": "",
+      "replace-the-tip-s-snapshot-with-the-current-selected-directory": "",
+      "use-exactly-the-prepared-bytes-leaving-later-working-edits-alone": "",
+      "reuse-every-existing-file-entry-and-change-the-message": "",
+      "guard-scripts-against-amending-a-different-tip-from-the-one-inspected": ""
+    },
+    "native-archives": {
+      "native-history-archives": "native-history-archives",
+      "pages-and-verification": "pages-and-verification",
+      "recovering-stored-versions": "recovering-stored-versions"
+    },
+    "native-bisect": {
+      "persistent-native-bisection-without-checkout": "persistent-native-bisection-without-checkout",
+      "state-retention-and-recovery": "state-retention-and-recovery"
+    },
+    "native-branches": {
+      "archived-branch-deletion": "archived-branch-deletion",
+      "native-branches-and-recoverable-switching": "native-branches-and-recoverable-switching",
+      "representation-and-c-api": "representation-and-c-api",
+      "branch-inventory-and-verified-creation": "branch-inventory-and-verified-creation",
+      "preflight-publication-and-recovery": "preflight-publication-and-recovery",
+      "restore-an-archived-branch": "restore-an-archived-branch",
+      "cli-defaults-and-workspace-identity": "cli-defaults-and-workspace-identity"
+    },
+    "native-checkout": {
+      "c-progress-and-limits": "c-progress-and-limits",
+      "starting-and-publishing": "starting-and-publishing",
+      "recoverable-native-checkout": "recoverable-native-checkout",
+      "recoverable-namespace-transitions": "recoverable-namespace-transitions",
+      "inspecting-resuming-and-aborting": "inspecting-resuming-and-aborting",
+      "journal-retention-and-private-data": "journal-retention-and-private-data"
+    },
+    "native-comparison": {
+      "c-and-operation-boundaries": "c-and-operation-boundaries",
+      "revision-snapshot-comparison": "revision-snapshot-comparison",
+      "native-working-directory-status-and-snapshot-comparison": "native-working-directory-status-and-snapshot-comparison",
+      "working-directory-status": "working-directory-status"
+    },
+    "native-file-history": {
+      "exact-renames-and-first-parent-file-history": "exact-renames-and-first-parent-file-history",
+      "exact-rename-comparison": "exact-rename-comparison",
+      "follow-a-file-lineage": "follow-a-file-lineage"
+    },
+    "native-hard-reset": {
+      "application-and-recovery": "application-and-recovery",
+      "recoverable-native-hard-reset": "recoverable-native-hard-reset",
+      "what-is-replaced-and-protected": "what-is-replaced-and-protected",
+      "api-bounds-and-validation": "api-bounds-and-validation"
+    },
+    "native-history": {
+      "native-revision-ancestry": "native-revision-ancestry"
+    },
+    "native-hunks": {
+      "review-and-bind-the-selection": "review-and-bind-the-selection",
+      "native-partial-text-staging-and-reset": "native-partial-text-staging-and-reset",
+      "scope-and-exact-bytes": "scope-and-exact-bytes",
+      "atomic-retention-and-recovery": "atomic-retention-and-recovery",
+      "remove-prepared-hunks": "remove-prepared-hunks"
+    },
+    "native-lines": {
+      "numbered-change-rows": "numbered-change-rows",
+      "native-individual-text-line-selection": "native-individual-text-line-selection",
+      "exact-bytes-and-selection-refusal": "exact-bytes-and-selection-refusal",
+      "plans-storage-and-retention": "plans-storage-and-retention"
+    },
+    "native-merge": {
+      "native-merge": "native-merge",
+      "reports-and-validation": "reports-and-validation",
+      "topology": "topology",
+      "apply-and-recover": "apply-and-recover",
+      "opt-in-text-composition": "opt-in-text-composition"
+    },
+    "native-rebase": {
+      "file-replay-and-topology": "file-replay-and-topology",
+      "read-only-report-and-bounds": "read-only-report-and-bounds",
+      "native-linear-rebase": "native-linear-rebase",
+      "apply-and-recover": "apply-and-recover",
+      "optional-bounded-text-composition": "optional-bounded-text-composition",
+      "resolve-conflicts-by-step": "resolve-conflicts-by-step"
+    },
+    "native-rebase-todo": {
+      "terminal-input": "terminal-input",
+      "limits-recovery-and-scope": "limits-recovery-and-scope",
+      "editable-and-interactive-native-rebase": "editable-and-interactive-native-rebase"
+    },
+    "native-replay": {
+      "native-cherry-pick-and-revert": "native-cherry-pick-and-revert",
+      "apply-a-planned-change": "apply-a-planned-change",
+      "optional-bounded-text-composition": "optional-bounded-text-composition",
+      "three-way-decisions": "three-way-decisions",
+      "interruption-abort-and-retention": "interruption-abort-and-retention",
+      "or-before-branch-publication": ""
+    },
+    "native-reset": {
+      "native-branch-reset": "native-branch-reset",
+      "retention-and-interruption": "retention-and-interruption"
+    },
+    "native-resolutions": {
+      "validation-and-recovery": "validation-and-recovery",
+      "prepare-and-apply": "prepare-and-apply",
+      "native-conflict-resolutions": "native-conflict-resolutions",
+      "choices": "choices"
+    },
+    "native-squash": {
+      "publication-and-retained-history": "publication-and-retained-history",
+      "native-commit-squash": "native-commit-squash"
+    },
+    "native-stage-rebase": {
+      "resolve-index-conflicts": "resolve-index-conflicts",
+      "optional-bounded-text-composition": "optional-bounded-text-composition",
+      "rebase-a-native-staging-index": "rebase-a-native-staging-index",
+      "apply-and-retain-prepared-bytes": "apply-and-retain-prepared-bytes",
+      "replay-and-preview": "replay-and-preview"
+    },
+    "native-staging": {
+      "selection-and-frozen-contents": "selection-and-frozen-contents",
+      "inspect-reset-and-commit": "inspect-reset-and-commit",
+      "native-staging-and-selected-commits": "native-staging-and-selected-commits",
+      "retention-and-publication": "retention-and-publication",
+      "inspect-prepared-text": "inspect-prepared-text",
+      "c-api-and-validation": "c-api-and-validation"
+    },
+    "native-stash": {
+      "reapply-conflicts-and-index": "reapply-conflicts-and-index",
+      "bounds-and-verification": "bounds-and-verification",
+      "save-and-scope": "save-and-scope",
+      "native-stash": "native-stash",
+      "drop-restore-and-retention": "drop-restore-and-retention"
+    },
+    "native-tags": {
+      "storage-cancellation-and-api": "storage-cancellation-and-api",
+      "native-revision-selectors": "native-revision-selectors",
+      "native-tags-revision-selectors-and-retained-archives": "native-tags-revision-selectors-and-retained-archives",
+      "archived-deletion-and-restoration": "archived-deletion-and-restoration",
+      "read-only-reports-and-pagination": "read-only-reports-and-pagination"
+    },
+    "native-watch": {
+      "optional-persistent-checkpoint-journal": "optional-persistent-checkpoint-journal",
+      "lost-events-audits-and-unavailable-observations": "lost-events-audits-and-unavailable-observations",
+      "status-and-event-lifecycle": "status-and-event-lifecycle",
+      "synthetic-performance-measurement": "synthetic-performance-measurement",
+      "resident-native-workspace-observation": "resident-native-workspace-observation",
+      "limits-and-resource-use": "limits-and-resource-use",
+      "c-api-and-validation": "c-api-and-validation"
+    },
+    "native-workspace": {
+      "c-progress-and-resource-boundaries": "c-progress-and-resource-boundaries",
+      "protected-paths-and-first-policy-limits": "protected-paths-and-first-policy-limits",
+      "checkout-plan-and-verification": "checkout-plan-and-verification",
+      "native-workspace-inspection-and-checkout-preflight": "native-workspace-inspection-and-checkout-preflight",
+      "combined-status": "combined-status"
+    },
+    "network-compression": {
+      "traffic-retries-and-recovery": "traffic-retries-and-recovery",
+      "bounds-and-verification": "bounds-and-verification",
+      "validation-and-remaining-work": "validation-and-remaining-work",
+      "negotiated-object-compression": "negotiated-object-compression",
+      "negotiation-and-representation": "negotiation-and-representation"
+    },
+    "operations": {
+      "progress-and-cooperative-cancellation": "",
+      "cli": "",
+      "c-operations": ""
+    },
+    "packs": {
+      "gc-selectif": "gc-selectif",
+      "publication-et-reprise": "publication-et-reprise",
+      "regroupement-incremental-et-complet": "regroupement-incremental-et-complet",
+      "packs-et-compaction": "packs-et-compaction",
+      "limites-actuelles": "limites-actuelles",
+      "memoire-du-gc": "memoire-du-gc",
+      "activation-et-compatibilite": "activation-et-compatibilite",
+      "activation-et-compatibilité": "activation-et-compatibilite",
+      "regroupement-incrémental-et-complet": "regroupement-incremental-et-complet",
+      "gc-sélectif": "gc-selectif",
+      "mémoire-du-gc": "memoire-du-gc"
+    },
+    "parallel-transfers": {
+      "limits-and-counters": "limits-and-counters",
+      "failure-and-publication": "failure-and-publication",
+      "bounded-parallel-object-transfers": "bounded-parallel-object-transfers"
+    },
+    "protocol": {
+      "consultation-paginee-sans-changement-de-format": "consultation-paginee-sans-changement-de-format",
+      "api-http": "api-http",
+      "stockage-physique-v3-catalogue-de-packs": "",
+      "pointeur-git": "pointeur-git",
+      "interface-c": "interface-c",
+      "stockage-local": "stockage-local",
+      "formats-et-protocole-experimentaux": "formats-et-protocole-experimentaux",
+      "identifiants-et-objets": "identifiants-et-objets",
+      "stockage-physique-v2-avec-packs": "",
+      "formats-et-protocole-expérimentaux": "formats-et-protocole-experimentaux",
+      "stockage-physique-v3--catalogue-de-packs": "",
+      "consultation-paginée-sans-changement-de-format": "consultation-paginee-sans-changement-de-format"
+    },
+    "reference-tables": {
+      "json-validation": "json-validation",
+      "reference-table-parsing-and-listing": "reference-table-parsing-and-listing",
+      "observer-changes-during-batch-publication": "observer-changes-during-batch-publication",
+      "measured-cli-listing-windows-x64-4-november-2026": "",
+      "measured-cli-listing--windows-x64-4-november-2026": ""
+    },
+    "repair-copy": {
+      "preserve-current-history-while-recovering-old-bytes": "preserve-current-history-while-recovering-old-bytes",
+      "corrupt-loose-objects-and-packed-envelopes": "corrupt-loose-objects-and-packed-envelopes",
+      "encryption-and-operation-boundaries": "encryption-and-operation-boundaries",
+      "rebuild-a-damaged-store-in-a-verified-new-location": "rebuild-a-damaged-store-in-a-verified-new-location"
+    },
+    "selective-retention": {
+      "selective-transfer-retention-and-receipt-pruning": "selective-transfer-retention-and-receipt-pruning",
+      "pruning-completed-local-receipts": "pruning-completed-local-receipts",
+      "incomplete-pulls": "incomplete-pulls",
+      "validation": ""
+    },
+    "server-access": {
+      "configure-identities": "configure-identities",
+      "http-extension": "http-extension",
+      "use-remote-asset-leases": "use-remote-asset-leases",
+      "publish-and-fetch-autonomous-history": "publish-and-fetch-autonomous-history",
+      "server-identities-asset-locks-and-native-history-transfer": "server-identities-asset-locks-and-native-history-transfer"
+    },
+    "server-read-leases": {
+      "server-read-leases": "server-read-leases",
+      "offline-administration": "offline-administration",
+      "lifecycle-and-retention": "lifecycle-and-retention",
+      "protocol": "protocol",
+      "validation": ""
+    },
+    "server-upload-leases": {
+      "protocol-and-compatibility": "protocol-and-compatibility",
+      "persistent-server-upload-leases": "persistent-server-upload-leases",
+      "lifetime-gc-and-administration": "lifetime-gc-and-administration",
+      "fencing-and-resume": "fencing-and-resume"
+    },
+    "settings": {
+      "repository-settings": "repository-settings"
+    },
+    "text-diff": {
+      "compare-a-native-file-between-revisions": "compare-a-native-file-between-revisions",
+      "inspect-frozen-staged-changes": "inspect-frozen-staged-changes",
+      "bounded-text-differences": "bounded-text-differences",
+      "compare-a-working-file": "compare-a-working-file"
+    },
+    "text-merge": {
+      "merge-one-stored-path": "merge-one-stored-path",
+      "cli-and-reviewed-conflict-resolution": "cli-and-reviewed-conflict-resolution",
+      "result": "result",
+      "virtual-file-preparation": "virtual-file-preparation",
+      "bounded-three-way-text-merge": "bounded-three-way-text-merge",
+      "budgets-and-cancellation": "budgets-and-cancellation"
+    },
+    "text-patches": {
+      "exact-bytes-and-bounds": "exact-bytes-and-bounds",
+      "prepare-an-external-patch-in-the-native-index": "prepare-an-external-patch-in-the-native-index",
+      "cli-workflow": "cli-workflow",
+      "accepted-format": "accepted-format",
+      "strict-unified-text-patches": "strict-unified-text-patches"
+    },
+    "transfer-policy": {
+      "recovery-and-validation": "recovery-and-validation",
+      "traffic-targets": "traffic-targets",
+      "retry-boundaries": "retry-boundaries",
+      "retry-policy-and-shared-traffic-targets": "retry-policy-and-shared-traffic-targets"
+    },
+    "transfer-sessions": {
+      "states-and-reference-protection": "states-and-reference-protection",
+      "format-and-writes": "format-and-writes",
+      "persistent-transfer-sessions": "persistent-transfer-sessions",
+      "gc-and-deliberate-discard": "gc-and-deliberate-discard",
+      "validation": ""
+    },
+    "transfers": {
+      "validation-and-remaining-work": "validation-and-remaining-work",
+      "publication-boundary": "publication-boundary",
+      "server-authentication-and-request-bodies": "server-authentication-and-request-bodies",
+      "transfer-progress-cancellation-and-publication": "transfer-progress-cancellation-and-publication"
+    },
+    "upload-inventories": {
+      "gc-expiry-and-cleanup": "gc-expiry-and-cleanup",
+      "registration-and-acknowledgement": "registration-and-acknowledgement",
+      "selective-server-upload-inventories": "selective-server-upload-inventories",
+      "protocol-and-disk-format": "protocol-and-disk-format",
+      "validation": ""
+    },
+    "usage": {
+      "historique-autonome": "historique-autonome",
+      "chiffrement-au-repos": "chiffrement-au-repos",
+      "parcours-du-prototype": "parcours-du-prototype",
+      "serveur-et-agent": "serveur-et-agent",
+      "cache-de-lectures-verifiees": "cache-de-lectures-verifiees",
+      "interface-c": "interface-c",
+      "regrouper-les-objets-en-packs": "regrouper-les-objets-en-packs",
+      "stocker-et-reconstruire-un-fichier": "stocker-et-reconstruire-un-fichier",
+      "git-et-assets": "git-et-assets",
+      "cache-de-lectures-vérifiées": "cache-de-lectures-verifiees"
+    },
+    "working-index": {
+      "reports-c-and-measurement": "reports-c-and-measurement",
+      "persistent-native-working-index": "persistent-native-working-index",
+      "reuse-and-fallback": "reuse-and-fallback",
+      "persistence-and-lifetime": "persistence-and-lifetime"
+    },
+    "workspace-abi": {
+      "scope-and-validation": "scope-and-validation",
+      "go-usage": "go-usage",
+      "embedded-workspace-observation-through-c-and-go": "embedded-workspace-observation-through-c-and-go",
+      "c-calls-and-output-ownership": "c-calls-and-output-ownership",
+      "lifetime-and-locking": "lifetime-and-locking",
+      "cooperative-cancellation-and-c-progress": "cooperative-cancellation-and-c-progress"
+    },
+    "go-binding": {
+      "concurrence-et-conservation": "concurrence-et-conservation",
+      "binding-go-du-moteur-c": "binding-go-du-moteur-c",
+      "workspace-observation": "workspace-observation",
+      "syncthing": "syncthing",
+      "tester": "tester",
+      "exemple": "exemple",
+      "windows-test-cleanup": "windows-test-cleanup",
+      "plages-et-comparaison-de-fichiers": "plages-et-comparaison-de-fichiers"
+    },
+    "syncthing": {
+      "apis": "apis",
+      "build-and-test": "build-and-test",
+      "syncthing-fixed-block-adapter": "syncthing-fixed-block-adapter",
+      "resume-and-cancellation": "resume-and-cancellation",
+      "interoperability-evidence": ""
+    },
+    "overview": {
+      "workflows": "workflows",
+      "getting-started": "getting-started",
+      "reading": "reading",
+      "limits": "limits",
+      "syrnck": "",
+      "components": "",
+      "build-and-test": "",
+      "quick-start": "",
+      "languages": "",
+      "git-and-synchronization": "",
+      "validation-and-repository-publishing": "",
+      "further-reading": "",
+      "license": "",
+      "compiler": "",
+      "utiliser": "",
+      "validation-et-migration": "",
+      "licence": ""
+    },
+    "licenses": {
+      "license": "license",
+      "dependencies": "dependencies",
+      "third-party-components": "",
+      "publishing-syrnck-to-github": "",
+      "repository-description": "",
+      "before-the-first-upload": "",
+      "local-setup-and-initial-commit": "",
+      "authentication": "",
+      "reviewed-scanner-exception": ""
+    },
+    "performance": {
+      "budgets": "budgets",
+      "measurement": "measurement",
+      "mesures-et-stratégie-de-performance": "",
+      "mesures-et-strategie-de-performance": "",
+      "reference-tables-and-json-depth-validation--4-november-2026": "",
+      "reference-tables-and-json-depth-validation-4-november-2026": "",
+      "streaming-compaction-plans--4-november-2026": "",
+      "streaming-compaction-plans-4-november-2026": "",
+      "streaming-integrity-audit--4-november-2026": "",
+      "streaming-integrity-audit-4-november-2026": "",
+      "gc-en-flux-et-marquage-compact--4-novembre-2026": "",
+      "gc-en-flux-et-marquage-compact-4-novembre-2026": "",
+      "index-paginés-et-mémoire--4-novembre-2026": "",
+      "index-pagines-et-memoire-4-novembre-2026": "",
+      "maintenance-incrémentale-de-plusieurs-packs--4-novembre-2026": "",
+      "maintenance-incrementale-de-plusieurs-packs-4-novembre-2026": "",
+      "packs-et-sessions-de-lecture--4-novembre-2026": "",
+      "packs-et-sessions-de-lecture-4-novembre-2026": "",
+      "lectures-vérifiées-et-parcours-fusionné--4-novembre-2026": "",
+      "lectures-verifiees-et-parcours-fusionne-4-novembre-2026": "",
+      "pipeline-c20-borné--3-novembre-2026": "",
+      "pipeline-c-20-borne-3-novembre-2026": "",
+      "mesure-c20-antérieure-au-pipeline--3-novembre-2026": "",
+      "mesure-c-20-anterieure-au-pipeline-3-novembre-2026": "",
+      "mesure-historique-du-prototype-rust--3-novembre-2026": "",
+      "mesure-historique-du-prototype-rust-3-novembre-2026": "",
+      "coûts-actuels": "",
+      "couts-actuels": "",
+      "prochain-banc-de-mesure": ""
+    },
+    "limits": {
+      "security": "security",
+      "sync": "sync",
+      "workspace": "workspace",
+      "feuille-de-route": "",
+      "0--socle-vérifiable": "",
+      "0-socle-verifiable": "",
+      "1--usage-git-quotidien": "",
+      "1-usage-git-quotidien": "",
+      "2--performances-de-production": "",
+      "2-performances-de-production": "",
+      "3--équipes-et-unreal-engine": "",
+      "3-equipes-et-unreal-engine": "",
+      "4--synchronisation-continue-et-syncthing": "",
+      "4-synchronisation-continue-et-syncthing": "",
+      "5--contrôle-de-versions-autonome-complet": "",
+      "5-controle-de-versions-autonome-complet": "",
+      "6--sécurité-rétention-et-exploitation": "",
+      "6-securite-retention-et-exploitation": ""
+    },
+    "crash-recovery": {
+      "other-operations": "other-operations",
+      "interrupted-garbage-collection": "interrupted-garbage-collection",
+      "before-recovery": "before-recovery",
+      "process-interruption-and-recovery": "",
+      "tested-interruption-boundaries": "",
+      "test-isolation-and-reproduction": "",
+      "remaining-durability-work": ""
+    },
+    "compatibility": {
+      "formats": "formats",
+      "adaptations": "adaptations",
+      "migration-vers-c20": "",
+      "migration-vers-c-20": "",
+      "compatibilité-conservée": "",
+      "compatibilite-conservee": "",
+      "adaptations-explicites": "",
+      "construction-et-distribution": ""
+    }
+  }
+}

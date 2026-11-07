@@ -11,6 +11,10 @@ CMakeUserPresets.json
 .env
 .env.*
 !.env.example
+/.CyDocBuild/node_modules/
+/.CyDocBuild/.cache/
+/.CyDocBuild/generated/
+/.CyDocBuild/internal/legacy/
 *.pfx
 *.p12
 *.sarif

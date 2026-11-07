@@ -282,6 +282,58 @@ struct StoreIoStats {
 std::vector<ObjectKey> dependencies(Kind kind, std::span<const std::uint8_t> bytes);
 void validate_object(Kind kind, std::span<const std::uint8_t> bytes);
 
+/**
+ * @doc api-store
+ * @locale en
+ * @title C++ Store API
+ * @section API
+ * @symbol syrnck::Store
+ * Use `#include <syrnck/core.hpp>` and link `Syrnck::core`.
+ *
+ * ## Ownership and concurrency {#ownership}
+ * `Store(root, key, create, options)` owns an exclusive repository lock. Keep the handle alive
+ * for the complete operation and serialize all calls, including destruction. It is movable,
+ * not copyable. Internal ingest workers do not make the handle safe for concurrent callers.
+ *
+ * ## Objects and retention {#objects}
+ * `ingest(input, chunking)` returns a manifest ID and statistics; it does not publish a reference.
+ * `get` verifies an object's typed identity. `reconstruct` verifies chunks and the complete file.
+ * `set_ref` validates its complete closure before retention. `compare_update_refs` publishes
+ * a group only when every expected value still matches; false means the caller must refresh.
+ * See [storage](doc:storage), [ranges](doc:file-ranges), and [reference tables](doc:reference-tables).
+ *
+ * ## Errors and cancellation {#errors}
+ * Catch `syrnck::Error`, with `MissingObject` and `Cancelled` as specialized errors.
+ * OperationOptions supplies a stop token and synchronous progress observer; do not reenter
+ * the Store from callbacks. Follow each operation's publication boundary and retention rules.
+ * See [progress and cancellation](doc:operations) and [repository settings](doc:settings).
+ */
+/**
+ * @doc api-store
+ * @locale fr
+ * @title API C++ du Store
+ * @section API
+ * @symbol syrnck::Store
+ * Inclure `#include <syrnck/core.hpp>` et lier `Syrnck::core`.
+ *
+ * ## Propriété et concurrence {#ownership}
+ * `Store(root, key, create, options)` détient le verrou exclusif du dépôt. Garder le handle
+ * pendant toute l'opération et sérialiser les appels, destruction comprise. Il se déplace
+ * mais ne se copie pas. Les workers internes ne rendent pas le handle utilisable en concurrence.
+ *
+ * ## Objets et rétention {#objects}
+ * `ingest(input, chunking)` rend un ID de manifeste et des statistiques, sans publier de référence.
+ * `get` vérifie l'identité typée ; `reconstruct` vérifie les blocs et le hash complet du fichier.
+ * `set_ref` contrôle la fermeture complète avant rétention. `compare_update_refs` publie un groupe
+ * seulement si toutes les valeurs attendues correspondent ; false impose de refaire la lecture.
+ * Voir le [stockage](doc:storage), les [plages](doc:file-ranges) et les [références](doc:reference-tables).
+ *
+ * ## Erreurs et annulation {#errors}
+ * Intercepter `syrnck::Error`, dont dérivent `MissingObject` et `Cancelled`.
+ * OperationOptions fournit un jeton d'arrêt et un observateur synchrone ; ne pas réentrer
+ * dans le Store depuis un callback. Respecter les frontières de publication et de rétention
+ * propres à chaque opération. Voir la [progression](doc:operations) et les [préférences](doc:settings).
+ */
 /// Exclusive store handle. Serialize access across threads; processes fail fast when busy.
 class Store {
 public:

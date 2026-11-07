@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
@@ -33,25 +36,13 @@ jobs:
         run: python scripts/build.py build
       - name: Test
         run: python scripts/build.py test
+      - name: Install distribution
+        run: cmake --install build --config Release --prefix dist
       - uses: actions/upload-artifact@v4
         with:
           name: syrnck-${{ matrix.os }}
           path: |
-            build/syrnck
-            build/Release/syrnck.exe
-            build/Release/syrnck_ffi.dll
-            build/Release/syrnck_ffi*.lib
-            build/*syrnck_ffi*.so
-            build/*syrnck_ffi*.dylib
-            include/syrnck.h
-            LICENSE
-            THIRD_PARTY.md
-            third_party/**/LICENSE*
-            third_party/**/LICENCE*
-            third_party/**/COPYING*
-            build/_deps/zstd-src/LICENSE
-            build/_deps/zstd-src/COPYING
-            build/_deps/curl-src/COPYING
+            dist/**
           if-no-files-found: error
   sanitizers:
     runs-on: ubuntu-latest
@@ -60,6 +51,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - run: cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSYRNCK_SANITIZE=ON
       - run: cmake --build build-asan --parallel 4

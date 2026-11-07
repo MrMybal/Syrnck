@@ -1,46 +1,9 @@
 # Native revision ancestry
 
-`native ancestry` examines the complete revision graph reachable from two
-snapshots. It reports both ancestry directions and all best common ancestors.
-It does not choose an arbitrary base when a criss-cross merge has several.
+This guide has moved to the local CyDoc manual. / Ce guide est maintenant dans le manuel CyDoc local.
 
-```text
-syrnck native ancestry tags/v1 HEAD --progress-json
-syrnck native ancestry heads/main heads/feature --max-revisions 100000 --max-links 1000000
-```
+[English](../Documentation/Documentation.html#/en/native-history) · [Français](../Documentation/Documentation.html#/fr/native-history)
 
-The JSON result contains `source`, `target`, `source_is_ancestor`,
-`target_is_ancestor`, `related`, sorted `merge_bases`, `visited_revisions` and
-`parent_links`. A revision is its own ancestor. Unrelated histories return an
-empty base list and `related: false`, with a successful command exit status.
-The CLI accepts the existing native revision selectors. The C++ API takes IDs:
+Canonical sources / Sources : [English](../.CyDocBuild/manual/en/native-history.md) · [Français](../.CyDocBuild/manual/fr/native-history.md).
 
-```cpp
-auto report = store.native_ancestry(left_id, right_id, syrnck::NativeGraphLimits{}, operation);
-```
-
-Traversal is iterative, with linear graph work after revision metadata decoding.
-Each distinct revision is loaded once. All parent edges, including merge parents,
-participate; duplicate parent entries count toward the link budget. Defaults are
-100,000 revisions and 1,000,000 links. Explicit limits allow 1..1,000,000 revisions
-and 0..10,000,000 links. Exceeding a budget fails without a partial answer.
-The base-list size is also bounded conservatively below a 16 MiB JSON report.
-Memory scales with visited revisions and parent links; revision metadata itself
-remains subject to the existing 16 MiB object limit.
-
-Only revision objects are read. File manifests and block payloads are not needed,
-so this query does not establish file integrity. Missing or corrupt revision
-metadata anywhere in the reachable graph is an error, even if a likely answer
-was found earlier. There is no shallow-history fallback or implicit network fetch.
-Use `fsck` or a verified snapshot operation for file integrity.
-
-Queries never change refs, stored files or working files. Planning progress,
-cooperative cancellation and English/French diagnostics follow the existing
-operation contract. Callbacks must not reenter the Store. C ABI and Go exposure
-of native history operations remain future work.
-
-Tests cover linear and merge histories, criss-cross bases, ancestor filtering,
-unrelated/reflexive comparisons, duplicate parents, budget boundaries, long
-iterative traversal, cancellation, observer errors and missing revision/file
-payload distinctions. Plain/encrypted and loose/single-pack/multi-pack fixtures
-run under the local Windows x64 build; other platform execution awaits CI.
+Run `syrnck help native-history` to open installed help. / Pour ouvrir l’aide installée.

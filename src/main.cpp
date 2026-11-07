@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "cli_control.hpp"
 #include "cli_watch.hpp"
+#include "cli_help.hpp"
 #include "cli_text_diff.hpp"
 #include <algorithm>
 #include <fstream>
@@ -299,6 +300,8 @@ void help(Language language) {
     std::cout << R"(Syrnck 0.1.0 — Stockage de blocs C++20, assets Git et révisions natives
 Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                [--cache-mib 64] [--index-cache-mib 4] COMMANDE
+  help [SUJET] [--section ID] [--print-url] [--directory DOSSIER]
+                                     Ouvrir le manuel local complet
   init [--encrypted]                 Créer un stockage de blocs
   keygen                             Afficher une clé aléatoire de 256 bits
   put FICHIER [--fixed-size OCTETS] [--workers 1..64] [--buffer-mib 32]
@@ -484,6 +487,8 @@ Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans 
   std::cout << R"(Syrnck 0.1.0 — C++20 block storage, Git assets and native revisions
 Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-mib 64]
               [--index-cache-mib 4] COMMAND
+  help [TOPIC] [--section ID] [--print-url] [--directory DIRECTORY]
+                                     Open the complete local manual
   init [--encrypted]                 Create a new block store
   keygen                             Print a random 256-bit key
   put FILE [--fixed-size BYTES] [--workers 1..64] [--buffer-mib 32]
@@ -696,6 +701,27 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (ca)
     ca_path = path_from_utf8(*ca);
   auto command = args.pop();
+  // Documentation is independent of repository state, encryption and credentials.
+  if (command == "help") {
+    const auto directory = args.option("--directory");
+    const auto section = args.option("--section");
+    const bool print_url = args.flag("--print-url");
+    args.paths();
+    require(args.values.size() <= 2, "unexpected or missing arguments; use --help");
+    std::string topic;
+    for (const auto &part : args.values) {
+      if (!topic.empty())
+        topic += ' ';
+      topic += part;
+    }
+    const auto url = cli::documentation_url(cli::documentation_directory(directory), language, topic, section);
+    if (print_url) {
+      std::cout << url << '\n';
+      require(std::cout.good(), "output write failed");
+    } else
+      cli::open_documentation(url);
+    return 0;
+  }
   if (command == "keygen") {
     args.count(0);
     std::cout << hex(random_bytes(32)) << '\n';

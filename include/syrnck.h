@@ -16,6 +16,61 @@ extern "C" {
 typedef struct SyrnckStore SyrnckStore;
 typedef struct SyrnckWorkspace SyrnckWorkspace;
 typedef struct SyrnckCancellation SyrnckCancellation;
+/**
+ * @doc api-c-abi
+ * @locale en
+ * @title C ABI: ownership and errors
+ * @section API
+ * @symbol syrnck_store_open
+ * Include `<syrnck.h>` and use the matching `syrnck_ffi` library; define SYRNCK_STATIC for static linking.
+ *
+ * ## Handles and buffers {#ownership}
+ * Open with syrnck_store_open and close exactly once. Serialize calls on each handle, including close.
+ * Workspace sessions retain no Store; open it only for queries. Paths and strings are UTF-8. Buffers belong to the caller unless a
+ * function explicitly allocates a string; release those strings with syrnck_string_free.
+ * IDs need 65 bytes including NUL. Size-query conventions differ between JSON strings and binary
+ * object reads; follow the comments beside each declaration in the distributed header.
+ *
+ * ## Status and diagnostics {#errors}
+ * ABI 1 returns 0 on success, 1 on ordinary error, 2 on an unknown exception and 3 on cooperative
+ * cancellation for operation-enabled calls. No C++ object or exception crosses the boundary.
+ * Copy syrnck_last_error or use syrnck_error_copy on the same OS thread immediately after failure.
+ * Diagnostics are canonical English and limited to 4095 bytes. Do not free the thread-local pointer.
+ *
+ * ## Observation and cancellation {#operations}
+ * Cancellation handles are one-shot and may be requested from another thread or progress callback.
+ * The owning application must serialize destruction against users. A callback borrows its strings
+ * only for its duration. Read [workspace sessions](doc:workspace-abi), [Go](doc:go-binding), and
+ * [verified ranges](doc:file-ranges) for complete API contracts and examples.
+ */
+/**
+ * @doc api-c-abi
+ * @locale fr
+ * @title ABI C : propriété et erreurs
+ * @section API
+ * @symbol syrnck_store_open
+ * Inclure `<syrnck.h>` et utiliser la bibliothèque `syrnck_ffi` correspondante ; définir SYRNCK_STATIC pour le lien statique.
+ *
+ * ## Handles et tampons {#ownership}
+ * Ouvrir avec syrnck_store_open puis fermer une seule fois. Sérialiser les appels et la fermeture de chaque handle.
+ * La session de workspace ne garde aucun Store ; l'ouvrir pour les requêtes. Chemins et chaînes sont UTF-8. Les tampons appartiennent
+ * à l'appelant, sauf allocation explicite d'une chaîne à libérer avec syrnck_string_free.
+ * Un ID demande 65 octets, NUL inclus. Les requêtes de taille diffèrent pour le JSON et les objets
+ * binaires : respecter les commentaires de chaque déclaration dans l'en-tête distribué.
+ *
+ * ## Codes de retour et diagnostics {#errors}
+ * L'ABI 1 rend 0 pour le succès, 1 pour une erreur ordinaire, 2 pour une exception inconnue et 3 pour
+ * une annulation coopérative dans les appels acceptant une opération. Aucun objet ni exception C++
+ * ne traverse l'interface. Copier syrnck_last_error ou appeler syrnck_error_copy immédiatement après
+ * l'erreur, sur le même thread OS. Les messages anglais canoniques sont limités à 4095 octets.
+ * Ne pas libérer le pointeur local au thread.
+ *
+ * ## Observation et annulation {#operations}
+ * Une source d'annulation est à usage unique ; la demande est autorisée depuis un autre thread ou
+ * un callback de progression. Sérialiser sa destruction avec ses utilisateurs. Les chaînes du
+ * callback sont empruntées uniquement pendant l'appel. Voir les [sessions](doc:workspace-abi),
+ * le [binding Go](doc:go-binding) et les [plages vérifiées](doc:file-ranges) pour les contrats et exemples.
+ */
 /* ABI 1: 0 = success; 1 = error; 2 = unknown C++ exception;
  * 3 = cooperative cancellation in *_ex calls with operation/cancellation input.
  * Strings are NUL-terminated UTF-8 unless a byte length is specified.

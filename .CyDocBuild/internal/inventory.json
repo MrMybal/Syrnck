@@ -1,0 +1,2173 @@
+[
+  {
+    "source": "docs/ARCHITECTURE.md",
+    "id": "architecture",
+    "locale": "fr",
+    "title": "Architecture",
+    "fr_title": "Architecture",
+    "section": "Getting started",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Architecture de Syrnck",
+        "id": "architecture-de-syrnck"
+      },
+      {
+        "level": 2,
+        "text": "Objectif et décisions",
+        "id": "objectif-et-decisions"
+      },
+      {
+        "level": 2,
+        "text": "Fichiers et révisions",
+        "id": "fichiers-et-revisions"
+      },
+      {
+        "level": 2,
+        "text": "Politique de découpage",
+        "id": "politique-de-decoupage"
+      },
+      {
+        "level": 2,
+        "text": "Mode Git",
+        "id": "mode-git"
+      },
+      {
+        "level": 2,
+        "text": "Mode autonome",
+        "id": "mode-autonome"
+      },
+      {
+        "level": 2,
+        "text": "Stockage physique et packs",
+        "id": "stockage-physique-et-packs"
+      },
+      {
+        "level": 2,
+        "text": "Pipeline d'ingestion",
+        "id": "pipeline-d-ingestion"
+      },
+      {
+        "level": 2,
+        "text": "Cache et parcours de validation",
+        "id": "cache-et-parcours-de-validation"
+      },
+      {
+        "level": 2,
+        "text": "Conservation et suppression",
+        "id": "conservation-et-suppression"
+      },
+      {
+        "level": 2,
+        "text": "Synchronisation et serveur",
+        "id": "synchronisation-et-serveur"
+      },
+      {
+        "level": 2,
+        "text": "Chiffrement",
+        "id": "chiffrement"
+      },
+      {
+        "level": 2,
+        "text": "Intégrité et limites actuelles",
+        "id": "integrite-et-limites-actuelles"
+      }
+    ]
+  },
+  {
+    "source": "docs/ARCHIVE_RETENTION.md",
+    "id": "archive-retention",
+    "locale": "en",
+    "title": "Retire native archives with a verified backup",
+    "fr_title": "Retrait des archives",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Retire native archives with a verified backup",
+        "id": "retire-native-archives-with-a-verified-backup"
+      }
+    ]
+  },
+  {
+    "source": "docs/ASSET_LOCKS.md",
+    "id": "asset-locks",
+    "locale": "en",
+    "title": "Repository-local asset leases",
+    "fr_title": "Verrous temporaires d’assets",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Repository-local asset leases",
+        "id": "repository-local-asset-leases"
+      },
+      {
+        "level": 2,
+        "text": "Acquire and inspect",
+        "id": "acquire-and-inspect"
+      },
+      {
+        "level": 2,
+        "text": "Renew, release and prune",
+        "id": "renew-release-and-prune"
+      },
+      {
+        "level": 2,
+        "text": "Storage and API",
+        "id": "storage-and-api"
+      }
+    ]
+  },
+  {
+    "source": "docs/AUDIT.md",
+    "id": "audit",
+    "locale": "en",
+    "title": "Streaming integrity audits",
+    "fr_title": "Vérification d’intégrité",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Streaming integrity audits",
+        "id": "streaming-integrity-audits"
+      },
+      {
+        "level": 2,
+        "text": "Memory and lifetime",
+        "id": "memory-and-lifetime"
+      },
+      {
+        "level": 2,
+        "text": "Verification and measurement",
+        "id": "verification-and-measurement"
+      },
+      {
+        "level": 2,
+        "text": "Progress and cancellation",
+        "id": "progress-and-cancellation"
+      }
+    ]
+  },
+  {
+    "source": "docs/BACKUPS.md",
+    "id": "backups",
+    "locale": "en",
+    "title": "Verified offline backups, restore and missing-object repair",
+    "fr_title": "Sauvegardes, restauration et réparation",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Verified offline backups, restore and missing-object repair",
+        "id": "verified-offline-backups-restore-and-missing-object-repair"
+      },
+      {
+        "level": 2,
+        "text": "Verify and change encryption keys",
+        "id": "verify-and-change-encryption-keys"
+      },
+      {
+        "level": 2,
+        "text": "Repair missing retained dependencies",
+        "id": "repair-missing-retained-dependencies"
+      },
+      {
+        "level": 2,
+        "text": "Validation and limits",
+        "id": "validation-and-limits"
+      }
+    ]
+  },
+  {
+    "source": "docs/CHECKOUT_RETENTION.md",
+    "id": "checkout-retention",
+    "locale": "en",
+    "title": "Completed checkout receipt retirement",
+    "fr_title": "Retrait des reçus de checkout",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Completed checkout receipt retirement",
+        "id": "completed-checkout-receipt-retirement"
+      },
+      {
+        "level": 2,
+        "text": "Coverage and fences",
+        "id": "coverage-and-fences"
+      },
+      {
+        "level": 2,
+        "text": "Historical receipts",
+        "id": "historical-receipts"
+      },
+      {
+        "level": 2,
+        "text": "Validation and limits",
+        "id": "validation-and-limits"
+      }
+    ]
+  },
+  {
+    "source": "docs/COMPACTION.md",
+    "id": "compaction",
+    "locale": "en",
+    "title": "Streaming packing and compaction",
+    "fr_title": "Empaquetage et compaction en flux",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Streaming packing and compaction",
+        "id": "streaming-packing-and-compaction"
+      },
+      {
+        "level": 2,
+        "text": "Ordered input and two passes",
+        "id": "ordered-input-and-two-passes"
+      },
+      {
+        "level": 2,
+        "text": "Memory and remaining limits",
+        "id": "memory-and-remaining-limits"
+      },
+      {
+        "level": 2,
+        "text": "Tests and reproduction",
+        "id": "tests-and-reproduction"
+      },
+      {
+        "level": 2,
+        "text": "Windows x64 measurement — 4 November 2026",
+        "id": "windows-x64-measurement-4-november-2026"
+      }
+    ]
+  },
+  {
+    "source": "docs/EXPORT.md",
+    "id": "export",
+    "locale": "en",
+    "title": "Transactional native exports",
+    "fr_title": "Export de révisions",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Transactional native exports",
+        "id": "transactional-native-exports"
+      }
+    ]
+  },
+  {
+    "source": "docs/FILE_COMPARISON.md",
+    "id": "file-comparison",
+    "locale": "en",
+    "title": "Manifest comparison and chunk reuse plans",
+    "fr_title": "Comparaison de manifestes",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Manifest comparison and chunk reuse plans",
+        "id": "manifest-comparison-and-chunk-reuse-plans"
+      }
+    ]
+  },
+  {
+    "source": "docs/FILE_RANGES.md",
+    "id": "file-ranges",
+    "locale": "en",
+    "title": "Verified file ranges",
+    "fr_title": "Lecture vérifiée de plages",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Verified file ranges",
+        "id": "verified-file-ranges"
+      }
+    ]
+  },
+  {
+    "source": "docs/GIT_ASSETS.md",
+    "id": "git-assets",
+    "locale": "en",
+    "title": "Git asset catalogs and retained bundles",
+    "fr_title": "Catalogues d’assets Git",
+    "section": "Git",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Git asset catalogs and retained bundles",
+        "id": "git-asset-catalogs-and-retained-bundles"
+      },
+      {
+        "level": 2,
+        "text": "Grouped transfers",
+        "id": "grouped-transfers"
+      },
+      {
+        "level": 2,
+        "text": "On-demand checkout and pointer-only clones",
+        "id": "on-demand-checkout-and-pointer-only-clones"
+      },
+      {
+        "level": 2,
+        "text": "Opt-in pre-push hook",
+        "id": "opt-in-pre-push-hook"
+      },
+      {
+        "level": 2,
+        "text": "Bounds and local Git requirements",
+        "id": "bounds-and-local-git-requirements"
+      }
+    ]
+  },
+  {
+    "source": "docs/GIT_FILTER_PROCESS.md",
+    "id": "git-filter-process",
+    "locale": "en",
+    "title": "Resident Git filters",
+    "fr_title": "Filtres Git résidents",
+    "section": "Git",
+    "parent": "git-assets",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Resident Git filters",
+        "id": "resident-git-filters"
+      },
+      {
+        "level": 2,
+        "text": "Behavior and performance scope",
+        "id": "behavior-and-performance-scope"
+      },
+      {
+        "level": 2,
+        "text": "Streaming and bounds",
+        "id": "streaming-and-bounds"
+      },
+      {
+        "level": 2,
+        "text": "Failures and shutdown",
+        "id": "failures-and-shutdown"
+      }
+    ]
+  },
+  {
+    "source": "docs/GIT_LFS_HISTORY.md",
+    "id": "git-lfs-history",
+    "locale": "en",
+    "title": "Offline conversion of complete Git LFS history",
+    "fr_title": "Conversion de tout l’historique LFS",
+    "section": "Git",
+    "parent": "git-assets",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Offline conversion of complete Git LFS history",
+        "id": "offline-conversion-of-complete-git-lfs-history"
+      },
+      {
+        "level": 2,
+        "text": "Complete preflight",
+        "id": "complete-preflight"
+      },
+      {
+        "level": 2,
+        "text": "Preserved history and signatures",
+        "id": "preserved-history-and-signatures"
+      },
+      {
+        "level": 2,
+        "text": "Retention and publication",
+        "id": "retention-and-publication"
+      },
+      {
+        "level": 2,
+        "text": "Bounds and validation",
+        "id": "bounds-and-validation"
+      }
+    ]
+  },
+  {
+    "source": "docs/GIT_LFS_MIGRATION.md",
+    "id": "git-lfs-migration",
+    "locale": "en",
+    "title": "Offline Git LFS migration",
+    "fr_title": "Migration d’un snapshot LFS",
+    "section": "Git",
+    "parent": "git-assets",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Offline Git LFS migration",
+        "id": "offline-git-lfs-migration"
+      },
+      {
+        "level": 2,
+        "text": "Prepare and inspect",
+        "id": "prepare-and-inspect"
+      },
+      {
+        "level": 2,
+        "text": "Convert a snapshot",
+        "id": "convert-a-snapshot"
+      },
+      {
+        "level": 2,
+        "text": "Cancellation and recovery",
+        "id": "cancellation-and-recovery"
+      },
+      {
+        "level": 2,
+        "text": "Library and limits",
+        "id": "library-and-limits"
+      }
+    ]
+  },
+  {
+    "source": "docs/GIT_RETENTION.md",
+    "id": "git-retention",
+    "locale": "en",
+    "title": "Git retention inventory and verified protection",
+    "fr_title": "Rétention des assets Git",
+    "section": "Git",
+    "parent": "git-assets",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Git retention inventory and verified protection",
+        "id": "git-retention-inventory-and-verified-protection"
+      },
+      {
+        "level": 2,
+        "text": "What the scan observes",
+        "id": "what-the-scan-observes"
+      },
+      {
+        "level": 2,
+        "text": "Preview and apply",
+        "id": "preview-and-apply"
+      },
+      {
+        "level": 2,
+        "text": "Unobserved does not mean safe to delete",
+        "id": "unobserved-does-not-mean-safe-to-delete"
+      },
+      {
+        "level": 2,
+        "text": "Transactions, cancellation and limits",
+        "id": "transactions-cancellation-and-limits"
+      }
+    ]
+  },
+  {
+    "source": "docs/INDEXES.md",
+    "id": "indexes",
+    "locale": "fr",
+    "title": "Paged pack indexes",
+    "fr_title": "Index de packs paginés",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Lecture paginée des index de packs",
+        "id": "lecture-paginee-des-index-de-packs"
+      },
+      {
+        "level": 2,
+        "text": "Validation et recherche",
+        "id": "validation-et-recherche"
+      },
+      {
+        "level": 2,
+        "text": "Cache et snapshot",
+        "id": "cache-et-snapshot"
+      },
+      {
+        "level": 2,
+        "text": "Réglages et compteurs",
+        "id": "reglages-et-compteurs"
+      },
+      {
+        "level": 2,
+        "text": "Mémoire et limites",
+        "id": "memoire-et-limites"
+      }
+    ]
+  },
+  {
+    "source": "docs/LOCALIZATION.md",
+    "id": "localization",
+    "locale": "en",
+    "title": "Language and localization policy",
+    "fr_title": "Langues et messages",
+    "section": "Getting started",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Language and localization policy",
+        "id": "language-and-localization-policy"
+      },
+      {
+        "level": 2,
+        "text": "Command-line selection",
+        "id": "command-line-selection"
+      },
+      {
+        "level": 2,
+        "text": "Library and protocol boundaries",
+        "id": "library-and-protocol-boundaries"
+      },
+      {
+        "level": 2,
+        "text": "Maintaining translations",
+        "id": "maintaining-translations"
+      }
+    ]
+  },
+  {
+    "source": "docs/MAINTENANCE.md",
+    "id": "maintenance",
+    "locale": "en",
+    "title": "Maintenance progress and cancellation",
+    "fr_title": "Maintenance et annulation",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Maintenance progress and cancellation",
+        "id": "maintenance-progress-and-cancellation"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_AMEND.md",
+    "id": "native-amend",
+    "locale": "en",
+    "title": "Native commit amendment",
+    "fr_title": "Modification du dernier commit",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native commit amendment",
+        "id": "native-commit-amendment"
+      },
+      {
+        "level": 2,
+        "text": "CLI",
+        "id": "cli"
+      },
+      {
+        "level": 2,
+        "text": "Retention, interruption and restoration",
+        "id": "retention-interruption-and-restoration"
+      },
+      {
+        "level": 2,
+        "text": "C++ API and validation",
+        "id": "c-api-and-validation"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_ARCHIVES.md",
+    "id": "native-archives",
+    "locale": "en",
+    "title": "Native history archives",
+    "fr_title": "Archives de l’historique natif",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native history archives",
+        "id": "native-history-archives"
+      },
+      {
+        "level": 2,
+        "text": "Pages and verification",
+        "id": "pages-and-verification"
+      },
+      {
+        "level": 2,
+        "text": "Recovering stored versions",
+        "id": "recovering-stored-versions"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_BISECT.md",
+    "id": "native-bisect",
+    "locale": "en",
+    "title": "Persistent native bisection without checkout",
+    "fr_title": "Recherche par bissection",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Persistent native bisection without checkout",
+        "id": "persistent-native-bisection-without-checkout"
+      },
+      {
+        "level": 2,
+        "text": "State, retention and recovery",
+        "id": "state-retention-and-recovery"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_BRANCHES.md",
+    "id": "native-branches",
+    "locale": "en",
+    "title": "Native branches and recoverable switching",
+    "fr_title": "Branches et changement de branche",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native branches and recoverable switching",
+        "id": "native-branches-and-recoverable-switching"
+      },
+      {
+        "level": 2,
+        "text": "Branch inventory and verified creation",
+        "id": "branch-inventory-and-verified-creation"
+      },
+      {
+        "level": 2,
+        "text": "Archived branch deletion",
+        "id": "archived-branch-deletion"
+      },
+      {
+        "level": 2,
+        "text": "Restore an archived branch",
+        "id": "restore-an-archived-branch"
+      },
+      {
+        "level": 2,
+        "text": "CLI defaults and workspace identity",
+        "id": "cli-defaults-and-workspace-identity"
+      },
+      {
+        "level": 2,
+        "text": "Preflight, publication and recovery",
+        "id": "preflight-publication-and-recovery"
+      },
+      {
+        "level": 2,
+        "text": "Representation and C++ API",
+        "id": "representation-and-c-api"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_CHECKOUT.md",
+    "id": "native-checkout",
+    "locale": "en",
+    "title": "Recoverable native checkout",
+    "fr_title": "Checkout récupérable",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Recoverable native checkout",
+        "id": "recoverable-native-checkout"
+      },
+      {
+        "level": 2,
+        "text": "Starting and publishing",
+        "id": "starting-and-publishing"
+      },
+      {
+        "level": 2,
+        "text": "Inspecting, resuming and aborting",
+        "id": "inspecting-resuming-and-aborting"
+      },
+      {
+        "level": 2,
+        "text": "Journal, retention and private data",
+        "id": "journal-retention-and-private-data"
+      },
+      {
+        "level": 2,
+        "text": "C++, progress and limits",
+        "id": "c-progress-and-limits"
+      },
+      {
+        "level": 2,
+        "text": "Recoverable namespace transitions",
+        "id": "recoverable-namespace-transitions"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_COMPARISON.md",
+    "id": "native-comparison",
+    "locale": "en",
+    "title": "Native working-directory status and snapshot comparison",
+    "fr_title": "Statut et comparaison de snapshots",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native working-directory status and snapshot comparison",
+        "id": "native-working-directory-status-and-snapshot-comparison"
+      },
+      {
+        "level": 2,
+        "text": "Working-directory status",
+        "id": "working-directory-status"
+      },
+      {
+        "level": 2,
+        "text": "Revision snapshot comparison",
+        "id": "revision-snapshot-comparison"
+      },
+      {
+        "level": 2,
+        "text": "C++ and operation boundaries",
+        "id": "c-and-operation-boundaries"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_FILE_HISTORY.md",
+    "id": "native-file-history",
+    "locale": "en",
+    "title": "Exact renames and first-parent file history",
+    "fr_title": "Renommages exacts et historique de fichiers",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Exact renames and first-parent file history",
+        "id": "exact-renames-and-first-parent-file-history"
+      },
+      {
+        "level": 2,
+        "text": "Exact rename comparison",
+        "id": "exact-rename-comparison"
+      },
+      {
+        "level": 2,
+        "text": "Follow a file lineage",
+        "id": "follow-a-file-lineage"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_HARD_RESET.md",
+    "id": "native-hard-reset",
+    "locale": "en",
+    "title": "Recoverable native hard reset",
+    "fr_title": "Reset hard récupérable",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Recoverable native hard reset",
+        "id": "recoverable-native-hard-reset"
+      },
+      {
+        "level": 2,
+        "text": "What is replaced and protected",
+        "id": "what-is-replaced-and-protected"
+      },
+      {
+        "level": 2,
+        "text": "Application and recovery",
+        "id": "application-and-recovery"
+      },
+      {
+        "level": 2,
+        "text": "API, bounds and validation",
+        "id": "api-bounds-and-validation"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_HISTORY.md",
+    "id": "native-history",
+    "locale": "en",
+    "title": "Native revision ancestry",
+    "fr_title": "Ascendance des révisions",
+    "section": "Version control",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native revision ancestry",
+        "id": "native-revision-ancestry"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_HUNKS.md",
+    "id": "native-hunks",
+    "locale": "en",
+    "title": "Native partial text staging and reset",
+    "fr_title": "Sélection de hunks textuels",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native partial text staging and reset",
+        "id": "native-partial-text-staging-and-reset"
+      },
+      {
+        "level": 2,
+        "text": "Review and bind the selection",
+        "id": "review-and-bind-the-selection"
+      },
+      {
+        "level": 2,
+        "text": "Scope and exact bytes",
+        "id": "scope-and-exact-bytes"
+      },
+      {
+        "level": 2,
+        "text": "Atomic retention and recovery",
+        "id": "atomic-retention-and-recovery"
+      },
+      {
+        "level": 2,
+        "text": "Remove prepared hunks",
+        "id": "remove-prepared-hunks"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_LINES.md",
+    "id": "native-lines",
+    "locale": "en",
+    "title": "Native individual text-line selection",
+    "fr_title": "Sélection de lignes textuelles",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native individual text-line selection",
+        "id": "native-individual-text-line-selection"
+      },
+      {
+        "level": 2,
+        "text": "Numbered change rows",
+        "id": "numbered-change-rows"
+      },
+      {
+        "level": 2,
+        "text": "Exact bytes and selection refusal",
+        "id": "exact-bytes-and-selection-refusal"
+      },
+      {
+        "level": 2,
+        "text": "Plans, storage and retention",
+        "id": "plans-storage-and-retention"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_MERGE.md",
+    "id": "native-merge",
+    "locale": "en",
+    "title": "Native merge",
+    "fr_title": "Fusion de branches",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native merge",
+        "id": "native-merge"
+      },
+      {
+        "level": 2,
+        "text": "Topology",
+        "id": "topology"
+      },
+      {
+        "level": 2,
+        "text": "Opt-in text composition",
+        "id": "opt-in-text-composition"
+      },
+      {
+        "level": 2,
+        "text": "Reports and validation",
+        "id": "reports-and-validation"
+      },
+      {
+        "level": 2,
+        "text": "Apply and recover",
+        "id": "apply-and-recover"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_REBASE.md",
+    "id": "native-rebase",
+    "locale": "en",
+    "title": "Native linear rebase",
+    "fr_title": "Rebase linéaire",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native linear rebase",
+        "id": "native-linear-rebase"
+      },
+      {
+        "level": 2,
+        "text": "File replay and topology",
+        "id": "file-replay-and-topology"
+      },
+      {
+        "level": 2,
+        "text": "Read-only report and bounds",
+        "id": "read-only-report-and-bounds"
+      },
+      {
+        "level": 2,
+        "text": "Apply and recover",
+        "id": "apply-and-recover"
+      },
+      {
+        "level": 2,
+        "text": "Resolve conflicts by step",
+        "id": "resolve-conflicts-by-step"
+      },
+      {
+        "level": 2,
+        "text": "Optional bounded text composition",
+        "id": "optional-bounded-text-composition"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_REBASE_TODO.md",
+    "id": "native-rebase-todo",
+    "locale": "en",
+    "title": "Editable and interactive native rebase",
+    "fr_title": "Rebase éditable et interactif",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Editable and interactive native rebase",
+        "id": "editable-and-interactive-native-rebase"
+      },
+      {
+        "level": 2,
+        "text": "Terminal input",
+        "id": "terminal-input"
+      },
+      {
+        "level": 2,
+        "text": "Limits, recovery and scope",
+        "id": "limits-recovery-and-scope"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_REPLAY.md",
+    "id": "native-replay",
+    "locale": "en",
+    "title": "Native cherry-pick and revert",
+    "fr_title": "Cherry-pick et revert",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native cherry-pick and revert",
+        "id": "native-cherry-pick-and-revert"
+      },
+      {
+        "level": 2,
+        "text": "Three-way decisions",
+        "id": "three-way-decisions"
+      },
+      {
+        "level": 2,
+        "text": "Optional bounded text composition",
+        "id": "optional-bounded-text-composition"
+      },
+      {
+        "level": 2,
+        "text": "Apply a planned change",
+        "id": "apply-a-planned-change"
+      },
+      {
+        "level": 2,
+        "text": "Interruption, abort and retention",
+        "id": "interruption-abort-and-retention"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_RESET.md",
+    "id": "native-reset",
+    "locale": "en",
+    "title": "Native branch reset",
+    "fr_title": "Reset soft et mixed",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native branch reset",
+        "id": "native-branch-reset"
+      },
+      {
+        "level": 2,
+        "text": "Retention and interruption",
+        "id": "retention-and-interruption"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_RESOLUTIONS.md",
+    "id": "native-resolutions",
+    "locale": "en",
+    "title": "Native conflict resolutions",
+    "fr_title": "Résolution explicite des conflits",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native conflict resolutions",
+        "id": "native-conflict-resolutions"
+      },
+      {
+        "level": 2,
+        "text": "Prepare and apply",
+        "id": "prepare-and-apply"
+      },
+      {
+        "level": 2,
+        "text": "Choices",
+        "id": "choices"
+      },
+      {
+        "level": 2,
+        "text": "Validation and recovery",
+        "id": "validation-and-recovery"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_SQUASH.md",
+    "id": "native-squash",
+    "locale": "en",
+    "title": "Native commit squash",
+    "fr_title": "Regroupement de commits",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native commit squash",
+        "id": "native-commit-squash"
+      },
+      {
+        "level": 2,
+        "text": "Publication and retained history",
+        "id": "publication-and-retained-history"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_STAGE_REBASE.md",
+    "id": "native-stage-rebase",
+    "locale": "en",
+    "title": "Rebase a native staging index",
+    "fr_title": "Rejeu d’un index périmé",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Rebase a native staging index",
+        "id": "rebase-a-native-staging-index"
+      },
+      {
+        "level": 2,
+        "text": "Replay and preview",
+        "id": "replay-and-preview"
+      },
+      {
+        "level": 2,
+        "text": "Apply and retain prepared bytes",
+        "id": "apply-and-retain-prepared-bytes"
+      },
+      {
+        "level": 2,
+        "text": "Resolve index conflicts",
+        "id": "resolve-index-conflicts"
+      },
+      {
+        "level": 2,
+        "text": "Optional bounded text composition",
+        "id": "optional-bounded-text-composition"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_STAGING.md",
+    "id": "native-staging",
+    "locale": "en",
+    "title": "Native staging and selected commits",
+    "fr_title": "Index de préparation et commits sélectionnés",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native staging and selected commits",
+        "id": "native-staging-and-selected-commits"
+      },
+      {
+        "level": 2,
+        "text": "Selection and frozen contents",
+        "id": "selection-and-frozen-contents"
+      },
+      {
+        "level": 2,
+        "text": "Inspect, reset and commit",
+        "id": "inspect-reset-and-commit"
+      },
+      {
+        "level": 2,
+        "text": "Retention and publication",
+        "id": "retention-and-publication"
+      },
+      {
+        "level": 2,
+        "text": "C++ API and validation",
+        "id": "c-api-and-validation"
+      },
+      {
+        "level": 2,
+        "text": "Inspect prepared text",
+        "id": "inspect-prepared-text"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_STASH.md",
+    "id": "native-stash",
+    "locale": "en",
+    "title": "Native stash",
+    "fr_title": "Stash natif",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native stash",
+        "id": "native-stash"
+      },
+      {
+        "level": 2,
+        "text": "Save and scope",
+        "id": "save-and-scope"
+      },
+      {
+        "level": 2,
+        "text": "Reapply, conflicts and index",
+        "id": "reapply-conflicts-and-index"
+      },
+      {
+        "level": 2,
+        "text": "Drop, restore and retention",
+        "id": "drop-restore-and-retention"
+      },
+      {
+        "level": 2,
+        "text": "Bounds and verification",
+        "id": "bounds-and-verification"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_TAGS.md",
+    "id": "native-tags",
+    "locale": "en",
+    "title": "Native tags, revision selectors and retained archives",
+    "fr_title": "Tags et sélecteurs de révision",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native tags, revision selectors and retained archives",
+        "id": "native-tags-revision-selectors-and-retained-archives"
+      },
+      {
+        "level": 2,
+        "text": "Read-only reports and pagination",
+        "id": "read-only-reports-and-pagination"
+      },
+      {
+        "level": 2,
+        "text": "Archived deletion and restoration",
+        "id": "archived-deletion-and-restoration"
+      },
+      {
+        "level": 2,
+        "text": "Native revision selectors",
+        "id": "native-revision-selectors"
+      },
+      {
+        "level": 2,
+        "text": "Storage, cancellation and API",
+        "id": "storage-cancellation-and-api"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_WATCH.md",
+    "id": "native-watch",
+    "locale": "en",
+    "title": "Resident native workspace observation",
+    "fr_title": "Surveillance résidente du workspace",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Resident native workspace observation",
+        "id": "resident-native-workspace-observation"
+      },
+      {
+        "level": 2,
+        "text": "Status and event lifecycle",
+        "id": "status-and-event-lifecycle"
+      },
+      {
+        "level": 2,
+        "text": "Lost events, audits and unavailable observations",
+        "id": "lost-events-audits-and-unavailable-observations"
+      },
+      {
+        "level": 2,
+        "text": "Optional persistent checkpoint journal",
+        "id": "optional-persistent-checkpoint-journal"
+      },
+      {
+        "level": 2,
+        "text": "Limits and resource use",
+        "id": "limits-and-resource-use"
+      },
+      {
+        "level": 2,
+        "text": "C++ API and validation",
+        "id": "c-api-and-validation"
+      },
+      {
+        "level": 2,
+        "text": "Synthetic performance measurement",
+        "id": "synthetic-performance-measurement"
+      }
+    ]
+  },
+  {
+    "source": "docs/NATIVE_WORKSPACE.md",
+    "id": "native-workspace",
+    "locale": "en",
+    "title": "Native workspace inspection and checkout preflight",
+    "fr_title": "Inspection du workspace",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Native workspace inspection and checkout preflight",
+        "id": "native-workspace-inspection-and-checkout-preflight"
+      },
+      {
+        "level": 2,
+        "text": "Combined status",
+        "id": "combined-status"
+      },
+      {
+        "level": 2,
+        "text": "Checkout plan and verification",
+        "id": "checkout-plan-and-verification"
+      },
+      {
+        "level": 2,
+        "text": "Protected paths and first-policy limits",
+        "id": "protected-paths-and-first-policy-limits"
+      },
+      {
+        "level": 2,
+        "text": "C++, progress and resource boundaries",
+        "id": "c-progress-and-resource-boundaries"
+      }
+    ]
+  },
+  {
+    "source": "docs/NETWORK_COMPRESSION.md",
+    "id": "network-compression",
+    "locale": "en",
+    "title": "Negotiated object compression",
+    "fr_title": "Compression réseau négociée",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Negotiated object compression",
+        "id": "negotiated-object-compression"
+      },
+      {
+        "level": 2,
+        "text": "Negotiation and representation",
+        "id": "negotiation-and-representation"
+      },
+      {
+        "level": 2,
+        "text": "Bounds and verification",
+        "id": "bounds-and-verification"
+      },
+      {
+        "level": 2,
+        "text": "Traffic, retries and recovery",
+        "id": "traffic-retries-and-recovery"
+      },
+      {
+        "level": 2,
+        "text": "Validation and remaining work",
+        "id": "validation-and-remaining-work"
+      }
+    ]
+  },
+  {
+    "source": "docs/OPERATIONS.md",
+    "id": "operations",
+    "locale": "en",
+    "title": "Progress and cooperative cancellation",
+    "fr_title": "Progression et annulation coopérative",
+    "section": "Getting started",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Progress and cooperative cancellation",
+        "id": "progress-and-cooperative-cancellation"
+      },
+      {
+        "level": 2,
+        "text": "CLI",
+        "id": "cli"
+      },
+      {
+        "level": 2,
+        "text": "C++ operations",
+        "id": "c-operations"
+      }
+    ]
+  },
+  {
+    "source": "docs/PACKS.md",
+    "id": "packs",
+    "locale": "fr",
+    "title": "Packs and compaction",
+    "fr_title": "Packs et compaction",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Packs et compaction",
+        "id": "packs-et-compaction"
+      },
+      {
+        "level": 2,
+        "text": "Activation et compatibilité",
+        "id": "activation-et-compatibilite"
+      },
+      {
+        "level": 2,
+        "text": "Regroupement incrémental et complet",
+        "id": "regroupement-incremental-et-complet"
+      },
+      {
+        "level": 2,
+        "text": "Publication et reprise",
+        "id": "publication-et-reprise"
+      },
+      {
+        "level": 2,
+        "text": "GC sélectif",
+        "id": "gc-selectif"
+      },
+      {
+        "level": 2,
+        "text": "Mémoire du GC",
+        "id": "memoire-du-gc"
+      },
+      {
+        "level": 2,
+        "text": "Limites actuelles",
+        "id": "limites-actuelles"
+      }
+    ]
+  },
+  {
+    "source": "docs/PARALLEL_TRANSFERS.md",
+    "id": "parallel-transfers",
+    "locale": "en",
+    "title": "Bounded parallel object transfers",
+    "fr_title": "Transferts parallèles bornés",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Bounded parallel object transfers",
+        "id": "bounded-parallel-object-transfers"
+      },
+      {
+        "level": 2,
+        "text": "Limits and counters",
+        "id": "limits-and-counters"
+      },
+      {
+        "level": 2,
+        "text": "Failure and publication",
+        "id": "failure-and-publication"
+      }
+    ]
+  },
+  {
+    "source": "docs/PROTOCOL.md",
+    "id": "protocol",
+    "locale": "fr",
+    "title": "Formats and protocol",
+    "fr_title": "Formats et protocole",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Formats et protocole expérimentaux",
+        "id": "formats-et-protocole-experimentaux"
+      },
+      {
+        "level": 2,
+        "text": "Identifiants et objets",
+        "id": "identifiants-et-objets"
+      },
+      {
+        "level": 2,
+        "text": "Stockage local",
+        "id": "stockage-local"
+      },
+      {
+        "level": 3,
+        "text": "Stockage physique v2 avec packs",
+        "id": "stockage-physique-v2-avec-packs"
+      },
+      {
+        "level": 3,
+        "text": "Stockage physique v3 : catalogue de packs",
+        "id": "stockage-physique-v3-catalogue-de-packs"
+      },
+      {
+        "level": 3,
+        "text": "Consultation paginée sans changement de format",
+        "id": "consultation-paginee-sans-changement-de-format"
+      },
+      {
+        "level": 2,
+        "text": "Pointeur Git",
+        "id": "pointeur-git"
+      },
+      {
+        "level": 2,
+        "text": "API HTTP",
+        "id": "api-http"
+      },
+      {
+        "level": 2,
+        "text": "Interface C",
+        "id": "interface-c"
+      }
+    ]
+  },
+  {
+    "source": "docs/REFERENCE_TABLES.md",
+    "id": "reference-tables",
+    "locale": "en",
+    "title": "Reference table parsing and listing",
+    "fr_title": "Tables de références",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Reference table parsing and listing",
+        "id": "reference-table-parsing-and-listing"
+      },
+      {
+        "level": 2,
+        "text": "JSON validation",
+        "id": "json-validation"
+      },
+      {
+        "level": 2,
+        "text": "Measured CLI listing — Windows x64, 4 November 2026",
+        "id": "measured-cli-listing-windows-x64-4-november-2026"
+      },
+      {
+        "level": 2,
+        "text": "Observer changes during batch publication",
+        "id": "observer-changes-during-batch-publication"
+      }
+    ]
+  },
+  {
+    "source": "docs/REPAIR_COPY.md",
+    "id": "repair-copy",
+    "locale": "en",
+    "title": "Rebuild a damaged Store in a verified new location",
+    "fr_title": "Reconstruction d’un dépôt endommagé",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Rebuild a damaged Store in a verified new location",
+        "id": "rebuild-a-damaged-store-in-a-verified-new-location"
+      },
+      {
+        "level": 2,
+        "text": "Preserve current history while recovering old bytes",
+        "id": "preserve-current-history-while-recovering-old-bytes"
+      },
+      {
+        "level": 2,
+        "text": "Corrupt loose objects and packed envelopes",
+        "id": "corrupt-loose-objects-and-packed-envelopes"
+      },
+      {
+        "level": 2,
+        "text": "Encryption and operation boundaries",
+        "id": "encryption-and-operation-boundaries"
+      }
+    ]
+  },
+  {
+    "source": "docs/SELECTIVE_RETENTION.md",
+    "id": "selective-retention",
+    "locale": "en",
+    "title": "Selective transfer retention and receipt pruning",
+    "fr_title": "Rétention des transferts et purge",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Selective transfer retention and receipt pruning",
+        "id": "selective-transfer-retention-and-receipt-pruning"
+      },
+      {
+        "level": 2,
+        "text": "Incomplete pulls",
+        "id": "incomplete-pulls"
+      },
+      {
+        "level": 2,
+        "text": "Pruning completed local receipts",
+        "id": "pruning-completed-local-receipts"
+      }
+    ]
+  },
+  {
+    "source": "docs/SERVER_ACCESS.md",
+    "id": "server-access",
+    "locale": "en",
+    "title": "Server identities, asset locks and native history transfer",
+    "fr_title": "Identités et permissions serveur",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Server identities, asset locks and native history transfer",
+        "id": "server-identities-asset-locks-and-native-history-transfer"
+      },
+      {
+        "level": 2,
+        "text": "Configure identities",
+        "id": "configure-identities"
+      },
+      {
+        "level": 2,
+        "text": "Use remote asset leases",
+        "id": "use-remote-asset-leases"
+      },
+      {
+        "level": 2,
+        "text": "Publish and fetch autonomous history",
+        "id": "publish-and-fetch-autonomous-history"
+      },
+      {
+        "level": 2,
+        "text": "HTTP extension",
+        "id": "http-extension"
+      }
+    ]
+  },
+  {
+    "source": "docs/SERVER_READ_LEASES.md",
+    "id": "server-read-leases",
+    "locale": "en",
+    "title": "Server read leases",
+    "fr_title": "Baux de lecture serveur",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Server read leases",
+        "id": "server-read-leases"
+      },
+      {
+        "level": 2,
+        "text": "Lifecycle and retention",
+        "id": "lifecycle-and-retention"
+      },
+      {
+        "level": 2,
+        "text": "Protocol",
+        "id": "protocol"
+      },
+      {
+        "level": 2,
+        "text": "Offline administration",
+        "id": "offline-administration"
+      }
+    ]
+  },
+  {
+    "source": "docs/SERVER_UPLOAD_LEASES.md",
+    "id": "server-upload-leases",
+    "locale": "en",
+    "title": "Persistent server upload leases",
+    "fr_title": "Baux d’envoi persistants",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Persistent server upload leases",
+        "id": "persistent-server-upload-leases"
+      },
+      {
+        "level": 2,
+        "text": "Lifetime, GC and administration",
+        "id": "lifetime-gc-and-administration"
+      },
+      {
+        "level": 2,
+        "text": "Fencing and resume",
+        "id": "fencing-and-resume"
+      },
+      {
+        "level": 2,
+        "text": "Protocol and compatibility",
+        "id": "protocol-and-compatibility"
+      }
+    ]
+  },
+  {
+    "source": "docs/SETTINGS.md",
+    "id": "settings",
+    "locale": "en",
+    "title": "Repository settings",
+    "fr_title": "Préférences du dépôt",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Repository settings",
+        "id": "repository-settings"
+      }
+    ]
+  },
+  {
+    "source": "docs/TEXT_DIFF.md",
+    "id": "text-diff",
+    "locale": "en",
+    "title": "Bounded text differences",
+    "fr_title": "Différences textuelles bornées",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Bounded text differences",
+        "id": "bounded-text-differences"
+      },
+      {
+        "level": 2,
+        "text": "Compare a native file between revisions",
+        "id": "compare-a-native-file-between-revisions"
+      },
+      {
+        "level": 2,
+        "text": "Inspect frozen staged changes",
+        "id": "inspect-frozen-staged-changes"
+      },
+      {
+        "level": 2,
+        "text": "Compare a working file",
+        "id": "compare-a-working-file"
+      }
+    ]
+  },
+  {
+    "source": "docs/TEXT_MERGE.md",
+    "id": "text-merge",
+    "locale": "en",
+    "title": "Bounded three-way text merge",
+    "fr_title": "Fusion textuelle à trois voies",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Bounded three-way text merge",
+        "id": "bounded-three-way-text-merge"
+      },
+      {
+        "level": 2,
+        "text": "Result",
+        "id": "result"
+      },
+      {
+        "level": 2,
+        "text": "Budgets and cancellation",
+        "id": "budgets-and-cancellation"
+      },
+      {
+        "level": 2,
+        "text": "Merge one stored path",
+        "id": "merge-one-stored-path"
+      },
+      {
+        "level": 2,
+        "text": "CLI and reviewed conflict resolution",
+        "id": "cli-and-reviewed-conflict-resolution"
+      },
+      {
+        "level": 2,
+        "text": "Virtual file preparation",
+        "id": "virtual-file-preparation"
+      }
+    ]
+  },
+  {
+    "source": "docs/TEXT_PATCHES.md",
+    "id": "text-patches",
+    "locale": "en",
+    "title": "Strict unified text patches",
+    "fr_title": "Patches unifiés stricts",
+    "section": "Version control",
+    "parent": "native-history",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Strict unified text patches",
+        "id": "strict-unified-text-patches"
+      },
+      {
+        "level": 2,
+        "text": "Accepted format",
+        "id": "accepted-format"
+      },
+      {
+        "level": 2,
+        "text": "Exact bytes and bounds",
+        "id": "exact-bytes-and-bounds"
+      },
+      {
+        "level": 2,
+        "text": "Prepare an external patch in the native index",
+        "id": "prepare-an-external-patch-in-the-native-index"
+      },
+      {
+        "level": 2,
+        "text": "CLI workflow",
+        "id": "cli-workflow"
+      }
+    ]
+  },
+  {
+    "source": "docs/TRANSFER_POLICY.md",
+    "id": "transfer-policy",
+    "locale": "en",
+    "title": "Retry policy and shared traffic targets",
+    "fr_title": "Reprise et objectifs de débit",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Retry policy and shared traffic targets",
+        "id": "retry-policy-and-shared-traffic-targets"
+      },
+      {
+        "level": 2,
+        "text": "Retry boundaries",
+        "id": "retry-boundaries"
+      },
+      {
+        "level": 2,
+        "text": "Traffic targets",
+        "id": "traffic-targets"
+      },
+      {
+        "level": 2,
+        "text": "Recovery and validation",
+        "id": "recovery-and-validation"
+      }
+    ]
+  },
+  {
+    "source": "docs/TRANSFER_SESSIONS.md",
+    "id": "transfer-sessions",
+    "locale": "en",
+    "title": "Persistent transfer sessions",
+    "fr_title": "Sessions de transfert persistantes",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Persistent transfer sessions",
+        "id": "persistent-transfer-sessions"
+      },
+      {
+        "level": 2,
+        "text": "Format and writes",
+        "id": "format-and-writes"
+      },
+      {
+        "level": 2,
+        "text": "States and reference protection",
+        "id": "states-and-reference-protection"
+      },
+      {
+        "level": 2,
+        "text": "GC and deliberate discard",
+        "id": "gc-and-deliberate-discard"
+      }
+    ]
+  },
+  {
+    "source": "docs/TRANSFERS.md",
+    "id": "transfers",
+    "locale": "en",
+    "title": "Transfer progress, cancellation and publication",
+    "fr_title": "Transferts et publication",
+    "section": "Transfers",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Transfer progress, cancellation and publication",
+        "id": "transfer-progress-cancellation-and-publication"
+      },
+      {
+        "level": 2,
+        "text": "Server authentication and request bodies",
+        "id": "server-authentication-and-request-bodies"
+      },
+      {
+        "level": 2,
+        "text": "Publication boundary",
+        "id": "publication-boundary"
+      },
+      {
+        "level": 2,
+        "text": "Validation and remaining work",
+        "id": "validation-and-remaining-work"
+      }
+    ]
+  },
+  {
+    "source": "docs/UPLOAD_INVENTORIES.md",
+    "id": "upload-inventories",
+    "locale": "en",
+    "title": "Selective server upload inventories",
+    "fr_title": "Inventaires d’envoi paginés",
+    "section": "Transfers",
+    "parent": "transfers",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Selective server upload inventories",
+        "id": "selective-server-upload-inventories"
+      },
+      {
+        "level": 2,
+        "text": "Registration and acknowledgement",
+        "id": "registration-and-acknowledgement"
+      },
+      {
+        "level": 2,
+        "text": "GC, expiry and cleanup",
+        "id": "gc-expiry-and-cleanup"
+      },
+      {
+        "level": 2,
+        "text": "Protocol and disk format",
+        "id": "protocol-and-disk-format"
+      }
+    ]
+  },
+  {
+    "source": "docs/USAGE.md",
+    "id": "usage",
+    "locale": "fr",
+    "title": "Getting started",
+    "fr_title": "Parcours de démarrage",
+    "section": "Getting started",
+    "parent": null,
+    "headings": [
+      {
+        "level": 1,
+        "text": "Parcours du prototype",
+        "id": "parcours-du-prototype"
+      },
+      {
+        "level": 2,
+        "text": "Stocker et reconstruire un fichier",
+        "id": "stocker-et-reconstruire-un-fichier"
+      },
+      {
+        "level": 2,
+        "text": "Cache de lectures vérifiées",
+        "id": "cache-de-lectures-verifiees"
+      },
+      {
+        "level": 2,
+        "text": "Regrouper les objets en packs",
+        "id": "regrouper-les-objets-en-packs"
+      },
+      {
+        "level": 2,
+        "text": "Historique autonome",
+        "id": "historique-autonome"
+      },
+      {
+        "level": 2,
+        "text": "Git et assets",
+        "id": "git-et-assets"
+      },
+      {
+        "level": 2,
+        "text": "Serveur et agent",
+        "id": "serveur-et-agent"
+      },
+      {
+        "level": 2,
+        "text": "Chiffrement au repos",
+        "id": "chiffrement-au-repos"
+      },
+      {
+        "level": 2,
+        "text": "Interface C",
+        "id": "interface-c"
+      }
+    ]
+  },
+  {
+    "source": "docs/WORKING_INDEX.md",
+    "id": "working-index",
+    "locale": "en",
+    "title": "Persistent native working index",
+    "fr_title": "Index de travail persistant",
+    "section": "Storage",
+    "parent": "storage",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Persistent native working index",
+        "id": "persistent-native-working-index"
+      },
+      {
+        "level": 2,
+        "text": "Reuse and fallback",
+        "id": "reuse-and-fallback"
+      },
+      {
+        "level": 2,
+        "text": "Persistence and lifetime",
+        "id": "persistence-and-lifetime"
+      },
+      {
+        "level": 2,
+        "text": "Reports, C++ and measurement",
+        "id": "reports-c-and-measurement"
+      }
+    ]
+  },
+  {
+    "source": "docs/WORKSPACE_ABI.md",
+    "id": "workspace-abi",
+    "locale": "en",
+    "title": "Embedded workspace observation through C and Go",
+    "fr_title": "Observation embarquée en C et Go",
+    "section": "API",
+    "parent": "integrations",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Embedded workspace observation through C and Go",
+        "id": "embedded-workspace-observation-through-c-and-go"
+      },
+      {
+        "level": 2,
+        "text": "Lifetime and locking",
+        "id": "lifetime-and-locking"
+      },
+      {
+        "level": 2,
+        "text": "C calls and output ownership",
+        "id": "c-calls-and-output-ownership"
+      },
+      {
+        "level": 2,
+        "text": "Cooperative cancellation and C progress",
+        "id": "cooperative-cancellation-and-c-progress"
+      },
+      {
+        "level": 2,
+        "text": "Go usage",
+        "id": "go-usage"
+      },
+      {
+        "level": 2,
+        "text": "Scope and validation",
+        "id": "scope-and-validation"
+      }
+    ]
+  },
+  {
+    "source": "bindings/go/README.md",
+    "id": "go-binding",
+    "locale": "fr",
+    "title": "Go binding",
+    "fr_title": "Binding Go",
+    "section": "API",
+    "parent": "integrations",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Binding Go du moteur C++",
+        "id": "binding-go-du-moteur-c"
+      },
+      {
+        "level": 2,
+        "text": "Tester",
+        "id": "tester"
+      },
+      {
+        "level": 2,
+        "text": "Exemple",
+        "id": "exemple"
+      },
+      {
+        "level": 2,
+        "text": "Concurrence et conservation",
+        "id": "concurrence-et-conservation"
+      },
+      {
+        "level": 2,
+        "text": "Plages et comparaison de fichiers",
+        "id": "plages-et-comparaison-de-fichiers"
+      },
+      {
+        "level": 2,
+        "text": "Workspace observation",
+        "id": "workspace-observation"
+      },
+      {
+        "level": 2,
+        "text": "Windows test cleanup",
+        "id": "windows-test-cleanup"
+      },
+      {
+        "level": 2,
+        "text": "Syncthing",
+        "id": "syncthing"
+      }
+    ]
+  },
+  {
+    "source": "bindings/syncthing/README.md",
+    "id": "syncthing",
+    "locale": "en",
+    "title": "Syncthing fixed-block adapter",
+    "fr_title": "Adaptateur de blocs Syncthing",
+    "section": "API",
+    "parent": "integrations",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Syncthing fixed-block adapter",
+        "id": "syncthing-fixed-block-adapter"
+      },
+      {
+        "level": 2,
+        "text": "Build and test",
+        "id": "build-and-test"
+      },
+      {
+        "level": 2,
+        "text": "APIs",
+        "id": "apis"
+      },
+      {
+        "level": 2,
+        "text": "Resume and cancellation",
+        "id": "resume-and-cancellation"
+      }
+    ]
+  }
+]
