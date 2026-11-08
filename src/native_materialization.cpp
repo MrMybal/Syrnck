@@ -54,7 +54,17 @@ NativeMaterialization NativeMaterialization::decode(std::span<const std::uint8_t
   return result;
 }
 bool NativeMaterialization::includes(std::string_view path) const {
-  return complete_ || covers(portable_fold(path));
+  if (complete_) return true;
+  const auto folded = portable_fold(path);
+  const auto slash = folded.rfind('/');
+  const auto leaf = slash == folded.npos ? folded : folded.substr(slash + 1);
+  if (leaf == ".syrnckignore" && !prefixes_.empty() &&
+      intersects(slash == folded.npos ? std::string_view{} : std::string_view(folded).substr(0, slash))) {
+    const auto spelling = path.substr(path.rfind('/') == path.npos ? 0 : path.rfind('/') + 1);
+    require(spelling == ".syrnckignore", "native ignore control must use canonical spelling");
+    return true;
+  }
+  return covers(folded);
 }
 bool NativeMaterialization::intersects(std::string_view path) const {
   if (complete_ || path.empty()) return true;
@@ -71,5 +81,90 @@ std::string NativeMaterialization::encode() const {
 }
 std::string NativeMaterialization::identity() const {
   return complete_ ? std::string("all") : object_id(Kind::chunk, bytes(encode()));
+}
+bool native_materialization_reference(std::string_view name, std::string *context) {
+  if (name == "workspace/materialization") {
+    if (context) context->clear();
+    return true;
+  }
+  if (!name.starts_with("workspaces/")) return false;
+  const auto slash = name.find('/', 11);
+  if (slash == name.npos || name.substr(slash + 1) != "workspace/materialization") return false;
+  const auto selected = name.substr(11, slash - 11);
+  validate_native_workspace_name(selected);
+  if (context) *context = selected;
+  return true;
+}
+namespace {
+bool sparse_required(const Store &store) {
+  const auto features = store.required_features();
+  return std::find(features.begin(), features.end(), "sparse-workspaces-v1") != features.end();
+}
+bool workspace_active(const Refs &refs, std::string_view context) {
+  if (!context.empty()) return refs.contains(native_context_reference(context, "registration"));
+  const auto heads = refs.lower_bound("heads/");
+  const auto staging = refs.lower_bound("staging/");
+  return refs.contains("workspace/HEAD") || refs.contains("workspace/detached") ||
+      refs.contains("workspace/staging") || refs.contains("checkouts/active") ||
+      (heads != refs.end() && heads->first.starts_with("heads/")) ||
+      (staging != refs.end() && staging->first.starts_with("staging/"));
+}
+std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
+  const auto found = refs.find(name);
+  return found == refs.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
+}
+}
+NativeMaterializationState read_native_materialization(const Store &store, std::string_view context,
+                                                        const Refs &refs, bool require_feature) {
+  NativeMaterializationState state;
+  state.reference = native_context_reference(context, "workspace/materialization");
+  state.root = lookup(refs, state.reference);
+  if (!state.root) return state;
+  require(!require_feature || sparse_required(store), "workspace materialization requires a supported reader feature");
+  require(state.root->kind == Kind::chunk, "invalid native materialization");
+  state.policy = NativeMaterialization::decode(store.get(*state.root));
+  return state;
+}
+NativeMaterializationState read_native_materialization(const Store &store) {
+  if (!sparse_required(store))
+    return {{}, {}, store.native_workspace_reference("workspace/materialization")};
+  return read_native_materialization(store, store.native_workspace_name(), store.refs());
+}
+void validate_native_materialization_requirements(const Store &store, const Refs &refs) {
+  for (const auto &[name, key] : refs) {
+    (void)key;
+    if (native_materialization_reference(name))
+      require(sparse_required(store), "workspace materialization requires a supported reader feature");
+  }
+}
+bool validate_native_materialization_changes(const Store &store, const Refs &before, const Refs &after) {
+  bool required = false;
+  std::set<std::string> policies;
+  for (const auto *refs : {&before, &after})
+    for (const auto &[name, key] : *refs) {
+      (void)key;
+      if (native_materialization_reference(name)) policies.insert(name);
+    }
+  for (const auto &name : policies) {
+    std::string context;
+    require(native_materialization_reference(name, &context), "invalid native materialization");
+    const auto previous = lookup(before, name), next = lookup(after, name);
+    const bool was_active = workspace_active(before, context), is_active = workspace_active(after, context);
+    require(previous == next || !was_active || !is_active,
+            "live workspace materialization is immutable");
+    if (next) {
+      // Immutable object IDs already validated at publication need no payload
+      // reread on every unrelated journal/index update. Revalidate a newly
+      // installed policy or a portable policy becoming an active context.
+      if (previous != next || (!was_active && is_active))
+        (void)read_native_materialization(store, context, after, false);
+      required = true;
+    }
+  }
+  return required;
+}
+void require_complete_native_materialization(const Store &store) {
+  require(read_native_materialization(store).policy.complete(),
+          "operation requires complete workspace materialization");
 }
 } // namespace syrnck

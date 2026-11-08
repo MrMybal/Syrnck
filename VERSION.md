@@ -21,7 +21,7 @@ These source features are not an announcement of a prebuilt release. Each operat
 
 ## Documented limitations
 
-- Named/detached HEAD and independent linked workspaces are available. Sparse materialization, in-place relocation and archived unregistering remain unfinished.
+- Named/detached HEAD and independent linked workspaces are available. Static partial linked workspaces retain complete logical snapshots. Dynamic selection, partial hard reset/stash, in-place relocation and archived unregistering remain unfinished.
 - Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Native revisions have no structured author or signature fields; merge-preserving rebase remains unfinished.
 - The agent transfers once per invocation. The watcher observes changes; neither provides a complete continuous synchronization service with causal versions, offline conflict reconciliation, deletions and rename propagation.
 - The optional Syncthing adapter covers regular-file BEP data. Device discovery, pairing, version vectors, conflicts and full daemon/folder synchronization are outside that adapter.

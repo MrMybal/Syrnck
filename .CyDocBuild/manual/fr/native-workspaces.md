@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -43,6 +43,45 @@ un autre dossier. En contexte lié, les commandes natives prennent le répertoir
 enregistré comme `--directory` par défaut ; une valeur explicite doit résoudre
 cette même racine. `native workspaces` affiche aussi le principal, les répertoires,
 branches/révisions et checkouts en attente.
+
+## Dossiers de travail partiels {#partial}
+
+```text
+syrnck native workspace-add code ../project-code --branch feature --include Source --include Config
+syrnck --store .syrnck --workspace code native materialization
+syrnck native workspace-add metadata ../project-metadata --no-files
+```
+
+Les options répétées `--include CHEMIN` sélectionnent des fichiers ou préfixes
+de dossiers relatifs au dépôt, avec correspondance Unicode/casse portable.
+Les préfixes doivent être disjoints ; ni jokers ni exclusions. `--no-files`
+sélectionne explicitement un dossier vide. Sans ces options, la matérialisation
+reste complète. Les contrôles `.syrnckignore` à la racine et dans les ancêtres
+nécessaires sont inclus automatiquement, avec leur orthographe canonique.
+
+Révisions et index figés conservent toujours l’arbre logique complet et tous
+ses objets localement. Commit, ajout et amendement d’un dossier préservent les
+entrées omises ; statut, cache et observation comparent seulement la sélection
+physique. Une édition explicite d’un fichier de travail hors sélection est
+refusée. Les différences entre snapshots et `native export` portent toujours
+sur l’arbre complet. Ajout et commit du dossier exigent une révision cible
+existante pour préserver les entrées omises ; créer d’abord la branche depuis
+la révision sélectionnée complète. Ce mode ne télécharge pas les blocs à la
+demande et ne réduit pas la taille du Store.
+
+Checkout, switch, HEAD détaché et restauration portable utilisent la sélection
+enregistrée, y compris pour les transitions fichier/dossier et de casse. Les
+fichiers locaux exclus sont préservés ; une obstruction de namespace est
+refusée. Les sauvegardes conservent sélection et index complet. La restauration
+matérialise les fichiers sélectionnés de l’index et vérifie exactement cet
+arbre projeté avant de lier le workspace.
+
+La sélection reste immuable tant que le workspace est enregistré. Créer un
+autre workspace pour une autre sélection. Reset hard et opérations de stash
+sur disque exigent actuellement un workspace complet et échouent avant toute
+modification des fichiers partiels. En C++ : `register_partial_native_workspace(
+primary, name, directory, prefixes, operation)` et `native_materialization()`.
+C/Go peuvent sélectionner et observer un contexte partiel créé par CLI/C++.
 
 ## Isolation et réservations de branches {#isolation}
 
@@ -88,6 +127,18 @@ observations complètes hashent chacune 64 Mio. Médianes CLI : 68 ms complètes
 tests tournaient. Ces mesures montrent les lectures évitées sur ce cas ; elles
 ne prédisent ni le débit d’un projet Unreal ni les latences multiplateformes.
 
+```text
+python scripts/benchmark_partial_workspace.py --cli build/Release/syrnck.exe --asset-mib 128 --iterations 5 --output partial-status.json
+```
+
+Cette autre mesure utilise deux assets synthétiques totalisant 128 Mio et
+25 octets de code. Sur Windows x64 local, le 8 novembre 2026, cinq observations
+sans cache d’index : la vue complète hashe 134 217 753 octets par observation,
+la vue `Source` seulement 25 octets. Médianes CLI : 105 ms et 18 ms. Les fichiers
+venaient d’être écrits/ingérés, sans purge du cache OS, et d’autres régressions
+tournaient. Le Store conserve tous
+les objets ; seule l’observation du dossier de travail est mesurée.
+
 ## Sauvegarde et restauration {#restore}
 
 ```text
@@ -112,9 +163,9 @@ séparément. Les modifications non préparées ne font pas partie d’une sauve
 logique du Store. Changer la cible de l’index archive son snapshot d’origine avant
 de publier le remplacement.
 
-La restauration publie exclusivement le dossier exporté complet avant de lier
+La restauration publie exclusivement la sélection physique exportée avant de lier
 le contexte. Après interruption avant liaison, relancer : une arborescence
-existante doit correspondre intégralement au contenu et aux modes sauvegardés.
+existante doit correspondre exactement au contenu sélectionné et aux modes sauvegardés.
 Exports modifiés, fichiers supplémentaires, liens et métadonnées protégées sont
 refusés sans écrasement. Les racines portables restent conservées jusqu’à un
 retrait explicite de rétention.
@@ -141,6 +192,10 @@ et chiffrés, reprise/annulation, transitions de namespace, inspection indépend
 de production et GC après récupération. Ces essais gardent OS et système de
 fichiers actifs ; les coupures de courant demandent une validation distincte.
 
+La campagne des workspaces partiels a aussi vérifié les 716 frontières d’arrêt
+de processus observées pour enregistrement et checkout, avec les mêmes contrôles
+clair/chiffré, reprise/annulation, lecteur indépendant et GC après récupération.
+
 ## C++, C et Go {#api}
 
 ```cpp
@@ -164,12 +219,16 @@ Les références principales et reçus v1 à v7 restent inchangés. Les métadon
 liées utilisent de vraies références `workspaces/NAME/`. Le slot d’un index nommé
 utilise le digest BLAKE3 du nom de branche, pour préserver la longueur maximale
 existante ; le snapshot garde le nom complet. Les reçus liés passent en v8 avec
-`context` et `layout_version` de 1 à 6. Versions d’objets/révisions, packs et ABI C
-inchangées.
+`context` et `layout_version` de 1 à 6 pour les vues complètes. Les reçus partiels
+utilisent v9 avec définitions figées `source_materialization` et
+`target_materialization`, contexte et layout de 1 à 4. La sélection statique
+actuelle exige deux définitions identiques. Un chunk canonique v1 est conservé
+sous `workspaces/NOM/workspace/materialization`. Versions d’objets/révisions,
+packs et ABI C inchangées.
 
-Matérialisation partielle, déplacement en place et désenregistrement archivé
-restent à compléter. Ce mode matérialise actuellement des snapshots complets
-et exige leurs objets retenus complets localement.
+Changement d’une sélection active, reset hard/stash partiels, déplacement en
+place et désenregistrement archivé restent à compléter. Chaque workspace exige
+toujours ses objets retenus complets localement.
 
 ## Compatibilité des lecteurs {#compatibility}
 
@@ -178,5 +237,6 @@ Enregistrement et restauration portable établissent l’exigence de lecteur
 refusent le Store, même pour les commandes de références ordinaires, et ne
 peuvent donc contourner les réservations de branches. Les lecteurs à jour
 acceptent toujours les configurations classiques. Voir [inspection et mise à
-niveau explicite](doc:settings#reader-features). Cette protection n’active pas la
-matérialisation partielle, qui reste un travail distinct.
+niveau explicite](doc:settings#reader-features). Une création partielle établit
+aussi `sparse-workspaces-v1` avant publication de sa sélection. Un lecteur
+prenant en charge seulement les contextes liés refuse cette exigence supplémentaire.

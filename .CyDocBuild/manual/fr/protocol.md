@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -149,6 +149,13 @@ Les racines détachées sont privées. Les index nommés utilisent
 `staging/BLAKE3(nom-branche)` ; la révision préparée garde le nom complet.
 Les reçus v8 ajoutent `context` et `layout_version` 1..6 ; les layouts principaux
 v1..v7 ne changent pas. La sélection appartient au handle.
+Un contexte partiel conserve un chunk canonique native-materialization v1 sous
+`workspace/materialization`, avec tableau de préfixes littéraux disjoints triés.
+Absence de chunk : tous les chemins ; tableau vide : aucun. Les reçus v9 figent
+les définitions source/cible, contexte et layout (1..4), sans déduire les actions
+de reprise depuis une sélection actuelle mutable. Les politiques statiques
+actuelles exigent deux définitions identiques et restent immuables tant que leur
+contexte est actif.
 
 Sans capacités requises, une sauvegarde de ces liaisons utilise le marqueur v2, conservant par
 contexte un descripteur portable native-workspace-snapshot et la révision
@@ -158,8 +165,8 @@ restent lisibles. La restauration relie explicitement le snapshot à un nouveau 
 ## Capacités requises du Store {#required-store-features}
 
 Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
-trié de noms uniques pris en charge (au plus 32). Le nom actuellement accepté est
-`linked-workspaces-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+trié de noms uniques pris en charge (au plus 32). Les noms acceptés sont
+`linked-workspaces-v1` et `sparse-workspaces-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
 l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
 aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
 packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne

@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 4
+revision: 5
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -129,6 +129,12 @@ directory; `workspace/HEAD` retains the named/detached descriptor. Detached root
 are private. Named indexes use `staging/BLAKE3(branch-name)`; prepared revisions
 still record the complete name. Receipts v8 add `context` and `layout_version`
 1..6; primary layouts v1..v7 remain unchanged. Selection is handle-local.
+Partial contexts retain a canonical native-materialization v1 chunk at
+`workspace/materialization`, containing sorted disjoint literal `prefixes`.
+An absent chunk means all paths; an empty array means none. Checkout receipts
+v9 freeze source/target prefix definitions, context and layout (1..4), so recovery
+does not infer actions from a mutable current selection. Current static policies
+require equal definitions and cannot change while their context remains active.
 
 Feature-free backups with linked machine bindings use marker v2, retaining a portable
 native-workspace-snapshot descriptor and `snapshot` revision per context instead
@@ -138,8 +144,8 @@ Restoration explicitly rebinds a portable snapshot in a new directory.
 ## Required Store features {#required-store-features}
 
 Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
-array of unique supported strings (at most 32). The currently supported name is
-`linked-workspaces-v1`. Unknown, duplicate, empty or malformed requirements fail
+array of unique supported strings (at most 32). Supported names are
+`linked-workspaces-v1` and `sparse-workspaces-v1`. Unknown, duplicate, empty or malformed requirements fail
 Store open. The extra field deliberately makes historical strict readers reject
 the configuration before reading objects/references. Base pack/index/envelope
 encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.

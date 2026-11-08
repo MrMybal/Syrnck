@@ -33,6 +33,56 @@ class NativeContext(unittest.TestCase):
         main = self.commit("main")
         return first, main
 
+    def test_partial_creation_commit_watch_and_empty_projection(self):
+        (self.root / "Source").mkdir()
+        (self.root / "Content").mkdir()
+        (self.root / "Données").mkdir()
+        (self.root / "Source/code.cpp").write_bytes(b"first\n")
+        (self.root / "Content/asset").write_bytes(b"hidden" * 2048)
+        (self.root / "Données/config").write_bytes(b"settings")
+        (self.root / ".syrnckignore").write_bytes(b"*.tmp\n")
+        first = self.commit("complete tree")
+        self.cmd("native", "branch", "partial", first)
+        added = json.loads(self.cmd("native", "workspace-add", "edit", self.edit, "--branch", "partial",
+                                    "--include", "Source/", "--include", "Données"))
+        self.assertEqual(added["checkout"]["version"], 9)
+        self.assertEqual(added["checkout"]["source_materialization"], ["Données", "Source"])
+        self.assertTrue((self.edit / ".syrnckignore").is_file())
+        self.assertTrue((self.edit / "Données/config").is_file())
+        self.assertFalse((self.edit / "Content").exists())
+        before = self.snapshot()
+        selected = json.loads(self.scoped("edit", "materialization").stdout)
+        self.assertEqual(selected["prefixes"], ["Données", "Source"])
+        self.assertFalse(selected["complete"])
+        self.assertTrue(json.loads(self.call("native", "materialization").stdout)["complete"])
+        self.assertEqual(self.snapshot(), before)
+        error = self.call("--lang", "fr", "--workspace", "edit", "native", "commit",
+                          "--branch", "absent", "-m", "no complete baseline", ok=False)
+        self.assertIn("révision cible existante", error.stderr.decode("utf-8"))
+        self.scoped("edit", "add", "--branch", "absent", ".", ok=False)
+        self.assertEqual(self.snapshot(), before)
+        (self.edit / "Source/code.cpp").write_bytes(b"changed\n")
+        self.scoped("edit", "add", ".")
+        child = self.scoped("edit", "commit", "--staged", "-m", "partial edit").stdout.decode().strip()
+        exported = Path(self.external.name) / "complete"
+        self.cmd("gc", "--delete")
+        self.cmd("native", "export", child, exported)
+        self.assertEqual((exported / "Content/asset").read_bytes(), b"hidden" * 2048)
+        watched = self.scoped("edit", "watch", "--polling", "--journal", "--max-updates", "1")
+        frames = [json.loads(line) for line in watched.stdout.splitlines()]
+        self.assertTrue(next(frame for frame in frames if frame["type"] == "status")["status"]["clean"])
+        empty = Path(self.external.name) / "empty"
+        self.cmd("native", "workspace-add", "empty", empty, "--revision", child, "--no-files")
+        self.assertEqual(list(empty.iterdir()), [])
+        self.assertEqual(json.loads(self.scoped("empty", "materialization").stdout)["prefixes"], [])
+        empty_child = self.scoped("empty", "commit", "-m", "metadata only").stdout.decode().strip()
+        self.assertTrue(json.loads(self.scoped("empty", "diff", child, empty_child).stdout)["equal"])
+        invalid = Path(self.external.name) / "invalid"
+        before = self.snapshot()
+        self.call("native", "workspace-add", "invalid", invalid, "--no-files", "--include", "Source", ok=False)
+        self.assertFalse(invalid.exists())
+        self.assertEqual(self.snapshot(), before)
+
     def test_isolated_heads_indexes_and_foreign_branch_preflight(self):
         first, main = self.fixture()
         (self.root / "asset").write_bytes(b"primary prepared")

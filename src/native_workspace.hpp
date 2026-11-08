@@ -1,5 +1,6 @@
 #pragma once
 #include "internal.hpp"
+#include "native_materialization.hpp"
 namespace syrnck {
 // Decode an immutable completed receipt without old workspace dependencies or
 // rereading the full reference table for each entry in a paginated inventory.
@@ -30,6 +31,8 @@ struct NativeSnapshotFile {
 };
 using NativeSnapshot = std::map<std::string, NativeSnapshotFile>;
 NativeSnapshot read_native_snapshot(const Store &, std::string_view, OperationOptions);
+NativeSnapshot read_native_materialized_snapshot(const Store &, std::string_view,
+                                                  const NativeMaterialization &, OperationOptions);
 NativeContent hash_native_file(const NativeFile &, Bytes &buffer, const OperationOptions &);
 bool native_link_like(const fs::path &, const fs::file_status &);
 void verify_native_checkout_namespace(const Store &, const fs::path &, const std::vector<std::string> &target,
@@ -61,5 +64,6 @@ Json plan_native_checkout_files(const Store &, const fs::path &, std::string_vie
                                 const NativeSnapshot &destination, OperationOptions);
 // Read-only recovery of an interrupted portable workspace export. Requires an
 // exact complete tree; never replaces an existing working file or follows links.
-void verify_native_restored_directory(const Store &, const fs::path &, std::string_view revision, OperationOptions);
+void verify_native_restored_directory(const Store &, const fs::path &, std::string_view revision, OperationOptions,
+                                      const NativeMaterialization & = {});
 } // namespace syrnck

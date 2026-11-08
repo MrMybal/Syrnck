@@ -111,6 +111,7 @@ void head_workspace(const Head &head, const fs::path &workspace) {
 struct Record {
   std::string id, nonce, branch, target, state = "preparing";
   std::string context;
+  NativeMaterialization source_materialization, target_materialization;
   fs::path workspace;
   std::optional<std::string> source;
   std::optional<std::string> destination_branch;
@@ -128,16 +129,21 @@ struct Record {
                                                           : (destination_branch ? 2 : 1);
     const bool detached = native_target_is_detached(branch) ||
         (destination_branch && native_target_is_detached(*destination_branch));
-    auto result = Json{{"version", !context.empty() ? 8 : detached ? 7 : layout},
+    const bool partial = !source_materialization.complete() || !target_materialization.complete();
+    auto result = Json{{"version", partial ? 9 : !context.empty() ? 8 : detached ? 7 : layout},
                        {"type", "native-checkout"},
                        {"nonce", nonce},
                        {"directory", utf8(workspace)},
                        {"branch", branch},
                        {"source", source ? Json(*source) : Json{}},
                        {"target", target}};
-    if (detached || !context.empty())
+    if (partial || detached || !context.empty())
       result["layout_version"] = layout;
-    if (!context.empty()) result["context"] = context;
+    if (partial || !context.empty()) result["context"] = context;
+    if (partial) {
+      result["source_materialization"] = source_materialization.definition();
+      result["target_materialization"] = target_materialization.definition();
+    }
     if (destination_branch) {
       result["destination_branch"] = *destination_branch;
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
@@ -202,6 +208,19 @@ struct Record {
   }
   std::string active_reference() const { return native_context_reference(context, active_name); }
   std::string head_reference() const { return native_context_reference(context, head_name); }
+  std::string materialization_reference() const { return native_context_reference(context, "workspace/materialization"); }
+  std::optional<ObjectKey> materialization_root() const {
+    return source_materialization.complete() ? std::optional<ObjectKey>{}
+        : std::optional{ObjectKey{Kind::chunk, source_materialization.identity()}};
+  }
+  RefUpdate materialization_guard() const {
+    const auto root = materialization_root();
+    return {materialization_reference(), root, root};
+  }
+  void freeze_materialization(const NativeMaterialization &policy) {
+    source_materialization = policy;
+    target_materialization = source_materialization;
+  }
   std::string branch_reference() const {
     const auto name = native_revision_reference(branch);
     return native_target_is_detached(branch) ? native_context_reference(context, name) : name;
@@ -226,8 +245,9 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
   const auto data = store.get(key);
   const auto value = parse_json(data);
   const auto stored_version = value.value("version", 0);
-  const auto version = stored_version == 7 || stored_version == 8 ? value.value("layout_version", 0) : stored_version;
-  const auto extra = stored_version == 8 ? 2u : stored_version == 7 ? 1u : 0u;
+  const auto version = stored_version == 7 || stored_version == 8 || stored_version == 9
+      ? value.value("layout_version", 0) : stored_version;
+  const auto extra = stored_version == 9 ? 4u : stored_version == 8 ? 2u : stored_version == 7 ? 1u : 0u;
   require(value.is_object() &&
               ((version == 1 && value.size() == 9 + extra) || (version == 2 && value.size() == 12 + extra) ||
                (version == 3 && value.size() == 10 + extra) || (version == 4 && value.size() == 13 + extra) ||
@@ -235,9 +255,16 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
               value.value("type", "") == "native-checkout",
           "invalid native checkout record");
   Record record;
-  if (stored_version == 8) {
+  if (stored_version == 8 || stored_version == 9) {
     record.context = value.at("context").get<std::string>();
-    validate_native_workspace_name(record.context);
+    if (stored_version == 8 || !record.context.empty()) validate_native_workspace_name(record.context);
+  }
+  if (stored_version == 9) {
+    record.source_materialization = NativeMaterialization::from_definition(value.at("source_materialization"));
+    record.target_materialization = NativeMaterialization::from_definition(value.at("target_materialization"));
+    require(version >= 1 && version <= 4 && !record.source_materialization.complete() &&
+                record.source_materialization.definition() == record.target_materialization.definition(),
+            "invalid native checkout record");
   }
   record.key = key;
   record.id = value.at("id").get<std::string>();
@@ -395,7 +422,12 @@ std::optional<Record> active(const Store &store) {
   return record;
 }
 Json actions(const Store &store, const Record &record, OperationOptions options) {
-  const auto difference = compare_native_snapshots(store, record.source, record.target, options);
+  const auto difference = record.source_materialization.complete() && record.target_materialization.complete()
+      ? compare_native_snapshots(store, record.source, record.target, options)
+      : compare_native_file_maps(record.source
+            ? read_native_materialized_snapshot(store, *record.source, record.source_materialization, options)
+            : NativeSnapshot{},
+          read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options);
   Json result = Json::array();
   for (const auto &row : difference["changes"]) {
     throw_if_cancelled(options.stop);
@@ -461,8 +493,8 @@ public:
       : store_(store), record(std::move(value)), entries(actions(store, record, options)) {
     if (record.namespace_transition) {
       const auto source =
-          record.source ? read_native_snapshot(store, *record.source, options) : NativeSnapshot{};
-      layout.emplace(source, read_native_snapshot(store, record.target, options), options,
+          record.source ? read_native_materialized_snapshot(store, *record.source, record.source_materialization, options) : NativeSnapshot{};
+      layout.emplace(source, read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options,
                      record.source_directories);
       require(layout->transition, "invalid native checkout record");
     }
@@ -516,6 +548,8 @@ public:
   }
   void expected_head() const {
     const auto refs = store_.refs();
+    require(lookup(refs, record.materialization_reference()) == record.materialization_root(),
+            "native checkout references changed");
     require(lookup(refs, record.branch_reference()) == record.branch_origin() &&
                 lookup(refs, record.index_reference()) == record.index_origin(),
             "native checkout branch or staging changed");
@@ -619,7 +653,7 @@ void Transaction::apply(OperationOptions options) {
   // only stop tokens through the atomic branch/journal publication.
   const OperationOptions final_options{options.stop};
   std::vector<std::string> target_paths, removed_paths;
-  for (const auto &[path, target] : read_native_snapshot(store_, record.target, final_options)) {
+  for (const auto &[path, target] : read_native_materialized_snapshot(store_, record.target, record.target_materialization, final_options)) {
     require(matches(working_path(store_, record, path, false), target.json(), path, final_options),
             "working file changed during native checkout");
     target_paths.push_back(path);
@@ -641,7 +675,7 @@ void Transaction::apply(OperationOptions options) {
       {record.branch_reference(), record.branch_origin(), record.branch_destination()},
       {record.active_reference(), record.key, key},
       {record.receipt(), {}, key},
-      {record.retained(), {}, record.destination()}};
+      {record.retained(), {}, record.destination()}, record.materialization_guard()};
   if (record.destination_branch) {
     updates[0].value = record.origin();
     updates.push_back({record.destination_reference(), record.destination(), record.destination()});
@@ -1048,6 +1082,7 @@ Json Store::switch_directory(const fs::path &workspace, std::string_view branch,
                              OperationOptions options) const {
   throw_if_cancelled(options.stop);
   require_no_native_checkout(*this);
+  const auto materialization = read_native_materialization(*this);
   const auto head = read_head(*this);
   const auto plan = plan_switch(workspace, branch, false, options);
   require(plan["ready"].get<bool>(), "native switch is blocked; inspect native switch-plan");
@@ -1061,6 +1096,7 @@ Json Store::switch_directory(const fs::path &workspace, std::string_view branch,
                 {"target", plan["target"]}};
   Record record;
   record.context = native_workspace_name();
+  record.freeze_materialization(materialization.policy);
   record.workspace = fs::canonical(workspace);
   record.namespace_transition = plan.value("namespace_transition", false);
   record.nonce = hex(random_bytes(32));
@@ -1083,7 +1119,7 @@ Json Store::switch_directory(const fs::path &workspace, std::string_view branch,
                                  {native_revision_reference(*this, std::string(branch)), record.destination(), record.destination()},
                                  {record.index_reference(), {}, {}},
                                  {native_staging_reference(*this, std::string(branch)), {}, {}},
-                                 {record.pin("target"), {}, record.destination()}};
+                                 {record.pin("target"), {}, record.destination()}, record.materialization_guard()};
   if (record.source)
     updates.push_back({record.pin("source"), {}, record.origin()});
   require(compare_update_refs(updates, options), "native switch HEAD, destination branch or staging changed");
@@ -1110,9 +1146,12 @@ Json Store::plan_detached_checkout(const fs::path &workspace, std::string_view r
 Json Store::detach_checkout(const fs::path &workspace, std::string_view revision, OperationOptions options) const {
   throw_if_cancelled(options.stop);
   require_no_native_checkout(*this);
+  const auto materialization = read_native_materialization(*this);
   const auto head = read_head(*this);
   const auto plan = plan_detached_checkout(workspace, revision, false, options);
   require(plan["ready"].get<bool>(), "native detached checkout is blocked; inspect native switch-plan --detach");
+  require(lookup(refs(), materialization.reference) == materialization.root,
+          "native detached references changed; retry operation");
   if (native_target_is_detached(head.branch)) {
     auto result = checkout_directory(workspace, detached_native_target, revision, options);
     result["operation"] = "switch-detached";
@@ -1124,7 +1163,8 @@ Json Store::detach_checkout(const fs::path &workspace, std::string_view revision
   const ObjectKey target{Kind::revision, std::string(revision)};
   std::vector<RefUpdate> updates{{slot, previous, target},
       {native_staging_reference(*this, detached_native_target), {}, {}},
-      {native_workspace_reference(head_name), head.key, head.key}};
+      {native_workspace_reference(head_name), head.key, head.key},
+      {materialization.reference, materialization.root, materialization.root}};
   const auto source = plan["source"].is_null() ? std::optional<ObjectKey>{}
       : std::optional{ObjectKey{Kind::revision, plan["source"].get<std::string>()}};
   updates.push_back({native_revision_reference(*this, head.branch), source, source});
@@ -1152,12 +1192,14 @@ Json Store::checkout_directory(const fs::path &workspace, std::string_view branc
                                OperationOptions options) const {
   throw_if_cancelled(options.stop);
   require_no_native_checkout(*this);
+  const auto materialization = read_native_materialization(*this);
   const auto plan = plan_checkout(workspace, branch, target, false, options);
   require(plan["ready"].get<bool>(), "native checkout is blocked; inspect native checkout-plan");
   if (plan["source"] == Json(target))
     return Json{{"version", 1}, {"pending", false}, {"state", "unchanged"}, {"target", target}};
   Record record;
   record.context = native_workspace_name();
+  record.freeze_materialization(materialization.policy);
   record.workspace = fs::canonical(workspace);
   record.namespace_transition = plan.value("namespace_transition", false);
   record.nonce = hex(random_bytes(32));
@@ -1173,7 +1215,7 @@ Json Store::checkout_directory(const fs::path &workspace, std::string_view branc
   std::vector<RefUpdate> updates{{native_workspace_reference(active_name), {}, record.key},
                                  {record.branch_reference(), record.origin(), record.origin()},
                                  {record.index_reference(), {}, {}},
-                                 {record.pin("target"), {}, record.destination()}};
+                                 {record.pin("target"), {}, record.destination()}, record.materialization_guard()};
   if (record.source)
     updates.push_back({record.pin("source"), {}, record.origin()});
   require(compare_update_refs(updates, options), "native checkout references changed");
@@ -1321,6 +1363,7 @@ Json native_hard_reset(const Store &store, const fs::path &workspace, std::strin
 Json checkout_native_stash(const Store &store, const fs::path &workspace, std::string_view branch,
                            const NativeStashApplyPlan &planned, bool pop, OperationOptions options) {
   throw_if_cancelled(options.stop);
+  require_complete_native_materialization(store);
   require_no_native_checkout(store);
   const auto plan = store.plan_checkout(workspace, branch, planned.target, false, options);
   require(plan["ready"] == true && plan["source"].get<std::string>() == planned.head,

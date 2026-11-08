@@ -42,6 +42,12 @@ func decodeWorkspace(t *testing.T, data []byte) workspaceReport {
 }
 
 func TestRegisteredWorkspaceObservation(t *testing.T) {
+	t.Run("complete", func(t *testing.T) { registeredWorkspaceObservation(t, false) })
+	t.Run("partial", func(t *testing.T) { registeredWorkspaceObservation(t, true) })
+}
+
+func registeredWorkspaceObservation(t *testing.T, partial bool) {
+	t.Helper()
 	cli := os.Getenv("SYRNCK_TEST_CLI")
 	if cli == "" {
 		t.Skip("native CLI supplies the registered-workspace fixture")
@@ -73,6 +79,7 @@ func TestRegisteredWorkspaceObservation(t *testing.T) {
 	}
 	run("init")
 	writeTest(t, filepath.Join(primary, "asset"), []byte("linked baseline"))
+	writeTest(t, filepath.Join(primary, "omitted"), []byte("retained outside projection"))
 	run("native", "commit", "-m", "Go linked fixture")
 	var fixture struct {
 		Directory string `json:"directory"`
@@ -80,8 +87,16 @@ func TestRegisteredWorkspaceObservation(t *testing.T) {
 			Revision string `json:"revision"`
 		} `json:"head"`
 	}
-	if err := json.Unmarshal(run("native", "workspace-add", "linked", linked), &fixture); err != nil {
+	arguments := []string{"native", "workspace-add", "linked", linked}
+	if partial {
+		arguments = append(arguments, "--include", "asset")
+	}
+	if err := json.Unmarshal(run(arguments...), &fixture); err != nil {
 		t.Fatal(err)
+	}
+	_, omitted := os.Stat(filepath.Join(fixture.Directory, "omitted"))
+	if partial && !os.IsNotExist(omitted) || !partial && omitted != nil {
+		t.Fatalf("incorrect physical projection: partial=%v, stat=%v", partial, omitted)
 	}
 	s, err := Open(storage, Options{})
 	if err != nil {

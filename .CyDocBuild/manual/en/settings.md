@@ -5,7 +5,7 @@ description: Repository settings guide.
 section: Storage
 order: 540
 parent: storage
-revision: 2
+revision: 3
 ---
 
 # Repository settings {#repository-settings}
@@ -71,7 +71,8 @@ its binding is published. Older executables reject the extended configuration
 at open rather than change shared branches without workspace reservations.
 For experimental linked Stores created before this gate existed, run the
 explicit require command before using older tools. Normal reference publication
-with registered contexts also establishes the gate.
+with registered contexts also establishes the gate. A partial workspace additionally
+requires `sparse-workspaces-v1` before publication of its selection.
 
 Only supported names are accepted. Enabling is idempotent, preserves physical
 format and objects, and survives pack/GC, backup, restore and repaired copies.

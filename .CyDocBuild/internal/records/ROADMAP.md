@@ -155,7 +155,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Retrait atomique des groupes complets d’archives de branches/tags avec sauvegarde indépendante vérifiée : index figés et annotations conservés, plan attendu, inventaire paginé des tags supprimés et reprise après arrêts forcés.
 - [x] HEAD détaché avec référence/index privés, switch récupérable et rétention des anciennes lignes.
 - [x] Workspaces liés multiples avec HEAD/index indépendants, réservation de branches et restauration portable.
-- [ ] Matérialisation partielle, déplacement en place et désenregistrement archivé des workspaces.
+- [x] Vues partielles statiques des workspaces liés : arbres/index logiques complets, sélection physique, contrôles ignore, commits/amendements, statut/cache/observation, checkout v9 récupérable et restauration portable.
+- [ ] Sélections dynamiques, reset hard/stash partiels, déplacement en place et désenregistrement archivé des workspaces.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.

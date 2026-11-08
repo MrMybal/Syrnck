@@ -19,6 +19,11 @@ int main() {
             "physical prefix selection confused siblings, ancestors or portable casing");
     require(NativeMaterialization::from_prefixes({"Straße"}).includes("STRASSE/asset"),
             "materialization prefixes disagree with portable Unicode case folding");
+    require(policy.includes(".syrnckignore") && policy.includes("Content/.syrnckignore") &&
+                policy.includes("Source/Generated/.syrnckignore") && !policy.includes("Plugins/.syrnckignore") &&
+                !none.includes(".syrnckignore"), "partial selection omitted required ignore controls");
+    fails([&] { policy.includes("Content/.SYRNCKIGNORE"); });
+    require(full.includes(".SYRNCKIGNORE"), "complete selection changed legacy control handling");
     const auto equivalent = NativeMaterialization::from_prefixes({"Données", "Content/Asset.uasset", "Source"});
     require(policy.identity() == equivalent.identity() && policy.encode() == equivalent.encode() &&
                 NativeMaterialization::decode(bytes(policy.encode())).definition() == policy.definition(),

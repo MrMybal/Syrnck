@@ -514,6 +514,13 @@ public:
   void validate_native_workspace(const fs::path &) const;
   Json register_native_workspace(const fs::path &primary, std::string_view name,
                                  const fs::path &directory, OperationOptions = {}) const;
+  // Static physical selection: literal disjoint prefixes; an empty vector
+  // materializes no files. Logical revisions/indexes and retained objects stay
+  // complete. The selection cannot change while this context is registered.
+  Json register_partial_native_workspace(const fs::path &primary, std::string_view name,
+                                         const fs::path &directory, const std::vector<std::string> &prefixes,
+                                         OperationOptions = {}) const;
+  Json native_materialization() const;
   Json restore_native_workspace(const fs::path &primary, std::string_view name, const fs::path &directory,
                                  NativeWorkspaceRestoreOptions = {}, OperationOptions = {}) const;
   Json native_workspaces(OperationOptions = {}) const;
@@ -664,6 +671,8 @@ public:
 
 private:
   struct Impl;
+  Json register_native_workspace_impl(const fs::path &, std::string_view, const fs::path &,
+                                      const std::optional<std::vector<std::string>> &, OperationOptions) const;
   std::unique_ptr<Impl> impl_;
   fs::path object_path(const ObjectKey &) const;
   Bytes read_envelope(const ObjectKey &) const;

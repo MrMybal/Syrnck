@@ -1,5 +1,6 @@
 #include "native_context.hpp"
 #include "native_workspace.hpp"
+#include "native_materialization.hpp"
 namespace syrnck {
 namespace {
 std::optional<ObjectKey> lookup(const Refs &refs, std::string_view name) {
@@ -151,7 +152,24 @@ void validate_native_branch_reservations(const Store &store, const Refs &before,
 }
 Json Store::register_native_workspace(const fs::path &primary, std::string_view name,
                                       const fs::path &directory, OperationOptions options) const {
+  return register_native_workspace_impl(primary, name, directory, {}, options);
+}
+Json Store::register_partial_native_workspace(const fs::path &primary, std::string_view name,
+                                               const fs::path &directory, const std::vector<std::string> &prefixes,
+                                               OperationOptions options) const {
+  return register_native_workspace_impl(primary, name, directory, prefixes, options);
+}
+Json Store::native_materialization() const {
+  const auto state = read_native_materialization(*this);
+  return Json{{"version", 1}, {"complete", state.policy.complete()}, {"prefixes", state.policy.definition()},
+              {"object", state.root ? Json(state.root->id) : Json{}}};
+}
+Json Store::register_native_workspace_impl(const fs::path &primary, std::string_view name,
+                                            const fs::path &directory,
+                                            const std::optional<std::vector<std::string>> &prefixes,
+                                            OperationOptions options) const {
   throw_if_cancelled(options.stop);
+  const auto materialization = prefixes ? NativeMaterialization::from_prefixes(*prefixes) : NativeMaterialization{};
   require(native_workspace_name().empty(), "workspace registration requires the primary context");
   require_no_native_checkout(*this);
   validate_native_workspace_name(name);
@@ -185,7 +203,8 @@ Json Store::register_native_workspace(const fs::path &primary, std::string_view 
   } else
     require(fs::is_directory(status) && !native_link_like(target, status), "invalid native workspace directory");
   target = fs::canonical(target);
-  require_features({"linked-workspaces-v1"}, options);
+  require_features(prefixes ? std::vector<std::string>{"linked-workspaces-v1", "sparse-workspaces-v1"}
+                           : std::vector<std::string>{"linked-workspaces-v1"}, options);
   const auto registration = put(Kind::chunk, bytes(Json{{"version", 1}, {"type", "native-workspace"},
       {"name", name}, {"directory", utf8(target)}}.dump())).first;
   const auto head = put(Kind::chunk, bytes(Json{{"version", 2}, {"type", "native-head"},
@@ -197,10 +216,14 @@ Json Store::register_native_workspace(const fs::path &primary, std::string_view 
   if (!bound_primary)
     bound_primary = put(Kind::chunk, bytes(Json{{"version", 1}, {"type", "native-head"},
         {"directory", utf8(primary_root)}, {"branch", "main"}}.dump())).first;
-  require(compare_update_refs({{prefix, {}, registration},
+  std::vector<RefUpdate> updates{{prefix, {}, registration},
       {native_context_reference(name, "workspace/HEAD"), {}, head},
       {native_context_reference(name, "workspace/detached"), {}, initial},
-      {"workspace/HEAD", primary_head, bound_primary}}, options), "native workspace references changed; retry operation");
+      {"workspace/HEAD", primary_head, bound_primary}};
+  const auto materialization_root = prefixes ? std::optional{put(Kind::chunk, bytes(materialization.encode())).first}
+                                             : std::optional<ObjectKey>{};
+  updates.push_back({native_context_reference(name, "workspace/materialization"), {}, materialization_root});
+  require(compare_update_refs(updates, options), "native workspace references changed; retry operation");
   return Json{{"version", 1}, {"state", "registered"}, {"name", name}, {"directory", utf8(target)},
       {"branch", Json{}}, {"revision", initial.id}};
 }
@@ -296,8 +319,10 @@ Json Store::restore_native_workspace(const fs::path &primary, std::string_view n
     updates.push_back({slot, previous, snapshot});
   } else updates.push_back({native_revision_reference(target), branch_tip, snapshot});
   const auto materialized = next_index ? next_index->id : snapshot->id;
+  const auto materialization = read_native_materialization(*this, name, refs);
+  updates.push_back({materialization.reference, materialization.root, materialization.root});
   require_features({"linked-workspaces-v1"}, options);
-  if (!exists) export_revision(materialized, destination, options);
+  if (!exists) export_native_materialization(*this, materialized, destination, materialization.policy, options);
   const auto registration = put(Kind::chunk, bytes(Json{{"version", 1}, {"type", "native-workspace"},
       {"name", name}, {"directory", utf8(destination)}}.dump())).first;
   const auto head = put(Kind::chunk, bytes(Json{{"version", native_target_is_detached(target) ? 2 : 1}, {"type", "native-head"},
@@ -311,7 +336,7 @@ Json Store::restore_native_workspace(const fs::path &primary, std::string_view n
         {"directory", utf8(primary_root)}, {"branch", "main"}}.dump())).first;
   updates.push_back({"workspace/HEAD", primary_head, bound_primary});
   report_progress(options, {ProgressPhase::publishing, "workspace-restore"});
-  verify_native_restored_directory(*this, destination, materialized, {options.stop});
+  verify_native_restored_directory(*this, destination, materialized, {options.stop}, materialization.policy);
   require(compare_update_refs(updates, {options.stop}), "native workspace references changed; retry operation");
   return Json{{"version", 1}, {"state", "restored"}, {"name", name}, {"directory", utf8(destination)},
       {"branch", native_target_is_detached(target) ? Json{} : Json(target)}, {"revision", snapshot->id},
@@ -330,6 +355,11 @@ Json Store::native_workspaces(OperationOptions options) const {
       {"pending_checkout", refs.contains("checkouts/active")}});
   auto linked = native_linked_workspace_rows(*this, refs, options);
   for (auto &row : linked) rows.push_back(std::move(row));
+  for (auto &row : rows) {
+    const auto name = row["name"].get<std::string>();
+    const auto policy = read_native_materialization(*this, name == "primary" ? std::string_view{} : name, refs);
+    if (!policy.policy.complete()) row["materialization"] = policy.policy.definition();
+  }
   return Json{{"version", 1}, {"workspaces", rows},
       {"selected", native_workspace_name().empty() ? "primary" : std::string(native_workspace_name())}};
 }

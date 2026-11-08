@@ -31,6 +31,7 @@ struct WorkspaceObservation::Impl {
   fs::path directory, storage;
   NativeSnapshot current;
   bool ready = false;
+  std::string materialization_epoch;
   Impl(const fs::path &root, const fs::path &store)
       : directory(fs::canonical(root)), storage(fs::canonical(store)) {}
 
@@ -38,7 +39,9 @@ struct WorkspaceObservation::Impl {
                const WorkspaceChanges &changes, OperationOptions options) {
     throw_if_cancelled(options.stop);
     require(store.root() == storage, "workspace observation belongs to another store");
-    bool full = !ready || changes.full_scan || changes.overflow;
+    const auto materialization = read_native_materialization(store).policy;
+    const auto epoch = materialization.identity();
+    bool full = !ready || changes.full_scan || changes.overflow || epoch != materialization_epoch;
     // Any failure invalidates continuity, including a cancelled query. Only a
     // completely successful observation can become the next incremental base.
     ready = false;
@@ -126,7 +129,7 @@ struct WorkspaceObservation::Impl {
         hashed += content.size;
         next.emplace(path, NativeSnapshotFile{{}, std::move(content), file.executable});
       }
-      const auto baseline = revision ? read_native_snapshot(store, *revision, options) : NativeSnapshot{};
+      const auto baseline = revision ? read_native_materialized_snapshot(store, *revision, materialization, options) : NativeSnapshot{};
       auto comparison = compare_native_workspace_maps(baseline, next, options);
       report = Json{{"version", 1}, {"base", revision ? Json(*revision) : Json{}},
                     {"clean", comparison["changes"].empty()}, {"tracked_files", baseline.size()},
@@ -138,6 +141,7 @@ struct WorkspaceObservation::Impl {
       current = std::move(next);
     }
     throw_if_cancelled(options.stop);
+    materialization_epoch = epoch;
     ready = true;
     return report;
   }

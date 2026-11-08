@@ -7,6 +7,7 @@
 #include "watch_journal.hpp"
 #include "native_workspace.hpp"
 #include "native_context.hpp"
+#include "native_materialization.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -54,7 +55,7 @@ static std::string key_check(const Key &key) {
   return hex(out);
 }
 static void supported_feature(std::string_view feature) {
-  require(feature == "linked-workspaces-v1", "unsupported required store feature");
+  require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1", "unsupported required store feature");
 }
 Json Store::Impl::load_config() {
   packs.invalidate();
@@ -130,7 +131,7 @@ Store::Store(const fs::path &root, std::optional<Key> key, bool create, StoreOpt
     atomic_write(impl_->root / "config.json", bytes(config), false);
   } else {
     impl_->load_config();
-    (void)refs();
+    validate_native_materialization_requirements(*this, refs());
   }
 }
 Store::~Store() = default;
@@ -608,7 +609,9 @@ std::string Store::native_workspace_reference(std::string_view local) const {
   return native_context_reference(native_workspace_name(), local);
 }
 void Store::write_refs(const Refs &refs, std::stop_token stop) const {
-  validate_native_branch_reservations(*this, this->refs(), refs);
+  const auto before = this->refs();
+  validate_native_branch_reservations(*this, before, refs);
+  const bool sparse = validate_native_materialization_changes(*this, before, refs);
   // Reference names cannot contain JSON escapes. Reject provably oversized
   // documents early; check the exact encoded size again before publication.
   std::size_t lower_bound = 2;
@@ -619,6 +622,7 @@ void Store::write_refs(const Refs &refs, std::stop_token stop) const {
   }
   auto value = encode_refs(refs).dump();
   require(value.size() <= max_object_size, "reference document exceeds 16 MiB");
+  if (sparse) require_features({"sparse-workspaces-v1"}, {stop});
   for (auto entry = refs.lower_bound("workspaces/");
        entry != refs.end() && entry->first.starts_with("workspaces/"); ++entry) {
     const auto slash = entry->first.find('/', 11);

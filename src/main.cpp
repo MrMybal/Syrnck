@@ -32,6 +32,17 @@ using namespace syrnck;
 class Args {
 public:
   std::vector<std::string> values;
+  std::vector<std::string> multi_option(std::string_view name) {
+    std::vector<std::string> result;
+    for (std::size_t i = 0; i < values.size();) {
+      if (values[i] == "--") break;
+      if (values[i] != name) { ++i; continue; }
+      require(i + 1 < values.size() && !values[i + 1].starts_with("--"), "missing or duplicate option value");
+      result.push_back(values[i + 1]);
+      values.erase(values.begin() + static_cast<std::ptrdiff_t>(i), values.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    }
+    return result;
+  }
   std::optional<std::string> option(std::string_view name, std::string_view alias = {}) {
     std::optional<std::string> result;
     for (std::size_t i = 0; i < values.size();) {
@@ -355,7 +366,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCHE] [--directory .] [--indexed]
   native workspaces
-  native workspace-add NOM DOSSIER [--branch BRANCHE | --revision RÉVISION]
+  native workspace-add NOM DOSSIER [--branch BRANCHE | --revision RÉVISION] [--include CHEMIN ... | --no-files]
+  native materialization
   native workspace-restore NOM DOSSIER [--branch BRANCHE | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCHE | --revision RÉVISION]
@@ -550,7 +562,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native status [--branch BRANCH | --revision REVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCH] [--directory .] [--indexed]
   native workspaces
-  native workspace-add NAME DIRECTORY [--branch BRANCH | --revision REVISION]
+  native workspace-add NAME DIRECTORY [--branch BRANCH | --revision REVISION] [--include PATH ... | --no-files]
+  native materialization
   native workspace-restore NAME DIRECTORY [--branch BRANCH | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCH | --revision REVISION]
@@ -985,7 +998,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "config" && sub == "require-feature") ||
       (command == "native" &&
-       (sub == "workspaces" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+       (sub == "workspaces" || sub == "materialization" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
         sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
         sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
@@ -1179,6 +1192,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     if (sub == "workspaces") {
       args.count(0);
       print(store.native_workspaces({control->token(), observe}));
+    } else if (sub == "materialization") {
+      args.count(0);
+      print(store.native_materialization());
     } else if (sub == "workspace-restore") {
       const auto primary = workspace();
       NativeWorkspaceRestoreOptions settings;
@@ -1192,12 +1208,24 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto branch = args.option("--branch");
       const auto revision = args.option("--revision");
       require(!(branch && revision), "choose either --branch or --revision");
+      auto includes = args.multi_option("--include");
+      const bool no_files = args.flag("--no-files");
+      require(!no_files || includes.empty(), "choose either --include or --no-files");
+      const bool partial = no_files || !includes.empty();
+      for (auto &include : includes) {
+        auto path = path_from_utf8(include).lexically_normal();
+        if (!path.empty() && path.filename().empty()) path = path.parent_path();
+        include = utf8(path);
+      }
       args.count(2);
       const auto selected = store.native_head();
       const auto target = revision ? std::optional{resolve(*revision)} :
           selected["revision"].is_string() ? std::optional{selected["revision"].get<std::string>()} : std::nullopt;
-      auto report = store.register_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]),
-                                                     {control->token(), observe});
+      auto report = partial
+          ? store.register_partial_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]), includes,
+                                                       {control->token(), observe})
+          : store.register_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]),
+                                              {control->token(), observe});
       store.use_native_workspace(args.values[0]);
       const auto directory = path_from_utf8(report["directory"].get<std::string>());
       if (branch) report["checkout"] = store.switch_directory(directory, *branch, {control->token(), observe});

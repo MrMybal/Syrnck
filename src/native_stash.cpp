@@ -139,6 +139,7 @@ std::vector<RefUpdate> native_stash_guard(const Store &store, const NativeStashE
 Json NativeStash::save(const fs::path &directory, std::string_view branch, std::string_view message,
                        NativeStashSaveOptions settings, OperationOptions options) const {
   throw_if_cancelled(options.stop);
+  require_complete_native_materialization(store_);
   require_no_native_checkout(store_);
   require(message.size() <= 1024 * 1024, "native stash message exceeds 1 MiB");
   try {

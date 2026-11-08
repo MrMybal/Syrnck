@@ -41,6 +41,9 @@ class DocumentationHelp(unittest.TestCase):
         for command in ("workspaces", "workspace-add"):
             self.assertTrue(self.run_cli("help", "native", command, "--print-url").stdout.strip().endswith("#/en/native-workspaces"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "workspace-restore", "--print-url").stdout.strip().endswith("#/fr/native-workspaces/restore"))
+        for language in ("en", "fr"):
+            self.assertTrue(self.run_cli("--lang", language, "help", "native", "materialization", "--print-url")
+                            .stdout.strip().endswith(f"#/{language}/native-workspaces/partial"))
         for command in ("required-features", "require-feature"):
             self.assertTrue(self.run_cli("help", "config", command, "--print-url").stdout.strip().endswith("#/en/settings/reader-features"))
         for topic in ["docs/PACKS.md#mémoire-du-gc", "docs\\PACKS.md#m%C3%A9moire-du-gc"]:

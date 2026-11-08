@@ -76,9 +76,15 @@ Json indexed_native_observation(const Store &store, const fs::path &directory,
                                 const std::optional<std::string> &revision, NativeSnapshot &observed,
                                 OperationOptions options) {
   throw_if_cancelled(options.stop);
-  const auto workspace = hash(bytes(utf8(fs::canonical(directory))));
+  const auto materialization = read_native_materialization(store).policy;
+  auto identity = utf8(fs::canonical(directory));
+  if (!materialization.complete()) {
+    identity.push_back('\0');
+    identity += materialization.identity();
+  }
+  const auto workspace = hash(bytes(identity));
   auto cache = load_cache(store, workspace, options);
-  const auto baseline = revision ? read_native_snapshot(store, *revision, options) : NativeSnapshot{};
+  const auto baseline = revision ? read_native_materialized_snapshot(store, *revision, materialization, options) : NativeSnapshot{};
   NativeSnapshot current;
   std::map<std::string, Entry> next;
   Bytes buffer(1024 * 1024);

@@ -29,10 +29,12 @@ Json nullable_id(const std::optional<ObjectKey> &key) {
   return key ? Json(key->id) : Json{};
 }
 struct Stage {
+  NativeMaterializationState materialization;
   std::string head_name, stage_name, marker;
   std::optional<ObjectKey> head, index, base;
   Files files, baseline;
   Stage(const Store &store, std::string_view branch) {
+    materialization = read_native_materialization(store);
     validate_native_target(branch);
     head_name = native_revision_reference(store, std::string(branch));
     stage_name = native_staging_reference(store, std::string(branch));
@@ -71,7 +73,8 @@ struct Stage {
     return store.put(Kind::revision, bytes(revision.dump())).first;
   }
   void publish(const Store &store, const ObjectKey &next, OperationOptions options) const {
-    require(store.compare_update_refs({{head_name, head, head}, {stage_name, index, next}}, options),
+    require(store.compare_update_refs({{head_name, head, head}, {stage_name, index, next},
+                                       {materialization.reference, materialization.root, materialization.root}}, options),
             "native staging references changed; retry operation");
   }
 };
@@ -105,11 +108,11 @@ public:
     }
     return matched;
   }
-  void observe(const Files &files, std::stop_token stop) {
+  void observe(const Files &files, std::stop_token stop, const NativeMaterialization *policy = nullptr) {
     for (const auto &[path, entry] : files) {
       (void)entry;
       throw_if_cancelled(stop);
-      matches(path);
+      if (!policy || policy->includes(path)) matches(path);
     }
   }
   void validate() const {
@@ -130,13 +133,14 @@ std::string Store::stage_directory(const fs::path &directory, std::string_view b
   throw_if_cancelled(options.stop);
   Stage stage(*this, branch);
   require_no_native_checkout(*this);
+  require(stage.head || stage.materialization.policy.complete(), "partial native commit requires an existing target revision");
   stage.require_fresh();
   Selection selection(paths);
-  selection.observe(stage.baseline, options.stop);
+  selection.observe(stage.baseline, options.stop, &stage.materialization.policy);
   auto files = stage.files;
   for (auto it = files.begin(); it != files.end();) {
     throw_if_cancelled(options.stop);
-    if (selection.matches(it->first))
+    if (stage.materialization.policy.includes(it->first) && selection.matches(it->first))
       it = files.erase(it);
     else
       ++it;

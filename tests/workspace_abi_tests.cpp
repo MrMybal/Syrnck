@@ -213,16 +213,18 @@ void detached_selection(const fs::path &project) {
   require(explicit_main["base"] == main && explicit_main["clean"] == false,
           "workspace ABI explicit branch override ignored");
 }
-void linked_selection(const fs::path &base) {
+void linked_selection(const fs::path &base, bool partial = false) {
   const auto primary = base / "primary", linked = base / "linked";
   std::string revision;
   {
     Fixture fixture(primary);
-    revision = fixture.revision(Json{{"asset", fixture.file("linked bytes")}});
+    revision = fixture.revision(Json{{"asset", fixture.file("linked bytes")}, {"omitted", fixture.file("retained bytes")}});
     fixture.install(revision);
-    fixture.store.register_native_workspace(primary, "linked", linked);
+    if (partial) fixture.store.register_partial_native_workspace(primary, "linked", linked, {"asset"});
+    else fixture.store.register_native_workspace(primary, "linked", linked);
     fixture.store.use_native_workspace("linked");
     fixture.store.detach_checkout(linked, revision);
+    require(fs::exists(linked / "omitted") != partial, "workspace ABI fixture has the wrong projection");
   }
   SyrnckWorkspace *workspace = nullptr;
   const auto directory = utf8(linked), storage = utf8(primary / ".syrnck");
@@ -255,6 +257,7 @@ int main() {
     coalesced_overflow(temporary.path / "overflow");
     detached_selection(temporary.path / "detached");
     linked_selection(temporary.path / "linked");
+    linked_selection(temporary.path / "partial", true);
     std::cout << "Workspace ABI retained hints, targeted/polling status, ownership and recovery passed\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

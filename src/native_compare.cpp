@@ -29,7 +29,7 @@ public:
   }
 };
 Snapshot snapshot(const Store &store, std::string_view id, ManifestSummaries &summaries,
-                  const OperationOptions &options) {
+                  const OperationOptions &options, const NativeMaterialization *policy = nullptr) {
   throw_if_cancelled(options.stop);
   const auto revision = store.metadata(Kind::revision, id);
   const auto &files = revision["files"];
@@ -38,6 +38,7 @@ Snapshot snapshot(const Store &store, std::string_view id, ManifestSummaries &su
   report_progress(options, {ProgressPhase::planning, id, 0, files.size()});
   for (const auto &[path, entry] : files.items()) {
     throw_if_cancelled(options.stop);
+    if (policy && !policy->includes(path)) { ++completed; continue; }
     auto manifest = entry["manifest"].get<std::string>();
     result.emplace_hint(result.end(), path,
                         File{manifest, summaries.get(manifest), entry["executable"].get<bool>()});
@@ -104,6 +105,11 @@ NativeSnapshot read_native_snapshot(const Store &store, std::string_view revisio
   ManifestSummaries summaries(store);
   return snapshot(store, revision, summaries, options);
 }
+NativeSnapshot read_native_materialized_snapshot(const Store &store, std::string_view revision,
+                                                   const NativeMaterialization &policy, OperationOptions options) {
+  ManifestSummaries summaries(store);
+  return snapshot(store, revision, summaries, options, policy.complete() ? nullptr : &policy);
+}
 Json compare_native_file_maps(const NativeSnapshot &source, const NativeSnapshot &target,
                               OperationOptions options) {
   return changes(source, target, false, options);
@@ -148,7 +154,8 @@ Json Store::status_directory(const fs::path &directory, const std::optional<std:
                              OperationOptions options) const {
   throw_if_cancelled(options.stop);
   ManifestSummaries summaries(*this);
-  const auto baseline = revision ? snapshot(*this, *revision, summaries, options) : Snapshot{};
+  const auto policy = read_native_materialization(*this).policy;
+  const auto baseline = revision ? snapshot(*this, *revision, summaries, options, policy.complete() ? nullptr : &policy) : Snapshot{};
   Snapshot current;
   Bytes buffer(1024 * 1024);
   std::uint64_t hashed_bytes = 0;

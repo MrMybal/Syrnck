@@ -185,8 +185,8 @@ bool executable_equal(bool actual, bool expected) {
 }
 } // namespace
 void verify_native_restored_directory(const Store &store, const fs::path &directory, std::string_view revision,
-                                      OperationOptions options) {
-  const auto expected = read_native_snapshot(store, revision, options);
+                                      OperationOptions options, const NativeMaterialization &materialization) {
+  const auto expected = read_native_materialized_snapshot(store, revision, materialization, options);
   const Inventory inventory(directory, store, options, true);
   Bytes buffer(1024 * 1024);
   std::size_t files = 0;
@@ -243,16 +243,22 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
                         const Inventory *supplied_inventory = nullptr) {
   throw_if_cancelled(options.stop);
   auto staging = store.staged_status(branch, options);
+  const auto materialization = read_native_materialization(store).policy;
   const auto source_id = source_override             ? override_id
                          : staging["head"].is_null() ? std::optional<std::string>{}
                                                      : std::optional{staging["head"].get<std::string>()};
   const auto stored_source = source_override ? NativeSnapshot{}
-                             : source_id     ? read_native_snapshot(store, *source_id, options)
+                             : source_id     ? read_native_materialized_snapshot(store, *source_id, materialization, options)
                                              : NativeSnapshot{};
   const auto &source = source_override ? *source_override : stored_source;
   const bool same = target && source_id && *source_id == *target;
-  const auto other = supplied || same ? NativeSnapshot{} : read_native_snapshot(store, *target, options);
-  const auto &destination = supplied ? *supplied : same ? source : other;
+  const auto other = supplied || same ? NativeSnapshot{} : read_native_materialized_snapshot(store, *target, materialization, options);
+  NativeSnapshot projected;
+  if (supplied && !materialization.complete()) {
+    projected = *supplied;
+    project_native_materialization(projected, materialization);
+  }
+  const auto &destination = supplied ? (materialization.complete() ? *supplied : projected) : same ? source : other;
   const NativeCheckoutLayout layout(source, destination, options, source_directories);
   const auto owned_inventory =
       supplied_inventory ? std::optional<Inventory>{}
@@ -415,6 +421,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
                                               const std::set<std::string> &additional_files) {
   throw_if_cancelled(options.stop);
   validate_id(target);
+  require_complete_native_materialization(store);
   const NativeRewriteState state(store, branch, options);
   const auto head = store.native_head();
   require(store.native_target() == branch, "native hard reset requires the selected branch");

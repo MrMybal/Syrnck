@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "native_materialization.hpp"
 #include <iostream>
 using namespace native_test;
 namespace {
@@ -23,7 +24,7 @@ std::string category(const fs::path &path) {
   if (!relative.empty() && *relative.begin() != ".syrnck" && *relative.begin() != "..") return "workspace";
   return utf8(path.parent_path().parent_path().filename());
 }
-void prepare(const fs::path &root, bool encrypted, std::string action, bool abort, bool linked) {
+void prepare(const fs::path &root, bool encrypted, std::string action, bool abort, bool linked, bool sparse) {
   Fixture f(root / "source", key(Json{{"encrypted", encrypted}}));
   const auto a = f.revision(Json{{"asset", f.file("old asset")}, {"shape", f.file("flat")}});
   const auto b = f.revision(Json{{"asset", f.file("main asset")}, {"shape/child", f.file("nested")}}, Json::array({a}));
@@ -33,10 +34,14 @@ void prepare(const fs::path &root, bool encrypted, std::string action, bool abor
   f.store.set_ref("workspace/detached", {Kind::revision, old});
   f.store.pack();
   atomic_write(root / "fixture.json", bytes(Json{{"encrypted", encrypted}, {"action", action},
-      {"abort", abort}, {"linked", linked}, {"a", a}, {"b", b}, {"old", old}}.dump()), false);
+      {"abort", abort}, {"linked", linked}, {"sparse", sparse}, {"a", a}, {"b", b}, {"old", old}}.dump()), false);
+}
+void registration(Store &store, const fs::path &primary, const Json &info, OperationOptions options = {}) {
+  if (info.value("sparse", false)) store.register_partial_native_workspace(primary, "linked", workspace, {"shape"}, options);
+  else store.register_native_workspace(primary, "linked", workspace, options);
 }
 void start(Store &store, const Json &info, OperationOptions options = {}) {
-  if (info["action"] == "register") store.register_native_workspace(store.root().parent_path(), "linked", workspace, options);
+  if (info["action"] == "register") registration(store, store.root().parent_path(), info, options);
   else if (info["action"] == "leave") store.switch_directory(workspace, info.value("linked", false) ? "feature" : "main", options);
   else store.detach_checkout(workspace, info[info["action"] == "enter" ? "a" : "b"].get<std::string>(), options);
 }
@@ -73,6 +78,9 @@ Json verify(Store &store, const Json &info, bool resumed) {
     require(refs.contains("workspaces/linked/workspace/HEAD") == registered &&
                 refs.contains("workspaces/linked/workspace/detached") == registered &&
                 refs.contains("workspace/HEAD") == registered, "workspace registration published partial roots");
+    if (info.value("sparse", false))
+      require(refs.contains("workspaces/linked/workspace/materialization") == registered,
+              "partial registration published a detached policy or unmasked context");
     if (registered) {
       store.use_native_workspace("linked");
       require(store.native_head()["branch"].is_null() && store.native_head()["revision"].is_string() &&
@@ -86,7 +94,12 @@ Json verify(Store &store, const Json &info, bool resumed) {
   const auto pending = store.checkout_status()["pending"].get<bool>();
   if (!pending) {
     const auto tree = store.metadata(Kind::revision, head["revision"].get<std::string>());
+    const auto policy = read_native_materialization(store).policy;
     for (const auto &[path, entry] : tree["files"].items()) {
+      if (!policy.includes(path)) {
+        require(!fs::exists(workspace / path_from_utf8(path)), "partial crash materialized excluded files");
+        continue;
+      }
       std::ostringstream output;
       store.reconstruct(entry["manifest"].get<std::string>(), output);
       require(text(read_bytes(workspace / path_from_utf8(path))) == output.str(), "detached crash left partial files");
@@ -128,7 +141,8 @@ int main(int argc, char **argv) {
     const std::string mode = argv[1];
     if (mode == "prepare") {
       require(argc == 6 || argc == 7, "detached probe expects encryption, action and recovery");
-      prepare(root, std::string_view(argv[3]) == "encrypted", argv[4], std::string_view(argv[5]) == "abort", argc == 7);
+      prepare(root, std::string_view(argv[3]) == "encrypted", argv[4], std::string_view(argv[5]) == "abort", argc == 7,
+              argc == 7 && std::string_view(argv[6]) == "sparse");
     } else {
       const auto info = parse_json(read_bytes(root / "fixture.json"));
       const auto primary = fs::canonical(workspace);
@@ -136,7 +150,7 @@ int main(int argc, char **argv) {
       if (info.value("linked", false)) {
         workspace = root / "linked";
         if (mode == "bind" && info["action"] != "register") {
-          store.register_native_workspace(primary, "linked", workspace);
+          registration(store, primary, info);
           store.use_native_workspace("linked");
           workspace = fs::canonical(workspace);
           store.switch_directory(workspace, "feature");

@@ -7,12 +7,14 @@ std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
   return found == refs.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
 }
 struct Amendment {
+  NativeMaterializationState materialization;
   std::string head_name, stage_name, archive_name;
   ObjectKey previous;
   std::optional<ObjectKey> index, archive;
   Json revision;
   Amendment(const Store &store, std::string_view branch, std::string_view expected, bool staged,
             std::stop_token stop) {
+    materialization = read_native_materialization(store);
     require_native_branch_available(store, branch);
     throw_if_cancelled(stop);
     validate_native_target(branch);
@@ -52,7 +54,8 @@ struct Amendment {
     revision["timestamp"] = unix_seconds();
     const auto next = store.put(Kind::revision, bytes(revision.dump())).first;
     require(store.compare_update_refs(
-                {{head_name, previous, next}, {stage_name, index, {}}, {archive_name, archive, previous}},
+                {{head_name, previous, next}, {stage_name, index, {}}, {archive_name, archive, previous},
+                 {materialization.reference, materialization.root, materialization.root}},
                 options),
             "native amendment references changed; retry operation");
     return next.id;
@@ -68,6 +71,10 @@ std::string Store::amend_directory(const fs::path &directory, std::string_view b
                                    IngestOptions options) const {
   Amendment amendment(*this, branch, expected, false, options.stop);
   std::map<std::string, Json> files;
+  const auto &materialization = amendment.materialization.policy;
+  if (!materialization.complete())
+    for (const auto &[path, entry] : amendment.revision["files"].items())
+      if (!materialization.includes(path)) files.emplace(path, entry);
   visit_native_files(directory, *this,
                      [&](const NativeFile &file) {
                        files.emplace(file.relative,

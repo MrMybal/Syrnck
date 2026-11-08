@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 3
+revision: 4
 ---
 
 ## Create and select a workspace {#usage}
@@ -42,6 +42,43 @@ running from another directory. Native workspace commands default `--directory`
 to the registered root when a linked context is selected. An explicit directory
 must resolve to that root. `native workspaces` includes the primary selection and
 reports each linked directory, branch/revision and pending checkout.
+
+## Partial working directories {#partial}
+
+```text
+syrnck native workspace-add code ../project-code --branch feature --include Source --include Config
+syrnck --store .syrnck --workspace code native materialization
+syrnck native workspace-add metadata ../project-metadata --no-files
+```
+
+Repeated `--include PATH` options select literal repository-relative files or
+directory prefixes, using portable Unicode/case matching. Prefixes must be
+disjoint; wildcards and exclusions are not supported. `--no-files` explicitly
+selects an empty working directory. Omitting both options retains the complete
+working directory. Root and ancestor `.syrnckignore` controls needed by selected
+paths are included automatically with canonical spelling.
+
+Revisions and frozen indexes always retain the complete logical file tree and
+all its objects locally. Whole-directory commit, stage and amend preserve
+omitted entries; working status, index and observation compare only the physical
+selection. Explicit working-file edits outside that selection are refused.
+Directory staging/commit requires an existing target revision to preserve omitted
+entries; create a new branch from the complete selected revision first.
+Snapshot diffs and `native export` still address the complete tree. Partial
+materialization does not implement lazy block downloading or save Store space.
+
+Checkout/switch, detached HEAD and portable restoration use the recorded
+selection, including file/directory and case transitions. Excluded local files
+are preserved; a namespace obstruction is refused. Backups retain the selection
+and the complete index. Restoration materializes the selected index files and
+verifies exactly that projected tree before binding the workspace.
+
+The selection is immutable while the workspace remains registered. Create a
+separate workspace for another selection. Hard reset and stash disk operations
+currently require a complete workspace and fail before changing partial working
+files. C++ creation uses `register_partial_native_workspace(primary, name,
+directory, prefixes, operation)`; `native_materialization()` reports the policy.
+C/Go can select and observe a partial context created by CLI/C++.
 
 ## Isolation and branch reservations {#isolation}
 
@@ -86,6 +123,18 @@ full and 24 ms indexed (primary: 75 ms and 20 ms). The file was cached by the OS
 other regression tests were running. These measurements demonstrate avoided
 reads on this fixture, not Unreal-project throughput or cross-platform latency.
 
+```text
+python scripts/benchmark_partial_workspace.py --cli build/Release/syrnck.exe --asset-mib 128 --iterations 5 --output partial-status.json
+```
+
+This separate fixture uses two synthetic assets totaling 128 MiB and 25 bytes of
+code. Local Windows x64, 8 November 2026, five observations without the indexed
+cache: the complete view hashed 134,217,753 bytes per observation, while the
+`Source` view hashed 25 bytes. Median CLI times were 105 ms and 18 ms respectively.
+The files had just been written/ingested, without flushing the OS cache; other
+regression tests were running. The Store
+retained all objects; the measurement concerns working status only.
+
 ## Backup and restoration {#restore}
 
 ```text
@@ -110,9 +159,9 @@ the committed HEAD separately. Unprepared dirty working bytes are not part of a
 logical Store backup. Renaming the index's target archives its original snapshot
 before publishing the replacement.
 
-Restoration exclusively publishes a complete exported directory before binding
+Restoration exclusively publishes the exported physical selection before binding
 the context. If interrupted before binding, rerun the command: an existing tree
-must match the complete saved content and modes. Changed exports, extra files,
+must match the selected saved content and modes. Changed exports, extra files,
 links and protected metadata are refused without overwriting them. The Store
 keeps the portable roots until an explicit retention operation removes them.
 
@@ -139,6 +188,10 @@ and encrypted Stores, resume/abort, namespace transitions, independent productio
 inspection and post-recovery GC. This tests process interruption with the OS and
 filesystem running; power-loss behavior is a separate validation.
 
+The partial-workspace campaign additionally verified all 716 observed process
+termination boundaries for registration and checkout with the same plain/encrypted,
+resume/abort, fresh-reader and post-recovery GC checks.
+
 ## C++, C and Go {#api}
 
 ```cpp
@@ -162,12 +215,16 @@ Primary reference layouts and checkout records v1..v7 stay unchanged. Linked
 metadata lives under real `workspaces/NAME/` references. Named indexes use the
 BLAKE3 digest of the branch name in their slot, preserving the existing maximum
 branch length. The retained snapshot still records the complete branch name.
-Linked checkout records use v8 with `context` and `layout_version` (1..6).
+Complete linked checkout records use v8 with `context` and `layout_version` (1..6).
+Partial checkout records use v9 with frozen `source_materialization` and
+`target_materialization` definitions, context and layout (1..4). The current
+static selection requires equal source/target definitions. A canonical v1
+materialization chunk is retained at `workspaces/NAME/workspace/materialization`.
 Object/revision, pack and C ABI versions are unchanged.
 
-Sparse materialization, in-place workspace relocation and archived unregistering
-remain work to complete. This mode currently materializes complete snapshots and
-requires their complete retained objects locally.
+Changing a live selection, partial hard reset/stash, in-place workspace relocation
+and archived unregistering remain work to complete. Every workspace still
+requires its complete retained objects locally.
 
 ## Reader compatibility {#compatibility}
 
@@ -175,5 +232,6 @@ Registration and portable restore establish the `linked-workspaces-v1` reader
 requirement before publishing a linked binding. Historical executables refuse
 the Store, including ordinary ref commands, so they cannot bypass branch
 reservations. Upgraded readers retain support for legacy configurations. See
-[inspection and explicit upgrade](doc:settings#reader-features); this does not
-enable sparse materialization, which remains separate work.
+[inspection and explicit upgrade](doc:settings#reader-features). Partial creation
+also establishes `sparse-workspaces-v1` before publishing its policy. Readers
+supporting linked contexts alone refuse this additional requirement.

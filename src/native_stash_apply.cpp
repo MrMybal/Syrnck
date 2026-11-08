@@ -43,6 +43,7 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
                                                 const NativeStashApplyOptions &settings, bool verify_objects,
                                                 OperationOptions options) {
   throw_if_cancelled(options.stop);
+  require_complete_native_materialization(store);
   const NativeRewriteState state(store, branch, options);
   NativeStashApplyPlan plan;
   plan.saved = read_native_stash(store, id, false, options);

@@ -25,6 +25,20 @@ public:
   std::string encode() const;
   std::string identity() const;
 };
+struct NativeMaterializationState {
+  NativeMaterialization policy;
+  std::optional<ObjectKey> root;
+  std::string reference;
+};
+bool native_materialization_reference(std::string_view, std::string *context = nullptr);
+NativeMaterializationState read_native_materialization(const Store &);
+NativeMaterializationState read_native_materialization(const Store &, std::string_view context,
+                                                        const Refs &, bool require_feature = true);
+void validate_native_materialization_requirements(const Store &, const Refs &);
+bool validate_native_materialization_changes(const Store &, const Refs &, const Refs &);
+void require_complete_native_materialization(const Store &);
+void export_native_materialization(const Store &, std::string_view revision, const fs::path &,
+                                   const NativeMaterialization &, OperationOptions);
 template<class Map> void project_native_materialization(Map &files, const NativeMaterialization &policy) {
   if (policy.complete()) return;
   for (auto entry = files.begin(); entry != files.end();)

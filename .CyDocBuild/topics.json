@@ -1236,6 +1236,7 @@
   "usage#cache-de-lectures-vérifiées": "usage#cache-de-lectures-verifiees",
   "native workspaces": "native-workspaces",
   "native workspace-add": "native-workspaces",
+  "native materialization": "native-workspaces#partial",
   "native workspace-restore": "native-workspaces#restore",
   "workspaces": "native-workspaces",
   "config required-features": "settings#reader-features",

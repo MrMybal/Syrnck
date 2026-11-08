@@ -5,7 +5,7 @@ description: Guide : Préférences du dépôt.
 section: Stockage
 order: 540
 parent: storage
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Préférences du dépôt {#repository-settings}
@@ -41,7 +41,8 @@ publication de sa liaison. Les anciens exécutables refusent la configuration
 étendue à l’ouverture, évitant de déplacer une branche partagée sans réservation.
 Pour un Store lié expérimental créé avant cette protection, lancer la commande
 explicite avant d’utiliser d’anciens outils. Une publication normale de références
-avec contextes enregistrés établit aussi la protection.
+avec contextes enregistrés établit aussi la protection. Un workspace partiel exige
+aussi `sparse-workspaces-v1` avant publication de sa sélection.
 
 Seuls les noms pris en charge sont acceptés. Activation idempotente, format
 physique et objets préservés ; les exigences survivent aux packs/GC, sauvegarde,

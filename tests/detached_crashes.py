@@ -9,12 +9,16 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from crash_shard import CrashShard
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
-LINKED = "--linked" in sys.argv
-if LINKED:
+SPARSE = "--sparse" in sys.argv
+if SPARSE:
+    sys.argv.remove("--sparse")
+LINKED = SPARSE or "--linked" in sys.argv
+if "--linked" in sys.argv:
     sys.argv.remove("--linked")
 SHARD = CrashShard.from_argv()
 ENV = {key: value for key, value in os.environ.items() if key.upper() not in
@@ -47,7 +51,7 @@ class DetachedCrashes(unittest.TestCase):
             for encrypted, action, operation in SHARD.select(scenarios):
                 seed = parent / f"seed-{encrypted}-{action}-{operation}"
                 self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation,
-                             *(["linked"] if LINKED else []))
+                             *(["sparse" if SPARSE else "linked"] if LINKED else []))
                 trace = parent / f"trace-{encrypted}-{action}-{operation}"
                 shutil.copytree(seed, trace)
                 self.command(READER, "bind", trace)
@@ -73,7 +77,16 @@ class DetachedCrashes(unittest.TestCase):
                         reader.start()
                         try:
                             line = lines.get(timeout=15)
-                            self.assertTrue(line, "detached probe missed checkpoint")
+                            if not line:
+                                _, error = process.communicate(timeout=8)
+                                evidence = Path(__file__).resolve().parent.parent / ".scratch" / "detached-crash-failures" / str(time.time_ns())
+                                try:
+                                    shutil.copytree(root, evidence)
+                                    saved = str(evidence)
+                                except OSError as copy_error:
+                                    saved = "copy failed: " + str(copy_error)
+                                self.fail("detached probe missed checkpoint: exit=" + str(process.returncode) +
+                                          "; " + error.decode("utf-8", "replace") + "; fixture=" + saved)
                             self.assertEqual(json.loads(line), event)
                             self.assertIsNone(process.poll())
                             process.kill()
@@ -82,7 +95,7 @@ class DetachedCrashes(unittest.TestCase):
                         finally:
                             if process.poll() is None:
                                 process.kill()
-                                process.communicate(timeout=8)
+                            process.communicate(timeout=8)
                             reader.join(timeout=5)
                         before = snapshot(root)
                         self.assertTrue(self.command(READER, "verify", root)["verified"])

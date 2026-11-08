@@ -145,10 +145,12 @@ struct NativeScan {
   OperationOptions options;
   NativeInventoryPaths paths;
   bool bounded;
+  NativeMaterialization materialization;
   std::size_t budget = 0;
   NativeScan(const fs::path &directory, const Store &store,
              const std::function<void(const NativeFile &)> &visitor, OperationOptions operation, bool scope)
-      : base(fs::canonical(directory)), storage(store.root()), visit(visitor), options(operation), bounded(scope) {
+      : base(fs::canonical(directory)), storage(store.root()), visit(visitor), options(operation), bounded(scope),
+        materialization(read_native_materialization(store).policy) {
     store.validate_native_workspace(base);
   }
   void rules_at(const fs::path &dir, const std::string &prefix, std::vector<Rule> &rules) {
@@ -164,6 +166,7 @@ struct NativeScan {
     budget += name.size() + 64;
   }
   void file(const fs::directory_entry &entry, const std::string &relative, const fs::file_status &status) {
+    if (!materialization.includes(relative)) return;
     require(fs::is_regular_file(status), "special files cannot be committed");
     paths.add(relative);
     bool executable = false;
@@ -176,6 +179,7 @@ struct NativeScan {
   void scan(const fs::path &dir, std::vector<Rule> rules, std::size_t depth) {
     require(depth <= 128, "native workspace directory nesting exceeds 128 levels");
     throw_if_cancelled(options.stop);
+    if (!materialization.complete() && materialization.prefixes().empty()) return;
     const auto rel = dir.lexically_relative(base);
     const auto prefix = rel == "." ? std::string{} : utf8(rel) + "/";
     report_progress(options, {ProgressPhase::scanning, prefix});
@@ -189,6 +193,7 @@ struct NativeScan {
       const auto relative = utf8(path.lexically_relative(base));
       const auto status = entry.symlink_status();
       const bool isdir = fs::is_directory(status);
+      if (isdir ? !materialization.intersects(relative) : !materialization.includes(relative)) continue;
       if (ignored(relative, isdir, rules)) continue;
       require(!native_link_like(path, status), "native symlink support is not implemented");
       if (isdir) scan(path, rules, depth + 1);
@@ -206,6 +211,7 @@ struct NativeScan {
       const auto slash = path.find('/', start);
       const auto component = path.substr(start, slash == path.npos ? path.size() - start : slash - start);
       const auto relative = prefix + std::string(component);
+      if (!materialization.intersects(relative) && !materialization.includes(relative)) return relative;
       rules_at(current, prefix, rules);
       const auto wanted = portable_fold(component);
       std::optional<fs::directory_entry> found;
@@ -261,6 +267,7 @@ std::optional<NativeFile> inspect_native_file(const fs::path &directory, const S
                                               std::string_view path, OperationOptions options) {
   throw_if_cancelled(options.stop);
   validate_path(path);
+  require(read_native_materialization(store).policy.includes(path), "native path is outside workspace materialization");
   const auto base = fs::canonical(directory);
   store.validate_native_workspace(base);
   const auto &store_root = store.root();
@@ -353,9 +360,22 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
   validate_native_target(branch);
   require_native_branch_available(*this, branch);
   require_no_native_checkout(*this);
-  require(!refs().contains(native_staging_reference(*this, std::string(branch))),
+  const auto original = refs();
+  const auto materialization = read_native_materialization(*this, native_workspace_name(), original);
+  const auto name = native_revision_reference(*this, std::string(branch));
+  const auto stage_name = native_staging_reference(*this, std::string(branch));
+  const auto found = original.find(name);
+  const auto previous = found == original.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
+  require(!previous || previous->kind == Kind::revision, "branch must point to a revision");
+  require(previous || materialization.policy.complete(), "partial native commit requires an existing target revision");
+  require(!original.contains(stage_name),
           "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
+  if (previous && !materialization.policy.complete()) {
+    const auto baseline = metadata(Kind::revision, previous->id);
+    for (const auto &[path, entry] : baseline["files"].items())
+      if (!materialization.policy.includes(path)) files.emplace(path, entry);
+  }
   visit_native_files(directory, *this,
                      [&](const NativeFile &file) {
                        files.emplace(file.relative,
@@ -366,15 +386,10 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
   Json entries = Json::object();
   auto &object = entries.get_ref<Json::object_t &>();
   object.reserve(files.size());
-  for (auto &[name, value] : files)
-    object.emplace_back(name, std::move(value));
+  for (auto &[path, value] : files)
+    object.emplace_back(path, std::move(value));
   Json parents = Json::array();
-  auto name = native_revision_reference(*this, std::string(branch));
-  auto all = refs();
-  if (all.contains(name)) {
-    require(all.at(name).kind == Kind::revision, "branch must point to a revision");
-    parents.push_back(all.at(name).id);
-  }
+  if (previous) parents.push_back(previous->id);
   auto value = Json{
       {"version", 1},
       {"parents", parents},
@@ -386,7 +401,9 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
     invoke_progress(options.progress, {ProgressPhase::publishing, branch});
   throw_if_cancelled(options.stop);
   auto key = put(Kind::revision, bytes(value)).first;
-  set_ref(name, key, options.stop);
+  require(compare_update_refs({{name, previous, key}, {stage_name, {}, {}},
+                               {materialization.reference, materialization.root, materialization.root}},
+                              {options.stop}), "native commit references changed; retry operation");
   return key.id;
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {
@@ -408,14 +425,18 @@ std::string Store::detach_history(std::string_view branch, std::string_view mess
   return key.id;
 }
 void Store::export_revision(std::string_view id, const fs::path &dest, OperationOptions options) const {
+  export_native_materialization(*this, id, dest, {}, options);
+}
+void export_native_materialization(const Store &store, std::string_view id, const fs::path &dest,
+                                    const NativeMaterialization &materialization, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  auto revision = metadata(Kind::revision, id);
-  (void)closure({{Kind::revision, std::string(id)}}, true, options.stop, options.progress);
+  auto revision = store.metadata(Kind::revision, id);
+  (void)store.closure({{Kind::revision, std::string(id)}}, true, options.stop, options.progress);
   std::uint64_t total = 0, completed = 0;
   for (const auto &[name, entry] : revision["files"].items()) {
-    (void)name;
     throw_if_cancelled(options.stop);
-    auto size = metadata(Kind::manifest, entry["manifest"].get<std::string>())["size"].get<std::uint64_t>();
+    if (!materialization.includes(name)) continue;
+    auto size = store.metadata(Kind::manifest, entry["manifest"].get<std::string>())["size"].get<std::uint64_t>();
     require(size <= UINT64_MAX - total, "export byte count overflow");
     total += size;
   }
@@ -429,9 +450,10 @@ void Store::export_revision(std::string_view id, const fs::path &dest, Operation
       [&](const fs::path &base) {
         for (const auto &[name, entry] : revision["files"].items()) {
           throw_if_cancelled(options.stop);
+          if (!materialization.includes(name)) continue;
           std::uint64_t file_bytes = 0;
           auto path = base / path_from_utf8(name);
-          restore_file(entry["manifest"].get<std::string>(), path,
+          store.restore_file(entry["manifest"].get<std::string>(), path,
                        {options.stop, [&](const ProgressEvent &event) {
                           file_bytes = event.bytes;
                           notify(ProgressPhase::exporting, name, completed + file_bytes);
