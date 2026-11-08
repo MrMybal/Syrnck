@@ -1592,6 +1592,51 @@
       "kind": "guide"
     },
     {
+      "id": "native-blame",
+      "title": "Native line attribution",
+      "description": "Verified blame through merge parents and exact renames.",
+      "section": "Version control",
+      "order": 251,
+      "parent": "native-history",
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"usage\">Attribute lines<a class=\"heading-anchor\" href=\"#/en/native-blame/usage\" aria-label=\"Link to Attribute lines\">#</a></h2><p><code>native blame REVISION PATH</code> attributes each line of a committed UTF-8 text file\nto the revision and path that introduced it. It reconstructs and verifies stored\nbytes without reading the workspace, modifying references or importing objects.\nThe C++ entry point is <code>native_blame</code> in <code>syrnck/history.hpp</code>.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>text</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-text\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">syrnck native blame HEAD Source/Module.cpp</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json</span><span class=\"code-line\" id=\"L3\" data-line=\"3\">syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow</span></code></pre></div><p>The JSON <code>lines</code> array keeps final line numbers, origin <code>revision</code>, origin <code>path</code>,\none-based <code>source_line</code> and exact <code>content</code>, including LF/CRLF or a missing final\nnewline. Empty files have zero lines. <code>commits</code> indexes origin revision timestamps\nand bounded message previews. Revision v1 has no structured author/signature;\nthis command does not invent either. JSON keys and identifiers remain English.</p>\n<h2 id=\"lineage\">Merges and renames<a class=\"heading-anchor\" href=\"#/en/native-blame/lineage\" aria-label=\"Link to Merges and renames\">#</a></h2><p>By default every ordered parent can supply unchanged lines. The first matching\nparent takes precedence, then the remaining lines are compared with later\nparents. Only lines unmatched in every parent originate at the merge itself.\n<code>--first-parent</code> restricts attribution to the first-parent chain. Matching uses\nthe bounded Myers line-edit engine; repeated identical lines can admit several\nvalid alignments. No whitespace normalization is applied.</p>\n<p>Unique exact-content renames are followed in either chunk representation, using\nthe complete-file hash and size. Executable-mode changes do not create new text\norigins. Multiple possible removed sources or added destinations stop following;\nedited renames and copies are not inferred. <code>--no-follow</code> treats a newly named\nfile as an addition. A binary parent cannot supply textual line origins.</p>\n<h2 id=\"limits\">Budgets and errors<a class=\"heading-anchor\" href=\"#/en/native-blame/limits\" aria-label=\"Link to Budgets and errors\">#</a></h2><p>The default traversal permits 1000 distinct revisions (1..10000), 64 MiB aggregate\ndecoded revision/manifest metadata and reconstructed file bytes (1..256 MiB), and\nthe <a href=\"#/en/text-diff\">text engine budgets</a>. These input/work budgets do not bound\nevery allocation in the process. Reconstructed content is cached per manifest\nonly for this query. Existing retained roots still protect the inspected history.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>text</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-text\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\">syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728</span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\">syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608</span></code></pre></div><p><code>status: complete</code> exits 0. Binary input returns <code>status: binary</code>, reason <code>non_text</code>,\nand exit 1. An exhausted revision/input/file/line/work/trace/output budget returns\n<code>status: limited</code>, a reason and exit 1. Both non-complete reports contain empty\n<code>lines</code> and <code>commits</code>; partial attribution is never presented as complete.\nMissing paths, corrupt/missing objects, invalid arguments and cancellation fail\nthe command with no partial report. Progress and diagnostics use the selected\ninterface language.</p>\n",
+      "text": "Attribute lines # native blame REVISION PATH attributes each line of a committed UTF-8 text file to the revision and path that introduced it. It reconstructs and verifies stored bytes without reading the workspace, modifying references or importing objects. The C++ entry point is native_blame in syrnck/history.hpp . text Copy syrnck native blame HEAD Source/Module.cpp syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow The JSON lines array keeps final line numbers, origin revision , origin path , one-based source_line and exact content , including LF/CRLF or a missing final newline. Empty files have zero lines. commits indexes origin revision timestamps and bounded message previews. Revision v1 has no structured author/signature; this command does not invent either. JSON keys and identifiers remain English. Merges and renames # By default every ordered parent can supply unchanged lines. The first matching parent takes precedence, then the remaining lines are compared with later parents. Only lines unmatched in every parent originate at the merge itself. --first-parent restricts attribution to the first-parent chain. Matching uses the bounded Myers line-edit engine; repeated identical lines can admit several valid alignments. No whitespace normalization is applied. Unique exact-content renames are followed in either chunk representation, using the complete-file hash and size. Executable-mode changes do not create new text origins. Multiple possible removed sources or added destinations stop following; edited renames and copies are not inferred. --no-follow treats a newly named file as an addition. A binary parent cannot supply textual line origins. Budgets and errors # The default traversal permits 1000 distinct revisions (1..10000), 64 MiB aggregate decoded revision/manifest metadata and reconstructed file bytes (1..256 MiB), and the text engine budgets . These input/work budgets do not bound every allocation in the process. Reconstructed content is cached per manifest only for this query. Existing retained roots still protect the inspected history. text Copy syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728 syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608 status: complete exits 0. Binary input returns status: binary , reason non_text , and exit 1. An exhausted revision/input/file/line/work/trace/output budget returns status: limited , a reason and exit 1. Both non-complete reports contain empty lines and commits ; partial attribution is never presented as complete. Missing paths, corrupt/missing objects, invalid arguments and cancellation fail the command with no partial report. Progress and diagnostics use the selected interface language. syrnck native blame HEAD Source/Module.cpp syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728 syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608",
+      "headings": [
+        {
+          "id": "usage",
+          "text": "Attribute lines",
+          "level": 2
+        },
+        {
+          "id": "lineage",
+          "text": "Merges and renames",
+          "level": 2
+        },
+        {
+          "id": "limits",
+          "text": "Budgets and errors",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "code-2-L1",
+        "code-2-L2"
+      ],
+      "languages": [
+        "text"
+      ],
+      "code": "syrnck native blame HEAD Source/Module.cpp\nsyrnck --lang fr native blame tags/release Source/Module.cpp --progress-json\nsyrnck native blame HEAD Source/Module.cpp --first-parent --no-follow\nsyrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728\nsyrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608",
+      "assets": [],
+      "links": [
+        "#/en/text-diff"
+      ],
+      "kind": "guide"
+    },
+    {
       "id": "native-branches",
       "title": "Native branches and recoverable switching",
       "description": "Native branches and recoverable switching guide.",
@@ -6108,6 +6153,52 @@
       ],
       "kind": "guide",
       "revision": "cc615c91b82d"
+    },
+    {
+      "id": "native-blame",
+      "title": "Attribution native des lignes",
+      "description": "Blame vérifié à travers les merges et renommages exacts.",
+      "section": "Versionnage",
+      "order": 251,
+      "parent": "native-history",
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"usage\">Attribuer les lignes<a class=\"heading-anchor\" href=\"#/fr/native-blame/usage\" aria-label=\"Lien vers Attribuer les lignes\">#</a></h2><p><code>native blame REVISION PATH</code> attribue chaque ligne d’un fichier texte UTF-8 commité\nà la révision et au chemin qui l’ont introduite. Il reconstruit et vérifie les\noctets stockés sans lire le workspace, modifier les références ou importer des\nobjets. L’entrée C++ est <code>native_blame</code> dans <code>syrnck/history.hpp</code>.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>text</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-text\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">syrnck native blame HEAD Source/Module.cpp</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json</span><span class=\"code-line\" id=\"L3\" data-line=\"3\">syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow</span></code></pre></div><p>Le tableau JSON <code>lines</code> conserve numéro final, <code>revision</code> et <code>path</code> d’origine,\n<code>source_line</code> à partir de 1 et <code>content</code> exact, y compris LF/CRLF ou absence de\nsaut de ligne final. Un fichier vide a zéro ligne. <code>commits</code> indexe les dates des\nrévisions d’origine et des aperçus de messages bornés. Le format de révision v1\nn’a ni auteur structuré ni signature ; cette commande ne les invente pas.\nLes clés JSON et identifiants restent en anglais.</p>\n<h2 id=\"lineage\">Merges et renommages<a class=\"heading-anchor\" href=\"#/fr/native-blame/lineage\" aria-label=\"Lien vers Merges et renommages\">#</a></h2><p>Par défaut, tous les parents ordonnés peuvent fournir des lignes inchangées. Le\npremier parent correspondant prime, puis les lignes restantes sont comparées\naux parents suivants. Seules les lignes absentes de tous les parents proviennent\ndu merge lui-même. <code>--first-parent</code> limite le parcours à la chaîne des premiers\nparents. Le moteur Myers borné effectue l’alignement ; des lignes répétées peuvent\nadmettre plusieurs alignements valides. Les espaces ne sont pas normalisés.</p>\n<p>Les renommages à contenu exact et correspondance unique sont suivis même si le\ndécoupage change, d’après hash et taille du fichier complet. Le mode exécutable ne\nchange pas l’origine des lignes. Plusieurs sources supprimées ou destinations\najoutées possibles arrêtent ce suivi ; renommages modifiés et copies ne sont pas\ndéduits. <code>--no-follow</code> traite le nouveau nom comme un ajout. Un parent binaire ne\nfournit pas d’origines textuelles.</p>\n<h2 id=\"limits\">Budgets et erreurs<a class=\"heading-anchor\" href=\"#/fr/native-blame/limits\" aria-label=\"Lien vers Budgets et erreurs\">#</a></h2><p>Le parcours autorise par défaut 1000 révisions distinctes (1..10000), 64 Mio de\nmétadonnées décodées de révisions/manifestes et de fichiers reconstruits cumulés\n(1..256 Mio), ainsi que les <a href=\"#/fr/text-diff\">budgets du moteur textuel</a>. Ces budgets\nd’entrée/calcul ne bornent pas toutes les allocations du processus. Le contenu\nreconstruit est mis en cache par manifeste pour cette seule requête. Les racines\nde rétention normales doivent toujours protéger l’historique consulté.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>text</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-text\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\">syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728</span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\">syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608</span></code></pre></div><p><code>status: complete</code> termine avec le code 0. Une entrée binaire rend <code>status: binary</code>,\nraison <code>non_text</code>, code 1. Un budget de révisions/entrée/fichier/lignes/calcul/\ntrace/sortie épuisé rend <code>status: limited</code>, une raison et le code 1. Les rapports\nincomplets ont <code>lines</code> et <code>commits</code> vides ; une attribution partielle n’est jamais\nprésentée comme complète. Chemin absent, objets corrompus/manquants, arguments\ninvalides et annulation font échouer la commande sans rapport partiel. Progression\net diagnostics suivent la langue choisie pour l’interface.</p>\n",
+      "text": "Attribuer les lignes # native blame REVISION PATH attribue chaque ligne d’un fichier texte UTF-8 commité à la révision et au chemin qui l’ont introduite. Il reconstruit et vérifie les octets stockés sans lire le workspace, modifier les références ou importer des objets. L’entrée C++ est native_blame dans syrnck/history.hpp . text Copier syrnck native blame HEAD Source/Module.cpp syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow Le tableau JSON lines conserve numéro final, revision et path d’origine, source_line à partir de 1 et content exact, y compris LF/CRLF ou absence de saut de ligne final. Un fichier vide a zéro ligne. commits indexe les dates des révisions d’origine et des aperçus de messages bornés. Le format de révision v1 n’a ni auteur structuré ni signature ; cette commande ne les invente pas. Les clés JSON et identifiants restent en anglais. Merges et renommages # Par défaut, tous les parents ordonnés peuvent fournir des lignes inchangées. Le premier parent correspondant prime, puis les lignes restantes sont comparées aux parents suivants. Seules les lignes absentes de tous les parents proviennent du merge lui-même. --first-parent limite le parcours à la chaîne des premiers parents. Le moteur Myers borné effectue l’alignement ; des lignes répétées peuvent admettre plusieurs alignements valides. Les espaces ne sont pas normalisés. Les renommages à contenu exact et correspondance unique sont suivis même si le découpage change, d’après hash et taille du fichier complet. Le mode exécutable ne change pas l’origine des lignes. Plusieurs sources supprimées ou destinations ajoutées possibles arrêtent ce suivi ; renommages modifiés et copies ne sont pas déduits. --no-follow traite le nouveau nom comme un ajout. Un parent binaire ne fournit pas d’origines textuelles. Budgets et erreurs # Le parcours autorise par défaut 1000 révisions distinctes (1..10000), 64 Mio de métadonnées décodées de révisions/manifestes et de fichiers reconstruits cumulés (1..256 Mio), ainsi que les budgets du moteur textuel . Ces budgets d’entrée/calcul ne bornent pas toutes les allocations du processus. Le contenu reconstruit est mis en cache par manifeste pour cette seule requête. Les racines de rétention normales doivent toujours protéger l’historique consulté. text Copier syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728 syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608 status: complete termine avec le code 0. Une entrée binaire rend status: binary , raison non_text , code 1. Un budget de révisions/entrée/fichier/lignes/calcul/ trace/sortie épuisé rend status: limited , une raison et le code 1. Les rapports incomplets ont lines et commits vides ; une attribution partielle n’est jamais présentée comme complète. Chemin absent, objets corrompus/manquants, arguments invalides et annulation font échouer la commande sans rapport partiel. Progression et diagnostics suivent la langue choisie pour l’interface. syrnck native blame HEAD Source/Module.cpp syrnck --lang fr native blame tags/release Source/Module.cpp --progress-json syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow syrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728 syrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608",
+      "headings": [
+        {
+          "id": "usage",
+          "text": "Attribuer les lignes",
+          "level": 2
+        },
+        {
+          "id": "lineage",
+          "text": "Merges et renommages",
+          "level": 2
+        },
+        {
+          "id": "limits",
+          "text": "Budgets et erreurs",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "code-2-L1",
+        "code-2-L2"
+      ],
+      "languages": [
+        "text"
+      ],
+      "code": "syrnck native blame HEAD Source/Module.cpp\nsyrnck --lang fr native blame tags/release Source/Module.cpp --progress-json\nsyrnck native blame HEAD Source/Module.cpp --first-parent --no-follow\nsyrnck native blame HEAD Source/Module.cpp --max-revisions 2000 --max-input-bytes 134217728\nsyrnck native blame HEAD Source/Module.cpp --max-file-bytes 2097152 --max-lines 60000 --max-work 33554432 --max-output-bytes 8388608",
+      "assets": [],
+      "links": [
+        "#/fr/text-diff"
+      ],
+      "kind": "guide",
+      "revision": "c160dfa92fd8"
     },
     {
       "id": "native-branches",

@@ -12,6 +12,7 @@ Object format v1, physical store formats v1/v2/v3 and C ABI 1 are separate versi
 
 - C++20 block storage shared by Git assets and native revisions: complete manifests, reusable chunks, verified ranges, packs, backups and explicit retention.
 - Native history and recoverable workspace workflows, plus an authenticated block server and resumable one-shot transfers.
+- Native line attribution through merge parents and exact renames, with verified stored content and explicit input/work/output budgets.
 - A local CyDoc manual in English and French, contextual `syrnck help`, public-header API annotations and documentation packaging in build/install/CI.
 - English/French README editions with source installation, scoped dependency notices and these version notes.
 

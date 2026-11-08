@@ -12,6 +12,7 @@ Format d’objet v1, formats physiques v1/v2/v3 et ABI C 1 sont des numéros dis
 
 - Stockage de blocs C++20 partagé entre assets Git et révisions natives : manifestes complets, blocs réutilisables, plages vérifiées, packs, sauvegardes et rétention explicite.
 - Historique natif et opérations récupérables du workspace, serveur de blocs authentifié et transferts ponctuels reprenables.
+- Attribution native des lignes à travers les parents de merges et renommages exacts, contenu stocké vérifié et budgets explicites d’entrée/calcul/sortie.
 - Manuel CyDoc local anglais/français, aide contextuelle `syrnck help`, annotations API d’en-têtes publics et documentation intégrée au build, à l’installation et à la CI.
 - README anglais/français avec installation depuis les sources, périmètre des licences tierces et présentes notes de version.
 

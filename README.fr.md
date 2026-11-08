@@ -53,7 +53,7 @@ Pour un asset existant, `syrnck put Content/Map.uasset` conserve son manifeste e
 ## Fonctionnalités
 
 - **Blocs réutilisables** : FastCDC ou découpage fixe, IDs BLAKE3 typés, compression Zstandard, vérification du fichier complet et packs immuables indexés.
-- **Versionnage** : filtres/catalogues Git et migration LFS hors ligne ; index natif, différences textuelles, merge, rebase linéaire/interactif, cherry-pick, reset, stash, historique de fichiers et bisect, avec leurs limites documentées.
+- **Versionnage** : filtres/catalogues Git et migration LFS hors ligne ; index natif, différences textuelles, merge, rebase linéaire/interactif, cherry-pick, reset, stash, historique de fichiers, attribution des lignes et bisect, avec leurs limites documentées.
 - **Transferts en équipe** : serveur de blocs authentifié, identités/permissions configurées, verrous temporaires d’assets, transfert des objets absents, sessions reprenables et publication de références protégée par jetons de génération.
 - **Rétention et récupération** : historique archivé, sauvegardes/restaurations vérifiées, copies réparées et retrait explicite avant collecte.
 - **Aide locale** : manuel CyDoc complet anglais/français, recherche, liens de section stables et aide contextuelle du CLI.

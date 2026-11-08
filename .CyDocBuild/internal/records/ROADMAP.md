@@ -185,7 +185,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Consultation paginée des archives de reset/index/squash/amendement/checkout/détachement : filtre et curseur par référence, inspection sans écriture, aperçu UTF-8 borné et vérification optionnelle des versions conservées.
 - [x] Bisection native persistante sans checkout : graphe avec merges, suggestions équilibrées, bons/mauvais/skips, ambiguïtés explicites, état attendu et session distincte ; historique protégé et archivage atomique à la fin.
 - [x] Historique de fichier paginé par premier parent avec suivi des renommages exacts, suppressions, curseur révision/chemin, limites de parcours et raisons d’arrêt explicites.
-- [ ] Blame, suivi heuristique des renommages/tous les parents, recherche générale dans l’historique et bisection avec checkout/exécution automatique.
+- [x] Blame natif des textes UTF-8 : parents de merges ordonnés, renommages exacts uniques, octets vérifiés et fins de ligne conservées, budgets cumulés sans attribution partielle, API C++ et CLI bilingue.
+- [ ] Suivi heuristique des renommages/tous les parents dans le journal de fichiers, recherche générale dans l’historique et bisection avec checkout/exécution automatique.
 - [ ] Auteurs, dates, signatures et politiques de validation des commits.
 - [x] Push de branches autonomes et fetch de références de suivi : fermeture complète, baux/reprise, publication CAS, règles serveur d’ascendance et de chemins ; têtes de suivi précédentes archivées et workspace intact.
 - [ ] Synchronisation des tags/annotations/politiques, intégration automatique du pull, administration de la rétention des racines de fetch et tests d’arrêts forcés de cette publication.

@@ -53,7 +53,7 @@ For an existing asset, `syrnck put Content/Map.uasset` retains its manifest and 
 ## Features
 
 - **Reusable blocks:** FastCDC or fixed chunking, typed BLAKE3 IDs, Zstandard compression, complete-file verification and indexed immutable packs.
-- **Version control:** Git filters/catalogs and offline LFS migration; native staging, text differences, merge, linear/interactive rebase, cherry-pick, reset, stash, file history and bisect, within their documented limits.
+- **Version control:** Git filters/catalogs and offline LFS migration; native staging, text differences, merge, linear/interactive rebase, cherry-pick, reset, stash, file history, line attribution and bisect, within their documented limits.
 - **Team transfers:** authenticated block server, configured identities/permissions, expiring asset locks, missing-object transfers, resumable sessions and fenced reference publication.
 - **Retention and recovery:** archived history, verified backups/restores, repair copies and explicit retirement before collection.
 - **Local help:** a complete English/French CyDoc manual with search, stable section links and contextual CLI help.
