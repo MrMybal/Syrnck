@@ -1,5 +1,6 @@
 #pragma once
 #include "internal.hpp"
+#include "fixture_cleanup.hpp"
 #include <source_location>
 #include <sstream>
 namespace native_test {
@@ -48,7 +49,7 @@ struct Fixture {
   void install(const std::string &id) const {
     for (const auto &entry : fs::directory_iterator(project))
       if (entry.path().filename() != ".syrnck")
-        fs::remove_all(entry.path());
+        fixture_test::remove_owned_tree(entry.path(), project);
     const auto value = store.metadata(Kind::revision, id);
     for (const auto &[path, entry] : value["files"].items()) {
       const auto destination = project / path_from_utf8(path);
