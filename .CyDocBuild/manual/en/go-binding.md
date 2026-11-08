@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 2
+revision: 3
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -35,10 +35,68 @@ if err != nil { return err }
 stats, err := syrnck.CopyMissing(ctx, source, destination,
     syrnck.ObjectKey{Kind: "manifest", ID: id}, "sync/map-v1")
 if err != nil { return err }
-fmt.Printf("%d octets copiés\n", stats.Bytes)
+fmt.Printf("%d bytes copied\n", stats.Bytes)
 return destination.Restore(id, "Map-restored.uasset")
 ```
 
+
+## Prepare and publish compound state {#catalog-transactions}
+
+`PrepareBytes(data, chunking)` ingests at most 16 MiB from memory without a
+plaintext temporary file. `PrepareFile(path, chunking)` streams a file without
+that input limit. Both return **unpinned** manifests, unlike the legacy `Ingest`
+method. `Put(kind, data)` creates an unpinned typed object: chunks stay exact;
+C++ validates and canonically encodes manifest/revision JSON and computes its
+native BLAKE3 identity. Unknown fields, duplicate/escaped duplicate keys, invalid
+schemas, excessive nesting and oversized objects are rejected. Go callers do
+not need to reproduce the native canonical encoder or object hash algorithm.
+
+Keep the Store open through preparation and publication. GC after closing can
+collect unpinned objects. Retain all data dependencies in a complete native
+revision or explicit roots; an opaque chunk containing object IDs does not
+automatically retain the referenced objects. A native revision's files and
+parents trace their complete dependencies through GC and backups.
+
+`Refs()` returns an independent `map[string]ObjectKey`. `CompareRefs(updates)`
+atomically guards and replaces/removes a group of up to 65536 references, with
+at most 16 MiB of JSON. Every replacement closure and whole-file hash is verified
+before one reference-table publication. Duplicate names are errors. A nil
+`Expected` requires absence; a nil `Value` removes the reference. Nil/empty groups
+are no-ops. The result is meaningful only when `err == nil`:
+
+```go
+current, err := store.RefsContext(ctx)
+if err != nil { return err }
+var expected *syrnck.ObjectKey
+if old, ok := current["ffi/catalog/main"]; ok { expected = &old }
+
+// Application-defined JSON describes a complete native revision whose files
+// reference the prepared manifests, with any required prior revision parents.
+candidate, err := store.PutContext(ctx, "revision", revisionJSON)
+if err != nil { return err }
+applied, err := store.CompareRefsContext(ctx, []syrnck.RefUpdate{
+    {Name: "ffi/catalog/main", Expected: expected, Value: &candidate},
+})
+if err != nil { return err } // Reload and establish the outcome before retrying.
+if !applied { return errRefreshAndReplan }
+```
+
+A stale expectation changes no member and returns false without an error.
+Refresh/replan instead of changing the expected value of an old operation.
+An IO failure can occur after atomic publication: on error, the boolean is not
+evidence that publication did not happen. Reopen/read the table and compare the
+exact proposed group before retrying. The table is always wholly old or wholly
+new, never a mixture produced by this transaction. Persist intent where a
+higher-level workflow must reconcile an unknown outcome after a crash.
+
+All five operations have `Context` variants. Preparation and CAS propagate
+native cancellation through ingestion/verification and before publication;
+successful completion wins a late stop request. `PutContext` and `RefsContext`
+check cancellation before their bounded native call; encoding/compression/read
+already in flight can finish. Failed preparation may leave complete unreferenced
+objects, with no publication. Concurrent external file writers remain the
+application's responsibility. These primitives support durable protocol state;
+they do not implement Syncthing folder reconciliation or workspace checkout.
 
 ## Concurrency and retention {#concurrence-et-conservation}
 
@@ -70,7 +128,7 @@ Close Stores/sessions explicitly before removing their directories. The trusted 
 
 ## Syncthing {#syncthing}
 
-The optional [Syncthing module](doc:syncthing) adapts manifests to BEP fixed SHA-256 blocks using Syncthingv2.1.7. It supports differential reconstruction and resumable staging with scanner/BEP TLS1.3 connections. Syrnck objects and CDC retain their own format. Resident daemon, discovery, conflicts and complete synchronization between Syncthing executables remain future work.
+The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Durable folder reconciliation, discovery, a pairing UI and complete autonomous synchronization remain unfinished.
 
 ## Registered workspaces {#registered-workspaces}
 

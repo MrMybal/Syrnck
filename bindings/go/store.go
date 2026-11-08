@@ -132,14 +132,7 @@ func (s *Store) Ingest(path string, chunking Chunking) (id string, err error) {
 	if err != nil {
 		return "", err
 	}
-	var config *[4]uint32
-	if chunking != (Chunking{}) {
-		var algorithm uint32
-		if chunking.Fixed {
-			algorithm = 1
-		}
-		config = &[4]uint32{algorithm, chunking.Min, chunking.Average, chunking.Max}
-	}
+	config := chunkingConfig(chunking)
 	err = s.with(func() error { id, err = nativeIngest(s.handle, p, config); return err })
 	return
 }

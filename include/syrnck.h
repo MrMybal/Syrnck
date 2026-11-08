@@ -37,6 +37,17 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * Copy syrnck_last_error or use syrnck_error_copy on the same OS thread immediately after failure.
  * Diagnostics are canonical English and limited to 4095 bytes. Do not free the thread-local pointer.
  *
+ * ## Prepare and publish catalogs {#catalogs}
+ * syrnck_object_put creates an unpinned chunk or canonical native metadata object. C++ computes
+ * the typed ID and rejects duplicate JSON fields. syrnck_ingest_buffer_ex (<=16 MiB) and
+ * syrnck_prepare_file_ex (streamed) prepare unpinned manifests without temporary plaintext.
+ * Publish a root before releasing the Store to GC; legacy ingest_file_ex still pins under ffi/ID.
+ * syrnck_refs_json reads the typed reference table. syrnck_refs_compare_json compares a complete
+ * group of name/expected/value entries and verifies all replacement closures before one publication.
+ * A false comparison is not permission to retarget an old plan. On nonzero status the reset applied
+ * output proves nothing: an IO error can follow atomic publication, so reload and establish its outcome.
+ * See [catalog transactions](doc:go-binding#catalog-transactions) for ownership and an example.
+ *
  * ## Observation and cancellation {#operations}
  * Cancellation handles are one-shot and may be requested from another thread or progress callback.
  * The owning application must serialize destruction against users. A callback borrows its strings
@@ -64,6 +75,17 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * ne traverse l'interface. Copier syrnck_last_error ou appeler syrnck_error_copy immédiatement après
  * l'erreur, sur le même thread OS. Les messages anglais canoniques sont limités à 4095 octets.
  * Ne pas libérer le pointeur local au thread.
+ *
+ * ## Préparer et publier les catalogues {#catalogs}
+ * syrnck_object_put crée un bloc ou objet de métadonnées natif canonique sans référence. C++ calcule
+ * l'ID typé et refuse les champs JSON en double. syrnck_ingest_buffer_ex (<=16 Mio) et
+ * syrnck_prepare_file_ex (flux) préparent des manifests sans référence ni fichier temporaire en clair.
+ * Publier une racine avant de libérer le Store au GC ; ingest_file_ex garde son pin ancien ffi/ID.
+ * syrnck_refs_json lit la table typée. syrnck_refs_compare_json compare un groupe complet de lignes
+ * name/expected/value et vérifie les fermetures avant une seule publication. Une comparaison échouée
+ * n'autorise pas à recibler un ancien plan. Sur statut non nul, applied remis à zéro ne prouve rien :
+ * une erreur IO peut suivre la publication atomique ; relire et établir son résultat avant de réessayer.
+ * Voir les [transactions de catalogue](doc:go-binding#catalog-transactions) pour les règles et l'exemple.
  *
  * ## Observation et annulation {#operations}
  * Une source d'annulation est à usage unique ; la demande est autorisée depuis un autre thread ou
@@ -175,6 +197,42 @@ typedef struct SyrnckOperation {
   SyrnckProgressCallback progress; /* NULL = no callback */
   void *user;
 } SyrnckOperation;
+
+/* Create an unpinned object and return out_id[65]. Chunk bytes remain exact;
+ * manifest/revision JSON is schema-validated and canonically encoded by C++.
+ * Duplicate fields, excessive nesting and inputs/results above 16 MiB fail.
+ * This does not validate the object's dependency closure or publish a ref.
+ * out_id starts empty on failure; normal required-reader feature gates apply. */
+SYRNCK_API int syrnck_object_put(SyrnckStore *store, const char *kind, const unsigned char *data,
+                                  size_t length, char *out_id);
+/* Bounded (<=16 MiB) in-memory ingestion, without plaintext temporary files.
+ * NULL/0 accepts an empty file. Chunking matches ingest_file_ex; NULL is default.
+ * Returns an UNPINNED manifest, unlike legacy ingest_file_ex. Publish its typed
+ * root (or a containing revision) before releasing the Store to GC. Operation
+ * cancellation/progress follow workspace *_ex; complete unreferenced objects
+ * can remain after cancellation. No refs or plaintext temporary files are written. */
+SYRNCK_API int syrnck_ingest_buffer_ex(SyrnckStore *store, const unsigned char *data, size_t length,
+                                        const SyrnckChunking *chunking, const SyrnckOperation *operation,
+                                        char *out_id);
+/* The same unpinned preparation for a streamed file, without the 16 MiB input
+ * buffer bound. Concurrent source writers are the caller's responsibility. */
+SYRNCK_API int syrnck_prepare_file_ex(SyrnckStore *store, const char *path, const SyrnckChunking *chunking,
+                                       const SyrnckOperation *operation, char *out_id);
+/* Typed reference table JSON {name:{kind,id}}; length includes NUL. The standard
+ * (NULL,0) query / caller-owned capacity convention applies. No refs are changed. */
+SYRNCK_API int syrnck_refs_json(SyrnckStore *store, char *out, size_t capacity, size_t *length);
+/* Atomically compare and update one group. Input is an array of exactly
+ * {name,expected,value}; expected/value are {kind,id} or null. Null expected
+ * requires absence; null value removes. At most 65536 entries / 16 MiB input.
+ * Duplicate names/fields fail. Every replacement closure and whole-file hash is
+ * verified before one refs publication. Stale expectations return 0, applied=0;
+ * complete success returns 0, applied=1. Errors/cancellation reset applied=0;
+ * that output proves nothing on nonzero status. An IO error can follow atomic
+ * publication: reload the table and prove the outcome before retrying.
+ * Successful publication wins a late cancellation. Callers must refresh/replan
+ * after applied=0; never retarget an earlier plan to a newly observed value. */
+SYRNCK_API int syrnck_refs_compare_json(SyrnckStore *store, const unsigned char *data, size_t length,
+                                        const SyrnckOperation *operation, int *applied);
 
 /* Resident advisory workspace observation, ABI 1 additive symbols.
  * Open arms notifications before the first full observation. It holds no Store

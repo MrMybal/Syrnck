@@ -143,6 +143,27 @@ public:
     }
   }
 };
+class BufferInput : public std::streambuf {
+public:
+  explicit BufferInput(std::span<const std::uint8_t> data) {
+    if (!data.empty()) {
+      auto first = const_cast<char *>(reinterpret_cast<const char *>(data.data()));
+      setg(first, first, first + data.size());
+    }
+  }
+};
+syrnck::Chunking chunking_options(const SyrnckChunking *options) {
+  syrnck::Chunking result;
+  if (options) {
+    syrnck::require(options->algorithm <= 1, "unknown chunking algorithm");
+    result.fixed = options->algorithm == 1;
+    result.min = options->min; result.avg = options->average; result.max = options->max;
+    result.validate();
+    if (result.fixed)
+      syrnck::require(result.min == result.avg && result.avg == result.max, "fixed chunking sizes must match");
+  }
+  return result;
+}
 class DiscardOutput : public std::streambuf {
   std::streamsize xsputn(const char *, std::streamsize length) override {
     return length;
@@ -200,18 +221,7 @@ int syrnck_ingest_file_ex(SyrnckStore *p, const char *path, const SyrnckChunking
     auto &store = checked(p);
     std::ifstream in(syrnck::path_from_utf8(checked(path)), std::ios::binary);
     syrnck::require(in.is_open(), "cannot open source file");
-    syrnck::Chunking chunking;
-    if (options) {
-      syrnck::require(options->algorithm <= 1, "unknown chunking algorithm");
-      chunking.fixed = options->algorithm == 1;
-      chunking.min = options->min;
-      chunking.avg = options->average;
-      chunking.max = options->max;
-      chunking.validate();
-      if (chunking.fixed)
-        syrnck::require(chunking.min == chunking.avg && chunking.avg == chunking.max,
-                        "fixed chunking sizes must match");
-    }
+    const auto chunking = chunking_options(options);
     auto [id, stats] = store.ingest(in, chunking);
     (void)stats;
     store.set_ref("ffi/" + id, {syrnck::Kind::manifest, id});
@@ -307,6 +317,81 @@ int syrnck_object_import(SyrnckStore *p, const char *kind, const char *id, const
     syrnck::require(length <= syrnck::max_object_size, "object too large");
     syrnck::require(data != nullptr || length == 0, "null object data");
     *created = checked(p).import(key(kind, id), {data, length}) ? 1 : 0;
+  });
+}
+int syrnck_object_put(SyrnckStore *p, const char *kind, const unsigned char *data, std::size_t length, char *out) {
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null ID output"); out[0] = 0;
+    syrnck::require(length <= syrnck::max_object_size, "object too large");
+    syrnck::require(data != nullptr || length == 0, "null object data");
+    auto &store = checked(p);
+    const auto type = syrnck::parse_kind(checked(kind));
+    const std::span<const std::uint8_t> input{data, length};
+    const auto key = type == syrnck::Kind::chunk ? store.put(type, input).first
+        : store.put(type, syrnck::canonical_metadata(type, input)).first;
+    std::memcpy(out, key.id.c_str(), 65);
+  });
+}
+int syrnck_ingest_buffer_ex(SyrnckStore *p, const unsigned char *data, std::size_t length,
+                             const SyrnckChunking *chunking, const SyrnckOperation *operation, char *out) {
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null ID output"); out[0] = 0;
+    syrnck::require(length <= syrnck::max_object_size, "object too large");
+    syrnck::require(data != nullptr || length == 0, "null object data");
+    auto &store = checked(p);
+    const auto control = operation_options(operation);
+    const auto configuration = chunking_options(chunking);
+    BufferInput buffer({data, length}); std::istream input(&buffer);
+    auto options = store.settings().ingest_options();
+    options.stop = control.stop; options.progress = control.progress;
+    const auto id = store.ingest(input, configuration, options).first;
+    std::memcpy(out, id.c_str(), 65);
+  });
+}
+int syrnck_prepare_file_ex(SyrnckStore *p, const char *path, const SyrnckChunking *chunking,
+                            const SyrnckOperation *operation, char *out) {
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null ID output"); out[0] = 0;
+    auto &store = checked(p);
+    const auto control = operation_options(operation);
+    const auto configuration = chunking_options(chunking);
+    std::ifstream input(syrnck::path_from_utf8(checked(path)), std::ios::binary);
+    syrnck::require(input.is_open(), "cannot open source file");
+    auto options = store.settings().ingest_options();
+    options.stop = control.stop; options.progress = control.progress;
+    const auto id = store.ingest(input, configuration, options).first;
+    std::memcpy(out, id.c_str(), 65);
+  });
+}
+int syrnck_refs_json(SyrnckStore *p, char *out, std::size_t capacity, std::size_t *length) {
+  return boundary([&] {
+    syrnck::require(length != nullptr, "null size output"); *length = 0;
+    const auto value = syrnck::encode_refs(checked(p).refs()).dump();
+    copy_bytes({reinterpret_cast<const std::uint8_t *>(value.c_str()), value.size() + 1}, out, capacity, length);
+  });
+}
+int syrnck_refs_compare_json(SyrnckStore *p, const unsigned char *data, std::size_t length,
+                             const SyrnckOperation *operation, int *applied) {
+  return boundary([&] {
+    syrnck::require(applied != nullptr, "null reference transaction output"); *applied = 0;
+    syrnck::require(length <= syrnck::max_object_size, "object too large");
+    syrnck::require(data != nullptr || length == 0, "null object data");
+    auto &store = checked(p);
+    const auto control = operation_options(operation);
+    syrnck::throw_if_cancelled(control.stop);
+    const auto document = syrnck::parse_unique_json({data, length});
+    syrnck::require(document.is_array() && document.size() <= 65536, "invalid reference transaction document");
+    std::vector<syrnck::RefUpdate> updates; updates.reserve(document.size());
+    const auto typed = [](const syrnck::Json &value) -> std::optional<syrnck::ObjectKey> {
+      return value.is_null() ? std::optional<syrnck::ObjectKey>{} : syrnck::parse_key(value);
+    };
+    for (const auto &row : document) {
+      syrnck::throw_if_cancelled(control.stop);
+      syrnck::require(row.is_object() && row.size() == 3 && row.contains("name") && row["name"].is_string() &&
+          row.contains("expected") && row.contains("value"), "invalid reference transaction document");
+      updates.push_back({row["name"].get<std::string>(), typed(row["expected"]), typed(row["value"])});
+    }
+    *applied = store.compare_update_refs(updates, control) ? 1 : 0;
   });
 }
 int syrnck_closure_json(SyrnckStore *p, const char *kind, const char *id, char *out, std::size_t capacity,

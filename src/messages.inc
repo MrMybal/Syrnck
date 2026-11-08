@@ -1151,3 +1151,8 @@ SYRNCK_MESSAGE("published native history conflicts with a retained observation",
 SYRNCK_MESSAGE("native agent conflict copies require bidirectional merges", "Les copies de conflit de l’agent natif exigent les fusions bidirectionnelles")
 SYRNCK_MESSAGE("agent conflict copies require --bidirectional", "Les copies de conflit de l’agent exigent --bidirectional")
 SYRNCK_MESSAGE("invalid native conflict copy inputs", "Entrées de copie de conflit native invalides")
+SYRNCK_MESSAGE("duplicate JSON object field", "Champ JSON d’objet en double")
+SYRNCK_MESSAGE("invalid JSON document", "Document JSON invalide")
+SYRNCK_MESSAGE("metadata object kind required", "Un type d’objet de métadonnées est requis")
+SYRNCK_MESSAGE("null reference transaction output", "Sortie de transaction de références nulle")
+SYRNCK_MESSAGE("invalid reference transaction document", "Document de transaction de références invalide")

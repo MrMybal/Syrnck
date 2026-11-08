@@ -41,6 +41,10 @@ inline std::string text(std::span<const std::uint8_t> s) {
   return {reinterpret_cast<const char *>(s.data()), s.size()};
 }
 Json parse_json(std::span<const std::uint8_t>);
+// Bounded input decoder for editable SDK documents. Reject duplicate keys and
+// build ordered objects without a quadratic duplicate search on every insert.
+Json parse_unique_json(std::span<const std::uint8_t>);
+Bytes canonical_metadata(Kind, std::span<const std::uint8_t>);
 bool is_utf8_text(std::span<const std::uint8_t>, OperationOptions);
 Refs parse_refs(std::span<const std::uint8_t>, std::string_view invalid_document);
 Json encode_refs(const Refs &);

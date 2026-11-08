@@ -10,6 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- Additive C/Go SDK object creation, unpinned memory/stream preparation and atomic typed reference groups for compound state retained through GC and backups.
 - Native macOS NFD callback filenames normalize to canonical NFC for Syncthing indexes, block requests and reconstruction.
 - Authenticated Syncthing BEP device connections and reproducible live upstream daemon qualification, including differential transfers into encrypted engine storage.
 - Explicit deterministic conflict copies for native merges and bidirectional agents, preserving asset contents and signed recoverable candidates.

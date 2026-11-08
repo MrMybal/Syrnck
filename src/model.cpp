@@ -212,6 +212,57 @@ template <class Value> Value parse_document(std::span<const std::uint8_t> data) 
 Json parse_json(std::span<const std::uint8_t> data) {
   return parse_document<Json>(data);
 }
+namespace {
+class UniqueJson final : public nlohmann::json_sax<Json> {
+  struct Frame {
+    Json value;
+    std::string key;
+    std::set<std::string> keys;
+  };
+  std::vector<Frame> stack_;
+  Json root_;
+  void add(Json value) {
+    if (stack_.empty()) root_ = std::move(value);
+    else if (stack_.back().value.is_object()) {
+      auto &frame = stack_.back();
+      frame.value.get_ref<Json::object_t &>().emplace_back(std::move(frame.key), std::move(value));
+    } else stack_.back().value.push_back(std::move(value));
+  }
+  bool start(bool object) {
+    require(stack_.size() < 128, "JSON nesting exceeds 128 levels");
+    stack_.push_back({object ? Json::object() : Json::array(), {}, {}});
+    return true;
+  }
+  bool end() {
+    auto value = std::move(stack_.back().value);
+    stack_.pop_back(); add(std::move(value)); return true;
+  }
+public:
+  Json take() { return std::move(root_); }
+  bool null() override { add(nullptr); return true; }
+  bool boolean(bool value) override { add(value); return true; }
+  bool number_integer(number_integer_t value) override { add(value); return true; }
+  bool number_unsigned(number_unsigned_t value) override { add(value); return true; }
+  bool number_float(number_float_t value, const string_t &) override { add(value); return true; }
+  bool string(string_t &value) override { add(std::move(value)); return true; }
+  bool binary(binary_t &value) override { add(Json::binary(std::move(value))); return true; }
+  bool key(string_t &value) override {
+    require(stack_.back().keys.insert(value).second, "duplicate JSON object field");
+    stack_.back().key = std::move(value); return true;
+  }
+  bool start_object(std::size_t) override { return start(true); }
+  bool end_object() override { return end(); }
+  bool start_array(std::size_t) override { return start(false); }
+  bool end_array() override { return end(); }
+  bool parse_error(std::size_t, const std::string &, const nlohmann::detail::exception &) override { return false; }
+};
+}
+Json parse_unique_json(std::span<const std::uint8_t> data) {
+  require(data.size() <= max_object_size, "object too large");
+  UniqueJson decoder;
+  require(Json::sax_parse(data.begin(), data.end(), &decoder), "invalid JSON document");
+  return decoder.take();
+}
 Refs parse_refs(std::span<const std::uint8_t> data, std::string_view invalid_document) {
   require(data.size() <= max_object_size, "reference document exceeds 16 MiB");
   // Reference tables do not use canonical field order. An ordered_json object
@@ -369,8 +420,10 @@ static Json canonical(Kind kind, const Json &j) {
     for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
       require(!folded.contains(path.substr(0, n)), "file/directory path collision");
   Json files = Json::object();
+  auto &entries = files.get_ref<Json::object_t &>();
+  entries.reserve(sorted.size());
   for (auto &[name, entry] : sorted)
-    files[name] = entry;
+    entries.emplace_back(name, std::move(entry));
   if (version == 2) {
     const auto author = canonical_native_author(j.at("author"), true), committer = canonical_native_author(j.at("committer"), false);
     require(committer["timestamp"] == j.at("timestamp"), "native committer timestamp differs from revision");
@@ -385,6 +438,12 @@ static Json canonical(Kind kind, const Json &j) {
               {"message", j.at("message").get<std::string>()},
               {"timestamp", number(j.at("timestamp"))},
               {"files", files}};
+}
+Bytes canonical_metadata(Kind kind, std::span<const std::uint8_t> data) {
+  require(kind == Kind::manifest || kind == Kind::revision, "metadata object kind required");
+  const auto value = canonical(kind, parse_unique_json(data)).dump();
+  require(value.size() <= max_object_size, "object exceeds size limit");
+  return Bytes(value.begin(), value.end());
 }
 void validate_object(Kind kind, std::span<const std::uint8_t> data) {
   require(data.size() <= max_object_size, "object exceeds size limit");

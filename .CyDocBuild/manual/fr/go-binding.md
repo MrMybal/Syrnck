@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -38,6 +38,64 @@ return destination.Restore(id, "Map-restored.uasset")
 ```
 
 `Create` exige un dossier neuf ou vide ; il ne signifie pas « ouvrir ou créer ». `Options.Key` contient zéro ou 32 octets pour le chiffrement au repos. L'appel ne conserve pas le tableau Go. L'application reste responsable du cycle de vie de sa clé et de l'effacement de ses propres copies.
+
+## Préparer et publier un état composé {#catalog-transactions}
+
+`PrepareBytes(data, chunking)` ingère au plus 16 Mio depuis la mémoire sans
+fichier temporaire en clair. `PrepareFile(path, chunking)` lit un flux sans cette
+limite d’entrée. Les deux rendent des manifests **sans référence**, contrairement
+à l’ancien `Ingest`. `Put(kind, data)` crée un objet typé sans référence : octets
+de blocs exacts ; C++ valide et encode canoniquement les JSON de manifest/révision
+et calcule leur ID BLAKE3 natif. Champs inconnus, clés dupliquées même échappées,
+schéma invalide, profondeur et tailles excessives sont refusés. Aucun encodeur
+canonique ni algorithme de hash d’objet natif n’est à réimplémenter en Go.
+
+Garder le Store ouvert pendant préparation et publication. Après fermeture,
+le GC peut supprimer les objets sans référence. Retenir les dépendances dans une
+révision native complète ou des racines explicites : un bloc opaque contenant
+des IDs ne retient pas automatiquement ces objets. Les fichiers et parents d’une
+révision native tracent leurs dépendances complètes pour GC et sauvegardes.
+
+`Refs()` rend une `map[string]ObjectKey` indépendante. `CompareRefs(updates)`
+protège et remplace/supprime atomiquement au plus 65536 références et 16 Mio de
+JSON. Chaque fermeture et hash de fichier complet sont vérifiés avant l’unique
+publication de la table. Les noms en double sont des erreurs. `Expected` nul
+exige l’absence ; `Value` nul supprime. Un groupe nil/vide ne change rien.
+Le booléen n’a de sens que si `err == nil` :
+
+```go
+current, err := store.RefsContext(ctx)
+if err != nil { return err }
+var expected *syrnck.ObjectKey
+if old, ok := current["ffi/catalog/main"]; ok { expected = &old }
+
+// JSON applicatif d’une révision native complète référençant les manifests
+// préparés et les éventuelles révisions parentes à conserver.
+candidate, err := store.PutContext(ctx, "revision", revisionJSON)
+if err != nil { return err }
+applied, err := store.CompareRefsContext(ctx, []syrnck.RefUpdate{
+    {Name: "ffi/catalog/main", Expected: expected, Value: &candidate},
+})
+if err != nil { return err } // Relire et établir le résultat avant un nouvel essai.
+if !applied { return errRefreshAndReplan }
+```
+
+Une condition périmée ne change aucun membre et rend false sans erreur.
+Relire/replanifier au lieu de changer la valeur attendue d’une ancienne opération.
+Une erreur IO peut survenir après publication atomique : sur erreur, le booléen
+ne prouve pas l’absence de publication. Rouvrir/relire la table et comparer le
+groupe exact proposé avant de réessayer. La table est entièrement ancienne ou
+nouvelle, sans mélange produit par cette transaction. Un parcours de haut niveau
+doit conserver son intention s’il doit réconcilier un résultat inconnu après crash.
+
+Les cinq opérations possèdent une variante `Context`. Préparation et CAS propagent
+l’annulation native pendant ingestion/vérification et avant publication ; un
+succès terminé l’emporte sur une demande tardive. `PutContext` et `RefsContext`
+contrôlent l’annulation avant leur appel natif borné ; encodage/compression/lecture
+déjà engagés peuvent finir. Une préparation échouée peut laisser des objets
+complets sans référence, sans publication. Les écrivains externes concurrents
+restent à gérer par l’application. Ces primitives permettent un état protocolaire
+persistant ; elles n’implémentent pas la réconciliation Syncthing ni le checkout.
 
 ## Concurrence et conservation {#concurrence-et-conservation}
 
@@ -82,9 +140,9 @@ Fermer explicitement les Stores et sessions avant de retirer leurs répertoires.
 
 ## Syncthing {#syncthing}
 
-Le module optionnel [Syncthing](doc:syncthing) adapte maintenant les manifestes aux blocs fixes SHA-256 de BEP et aux requêtes de la bibliothèque Syncthing v2.1.7. Il prend en charge la reconstruction différentielle et un staging reprenable, avec le scanner et les connexions BEP TLS 1.3. Les objets et le CDC Syrnck gardent leur format propre. Le daemon résident, la découverte, les conflits et la synchronisation complète entre exécutables Syncthing restent à réaliser.
+Le module optionnel [Syncthing](doc:syncthing) adapte les manifests aux blocs fixes SHA-256 BEP via la bibliothèque Syncthing v2.1.7 figée. Connexions d’appareils authentifiées et transferts différentiels sont vérifiés contre son daemon réel. Objets et CDC Syrnck gardent leur format. Réconciliation persistante de dossiers, découverte, interface d’appairage et synchronisation entièrement autonome restent à terminer.
 
-## Registered workspaces {#registered-workspaces}
+## Workspaces enregistrés {#registered-workspaces}
 
 Ouvrir avec `WorkspaceOptions{Name: "edit"}` puis sélectionner
 `store.UseWorkspace("edit")` avant chaque statut. Un nom vide utilise le principal.
