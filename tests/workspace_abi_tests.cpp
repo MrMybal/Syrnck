@@ -213,6 +213,38 @@ void detached_selection(const fs::path &project) {
   require(explicit_main["base"] == main && explicit_main["clean"] == false,
           "workspace ABI explicit branch override ignored");
 }
+void linked_selection(const fs::path &base) {
+  const auto primary = base / "primary", linked = base / "linked";
+  std::string revision;
+  {
+    Fixture fixture(primary);
+    revision = fixture.revision(Json{{"asset", fixture.file("linked bytes")}});
+    fixture.install(revision);
+    fixture.store.register_native_workspace(primary, "linked", linked);
+    fixture.store.use_native_workspace("linked");
+    fixture.store.detach_checkout(linked, revision);
+  }
+  SyrnckWorkspace *workspace = nullptr;
+  const auto directory = utf8(linked), storage = utf8(primary / ".syrnck");
+  const SyrnckWorkspaceOptions options{1, 4096, 65536};
+  success(syrnck_workspace_open_registered_ex(directory.c_str(), storage.c_str(), "linked", &options, nullptr, &workspace));
+  struct Close { SyrnckWorkspace *value; ~Close() { syrnck_workspace_close(value); } } close{workspace};
+  OpenStore store(primary, {});
+  char *value = nullptr; std::size_t length = 1;
+  require(syrnck_workspace_status_json(workspace, store.value, nullptr, 0, &value, &length) == 1 && !value && !length,
+          "linked observation accepted a primary Store context");
+  success(syrnck_store_use_workspace(store.value, "linked"));
+  const auto selected = output([&](char **text, std::size_t *size) {
+    return syrnck_workspace_status_json(workspace, store.value, nullptr, 2, text, size);
+  });
+  require(selected["clean"] == true && selected["unstaged"]["base"] == revision,
+          "linked workspace ABI did not follow its private HEAD/index");
+  require(syrnck_store_use_workspace(store.value, "missing") == 1, "unknown ABI context selected");
+  const auto preserved = output([&](char **text, std::size_t *size) {
+    return syrnck_workspace_status_json(workspace, store.value, nullptr, 0, text, size);
+  });
+  require(preserved["clean"] == true && preserved["base"] == revision, "failed context selection changed the Store");
+}
 } // namespace
 int main() {
   Temporary temporary;
@@ -222,6 +254,7 @@ int main() {
         scenario(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(polling)), encrypted, polling);
     coalesced_overflow(temporary.path / "overflow");
     detached_selection(temporary.path / "detached");
+    linked_selection(temporary.path / "linked");
     std::cout << "Workspace ABI retained hints, targeted/polling status, ownership and recovery passed\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

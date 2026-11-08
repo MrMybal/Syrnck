@@ -1,4 +1,5 @@
 #include "native_branch_archive.hpp"
+#include "native_context.hpp"
 namespace syrnck {
 namespace {
 NativeBranchArchive archive_for(const NativeBranchState &branch) {
@@ -28,6 +29,9 @@ DeletePlan prepare_delete(const Store &store, const Refs &refs, const NativeBran
     blockers.push_back(Json{{"reason", "pending_checkout"}});
   if (current)
     blockers.push_back(Json{{"reason", "selected_branch"}});
+  const auto owner = native_branch_workspace_owner(store, branch.name);
+  if (owner && *owner != store.native_workspace_name())
+    blockers.push_back(Json{{"reason", "branch_in_other_workspace"}, {"workspace", *owner}});
   if (branch.index && !archive_index)
     blockers.push_back(Json{{"reason", "staging_present"}});
   if (state < 0)
@@ -110,11 +114,11 @@ Json Store::delete_native_branch(std::string_view name, std::string_view expecte
   throw_if_cancelled(options.stop);
   const auto record = put(Kind::chunk, bytes(plan.archive.json().dump())).first;
   require(record.id == plan.archive.id, "invalid native branch archive");
-  const auto head = native_branch_lookup(all, "workspace/HEAD");
+  const auto head = native_branch_lookup(all, this->native_workspace_reference("workspace/HEAD"));
   auto updates = plan.archive.retention_updates(all);
   updates.push_back({branch.ref, branch.target, {}});
   updates.push_back({branch.index_ref, branch.index, {}});
-  updates.push_back({"workspace/HEAD", head, head});
+  updates.push_back({this->native_workspace_reference("workspace/HEAD"), head, head});
   require(compare_update_refs(updates, options), "native branch references changed; retry operation");
   plan.report["state"] = "deleted";
   return plan.report;

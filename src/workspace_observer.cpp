@@ -68,7 +68,7 @@ struct WorkspaceObservation::Impl {
           throw_if_cancelled(options.stop);
           if (covered(scopes, target)) continue;
           std::map<std::string, NativeFile> local;
-          const auto scope = visit_native_scope(directory, storage, target, [&](const NativeFile &file) {
+          const auto scope = visit_native_scope(directory, store, target, [&](const NativeFile &file) {
             local.emplace(file.relative, file);
           }, options);
           // Resolution can broaden to an absent/ignored/file ancestor. Drop

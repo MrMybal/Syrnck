@@ -11,14 +11,14 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
     text_limits->validate();
   require(kind == NativeReplayKind::cherry_pick || kind == NativeReplayKind::revert,
           "invalid native replay kind");
-  validate_ref(native_revision_reference(std::string(branch)));
+  validate_ref(native_revision_reference(store, std::string(branch)));
   validate_id(source_id);
   const auto selected_head = store.native_head();
   require(selected_head["directory"].is_null() ||
               utf8(fs::canonical(directory)) == selected_head["directory"].get<std::string>(),
           "native HEAD belongs to another workspace");
   const auto refs = store.refs();
-  const auto head = refs.find(native_revision_reference(std::string(branch)));
+  const auto head = refs.find(native_revision_reference(store, std::string(branch)));
   require(head != refs.end() && head->second.kind == Kind::revision, "unknown native branch");
   const auto revision = store.metadata(Kind::revision, source_id);
   const auto &parents = revision["parents"];

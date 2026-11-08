@@ -6,6 +6,7 @@
 #include "object_marks.hpp"
 #include "watch_journal.hpp"
 #include "native_workspace.hpp"
+#include "native_context.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -17,6 +18,7 @@
 namespace syrnck {
 struct Store::Impl {
   fs::path root;
+  std::string native_workspace;
   std::optional<Key> key;
   FileLock lock;
   PackStorage packs;
@@ -175,7 +177,7 @@ static Bytes encode_object(const ObjectKey &key, std::span<const std::uint8_t> d
 }
 namespace {
 std::optional<Bytes> watch_journal_bytes(const Store &store) {
-  const auto path = store.root() / "watch-journal";
+  const auto path = native_workspace_local_path(store, "watch-journal");
   const auto status = fs::symlink_status(path);
   if (!fs::exists(status)) return {};
   require(fs::is_regular_file(status) && !native_link_like(path, status), "invalid workspace watch journal file");
@@ -208,17 +210,17 @@ void Store::write_workspace_watch_journal(const Json &value, OperationOptions op
   document.insert(document.end(), envelope.begin(), envelope.end());
   report_progress(options, {ProgressPhase::publishing, "watch-journal", 0, 1});
   require(watch_journal_bytes(*this) == original, "workspace watch journal changed; retry operation");
-  atomic_write(root() / "watch-journal", document, true, options.stop);
+  atomic_write(native_workspace_local_path(*this, "watch-journal"), document, true, options.stop);
 }
 Json Store::clear_workspace_watch_journal(OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  auto lock = lock_watch_journal(root());
+  auto lock = lock_watch_journal(native_workspace_local_path(*this, "watch.lock").parent_path());
   const auto original = watch_journal_bytes(*this);
   report_progress(options, {ProgressPhase::publishing, "watch-journal", 0, 1});
   require(watch_journal_bytes(*this) == original, "workspace watch journal changed; retry operation");
   if (original) {
-    require(fs::remove(root() / "watch-journal"), "cannot clear workspace watch journal");
-    sync_directory(root());
+    require(fs::remove(native_workspace_local_path(*this, "watch-journal")), "cannot clear workspace watch journal");
+    sync_directory(native_workspace_local_path(*this, "watch-journal").parent_path());
   }
   return Json{{"version", 1}, {"state", original ? "cleared" : "absent"}};
 }
@@ -326,7 +328,7 @@ std::pair<std::string, IngestStats> Store::ingest(std::istream &source, Chunking
   IngestStats stats;
   auto notify = [&](ProgressPhase phase, bool complete = false, std::size_t buffered = 0) {
     if (options.progress)
-      options.progress({phase, {}, stats.file_bytes, {}, complete, buffered});
+      invoke_progress(options.progress, {phase, {}, stats.file_bytes, {}, complete, buffered});
     check_cancelled();
   };
   notify(ProgressPhase::ingesting);
@@ -480,7 +482,7 @@ void Store::reconstruct(std::string_view id, std::ostream &output, OperationOpti
   auto total = manifest.at("size").get<std::uint64_t>();
   auto notify = [&](std::uint64_t bytes, bool complete = false) {
     if (options.progress)
-      options.progress({ProgressPhase::reconstructing, {}, bytes, total, complete});
+      invoke_progress(options.progress, {ProgressPhase::reconstructing, {}, bytes, total, complete});
     throw_if_cancelled(options.stop);
   };
   notify(0);
@@ -546,7 +548,17 @@ void Store::restore_file_range(std::string_view id, const fs::path &dest, std::u
 Refs Store::refs() const {
   return parse_refs(read_bytes(root() / "refs.json", max_object_size), "invalid refs document");
 }
+std::string_view Store::native_workspace_name() const { return impl_->native_workspace; }
+void Store::use_native_workspace(std::string_view name) {
+  require(progress_callback_depth == 0, "cannot select native workspace from a progress callback");
+  if (!name.empty()) (void)read_native_workspace_context(*this, name);
+  impl_->native_workspace = name;
+}
+std::string Store::native_workspace_reference(std::string_view local) const {
+  return native_context_reference(native_workspace_name(), local);
+}
 void Store::write_refs(const Refs &refs, std::stop_token stop) const {
+  validate_native_branch_reservations(*this, this->refs(), refs);
   // Reference names cannot contain JSON escapes. Reject provably oversized
   // documents early; check the exact encoded size again before publication.
   std::size_t lower_bound = 2;

@@ -18,7 +18,7 @@ struct NativeBranchState {
   std::optional<std::string> base;
   Json revision, prepared;
   NativeBranchState(const Store &store, const Refs &refs, std::string_view branch, OperationOptions options)
-      : name(branch), ref("heads/" + name), index_ref("staging/" + name) {
+      : name(branch), ref("heads/" + name), index_ref(native_staging_reference(store, name)) {
     throw_if_cancelled(options.stop);
     native_branch_name(name);
     const auto found = native_branch_lookup(refs, ref);

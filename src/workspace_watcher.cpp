@@ -1,5 +1,6 @@
 #include <syrnck/watcher.hpp>
 #include "native_workspace.hpp"
+#include "working_file_stamp.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
@@ -99,6 +100,7 @@ std::string root_identity(const fs::path &root) {
 struct WorkspaceWatcher::Impl {
   fs::path root, store;
   std::string store_relative, identity, mode = "polling";
+  std::optional<std::string> external_metadata;
 #ifdef _WIN32
   std::string store_fold;
 #endif
@@ -117,17 +119,49 @@ struct WorkspaceWatcher::Impl {
   Impl(const fs::path &directory, const fs::path &storage, WorkspaceWatchOptions value)
       : root(fs::canonical(directory)), store(fs::canonical(storage)), options(value), anchor(root)
 #if defined(__linux__) && !defined(_WIN32)
-      , directories(root, store, value.max_directories)
+      , directories(root, store, value.max_directories, value.external_store)
 #endif
   {
     require(options.max_paths >= 1 && options.max_paths <= 65536 && options.max_directories >= 1 &&
                 options.max_directories <= 65536, "invalid workspace watcher limits");
-    require(root != store && below(store, root), "native store must be below watched workspace");
-    store_relative = utf8(store.lexically_relative(root));
+    require(root != store && !below(root, store) && (below(store, root) || options.external_store),
+            "native store must be below watched workspace");
+    store_relative = below(store, root) ? utf8(store.lexically_relative(root)) : std::string{};
 #ifdef _WIN32
     store_fold = portable_fold(store_relative);
 #endif
     identity = anchor.value();
+    if (store_relative.empty()) {
+      external_metadata = metadata_stamp();
+      if (!external_metadata) options.polling = true;
+    }
+  }
+  std::optional<std::string> metadata_stamp() const {
+    try {
+      std::string result;
+      for (const auto *name : {"refs.json", "config.json"}) {
+        const auto path = store / name;
+        const auto status = fs::symlink_status(path);
+        if (!fs::is_regular_file(status) || native_link_like(path, status)) return {};
+        const NativeFile file{path, name, fs::file_size(path), fs::last_write_time(path), false};
+        const auto stamp = working_file_stamp(file);
+        if (!stamp) return {};
+        result += stamp->id + '\n';
+      }
+      return result;
+    } catch (const Error &) { return {}; }
+      catch (const fs::filesystem_error &) { return {}; }
+  }
+  bool metadata_changed() {
+    if (!external_metadata) return false;
+    const auto next = metadata_stamp();
+    if (!next) {
+      external_metadata.reset(); close_native(); mode = "polling";
+      return true;
+    }
+    if (*next == *external_metadata) return false;
+    external_metadata = next;
+    return true;
   }
   ~Impl() { close_native(); }
   void close_native() noexcept {
@@ -282,6 +316,7 @@ struct WorkspaceWatcher::Impl {
 #endif
     for (;;) {
       throw_if_cancelled(stop);
+      if (metadata_changed()) { batch.full_scan = true; return batch; }
       const auto left = std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
       const auto tick = static_cast<unsigned>(std::clamp<std::int64_t>(left.count(), 0, 50));
       if (mode == "polling") {

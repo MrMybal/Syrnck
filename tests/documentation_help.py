@@ -38,6 +38,9 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "tags", "--print-url").stdout.strip().endswith("#/fr/native-tags"))
         self.assertTrue(self.run_cli("help", "native", "switch", "--detach", "--print-url").stdout.strip().endswith("#/en/native-detached"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "switch-plan", "--detach", "--print-url").stdout.strip().endswith("#/fr/native-detached/recovery"))
+        for command in ("workspaces", "workspace-add"):
+            self.assertTrue(self.run_cli("help", "native", command, "--print-url").stdout.strip().endswith("#/en/native-workspaces"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "workspace-restore", "--print-url").stdout.strip().endswith("#/fr/native-workspaces/restore"))
         for topic in ["docs/PACKS.md#mémoire-du-gc", "docs\\PACKS.md#m%C3%A9moire-du-gc"]:
             self.assertTrue(self.run_cli("help", topic, "--print-url").stdout.strip().endswith("#/en/packs/memoire-du-gc"))
         self.assertTrue(self.run_cli("help", "native-tags", "--section", "native-revision-selectors", "--print-url").stdout.strip().endswith("/native-revision-selectors"))

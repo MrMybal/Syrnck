@@ -229,7 +229,7 @@ std::string migrate_tree(const Store &store, const fs::path &directory, const Sn
           contextual.path = asset.path;
           if (contextual.phase == ProgressPhase::ingesting)
             contextual.total_bytes = asset.pointer.size;
-          options.progress(contextual);
+          invoke_progress(options.progress, contextual);
         }
       };
       auto [id, stats] = store.ingest(input, {}, file_options);

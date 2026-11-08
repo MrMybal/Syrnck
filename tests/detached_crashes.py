@@ -13,6 +13,9 @@ import unittest
 from crash_shard import CrashShard
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
+LINKED = "--linked" in sys.argv
+if LINKED:
+    sys.argv.remove("--linked")
 SHARD = CrashShard.from_argv()
 ENV = {key: value for key, value in os.environ.items() if key.upper() not in
        ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
@@ -35,11 +38,16 @@ class DetachedCrashes(unittest.TestCase):
             parent = Path(temporary)
             count = 0
             verified = 0
+            actions = [(action, operation) for action in ("enter", "leave", "move")
+                       for operation in ("apply", "abort")]
+            if LINKED:
+                actions.append(("register", "apply"))
             scenarios = [(encrypted, action, operation) for encrypted in (False, True)
-                         for action in ("enter", "leave", "move") for operation in ("apply", "abort")]
+                         for action, operation in actions]
             for encrypted, action, operation in SHARD.select(scenarios):
                 seed = parent / f"seed-{encrypted}-{action}-{operation}"
-                self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation)
+                self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation,
+                             *(["linked"] if LINKED else []))
                 trace = parent / f"trace-{encrypted}-{action}-{operation}"
                 shutil.copytree(seed, trace)
                 self.command(READER, "bind", trace)
@@ -49,7 +57,8 @@ class DetachedCrashes(unittest.TestCase):
                                     for e in events), events)
                 coordinates = {(e["phase"], e["kind"], e["occurrence"]) for e in events}
                 self.assertEqual(len(coordinates), len(events))
-                self.assertTrue(any(e["phase"] == "checkout.cleaned" for e in events))
+                if action != "register":
+                    self.assertTrue(any(e["phase"] == "checkout.cleaned" for e in events))
                 for event in events:
                     with self.subTest(encrypted=encrypted, action=action, operation=operation, event=event):
                         root = parent / f"case-{count}"

@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -14,7 +14,7 @@ SyrnckWorkspace dans l’en-tête C et Workspace dans le binding Go exposent le 
 
 ## Durée de vie et verrouillage {#lifetime-and-locking}
 
-Créer d’abord Store et workspace ; le Store est strictement sous la racine. Les chemins sont résolus à l’ouverture. Ouvrir la session avant son premier statut : les notifications sont déjà armées au retour. Elle garde identité de racine, watcher et inventaire mémoire, sans handle Store, clé ou verrou Store.
+Créer d’abord Store et workspace. Pour le contexte principal, le Store est strictement sous la racine. Une session liée utilise un Store disjoint et exige son dossier enregistré exact. Les chemins sont résolus à l’ouverture. Ouvrir la session avant son premier statut : les notifications sont déjà armées au retour. Elle garde identité de racine, watcher et inventaire mémoire, sans handle Store, clé ou verrou Store.
 
 Ouvrir le Store seulement pour le statut, puis le fermer avant consommation du résultat/attente. Après changement, le rouvrir pour une nouvelle requête. Premier statut, invalidation explicite et récupération relisent tous les octets choisis ; indices natifs ordinaires ciblent des préfixes fichier/sous-arbre, tandis que le polling énumère avec le cache de hashes jetable. Planifier des audits complets indépendants, par exemple toutes les cinq minutes via Invalidate : le silence des notifications ne prouve pas l’absence de changements. Fermer explicitement la session à l’arrêt.
 
@@ -108,3 +108,20 @@ _ = changes
 ## Portée {#scope-and-validation}
 
 C’est une observation consultative, pas un snapshot verrouillé ou un agent de transfert. Elle ne conserve pas les versions intermédiaires, ne maintient pas d’historique rejouable et n’expose pas le journal de checkpoint du CLI. Un redémarrage recrée l’inventaire et refait un scan complet. Cycle de vie de service, causalité, tombstones, résolution de conflits et interopérabilité complète avec le daemon Syncthing restent à développer.
+
+## Contextes enregistrés {#registered-contexts}
+
+Utiliser `syrnck_workspace_open_registered_ex(directory, store_path, name,
+options, cancellation, out)` pour un workspace lié enregistré. Avant chaque
+statut, sélectionner le même contexte sur le Store ouvert par l’appelant via
+`syrnck_store_use_workspace(store, name)`. NULL ou vide sélectionne le principal.
+Un nom inconnu échoue sans changer la sélection ; une session/contexte différent
+échoue sans sortie périmée. Ne pas changer de sélection dans un callback de
+progression. Symboles additifs exigeant une bibliothèque ABI 1 reconstruite adaptée.
+
+Go utilise `WorkspaceOptions{Name: "edit"}` à l’ouverture puis
+`store.UseWorkspace("edit")` avant statut. La session ne garde ni Store, clé ou
+verrou. Les notifications liées surveillent prudemment refs/config externes ;
+les audits complets périodiques restent nécessaires. Enregistrement et
+restauration portable sont exposés par le [CLI et C++](doc:native-workspaces),
+pas par des appels d’administration C/Go.

@@ -153,7 +153,7 @@ Json Store::status_directory(const fs::path &directory, const std::optional<std:
   Bytes buffer(1024 * 1024);
   std::uint64_t hashed_bytes = 0;
   visit_native_files(
-      directory, root(),
+      directory, *this,
       [&](const NativeFile &file) {
         auto content = hash_native_file(file, buffer, options);
         require(content.size <= UINT64_MAX - hashed_bytes, "native comparison byte count overflow");

@@ -19,6 +19,9 @@ env = os.environ.copy()
 env["GOTOOLCHAIN"] = "local"
 env["GOCACHE"] = str(root / ".tools/go-cache")
 env["GOPATH"] = str(root / ".tools/go-path")
+test_cli = library.parent / ("syrnck.exe" if os.name == "nt" else "syrnck")
+if test_cli.is_file():
+    env["SYRNCK_TEST_CLI"] = str(test_cli)
 if os.name == "nt":
     env["SYRNCK_LIBRARY"] = str(library)
     env["CGO_ENABLED"] = "0"

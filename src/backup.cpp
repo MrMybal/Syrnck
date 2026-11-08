@@ -26,12 +26,30 @@ void quiescent(const Store &store, OperationOptions options) {
 Refs portable_refs(const Refs &refs, Json &excluded) {
   auto result = refs;
   for (auto it = result.begin(); it != result.end();)
-    if (it->first == "workspace/HEAD" || it->first.starts_with("checkouts/receipts/")) {
+    if (native_workspace_machine_reference(it->first)) {
       excluded.push_back(it->first);
       it = result.erase(it);
     } else
       ++it;
   return result;
+}
+void add_portable_workspaces(const Store &source, Refs &refs, std::map<ObjectKey, Bytes> &generated,
+                             OperationOptions options) {
+  // Preserve portable selection intent and an exact revision root, never an
+  // active machine binding. Source bytes/references remain read-only.
+  const auto workspaces = source.native_workspaces(options);
+  for (const auto &workspace : workspaces["workspaces"]) {
+    const auto name = workspace["name"].get<std::string>();
+    if (name == "primary") continue;
+    require(workspace["revision"].is_string(), "native workspace has no retained revision");
+    const auto revision = workspace["revision"].get<std::string>();
+    const auto encoded = Json{{"version", 1}, {"type", "native-workspace-snapshot"},
+        {"name", name}, {"branch", workspace["branch"]}, {"revision", revision}}.dump();
+    const ObjectKey selection{Kind::chunk, object_id(Kind::chunk, bytes(encoded))};
+    generated.emplace(selection, Bytes(encoded.begin(), encoded.end()));
+    refs[native_context_reference(name, "portable")] = selection;
+    refs[native_context_reference(name, "snapshot")] = {Kind::revision, revision};
+  }
 }
 std::string refs_hash(const Refs &refs) {
   return hash(bytes(encode_refs(refs).dump()));
@@ -43,7 +61,7 @@ Json marker(const Store &store) {
   const auto data = read_bytes(path, max_object_size);
   const auto value = parse_json(data);
   require(value.is_object() && value.size() == 9 && value.contains("version") &&
-              value["version"].is_number_unsigned() && value["version"] == 1 && value.contains("type") &&
+              value["version"].is_number_unsigned() && (value["version"] == 1 || value["version"] == 2) && value.contains("type") &&
               value["type"] == "store-backup" && value.contains("created_at") &&
               value["created_at"].is_number_unsigned() && value.contains("refs_hash") &&
               value["refs_hash"].is_string() && value.contains("settings_hash") &&
@@ -60,7 +78,8 @@ Json marker(const Store &store) {
     require(name.is_string(), "invalid backup descriptor");
     const auto ref = name.get<std::string>();
     validate_ref(ref);
-    require((ref == "workspace/HEAD" || ref.starts_with("checkouts/receipts/")) && names.insert(ref).second,
+    require((value["version"] == 1 ? ref == "workspace/HEAD" || ref.starts_with("checkouts/receipts/")
+                : native_workspace_machine_reference(ref)) && names.insert(ref).second,
             "invalid backup descriptor");
   }
   require(value["refs_hash"] == refs_hash(store.refs()) &&
@@ -94,10 +113,18 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
   const auto target = destination_path(source, destination);
   const auto original = source.refs();
   Json excluded = Json::array();
-  const auto refs = portable_refs(original, excluded);
+  auto refs = portable_refs(original, excluded);
+  std::map<ObjectKey, Bytes> generated;
+  add_portable_workspaces(source, refs, generated, options);
   const auto settings = source.settings();
-  const auto objects = source.closure(roots(refs), true, options.stop, options.progress);
-  auto descriptor = Json{{"version", 1},
+  auto existing_roots = roots(refs);
+  std::erase_if(existing_roots, [&](const auto &root) { return generated.contains(root); });
+  auto objects = source.closure(existing_roots, true, options.stop, options.progress);
+  for (const auto &[generated_key, data] : generated) { (void)data; objects.insert(generated_key); }
+  const bool linked = std::any_of(excluded.begin(), excluded.end(), [](const auto &name) {
+    return name.template get<std::string>().starts_with("workspaces/");
+  });
+  auto descriptor = Json{{"version", linked ? 2 : 1},
                          {"type", "store-backup"},
                          {"created_at", unix_seconds()},
                          {"refs_hash", refs_hash(refs)},
@@ -115,7 +142,8 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
         output.set_settings(settings);
         for (const auto &object : objects) {
           report_progress(options, {ProgressPhase::transferring, object.id, completed, objects.size()});
-          const auto data = source.get(object);
+          const auto found = generated.find(object);
+          const auto data = found == generated.end() ? source.get(object) : found->second;
           require(data.size() <= std::numeric_limits<std::uint64_t>::max() - total,
                   "backup logical size overflow");
           output.import(object, data);
@@ -189,19 +217,22 @@ Json restore_backup(const Store &store, const fs::path &destination, std::option
 namespace {
 struct RepairPlan {
   Refs original, portable;
+  std::map<ObjectKey, Bytes> generated;
   Json excluded;
   std::set<ObjectKey> missing, corrupt, objects;
   std::uint64_t logical_bytes;
   std::string backup_snapshot;
 };
-RepairPlan prepare_repair(const Store &destination, const Store &backup, OperationOptions options) {
+RepairPlan prepare_repair(const Store &destination, const Store &backup, OperationOptions options, bool workspace_snapshots = false) {
   throw_if_cancelled(options.stop);
   require(destination.root() != backup.root(), "backup repair requires distinct stores");
   quiescent(destination, options);
   const auto verified_backup = verify_backup(backup, options);
   const auto refs = destination.refs();
   Json excluded = Json::array();
-  const auto portable = portable_refs(refs, excluded);
+  auto portable = portable_refs(refs, excluded);
+  std::map<ObjectKey, Bytes> generated;
+  if (workspace_snapshots) add_portable_workspaces(destination, portable, generated, options);
   std::set<ObjectKey> selected, damaged, seen;
   std::size_t budget = 4096;
   std::uint64_t logical_bytes = 0;
@@ -214,6 +245,7 @@ RepairPlan prepare_repair(const Store &destination, const Store &backup, Operati
   };
   auto load = [&](const ObjectKey &key) {
     throw_if_cancelled(options.stop);
+    if (const auto found = generated.find(key); found != generated.end()) return found->second;
     try {
       return destination.get(key);
     } catch (const MissingObject &) {
@@ -252,6 +284,7 @@ RepairPlan prepare_repair(const Store &destination, const Store &backup, Operati
 
   return {refs,
           portable,
+          std::move(generated),
           excluded,
           std::move(selected),
           std::move(damaged),
@@ -324,7 +357,7 @@ Json repair_from_backup(const Store &destination, const Store &backup, bool appl
   return report;
 }
 Json plan_repaired_copy(const Store &source, const Store &backup, OperationOptions options) {
-  return copy_repair_report(prepare_repair(source, backup, options));
+  return copy_repair_report(prepare_repair(source, backup, options, true));
 }
 Json create_repaired_copy(const Store &source, const Store &backup, const fs::path &destination,
                           std::optional<Key> key, OperationOptions options) {
@@ -333,7 +366,7 @@ Json create_repaired_copy(const Store &source, const Store &backup, const fs::pa
           "encrypted repair inputs require a destination encryption key");
   const auto target = destination_path(source, destination);
   require(!inside(target, backup.root()), "repair copy destination must be outside the backup store");
-  const auto plan = prepare_repair(source, backup, options);
+  const auto plan = prepare_repair(source, backup, options, true);
   const auto settings = source.settings();
   auto report = copy_repair_report(plan);
   std::size_t completed = 0;
@@ -344,7 +377,8 @@ Json create_repaired_copy(const Store &source, const Store &backup, const fs::pa
         output.set_settings(settings);
         for (const auto &object : plan.objects) {
           report_progress(options, {ProgressPhase::transferring, object.id, completed, plan.objects.size()});
-          output.import(object, recovered_object(source, backup, object, options));
+          const auto found = plan.generated.find(object);
+          output.import(object, found == plan.generated.end() ? recovered_object(source, backup, object, options) : found->second);
           ++completed;
         }
         std::vector<RefUpdate> updates;

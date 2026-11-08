@@ -5,7 +5,7 @@ description: Verified offline backups, restore and missing-object repair guide.
 section: Storage
 order: 50
 parent: storage
-revision: 1
+revision: 2
 ---
 
 # Verified offline backups, restore and missing-object repair {#verified-offline-backups-restore-and-missing-object-repair}
@@ -126,3 +126,19 @@ objects from an older backup while keeping intact newer source data. Neither
 input's existing objects, pack files or references are replaced.
 
 ## Validation and limits {#validation-and-limits}
+
+## Portable linked workspace snapshots {#linked-workspaces}
+
+Backups and repaired copies preserve each registered linked selection as portable
+metadata plus a retained exact revision, including its frozen index. Absolute
+registration/HEAD paths and checkout receipts are omitted. Backups containing
+these exclusions use marker v2; existing v1 backups remain supported.
+
+After restoring the Store inside a new primary directory, run
+`native workspace-restore NAME NEW_DIRECTORY [--branch NAME | --detach]`.
+The default reuses the original named branch only if its tip still matches and
+no other workspace selects it. A changed/reserved branch requires another name
+or detached restoration. Prepared bytes are materialized when an index exists;
+HEAD remains the committed revision. Unprepared working edits are not backed up.
+An interrupted complete export can be retried only if all exported files still
+match. See [workspace restoration](doc:native-workspaces#restore).

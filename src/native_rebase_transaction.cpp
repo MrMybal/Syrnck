@@ -4,14 +4,14 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
                              std::string_view base, std::string_view onto,
                              const NativeRebaseOptions &settings, OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  validate_ref(native_revision_reference(std::string(branch)));
+  validate_ref(native_revision_reference(*this, std::string(branch)));
   validate_id(expected);
   require_no_native_checkout(*this);
   const auto all = refs();
-  const auto found = all.find(native_revision_reference(std::string(branch)));
+  const auto found = all.find(native_revision_reference(*this, std::string(branch)));
   require(found != all.end() && found->second.kind == Kind::revision, "unknown native branch");
   require(found->second.id == expected, "native rebase tip changed; inspect the branch and retry");
-  require(!all.contains(native_staging_reference(std::string(branch))), "native rebase requires an empty staging index");
+  require(!all.contains(native_staging_reference(*this, std::string(branch))), "native rebase requires an empty staging index");
   auto plan = prepare_native_rebase(*this, directory, branch, base, onto, settings, true, options);
   require(plan.report["ready"].get<bool>(), "native rebase is blocked; inspect native rebase-plan");
   const auto mode = plan.report["mode"].get<std::string>();

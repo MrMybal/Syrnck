@@ -117,6 +117,16 @@ func (s *Store) Close() error {
 	return err
 }
 
+// UseWorkspace selects a registered native context on this handle. Empty selects
+// primary. It does not select a context for another Store handle or Workspace.
+func (s *Store) UseWorkspace(name string) error {
+	value, err := text(name)
+	if err != nil {
+		return err
+	}
+	return s.with(func() error { return nativeUseWorkspace(s.handle, value) })
+}
+
 func (s *Store) Ingest(path string, chunking Chunking) (id string, err error) {
 	p, err := text(path)
 	if err != nil {

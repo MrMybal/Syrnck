@@ -47,7 +47,7 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
   NativeStashApplyPlan plan;
   plan.saved = read_native_stash(store, id, false, options);
   plan.head = state.head.id;
-  plan.selection = state.lookup("workspace/HEAD");
+  plan.selection = state.lookup(store.native_workspace_reference("workspace/HEAD"));
   const auto selection = store.native_head();
   require(store.native_target() == branch,
           "native stash apply requires the selected branch");

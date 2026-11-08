@@ -299,7 +299,7 @@ void help(Language language) {
   if (language == Language::french) {
     std::cout << R"(Syrnck 0.1.0 — Stockage de blocs C++20, assets Git et révisions natives
 Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
-               [--cache-mib 64] [--index-cache-mib 4] COMMANDE
+               [--cache-mib 64] [--index-cache-mib 4] [--workspace NOM] COMMANDE
   help [SUJET] [--section ID] [--print-url] [--directory DOSSIER]
                                      Ouvrir le manuel local complet
   init [--encrypted]                 Créer un stockage de blocs
@@ -352,6 +352,9 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native archive-show RÉFÉRENCE [--verify]
   native status [--branch BRANCHE | --revision RÉVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCHE] [--directory .] [--indexed]
+  native workspaces
+  native workspace-add NOM DOSSIER [--branch BRANCHE | --revision RÉVISION]
+  native workspace-restore NOM DOSSIER [--branch BRANCHE | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCHE | --revision RÉVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
@@ -490,7 +493,7 @@ Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans 
   }
   std::cout << R"(Syrnck 0.1.0 — C++20 block storage, Git assets and native revisions
 Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-mib 64]
-              [--index-cache-mib 4] COMMAND
+              [--index-cache-mib 4] [--workspace NAME] COMMAND
   help [TOPIC] [--section ID] [--print-url] [--directory DIRECTORY]
                                      Open the complete local manual
   init [--encrypted]                 Create a new block store
@@ -542,6 +545,9 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native archive-show REFERENCE [--verify]
   native status [--branch BRANCH | --revision REVISION] [--directory .] [--indexed]
   native status --combined [--branch BRANCH] [--directory .] [--indexed]
+  native workspaces
+  native workspace-add NAME DIRECTORY [--branch BRANCH | --revision REVISION]
+  native workspace-restore NAME DIRECTORY [--branch BRANCH | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCH | --revision REVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
@@ -687,6 +693,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     return 0;
   }
   auto root_option = args.option("--store");
+  auto native_workspace = args.option("--workspace");
+  if (native_workspace) {
+    require(!native_workspace->empty(), "invalid native workspace name");
+    if (*native_workspace == "primary") *native_workspace = "";
+    else validate_native_workspace_name(*native_workspace);
+  }
   auto root = path_from_utf8(root_option.value_or(".syrnck"));
   StoreOptions store_options;
   if (auto cache_mib = args.option("--cache-mib")) {
@@ -709,6 +721,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (ca)
     ca_path = path_from_utf8(*ca);
   auto command = args.pop();
+  require(!native_workspace || command == "native" || command == "help", "workspace selection is only available for native commands");
   // Documentation is independent of repository state, encryption and credentials.
   if (command == "help") {
     const auto directory = args.option("--directory");
@@ -754,6 +767,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     sub = args.pop();
   if (command == "native" && sub == "watch") {
     cli::NativeWatchCommand request;
+    request.workspace = native_workspace.value_or("");
     request.combined = args.flag("--combined");
     request.polling = args.flag("--polling");
     request.journal = args.flag("--journal");
@@ -765,7 +779,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     request.duration_ms = integer(args.option("--duration-ms").value_or("0"));
     request.max_updates = integer(args.option("--max-updates").value_or("0"));
     request.max_paths = integer(args.option("--max-paths").value_or("4096"));
-    const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+    const auto watch_directory = args.option("--directory");
+    auto directory = path_from_utf8(watch_directory.value_or("."));
+    if (!watch_directory && native_workspace && !native_workspace->empty()) {
+      Store selected(root, read_key(), false, store_options);
+      selected.use_native_workspace(*native_workspace);
+      directory = path_from_utf8(selected.native_head()["directory"].get<std::string>());
+    }
     const auto text = args.flag("--progress"), json = args.flag("--progress-json");
     require(!(text && json), "choose one progress output mode");
     args.count(0);
@@ -773,7 +793,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                                                 : text ? cli::ProgressMode::text
                                                                        : cli::ProgressMode::none);
     return cli::watch_native(directory, root, request,
-        [&] { return std::make_unique<Store>(root, read_key(), false, store_options); }, language,
+        [&] {
+          auto store = std::make_unique<Store>(root, read_key(), false, store_options);
+          if (native_workspace) store->use_native_workspace(*native_workspace);
+          return store;
+        }, language,
         {control->token(), [&](const ProgressEvent &event) { control->report(event); }});
   }
   if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
@@ -949,13 +973,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       !root_option)
     root = git::common_store(git_directory);
   Store store(root, read_key(), false, store_options);
+  if (native_workspace) store.use_native_workspace(*native_workspace);
   auto text_progress = args.flag("--progress"), json_progress = args.flag("--progress-json");
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "native" &&
-       (sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+       (sub == "workspaces" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
         sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
         sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
@@ -1122,8 +1147,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       return branch ? *branch : store.native_target();
     };
     auto workspace = [&] {
-      const auto directory = path_from_utf8(args.option("--directory").value_or("."));
+      const auto specified = args.option("--directory");
       const auto head = store.native_head();
+      const auto directory = path_from_utf8(specified.value_or(!store.native_workspace_name().empty()
+          ? head["directory"].get<std::string>() : "."));
       require(head["directory"].is_null() ||
                   utf8(fs::canonical(directory)) == head["directory"].get<std::string>(),
               "native HEAD belongs to another workspace");
@@ -1140,7 +1167,38 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
       return {};
     };
-    if (sub == "checkout-receipts") {
+    if (sub == "workspaces") {
+      args.count(0);
+      print(store.native_workspaces({control->token(), observe}));
+    } else if (sub == "workspace-restore") {
+      const auto primary = workspace();
+      NativeWorkspaceRestoreOptions settings;
+      settings.branch = args.option("--branch");
+      settings.detached = args.flag("--detach");
+      args.count(2);
+      print(store.restore_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]), settings,
+                                            {control->token(), observe}));
+    } else if (sub == "workspace-add") {
+      const auto primary = workspace();
+      const auto branch = args.option("--branch");
+      const auto revision = args.option("--revision");
+      require(!(branch && revision), "choose either --branch or --revision");
+      args.count(2);
+      const auto selected = store.native_head();
+      const auto target = revision ? std::optional{resolve(*revision)} :
+          selected["revision"].is_string() ? std::optional{selected["revision"].get<std::string>()} : std::nullopt;
+      auto report = store.register_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]),
+                                                     {control->token(), observe});
+      store.use_native_workspace(args.values[0]);
+      const auto directory = path_from_utf8(report["directory"].get<std::string>());
+      if (branch) report["checkout"] = store.switch_directory(directory, *branch, {control->token(), observe});
+      else if (target) report["checkout"] = store.detach_checkout(directory, *target, {control->token(), observe});
+      report["head"] = store.native_head();
+      report["branch"] = report["head"]["branch"];
+      report["revision"] = report["head"]["revision"];
+      report["state"] = "ready";
+      print(report);
+    } else if (sub == "checkout-receipts") {
       const auto after = args.option("--after");
       const auto limit = integer(args.option("--limit").value_or("100"));
       require(limit >= 1 && limit <= 1000, "native checkout receipt page limit must be in 1..1000");
@@ -1373,7 +1431,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         return plan["ready"].get<bool>() ? 0 : 1;
       }
       const auto all = store.refs();
-      const auto index = all.find(native_staging_reference(branch));
+      const auto index = all.find(native_staging_reference(store, branch));
       require(index != all.end() && index->second.kind == Kind::revision, "no native staging snapshot");
       const auto head = expected ? *expected : resolve(native_revision_selector(branch));
       const auto snapshot = expected_index ? *expected_index : index->second.id;
@@ -1471,7 +1529,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         return 0;
       }
       if (!revision) {
-        const auto name = native_revision_reference(branch ? *branch : store.native_target());
+        const auto name = native_revision_reference(store, branch ? *branch : store.native_target());
         validate_ref(name);
         const auto all = store.refs();
         if (const auto found = all.find(name); found != all.end()) {
@@ -1835,7 +1893,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto limit = integer(args.option("--limit").value_or("50"));
       args.count(0);
       auto refs = store.refs();
-      auto name = native_revision_reference(branch);
+      auto name = native_revision_reference(store, branch);
       require(refs.contains(name), "unknown branch");
       auto current = refs.at(name);
       std::set<std::string> seen;

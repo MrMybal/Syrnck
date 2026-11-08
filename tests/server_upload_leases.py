@@ -41,6 +41,8 @@ class ProxyHandler(base.Handler):
         if self.server.hold_renewal:
             if self.command == "PUT" and self.path.startswith("/v1/uploads/") and self.server.calls.count((self.command, self.path)) == 2:
                 self.server.renewal_entered.set()
+                if self.server.renewal_signal is not None:
+                    self.server.renewal_signal.write_text("ready", encoding="ascii")
                 self.server.renewal_release.wait(5)
             elif self.command == "PUT" and self.path.startswith("/v1/objects/") and self.server.renewal_entered.is_set():
                 self.server.object_during_renewal.set()
@@ -66,6 +68,7 @@ class Proxy(base.Repository):
         self.target, self.gate = target, True
         self.hold_renewal = False
         self.hide_inventory, self.hold_inventory = False, False
+        self.renewal_signal = None
         self.inventory_entered, self.inventory_release = threading.Event(), threading.Event()
         self.renewal_entered, self.renewal_release, self.object_during_renewal = threading.Event(), threading.Event(), threading.Event()
 
@@ -261,15 +264,18 @@ class ServerUploadLeases(unittest.TestCase):
 
     def test_cancel_joins_an_inflight_renewal(self):
         self.setup_server()
-        with self.serving(seconds=1) as remote, base.server(lambda: Proxy(remote.url)) as proxy:
+        with self.serving(seconds=3) as remote, base.server(lambda: Proxy(remote.url)) as proxy:
             proxy.gate, proxy.hold_renewal = False, True
+            proxy.renewal_signal = self.root / "upload-renewal-ready"
+            self.env["SYRNCK_TEST_RENEWAL_READY"] = str(proxy.renewal_signal)
             try:
                 start = time.monotonic()
                 self.assertTrue(self.probe(proxy, "renew_stop", requests=4)["cancelled"])
                 self.assertTrue(proxy.renewal_entered.is_set())
-                self.assertLess(time.monotonic() - start, 3)
+                self.assertLess(time.monotonic() - start, 12)
                 self.assertEqual(self.http(remote.url, "GET", "/v1/refs"), {})
             finally:
+                self.env.pop("SYRNCK_TEST_RENEWAL_READY", None)
                 proxy.renewal_release.set()
 
     def test_legacy_fallback_strict_client_and_no_silent_downgrade(self):

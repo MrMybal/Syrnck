@@ -1,8 +1,9 @@
 #include <syrnck/working_index.hpp>
 #include "working_file_stamp.hpp"
+#include "native_context.hpp"
 namespace syrnck {
 namespace {
-fs::path pointer_path(const Store &store) { return store.root() / "working-index.json"; }
+fs::path pointer_path(const Store &store) { return native_workspace_local_path(store, "working-index.json"); }
 std::optional<Bytes> pointer_bytes(const Store &store) {
   const auto path = pointer_path(store);
   const auto status = fs::symlink_status(path);
@@ -84,7 +85,7 @@ Json indexed_native_observation(const Store &store, const fs::path &directory,
   std::uint64_t hashed_bytes = 0, hashed_files = 0, reused_files = 0, supported_files = 0;
   bool truncated = false;
   std::size_t budget = 512;
-  visit_native_files(directory, store.root(), [&](const NativeFile &file) {
+  visit_native_files(directory, store, [&](const NativeFile &file) {
     const auto before = working_file_stamp(file);
     const auto found = cache.entries.find(file.relative);
     NativeContent content;
@@ -167,7 +168,7 @@ Json clear_native_working_index(const Store &store, OperationOptions options) {
   require(pointer_bytes(store) == original, "working index changed; retry operation");
   if (original) {
     require(fs::remove(pointer_path(store)), "cannot clear working index");
-    sync_directory(store.root());
+    sync_directory(pointer_path(store).parent_path());
   }
   return Json{{"version", 1}, {"state", original ? "cleared" : "absent"}};
 }

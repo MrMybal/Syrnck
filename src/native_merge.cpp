@@ -8,7 +8,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   if (settings.text_merge)
     settings.text_merge->validate();
   require(!settings.no_fast_forward || !settings.fast_forward_only, "choose either --no-ff or --ff-only");
-  validate_ref(native_revision_reference(std::string(branch)));
+  validate_ref(native_revision_reference(store, std::string(branch)));
   validate_id(source);
   if (settings.base)
     validate_id(*settings.base);
@@ -17,7 +17,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
               utf8(fs::canonical(directory)) == selected["directory"].get<std::string>(),
           "native HEAD belongs to another workspace");
   const auto refs = store.refs();
-  const auto head = refs.find(native_revision_reference(std::string(branch)));
+  const auto head = refs.find(native_revision_reference(store, std::string(branch)));
   require(head != refs.end() && head->second.kind == Kind::revision, "unknown native branch");
   const auto graph = store.native_ancestry(head->second.id, source, settings.limits, options);
   NativeMergePlan plan{head->second.id, {}, {}, {}};

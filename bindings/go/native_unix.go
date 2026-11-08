@@ -126,13 +126,16 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 
 type nativeWorkspaceHandle = *C.SyrnckWorkspace
 
-func nativeWorkspaceOpen(root, store []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
+func nativeWorkspaceOpen(root, store, name []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
 	if C.syrnck_abi_version() != 1 {
 		return nil, errors.New("unsupported Syrnck ABI")
 	}
 	var result nativeWorkspaceHandle
-	err := status(int(C.syrnck_workspace_open_ex(ctext(root), ctext(store), (*C.SyrnckWorkspaceOptions)(unsafe.Pointer(config)), cancellation, &result)))
+	err := status(int(C.syrnck_workspace_open_registered_ex(ctext(root), ctext(store), ctext(name), (*C.SyrnckWorkspaceOptions)(unsafe.Pointer(config)), cancellation, &result)))
 	return result, err
+}
+func nativeUseWorkspace(h nativeHandle, name []byte) error {
+	return status(int(C.syrnck_store_use_workspace(h, ctext(name))))
 }
 func nativeWorkspaceClose(h nativeWorkspaceHandle) error {
 	return status(int(C.syrnck_workspace_close(h)))

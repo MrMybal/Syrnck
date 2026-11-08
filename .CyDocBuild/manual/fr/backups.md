@@ -5,7 +5,7 @@ description: Guide : Sauvegardes, restauration et réparation.
 section: Stockage
 order: 50
 parent: storage
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Sauvegardes vérifiées et restauration {#verified-offline-backups-restore-and-missing-object-repair}
@@ -59,3 +59,19 @@ syrnck --store damaged-store fsck
 ## Limites {#validation-and-limits}
 
 La vérification complète relit volontairement les données conservées. Le parcours ne dispose pas encore d’inventaire sur disque. Ces opérations ne promettent pas une durabilité universelle après panne d’alimentation. Réplication en direct, bascule multi-serveur, scrubbing programmé, rétention distribuée et remplacement automatique des données corrompues restent des fonctions distinctes à développer.
+
+## Snapshots portables des workspaces liés {#linked-workspaces}
+
+Sauvegardes et copies réparées gardent chaque sélection liée dans des métadonnées
+portables avec sa révision exacte conservée et son index figé. Les chemins
+absolus registration/HEAD et reçus sont omis. Les sauvegardes contenant ces
+exclusions utilisent le marqueur v2 ; les anciennes v1 restent prises en charge.
+
+Après restauration du Store dans un nouveau dossier principal, lancer
+`native workspace-restore NOM NOUVEAU_DOSSIER [--branch NOM | --detach]`.
+Le défaut reprend la branche originale si sa tête correspond encore et qu’aucun
+autre workspace ne la sélectionne. Sinon choisir un autre nom ou HEAD détaché.
+L’index figé est matérialisé s’il existe ; HEAD garde la révision commitée.
+Les modifications de travail non préparées ne sont pas sauvegardées. Une
+exportation complète interrompue se reprend seulement si tous ses fichiers
+correspondent encore. Voir [la restauration](doc:native-workspaces#restore).

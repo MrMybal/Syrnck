@@ -14,13 +14,14 @@ struct SyrnckStore {
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
   syrnck::fs::path directory;
+  std::string context;
   syrnck::WorkspaceWatcher watcher;
   syrnck::WorkspaceObservation observation;
   syrnck::WorkspaceChanges pending;
   std::size_t max_paths;
   SyrnckWorkspace(const syrnck::fs::path &root, const syrnck::fs::path &storage,
-                  syrnck::WorkspaceWatchOptions options, std::stop_token stop)
-      : directory(syrnck::fs::canonical(root)), watcher(directory, storage, options, stop),
+                  syrnck::WorkspaceWatchOptions options, std::stop_token stop, std::string name = {})
+      : directory(syrnck::fs::canonical(root)), context(std::move(name)), watcher(directory, storage, options, stop),
         observation(directory, storage), max_paths(options.max_paths) { invalidate(); }
   void invalidate() {
     observation.invalidate();
@@ -185,6 +186,9 @@ int syrnck_store_open(const char *path, bool create, const unsigned char *key, s
 }
 int syrnck_store_close(SyrnckStore *store) {
   return boundary([&] { delete store; });
+}
+int syrnck_store_use_workspace(SyrnckStore *p, const char *name) {
+  return boundary([&] { checked(p).use_native_workspace(name ? name : ""); });
 }
 int syrnck_ingest_file(SyrnckStore *p, const char *path, char *out) {
   return syrnck_ingest_file_ex(p, path, nullptr, out);
@@ -354,18 +358,26 @@ int syrnck_workspace_open(const char *directory, const char *storage, const Syrn
 }
 int syrnck_workspace_open_ex(const char *directory, const char *storage, const SyrnckWorkspaceOptions *options,
                               const SyrnckCancellation *cancellation, SyrnckWorkspace **out) {
+  return syrnck_workspace_open_registered_ex(directory, storage, nullptr, options, cancellation, out);
+}
+int syrnck_workspace_open_registered_ex(const char *directory, const char *storage, const char *name,
+                              const SyrnckWorkspaceOptions *options,
+                              const SyrnckCancellation *cancellation, SyrnckWorkspace **out) {
   return boundary([&] {
     syrnck::require(out != nullptr, "null output handle");
     *out = nullptr;
     const auto stop = stop_token(cancellation);
     syrnck::throw_if_cancelled(stop);
     syrnck::WorkspaceWatchOptions selected;
+    const std::string context = name ? name : "";
+    if (!context.empty()) syrnck::validate_native_workspace_name(context);
     if (options) {
       syrnck::require(options->polling <= 1, "invalid workspace polling flag");
       selected = {options->polling != 0, options->max_paths, options->max_directories};
     }
+    selected.external_store = !context.empty();
     auto result = std::make_unique<SyrnckWorkspace>(syrnck::path_from_utf8(checked(directory)),
-                                                    syrnck::path_from_utf8(checked(storage)), selected, stop);
+                                                    syrnck::path_from_utf8(checked(storage)), selected, stop, context);
     syrnck::throw_if_cancelled(stop);
     *out = result.release();
   });
@@ -400,6 +412,7 @@ int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, 
     syrnck::throw_if_cancelled(options.stop);
     auto &store = checked(p);
     syrnck::require(mode <= 2, "invalid workspace status mode");
+    syrnck::require(store.native_workspace_name() == session.context, "workspace observation belongs to another context");
     // Identity checks and newly queued hints apply even without an explicit wait.
     session.pending.merge(session.watcher.wait(std::chrono::milliseconds(0), options.stop), session.max_paths);
     const auto head = store.native_head();
@@ -417,7 +430,7 @@ int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, 
       else {
         std::optional<std::string> revision;
         const auto refs = store.refs();
-        if (const auto found = refs.find(syrnck::native_revision_reference(branch)); found != refs.end()) {
+        if (const auto found = refs.find(syrnck::native_revision_reference(store, branch)); found != refs.end()) {
           syrnck::require(found->second.kind == syrnck::Kind::revision, "branch must point to a revision");
           revision = found->second.id;
         }

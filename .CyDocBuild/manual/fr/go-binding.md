@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -83,3 +83,10 @@ Fermer explicitement les Stores et sessions avant de retirer leurs répertoires.
 ## Syncthing {#syncthing}
 
 Le module optionnel [Syncthing](doc:syncthing) adapte maintenant les manifestes aux blocs fixes SHA-256 de BEP et aux requêtes de la bibliothèque Syncthing v2.1.7. Il prend en charge la reconstruction différentielle et un staging reprenable, avec le scanner et les connexions BEP TLS 1.3. Les objets et le CDC Syrnck gardent leur format propre. Le daemon résident, la découverte, les conflits et la synchronisation complète entre exécutables Syncthing restent à réaliser.
+
+## Registered workspaces {#registered-workspaces}
+
+Ouvrir avec `WorkspaceOptions{Name: "edit"}` puis sélectionner
+`store.UseWorkspace("edit")` avant chaque statut. Un nom vide utilise le principal.
+Un contexte différent échoue ; un nom invalide garde la sélection précédente.
+Voir [les contextes liés](doc:workspace-abi#registered-contexts).

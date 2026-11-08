@@ -1,5 +1,6 @@
 #include <syrnck/net.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <thread>
 using namespace syrnck;
@@ -38,7 +39,13 @@ int entry(int argc, char **argv) {
                                  if (event.path.starts_with("v1/objects/chunk/") && event.bytes > 0) {
                                    if (mode == "renew_stop" && !late.joinable())
                                      late = std::jthread([&] {
-                                       std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                       if (const auto *signal = std::getenv("SYRNCK_TEST_RENEWAL_READY")) {
+                                         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                                         while (!fs::exists(path_from_utf8(signal)) && std::chrono::steady_clock::now() < deadline)
+                                           std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                                       } else {
+                                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                       }
                                        stop.request_stop();
                                      });
                                    if ((mode == "backoff" || mode == "pace") && !late.joinable())

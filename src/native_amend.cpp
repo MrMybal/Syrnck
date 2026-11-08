@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_context.hpp"
 namespace syrnck {
 namespace {
 std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
@@ -12,12 +13,13 @@ struct Amendment {
   Json revision;
   Amendment(const Store &store, std::string_view branch, std::string_view expected, bool staged,
             std::stop_token stop) {
+    require_native_branch_available(store, branch);
     throw_if_cancelled(stop);
     validate_native_target(branch);
     validate_id(expected);
     require_no_native_checkout(store);
-    head_name = native_revision_reference(std::string(branch));
-    stage_name = native_staging_reference(std::string(branch));
+    head_name = native_revision_reference(store, std::string(branch));
+    stage_name = native_staging_reference(store, std::string(branch));
     archive_name = "archive/amend/" + std::string(expected);
     validate_ref(head_name);
     validate_ref(stage_name);
@@ -66,7 +68,7 @@ std::string Store::amend_directory(const fs::path &directory, std::string_view b
                                    IngestOptions options) const {
   Amendment amendment(*this, branch, expected, false, options.stop);
   std::map<std::string, Json> files;
-  visit_native_files(directory, root(),
+  visit_native_files(directory, *this,
                      [&](const NativeFile &file) {
                        files.emplace(file.relative,
                                      ingest_native_file(*this, file, options,

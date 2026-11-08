@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_context.hpp"
 #include <chrono>
 namespace syrnck {
 namespace {
@@ -33,8 +34,8 @@ struct Stage {
   Files files, baseline;
   Stage(const Store &store, std::string_view branch) {
     validate_native_target(branch);
-    head_name = native_revision_reference(std::string(branch));
-    stage_name = native_staging_reference(std::string(branch));
+    head_name = native_revision_reference(store, std::string(branch));
+    stage_name = native_staging_reference(store, std::string(branch));
     validate_ref(head_name);
     validate_ref(stage_name);
     marker = "Syrnck staging v1: " + std::string(branch);
@@ -125,6 +126,7 @@ std::string Store::stage_directory(const fs::path &directory, std::string_view b
 }
 std::string Store::stage_directory(const fs::path &directory, std::string_view branch,
                                    const std::vector<std::string> &paths, IngestOptions options) const {
+  require_native_branch_available(*this, branch);
   throw_if_cancelled(options.stop);
   Stage stage(*this, branch);
   require_no_native_checkout(*this);
@@ -139,7 +141,7 @@ std::string Store::stage_directory(const fs::path &directory, std::string_view b
     else
       ++it;
   }
-  visit_native_files(directory, root(),
+  visit_native_files(directory, *this,
                      [&](const NativeFile &file) {
                        if (selection.matches(file.relative))
                          files.emplace(
@@ -253,6 +255,7 @@ Json Store::diff_unstaged_file(const fs::path &directory, std::string_view branc
 }
 std::string Store::commit_staged(std::string_view branch, std::string_view message,
                                  OperationOptions options) const {
+  require_native_branch_available(*this, branch);
   throw_if_cancelled(options.stop);
   require_no_native_checkout(*this);
   const Stage stage(*this, branch);

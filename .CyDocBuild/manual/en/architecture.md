@@ -4,7 +4,7 @@ title: Architecture
 description: Architecture guide.
 section: Getting started
 order: 10
-revision: 2
+revision: 3
 ---
 
 # Syrnck architecture {#architecture-de-syrnck}
@@ -60,7 +60,7 @@ Native history provides complete commits, frozen staging, branches/tags, first-p
 
 Recoverable checkout verifies source/target closures, retains a canonical-root-bound journal and prepares whole files before exclusive moves. Source backups survive until atomic branch/archive/target publication. Resume/abort is explicit; after publication only cleanup can resume. Workspace moves are sequential without external-editor lock; private bytes stay plaintext even with encrypted objects. GC/native writes block during active recovery; receipts/archives remain until explicit retirement.
 
-HEAD is a chunk at `workspace/HEAD`, binding directory/selection; absence means main. Named descriptors keep v1; [detached HEAD](doc:native-detached) uses v2 and private revision/index roots. Switch journalv2 (namespacev4), or v7 for detached targets, guards old/new HEAD and both tips and publishes selection with the committed journal, preserving tips. CLI defaults and `Store::native_target()` resolve the selection. Linked/partial workspaces remain incomplete.
+HEAD is a chunk at `workspace/HEAD`, binding directory/selection; absence means main. Named descriptors keep v1; [detached HEAD](doc:native-detached) uses v2 and private revision/index roots. Switch journalv2 (namespacev4), or v7 for detached targets, guards old/new HEAD and both tips and publishes selection with the committed journal, preserving tips. CLI defaults and `Store::native_target()` resolve the selection. [Linked workspaces](doc:native-workspaces) scope HEAD/index/cache/journal and receipts under real `workspaces/NAME/` roots, share objects/named branches, and enforce branch reservations. Linked receipts use v8 with recorded context and layout; backups retain portable selections rather than absolute paths. Sparse materialization and workspace administration remain incomplete.
 
 Tags use target and optional annotation refs published atomically. Expected-tip deletion archives target/annotation/receipt and restore preserves archive. Pages bound JSON to 16 MiB. Selectors reject ambiguous branch/tag names. Signatures, server native branch policy and atomic multi-root transfer remain future work. Text storage may share chunks without exposing block-level differences in the user interface.
 

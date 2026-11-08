@@ -154,7 +154,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Inventaire paginé et retrait atomique des reçus/cibles de checkout, avec archives sources optionnelles : sauvegarde indépendante vérifiée, plan attendu, refus de récupération active/données privées et conservation des versions hors ligne.
 - [x] Retrait atomique des groupes complets d’archives de branches/tags avec sauvegarde indépendante vérifiée : index figés et annotations conservés, plan attendu, inventaire paginé des tags supprimés et reprise après arrêts forcés.
 - [x] HEAD détaché avec référence/index privés, switch récupérable et rétention des anciennes lignes.
-- [ ] Workspaces multiples/partiels.
+- [x] Workspaces liés multiples avec HEAD/index indépendants, réservation de branches et restauration portable.
+- [ ] Matérialisation partielle, déplacement en place et désenregistrement archivé des workspaces.
 - [x] Moteur C++ borné de fusion textuelle à trois voies : composition des changements indépendants, conflits conservateurs avec coordonnées exactes, fins de ligne conservées et aucun résultat partiel.
 - [x] Aperçu C++ de fusion d’un chemin dans trois snapshots explicites : reconstruction et hashes vérifiés, modes fusionnés séparément, limites vérifiées avant lecture des blocs, aucune lecture du workspace ni écriture.
 - [x] CLI de fusion textuelle anglais/français : sélecteurs de révisions, JSON bloquant ou octets exacts sans conflit, budgets/progression et résolution personnalisée via le merge récupérable existant ; comparaison avec Git et reconstruction après GC.
@@ -214,3 +215,10 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [ ] Audit complet de provenance, paquets signés et stratégie de migration de format.
 
 Critère de sortie : restauration complète après perte d'un nœud et après rotation de clés ; aucune suppression ne précède la validation de toutes les racines protégées et des transferts en cours.
+
+## Linked workspace milestone
+
+- [x] Independent registered directories and HEADs, scoped named/detached indexes, working caches, observation sessions, bisect state and checkout receipts over shared objects/branches.
+- [x] Shared named-branch reservations, canonical non-overlap validation and v8 context-bound recoverable transactions; primary v1..v7 layouts preserved.
+- [x] Portable linked selections in backups and repaired copies, explicit new-directory restoration with prepared data and retry verification; C/Go observation selection.
+- [ ] Sparse materialization that preserves omitted tracked entries, in-place relocation and archived unregistering.

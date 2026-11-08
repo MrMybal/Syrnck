@@ -5,7 +5,7 @@ description: Guide : Branches et changement de branche.
 section: Versionnage
 order: 220
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Branches natives et changement récupérable {#native-branches-and-recoverable-switching}
@@ -109,7 +109,7 @@ Les arguments snapshot acceptent [tags et sélecteurs](doc:native-tags). Le swit
 
 `native head` retourne des clés anglaises : `version` (1), `branch`, `revision` (null si non née), `explicit`, `directory` (racine canonique ou null pour HEAD implicite). Le descripteur résout la branche dynamiquement sans réécriture à chaque commit. Une suppression générique de sa tête laisse une sélection non née.
 
-Avec HEAD explicite, `--directory` (défaut `.`) doit résoudre la même racine canonique. Un Store ne sélectionne qu’un workspace. Workspaces liés indépendants, déplacement et switch vers destination non née restent à réaliser. Les méthodes C++ à branche explicite ne résolvent pas implicitement HEAD ; l’appelant peut utiliser `native_target()` pour une branche ou la cible détachée opaque. Voir [HEAD détaché](doc:native-detached), dont `native head` indique `branch: null`.
+Avec HEAD explicite, le dossier doit résoudre la même racine canonique. Les [workspaces liés](doc:native-workspaces) gardent des HEAD et index indépendants ; `--workspace NOM` sélectionne leur contexte et utilise par défaut leur chemin enregistré. Le contexte principal garde le défaut `.`. Une branche nommée ne peut être sélectionnée que dans un workspace. Déplacement, matérialisation partielle et switch vers destination non née restent à réaliser. Les méthodes C++ à branche explicite ne résolvent pas implicitement HEAD ; l’appelant peut utiliser `native_target()` pour une branche ou la cible détachée opaque. Voir [HEAD détaché](doc:native-detached), dont `native head` indique `branch: null`.
 
 ## Préparation, publication et récupération {#preflight-publication-and-recovery}
 

@@ -1,4 +1,5 @@
 #include "native_branch.hpp"
+#include "native_context.hpp"
 #include "native_text_diff.hpp"
 #include <algorithm>
 #include <sstream>
@@ -22,8 +23,8 @@ HunkPlan state(const Store &store, std::string_view branch, std::string_view pat
   plan.refs = store.refs();
   plan.branch = branch;
   plan.path = path;
-  plan.head = native_branch_lookup(plan.refs, native_revision_reference(plan.branch));
-  plan.index = native_branch_lookup(plan.refs, native_staging_reference(plan.branch));
+  plan.head = native_branch_lookup(plan.refs, native_revision_reference(store, plan.branch));
+  plan.index = native_branch_lookup(plan.refs, native_staging_reference(store, plan.branch));
   require(!plan.head || plan.head->kind == Kind::revision, "branch must point to a revision");
   require(!plan.index || plan.index->kind == Kind::revision, "invalid native staging snapshot");
   plan.base = plan.head;
@@ -168,6 +169,7 @@ std::string select(const HunkPlan &plan, const std::set<std::size_t> &selected, 
 }
 Json publish(const Store &store, HunkPlan &plan, std::string_view chosen, OperationOptions options,
              bool verify_working) {
+  require_native_branch_available(store, plan.branch);
   auto ingestion = store.settings().ingest_options();
   ingestion.stop = options.stop;
   ingestion.progress = [&](const ProgressEvent &event) {
@@ -186,10 +188,10 @@ Json publish(const Store &store, HunkPlan &plan, std::string_view chosen, Operat
   const auto candidate = store.put(Kind::revision, bytes(snapshot.dump())).first;
   if (verify_working)
     verify_native_working_diff(store, plan.working, options);
-  const auto selection = native_branch_lookup(plan.refs, "workspace/HEAD");
-  std::vector<RefUpdate> updates{{native_revision_reference(plan.branch), plan.head, plan.head},
-                                 {native_staging_reference(plan.branch), plan.index, candidate},
-                                 {"workspace/HEAD", selection, selection}};
+  const auto selection = native_branch_lookup(plan.refs, store.native_workspace_reference("workspace/HEAD"));
+  std::vector<RefUpdate> updates{{native_revision_reference(store, plan.branch), plan.head, plan.head},
+                                 {native_staging_reference(store, plan.branch), plan.index, candidate},
+                                 {store.native_workspace_reference("workspace/HEAD"), selection, selection}};
   if (plan.index)
     updates.push_back({plan.archive, native_branch_lookup(plan.refs, plan.archive), plan.index});
   plan.report["state"] = "applied";

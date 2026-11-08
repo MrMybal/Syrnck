@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 2
+revision: 3
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -19,8 +19,9 @@ header, binding and native library from the same release.
 
 ## Lifetime and locking {#lifetime-and-locking}
 
-1. Create the Store and workspace directories first. The Store must be strictly
-   below the workspace root; both paths are resolved when opening the session.
+1. Create the Store and workspace directories first. For primary sessions, the Store must be strictly
+   below the workspace root. Registered linked sessions use a disjoint Store
+   and require their exact registered directory. Both paths are resolved at open.
 2. Open the workspace session before its initial status. Native notifications
    are already armed when open returns. The session retains its root directory
    identity, watcher and in-memory inventory, with no Store handle or Store lock.
@@ -224,3 +225,19 @@ history or expose the CLI's persistent checkpoint journal. A restart always
 creates a new inventory and performs a complete scan. Service lifecycle,
 causal versions, tombstones, conflict resolution and full Syncthing daemon
 interoperability remain separate work.
+
+## Registered contexts {#registered-contexts}
+
+Use `syrnck_workspace_open_registered_ex(directory, store_path, name, options,
+cancellation, out)` for a registered linked workspace. Before each status,
+select the same context on the caller-opened Store with
+`syrnck_store_use_workspace(store, name)`. NULL or empty selects primary.
+An unknown name fails without changing selection; mismatched sessions/Stores
+fail without returning stale output. Never change selection from a progress
+callback. These additive symbols require matching rebuilt ABI 1 libraries.
+
+Go uses `WorkspaceOptions{Name: "edit"}` at open and `store.UseWorkspace("edit")`
+before status. The session retains no Store/key/lock. Linked native watchers
+observe external refs/config metadata conservatively and require periodic full
+audits as primary sessions do. Registration and portable restore are exposed by
+the [CLI and C++ API](doc:native-workspaces), not by C/Go management calls.

@@ -22,24 +22,27 @@ std::string category(const fs::path &path) {
   if (!relative.empty() && *relative.begin() != ".syrnck" && *relative.begin() != "..") return "workspace";
   return utf8(path.parent_path().parent_path().filename());
 }
-void prepare(const fs::path &root, bool encrypted, std::string action, bool abort) {
+void prepare(const fs::path &root, bool encrypted, std::string action, bool abort, bool linked) {
   Fixture f(root / "source", key(Json{{"encrypted", encrypted}}));
   const auto a = f.revision(Json{{"asset", f.file("old asset")}, {"shape", f.file("flat")}});
   const auto b = f.revision(Json{{"asset", f.file("main asset")}, {"shape/child", f.file("nested")}}, Json::array({a}));
   const auto old = f.revision(Json{{"asset", f.file("inactive detached history")}});
   f.install(b);
+  if (linked) f.store.create_native_branch("feature", b);
   f.store.set_ref("workspace/detached", {Kind::revision, old});
   f.store.pack();
   atomic_write(root / "fixture.json", bytes(Json{{"encrypted", encrypted}, {"action", action},
-      {"abort", abort}, {"a", a}, {"b", b}, {"old", old}}.dump()), false);
+      {"abort", abort}, {"linked", linked}, {"a", a}, {"b", b}, {"old", old}}.dump()), false);
 }
 void start(Store &store, const Json &info, OperationOptions options = {}) {
-  if (info["action"] == "leave") store.switch_directory(workspace, "main", options);
+  if (info["action"] == "register") store.register_native_workspace(store.root().parent_path(), "linked", workspace, options);
+  else if (info["action"] == "leave") store.switch_directory(workspace, info.value("linked", false) ? "feature" : "main", options);
   else store.detach_checkout(workspace, info[info["action"] == "enter" ? "a" : "b"].get<std::string>(), options);
 }
 bool finished(const Store &store, const Json &info) {
+  if (info["action"] == "register") return store.refs().contains("workspaces/linked/registration");
   const auto head = store.native_head();
-  return info["action"] == "leave" ? head["branch"] == "main"
+  return info["action"] == "leave" ? head["branch"] == (info.value("linked", false) ? "feature" : "main")
       : head["branch"].is_null() && head["revision"] == info[info["action"] == "enter" ? "a" : "b"];
 }
 void prime_abort(Store &store, const Json &info) {
@@ -61,6 +64,23 @@ Json verify(Store &store, const Json &info, bool resumed) {
   if (resumed) store.gc(true);
   store.fsck();
   require(store.refs().at("heads/main").id == info["b"].get<std::string>(), "detached crash moved main");
+  if (info.value("linked", false))
+    require(store.refs().at("heads/feature").id == info["b"].get<std::string>(), "linked crash moved feature");
+  if (info["action"] == "register") {
+    const auto refs = store.refs();
+    const auto registered = refs.contains("workspaces/linked/registration");
+    require(refs.contains("workspaces/linked/workspace/HEAD") == registered &&
+                refs.contains("workspaces/linked/workspace/detached") == registered &&
+                refs.contains("workspace/HEAD") == registered, "workspace registration published partial roots");
+    if (registered) {
+      store.use_native_workspace("linked");
+      require(store.native_head()["branch"].is_null() && store.native_head()["revision"].is_string() &&
+                  !fs::exists(workspace / "asset"), "registered workspace selected or changed primary files");
+      store.use_native_workspace("");
+    }
+    require(!resumed || registered, "workspace registration did not resume");
+    return Json{{"verified", true}};
+  }
   const auto head = store.native_head();
   const auto pending = store.checkout_status()["pending"].get<bool>();
   if (!pending) {
@@ -106,15 +126,28 @@ int main(int argc, char **argv) {
     workspace = root / "source";
     const std::string mode = argv[1];
     if (mode == "prepare") {
-      require(argc == 6, "detached probe expects encryption, action and recovery");
-      prepare(root, std::string_view(argv[3]) == "encrypted", argv[4], std::string_view(argv[5]) == "abort");
+      require(argc == 6 || argc == 7, "detached probe expects encryption, action and recovery");
+      prepare(root, std::string_view(argv[3]) == "encrypted", argv[4], std::string_view(argv[5]) == "abort", argc == 7);
     } else {
-      workspace = fs::canonical(workspace);
       const auto info = parse_json(read_bytes(root / "fixture.json"));
-      Store store(workspace / ".syrnck", key(info));
+      const auto primary = fs::canonical(workspace);
+      Store store(primary / ".syrnck", key(info));
+      if (info.value("linked", false)) {
+        workspace = root / "linked";
+        if (mode == "bind" && info["action"] != "register") {
+          store.register_native_workspace(primary, "linked", workspace);
+          store.use_native_workspace("linked");
+          workspace = fs::canonical(workspace);
+          store.switch_directory(workspace, "feature");
+          store.set_ref("workspaces/linked/workspace/detached", {Kind::revision, info["old"].get<std::string>()});
+        } else if (mode != "bind" && info["action"] != "register") {
+          store.use_native_workspace("linked");
+          workspace = fs::canonical(workspace);
+        }
+      } else workspace = primary;
       if (mode == "bind") {
         // Fixture setup runs after cloning, so machine-bound HEAD has the real path.
-        if (info["action"] != "enter") store.detach_checkout(workspace, info["a"].get<std::string>());
+        if (info["action"] != "enter" && info["action"] != "register") store.detach_checkout(workspace, info["a"].get<std::string>());
       } else if (mode == "trace" || mode == "run") {
         prime_abort(store, info);
         if (mode == "trace") tracing = true;

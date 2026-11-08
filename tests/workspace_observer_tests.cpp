@@ -185,7 +185,7 @@ void scoped_changes(const fs::path &root, bool encrypted) {
     require(refused, "scoped namespace validation accepted a portable collision");
   }
   bool protected_refused = false;
-  try { visit_native_scope(project, store.root(), "vault", [](const NativeFile &) {}, {}); }
+  try { visit_native_scope(project, store, "vault", [](const NativeFile &) {}, {}); }
   catch (const Error &) { protected_refused = true; }
   require(protected_refused, "scoped scan entered protected Store contents");
 

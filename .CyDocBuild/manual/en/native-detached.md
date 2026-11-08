@@ -5,7 +5,7 @@ description: Explore revisions and commit independently of named branches.
 section: Version control
 order: 221
 parent: native-branches
-revision: 1
+revision: 2
 ---
 
 ## Select a detached revision {#usage}
@@ -83,5 +83,6 @@ auto target = store.native_target();
 auto changes = store.workspace_status(workspace, target, operation);
 ```
 
-One canonical workspace is still selected per Store. Linked/partial workspaces
-and workspace relocation remain separate work.
+Each Store handle selects one context. [Linked workspaces](doc:native-workspaces)
+share objects and branches while retaining independent HEADs and indexes. Sparse
+materialization, in-place relocation and archived unregistering remain separate work.

@@ -1,5 +1,6 @@
 #pragma once
 #include "native_workspace.hpp"
+#include "native_context.hpp"
 namespace syrnck {
 struct NativeRewriteState {
   Refs refs;
@@ -9,8 +10,9 @@ struct NativeRewriteState {
   Json revision, prepared;
   std::optional<std::string> index_base;
   NativeRewriteState(const Store &store, std::string_view name, OperationOptions options)
-      : refs(store.refs()), branch(name), head_name(native_revision_reference(branch)), index_name(native_staging_reference(branch)) {
+      : refs(store.refs()), branch(name), head_name(native_revision_reference(store, branch)), index_name(native_staging_reference(store, branch)) {
     throw_if_cancelled(options.stop);
+    require_native_branch_available(store, name);
     validate_ref(head_name);
     validate_ref(index_name);
     const auto found = refs.find(head_name);

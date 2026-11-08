@@ -5,7 +5,7 @@ description: Native branches and recoverable switching guide.
 section: Version control
 order: 220
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 # Native branches and recoverable switching {#native-branches-and-recoverable-switching}
@@ -231,10 +231,12 @@ HEAD resolves the branch dynamically. A later commit or checkout on that branch
 changes `revision` without rewriting the descriptor. Generic deletion of its
 branch leaves an unborn symbolic selection; it does not select another branch.
 
-Once HEAD is explicit, CLI workspace commands require `--directory` (default
-`.`) to resolve to that same canonical root. A Store supports one selected
-workspace. Independent linked workspaces, relocation and
-unborn destination switching remain future work. Low-level C++ methods with an
+Once HEAD is explicit, workspace commands require the same canonical directory.
+[Linked workspaces](doc:native-workspaces) have independent HEADs and indexes;
+`--workspace NAME` selects one and defaults native `--directory` to its registered
+path. Primary commands retain the `.` default. A named branch can be selected
+in one workspace at a time. Relocation, sparse materialization and unborn
+destination switching remain future work. Low-level C++ methods with an
 explicit branch argument keep their existing contract; they do not implicitly
 resolve HEAD. Applications can use `native_target()` to select a branch or the
 opaque detached target; see [detached HEAD](doc:native-detached).

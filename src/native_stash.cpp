@@ -153,7 +153,7 @@ Json NativeStash::save(const fs::path &directory, std::string_view branch, std::
   std::set<std::string> additional;
   if (settings.include_untracked)
     visit_native_files(
-        directory, store_.root(),
+        directory, store_,
         [&](const NativeFile &file) { additional.insert(portable_fold(file.relative)); }, options);
   const auto selected = store_.native_head();
   require(selected["revision"].is_string(), "native stash requires an existing selected head");

@@ -9,7 +9,7 @@ namespace syrnck {
 class WatchDirectories {
 public:
   using Add = std::function<int(const fs::path &)>;
-  WatchDirectories(fs::path root, fs::path storage, std::size_t max_directories);
+  WatchDirectories(fs::path root, fs::path storage, std::size_t max_directories, bool external_store = false);
   bool start(const Add &, std::stop_token = {});
   bool extend(std::string_view relative, const Add &, std::stop_token = {});
   const std::string *find(int descriptor) const;

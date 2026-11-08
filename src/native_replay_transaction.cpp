@@ -6,15 +6,15 @@ Json apply_replay(const Store &store, const fs::path &directory, std::string_vie
                   std::string_view message, std::optional<std::uint32_t> mainline, OperationOptions options,
                   const NativeResolutionSet *resolutions, const TextDiffOptions *text_limits) {
   throw_if_cancelled(options.stop);
-  validate_ref(native_revision_reference(std::string(branch)));
+  validate_ref(native_revision_reference(store, std::string(branch)));
   validate_id(expected_revision);
   validate_id(source);
   require_no_native_checkout(store);
   const auto all = store.refs();
-  const auto found = all.find(native_revision_reference(std::string(branch)));
+  const auto found = all.find(native_revision_reference(store, std::string(branch)));
   require(found != all.end() && found->second.kind == Kind::revision, "unknown native branch");
   require(found->second.id == expected_revision, "native replay tip changed; inspect the branch and retry");
-  require(!all.contains(native_staging_reference(std::string(branch))), "native replay requires an empty staging index");
+  require(!all.contains(native_staging_reference(store, std::string(branch))), "native replay requires an empty staging index");
   auto plan = prepare_native_replay(store, directory, branch, source, kind, mainline, true, options,
                                     resolutions, text_limits);
   require(plan.report["conflicts"].empty(), "native replay has conflicts; inspect the replay plan");

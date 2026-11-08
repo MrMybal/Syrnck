@@ -1233,5 +1233,9 @@
   "transfer-sessions#validation": "transfer-sessions",
   "unpin": "storage",
   "upload-inventories#validation": "upload-inventories",
-  "usage#cache-de-lectures-vérifiées": "usage#cache-de-lectures-verifiees"
+  "usage#cache-de-lectures-vérifiées": "usage#cache-de-lectures-verifiees",
+  "native workspaces": "native-workspaces",
+  "native workspace-add": "native-workspaces",
+  "native workspace-restore": "native-workspaces#restore",
+  "workspaces": "native-workspaces"
 }

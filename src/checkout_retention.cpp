@@ -11,14 +11,14 @@ std::string refs_hash(const Refs &refs) {
   return hash(bytes(encode_refs(refs).dump()));
 }
 struct Completed {
-  std::string id;
+  std::string id, context;
   ObjectKey target{Kind::revision, {}};
   std::optional<ObjectKey> receipt, source;
   std::string completed_name() const {
-    return "checkouts/completed/" + id;
+    return native_context_reference(context, "checkouts/completed/" + id);
   }
   std::string receipt_name() const {
-    return "checkouts/receipts/" + id;
+    return native_context_reference(context, "checkouts/receipts/" + id);
   }
   std::string source_name() const {
     return "archive/checkout/" + id;
@@ -36,6 +36,7 @@ Completed read(const Store &store, const Refs &refs, const std::string &id, Oper
   validate_id(id);
   Completed value;
   value.id = id;
+  value.context = store.native_workspace_name();
   const auto target = lookup(refs, value.completed_name());
   require(target && target->kind == Kind::revision, "unknown completed native checkout target");
   value.target = *target;
@@ -45,12 +46,14 @@ Completed read(const Store &store, const Refs &refs, const std::string &id, Oper
   if (value.receipt) {
     require(value.receipt->kind == Kind::chunk, "invalid completed native checkout receipt");
     const auto info = read_native_checkout_receipt(store, *value.receipt, id);
+    require(info.value("context", std::string{}) == value.context, "invalid completed native checkout receipt");
     require(info["target"] == value.target.id, "native checkout receipt and target disagree");
     if (value.source)
       require(info["source"] == value.source->id, "native checkout receipt and source disagree");
   }
-  const auto pending = refs.lower_bound("checkouts/pending/" + id + '/');
-  require(pending == refs.end() || !pending->first.starts_with("checkouts/pending/" + id + '/'),
+  const auto pending_name = store.native_workspace_reference("checkouts/pending/" + id) + '/';
+  const auto pending = refs.lower_bound(pending_name);
+  require(pending == refs.end() || !pending->first.starts_with(pending_name),
           "completed native checkout still has pending pins");
   const auto parent = store.root() / "checkouts";
   const auto status = fs::symlink_status(parent);
@@ -124,7 +127,8 @@ Json native_checkout_receipts(const Store &store, const std::optional<std::strin
     validate_id(*after);
   const auto refs = store.refs();
   std::set<std::string> ids;
-  for (const auto &prefix : {std::string("checkouts/completed/"), std::string("checkouts/receipts/")})
+  for (const auto &prefix : {store.native_workspace_reference("checkouts/completed") + '/',
+                              store.native_workspace_reference("checkouts/receipts") + '/'})
     for (auto at = refs.lower_bound(prefix); at != refs.end() && at->first.starts_with(prefix); ++at) {
       throw_if_cancelled(options.stop);
       const auto id = at->first.substr(prefix.size());

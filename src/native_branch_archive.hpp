@@ -44,7 +44,7 @@ struct NativeBranchArchive {
   NativeBranchState state(const Store &store, OperationOptions options) const {
     Refs refs{{"heads/" + name, target}};
     if (index)
-      refs.emplace("staging/" + name, *index);
+      refs.emplace(native_staging_reference(store, name), *index);
     return NativeBranchState(store, refs, name, options);
   }
 };

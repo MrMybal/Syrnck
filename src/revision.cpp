@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "native_workspace.hpp"
 #include "native_inventory.hpp"
+#include "native_context.hpp"
 #include <chrono>
 #include <fstream>
 #include <regex>
@@ -145,10 +146,10 @@ struct NativeScan {
   NativeInventoryPaths paths;
   bool bounded;
   std::size_t budget = 0;
-  NativeScan(const fs::path &directory, const fs::path &store,
+  NativeScan(const fs::path &directory, const Store &store,
              const std::function<void(const NativeFile &)> &visitor, OperationOptions operation, bool scope)
-      : base(fs::canonical(directory)), storage(store), visit(visitor), options(operation), bounded(scope) {
-    require(inside(storage, base), "native store must be inside committed directory");
+      : base(fs::canonical(directory)), storage(store.root()), visit(visitor), options(operation), bounded(scope) {
+    store.validate_native_workspace(base);
   }
   void rules_at(const fs::path &dir, const std::string &prefix, std::vector<Rule> &rules) {
     const auto ignore_file = dir / ".syrnckignore";
@@ -241,27 +242,28 @@ struct NativeScan {
   }
 };
 } // namespace
-void visit_native_files(const fs::path &directory, const fs::path &store_root,
+void visit_native_files(const fs::path &directory, const Store &store,
                         const std::function<void(const NativeFile &)> &visit, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  NativeScan scan(directory, store_root, visit, options, false);
+  NativeScan scan(directory, store, visit, options, false);
   scan.scan(scan.base, {}, 0);
   scan.paths.finish(options.stop);
 }
-std::string visit_native_scope(const fs::path &directory, const fs::path &store_root, std::string_view path,
+std::string visit_native_scope(const fs::path &directory, const Store &store, std::string_view path,
                                 const std::function<void(const NativeFile &)> &visit, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  NativeScan scan(directory, store_root, visit, options, true);
+  NativeScan scan(directory, store, visit, options, true);
   auto scope = scan.scope(path);
   scan.paths.finish(options.stop);
   return scope;
 }
-std::optional<NativeFile> inspect_native_file(const fs::path &directory, const fs::path &store_root,
+std::optional<NativeFile> inspect_native_file(const fs::path &directory, const Store &store,
                                               std::string_view path, OperationOptions options) {
   throw_if_cancelled(options.stop);
   validate_path(path);
   const auto base = fs::canonical(directory);
-  require(base != store_root && inside(store_root, base), "native store must be below checkout workspace");
+  store.validate_native_workspace(base);
+  const auto &store_root = store.root();
   auto current = base;
   std::string prefix;
   std::vector<Rule> rules;
@@ -326,7 +328,7 @@ Json ingest_native_file(const Store &store, const NativeFile &file, IngestOption
       auto event = progress;
       event.path = file.relative;
       event.total_bytes = file.size;
-      options.progress(event);
+      invoke_progress(options.progress, event);
     };
   const auto [id, stats] = store.ingest(input, {}, file_options);
   const auto status = fs::symlink_status(file.path);
@@ -349,11 +351,12 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
                                     std::string_view message, IngestOptions options) const {
   throw_if_cancelled(options.stop);
   validate_native_target(branch);
+  require_native_branch_available(*this, branch);
   require_no_native_checkout(*this);
-  require(!refs().contains(native_staging_reference(std::string(branch))),
+  require(!refs().contains(native_staging_reference(*this, std::string(branch))),
           "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
-  visit_native_files(directory, root(),
+  visit_native_files(directory, *this,
                      [&](const NativeFile &file) {
                        files.emplace(file.relative,
                                      ingest_native_file(*this, file, options,
@@ -366,7 +369,7 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
   for (auto &[name, value] : files)
     object.emplace_back(name, std::move(value));
   Json parents = Json::array();
-  auto name = native_revision_reference(std::string(branch));
+  auto name = native_revision_reference(*this, std::string(branch));
   auto all = refs();
   if (all.contains(name)) {
     require(all.at(name).kind == Kind::revision, "branch must point to a revision");
@@ -380,16 +383,17 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
       {"files",
        entries}}.dump();
   if (options.progress)
-    options.progress({ProgressPhase::publishing, branch});
+    invoke_progress(options.progress, {ProgressPhase::publishing, branch});
   throw_if_cancelled(options.stop);
   auto key = put(Kind::revision, bytes(value)).first;
   set_ref(name, key, options.stop);
   return key.id;
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {
+  require_native_branch_available(*this, branch);
   require_no_native_checkout(*this);
   validate_native_target(branch);
-  auto name = native_revision_reference(std::string(branch));
+  auto name = native_revision_reference(*this, std::string(branch));
   auto all = refs();
   require(all.contains(name) && all.at(name).kind == Kind::revision, "unknown native branch");
   auto previous = all.at(name);

@@ -8,10 +8,18 @@ inline void throw_if_cancelled(std::stop_token stop) {
   if (stop.stop_requested())
     throw Cancelled("operation cancelled");
 }
+inline thread_local unsigned progress_callback_depth = 0;
+inline void invoke_progress(const ProgressCallback &callback, const ProgressEvent &event) {
+  struct Guard {
+    Guard() { ++progress_callback_depth; }
+    ~Guard() { --progress_callback_depth; }
+  } guard;
+  callback(event);
+}
 inline void report_progress(const OperationOptions &options, const ProgressEvent &event) {
   throw_if_cancelled(options.stop);
   if (options.progress)
-    options.progress(event);
+    invoke_progress(options.progress, event);
   throw_if_cancelled(options.stop);
 }
 void atomic_write(const fs::path &, std::span<const std::uint8_t>, bool replace, std::stop_token = {});

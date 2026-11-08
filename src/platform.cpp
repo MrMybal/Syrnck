@@ -333,7 +333,8 @@ ProcessResult process(const std::vector<std::string> &args, const fs::path &cwd,
   using File = std::unique_ptr<std::FILE, decltype(close_file)>;
   File in(std::tmpfile(), close_file), out(std::tmpfile(), close_file), err(std::tmpfile(), close_file);
   require(in && out && err, "cannot allocate child streams");
-  require(std::fwrite(input.data(), 1, input.size(), in.get()) == input.size(), "child input write failed");
+  if (!input.empty())
+    require(std::fwrite(input.data(), 1, input.size(), in.get()) == input.size(), "child input write failed");
   std::rewind(in.get());
 #ifdef _WIN32
   auto quote = [](const std::string &arg) {

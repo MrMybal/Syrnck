@@ -34,7 +34,7 @@ func loadLibrary() error {
 			return
 		}
 		library.functions = make(map[string]*syscall.Proc)
-		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify", "string_free", "workspace_open", "workspace_close", "workspace_wait_json", "workspace_status_json", "workspace_invalidate", "cancellation_create", "cancellation_request", "cancellation_close", "workspace_open_ex", "workspace_wait_json_ex", "workspace_status_json_ex"} {
+		for _, name := range []string{"abi_version", "error_copy", "store_open", "store_close", "store_use_workspace", "workspace_open_registered_ex", "ingest_file_ex", "restore_file", "file_verify", "restore_file_range", "file_read_range", "file_compare_json", "object_has", "object_read", "object_import", "closure_json", "ref_set", "ref_remove", "store_verify", "string_free", "workspace_open", "workspace_close", "workspace_wait_json", "workspace_status_json", "workspace_invalidate", "cancellation_create", "cancellation_request", "cancellation_close", "workspace_open_ex", "workspace_wait_json_ex", "workspace_status_json_ex"} {
 			p, err := library.dll.FindProc("syrnck_" + name)
 			if err != nil {
 				library.err = err
@@ -212,16 +212,22 @@ func nativeVerify(h nativeHandle) (uint64, error) {
 
 type nativeWorkspaceHandle uintptr
 
-func nativeWorkspaceOpen(root, store []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
+func nativeWorkspaceOpen(root, store, name []byte, config *[3]uint32, cancellation nativeCancellationHandle) (nativeWorkspaceHandle, error) {
 	if err := loadLibrary(); err != nil {
 		return 0, err
 	}
 	var result nativeWorkspaceHandle
-	r, _, _ := library.functions["workspace_open_ex"].Call(uintptr(unsafe.Pointer(&root[0])), uintptr(unsafe.Pointer(&store[0])), uintptr(unsafe.Pointer(config)), uintptr(cancellation), uintptr(unsafe.Pointer(&result)))
+	r, _, _ := library.functions["workspace_open_registered_ex"].Call(uintptr(unsafe.Pointer(&root[0])), uintptr(unsafe.Pointer(&store[0])), uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(config)), uintptr(cancellation), uintptr(unsafe.Pointer(&result)))
 	runtime.KeepAlive(root)
 	runtime.KeepAlive(store)
+	runtime.KeepAlive(name)
 	runtime.KeepAlive(config)
 	return result, status(int(r))
+}
+func nativeUseWorkspace(h nativeHandle, name []byte) error {
+	r, _, _ := library.functions["store_use_workspace"].Call(uintptr(h), uintptr(unsafe.Pointer(&name[0])))
+	runtime.KeepAlive(name)
+	return status(int(r))
 }
 func nativeWorkspaceClose(h nativeWorkspaceHandle) error {
 	r, _, _ := library.functions["workspace_close"].Call(uintptr(h))

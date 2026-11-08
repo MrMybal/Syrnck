@@ -249,6 +249,10 @@ struct StoreOptions {
   std::size_t verified_cache_entries = 8192;
   std::size_t pack_index_cache_bytes = 4 * 1024 * 1024;
 };
+struct NativeWorkspaceRestoreOptions {
+  std::optional<std::string> branch{};
+  bool detached = false;
+};
 struct PackOptions {
   // Hard limits for newly built packs, including their 8-byte header.
   std::uint64_t max_pack_bytes = 512ULL * 1024 * 1024;
@@ -498,6 +502,17 @@ public:
   // Opaque selector accepted by native workspace/staging/history operations.
   // A detached selector is not a branch name and cannot be published as one.
   std::string native_target() const;
+  // Select a registered workspace for this handle. Empty selects the primary
+  // legacy workspace; this never changes another handle's selection.
+  void use_native_workspace(std::string_view name);
+  std::string_view native_workspace_name() const;
+  std::string native_workspace_reference(std::string_view local) const;
+  void validate_native_workspace(const fs::path &) const;
+  Json register_native_workspace(const fs::path &primary, std::string_view name,
+                                 const fs::path &directory, OperationOptions = {}) const;
+  Json restore_native_workspace(const fs::path &primary, std::string_view name, const fs::path &directory,
+                                 NativeWorkspaceRestoreOptions = {}, OperationOptions = {}) const;
+  Json native_workspaces(OperationOptions = {}) const;
   // Bounded pages of existing branch heads and their frozen staging state.
   Json native_branches(const std::optional<std::string> &after = {}, std::size_t limit = 100,
                        bool verify_objects = false, OperationOptions = {}) const;

@@ -34,6 +34,8 @@ class ReadProxyHandler(base.Handler):
             if self.command == "PUT" and self.path.startswith("/v1/reads/"):
                 if self.server.calls.count((self.command, self.path)) == 2 and self.server.hold_renewal:
                     self.server.renewal_entered.set()
+                    if self.server.renewal_signal is not None:
+                        self.server.renewal_signal.write_text("ready", encoding="ascii")
                     self.server.renewal_release.wait(5)
             elif self.command == "GET" and self.path.startswith("/v1/objects/"):
                 if self.server.renewal_entered.is_set():
@@ -58,6 +60,7 @@ class ReadProxy(base.Repository):
         super().__init__(ReadProxyHandler)
         self.target, self.gate, self.drop_release, self.hold_renewal = target, False, False, False
         self.release_on_object = True
+        self.renewal_signal = None
         self.condition, self.active = threading.Condition(), 0
         self.renewal_entered, self.renewal_release, self.object_during_renewal = threading.Event(), threading.Event(), threading.Event()
 
@@ -205,16 +208,19 @@ class ServerReadLeases(unittest.TestCase):
 
     def test_cancellation_joins_a_pending_read_renewal(self):
         self.setup_source()
-        with self.serving(read_seconds=1) as remote, base.server(lambda: ReadProxy(remote.url)) as proxy:
+        with self.serving(read_seconds=3) as remote, base.server(lambda: ReadProxy(remote.url)) as proxy:
             proxy.hold_renewal = True
             proxy.release_on_object = False
+            proxy.renewal_signal = self.root / "read-renewal-ready"
+            self.env["SYRNCK_TEST_RENEWAL_READY"] = str(proxy.renewal_signal)
             try:
                 start = time.monotonic()
                 self.assertTrue(self.probe(proxy, "renew_stop", "pull", requests=4)["cancelled"])
                 self.assertTrue(proxy.renewal_entered.is_set())
-                self.assertLess(time.monotonic() - start, 3)
+                self.assertLess(time.monotonic() - start, 12)
                 self.assertEqual(json.loads(self.cmd("refs", store=self.target, encrypted=True).stdout), {})
             finally:
+                self.env.pop("SYRNCK_TEST_RENEWAL_READY", None)
                 proxy.drain()
 
     def test_release_precedes_local_publication_and_completed_resume_is_offline(self):

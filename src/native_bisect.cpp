@@ -33,7 +33,7 @@ std::set<std::string> identifiers(const Json &value) {
   return result;
 }
 std::optional<Record> read(const Store &store, const Refs &refs) {
-  const auto key = lookup(refs, active_name), pin = lookup(refs, pin_name);
+  const auto key = lookup(refs, store.native_workspace_reference(active_name)), pin = lookup(refs, store.native_workspace_reference(pin_name));
   if (!key) {
     require(!pin, "native bisect has an orphan history pin");
     return {};
@@ -212,8 +212,8 @@ Json NativeBisect::start(std::string_view good, std::string_view bad, OperationO
   record.key = store_.put(Kind::chunk, bytes(record.json().dump())).first;
   report["state"] = record.key.id;
   require(
-      store_.compare_update_refs({{std::string(active_name), {}, record.key},
-                                  {std::string(pin_name), {}, ObjectKey{Kind::revision, record.seed_bad}}},
+      store_.compare_update_refs({{store_.native_workspace_reference(active_name), {}, record.key},
+                                  {store_.native_workspace_reference(pin_name), {}, ObjectKey{Kind::revision, record.seed_bad}}},
                                  options),
       "native bisect references changed; retry operation");
   return report;
@@ -245,7 +245,7 @@ Json NativeBisect::mark(std::string_view result, std::string_view revision, std:
   auto report = analyse(store_, *record, options);
   const auto next = store_.put(Kind::chunk, bytes(record->json().dump())).first;
   report["state"] = next.id;
-  require(store_.compare_update_refs({{std::string(active_name), record->key, next}}, options),
+  require(store_.compare_update_refs({{store_.native_workspace_reference(active_name), record->key, next}}, options),
           "native bisect references changed; retry operation");
   return report;
 }
@@ -259,15 +259,15 @@ Json NativeBisect::reset(std::string_view expected, OperationOptions options) co
   require(record->key.id == expected, "native bisect state changed; refresh status");
   auto report = analyse(store_, *record, options);
   const ObjectKey root{Kind::revision, record->seed_bad};
-  const auto archive = "archive/bisect/" + root.id, receipt = "bisect/receipts/" + record->session;
+  const auto archive = "archive/bisect/" + root.id, receipt = store_.native_workspace_reference("bisect/receipts/" + record->session);
   const auto previous = lookup(refs, archive);
   require(!previous || *previous == root, "native bisect archive reference is occupied");
   require(!lookup(refs, receipt), "native bisect receipt reference is occupied");
   report["active"] = false;
   report["archive"] = archive;
   report["receipt"] = receipt;
-  require(store_.compare_update_refs({{std::string(active_name), record->key, {}},
-                                      {std::string(pin_name), root, {}},
+  require(store_.compare_update_refs({{store_.native_workspace_reference(active_name), record->key, {}},
+                                      {store_.native_workspace_reference(pin_name), root, {}},
                                       {archive, previous, root},
                                       {receipt, {}, record->key}},
                                      options),

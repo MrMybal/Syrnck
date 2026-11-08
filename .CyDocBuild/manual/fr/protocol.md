@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -139,3 +139,18 @@ L'en-tête `include/syrnck.h` définit l'ABI 1, annoncée par `syrnck_abi_versio
 Après import de tous les objets, `syrnck_ref_set` valide les dépendances et les hashes complets avant de publier le pin. Cette fonction remplace une référence locale sans compare-and-swap ; l'API HTTP conserve son contrat CAS distinct. Les objets reçus avant publication ne sont pas automatiquement protégés du GC après fermeture du store. L'intégrateur doit garder le store ouvert et sérialiser transfert/GC, puis conserver une racine avant fermeture pour garantir la rétention.
 
 `syrnck_last_error` est local au thread et reste valide jusqu'au prochain appel qui modifie l'erreur. Le diagnostic est borné à 4 095 octets pour éviter d'allouer de la mémoire pendant le signalement d'une erreur. `syrnck_error_copy` permet de le copier sans le modifier ; sa longueur inclut NUL. Un binding avec goroutines doit récupérer l'erreur sur le même thread OS que l'appel. Les buffers d'objets appartiennent à l'appelant ; seules les chaînes allouées par `syrnck_manifest_json` passent par `syrnck_string_free`.
+
+## Enregistrements des workspaces liés {#linked-workspace-formats}
+
+Les [workspaces liés](doc:native-workspaces) utilisent les vraies références
+`workspaces/NOM/`. `registration` conserve un chunk native-workspace v1 canonique
+avec nom et dossier ; `workspace/HEAD` conserve la sélection nommée/détachée.
+Les racines détachées sont privées. Les index nommés utilisent
+`staging/BLAKE3(nom-branche)` ; la révision préparée garde le nom complet.
+Les reçus v8 ajoutent `context` et `layout_version` 1..6 ; les layouts principaux
+v1..v7 ne changent pas. La sélection appartient au handle.
+
+Une sauvegarde contenant ces liaisons utilise le marqueur v2, conservant par
+contexte un descripteur portable native-workspace-snapshot et la révision
+`snapshot`, sans liaisons absolues registration/HEAD/reçus. Les sauvegardes v1
+restent lisibles. La restauration relie explicitement le snapshot à un nouveau dossier.

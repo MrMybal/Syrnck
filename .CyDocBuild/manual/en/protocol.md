@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 2
+revision: 3
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -120,3 +120,17 @@ This v1 is not BEP, Git LFS or Lore. `GET /v1/capabilities` negotiates [upload l
 `ref_set` verifies the complete closure/file hashes then replaces a local pin without CAS; HTTP is distinct CAS. Unpublished imported objects are not protected after close: keep the Store open and serialize transfer/GC, then retain a root before closing.
 
 `last_error` is thread-local, valid until a modifying call, bounded 4095 bytes to avoid allocating in error handling. `error_copy` copies without changing it, length includes NUL. Goroutine bindings must retrieve it on the same OS thread. Only allocated `manifest_json` strings use `string_free`; ordinary buffers belong to the caller. Additive range, comparison, file-verification and [workspace APIs](doc:workspace-abi) require matching rebuilt headers/library. See [C ownership reference](doc:api-c-abi).
+
+## Linked workspace records {#linked-workspace-formats}
+
+[Linked workspaces](doc:native-workspaces) use real `workspaces/NAME/` refs.
+`registration` retains a canonical v1 native-workspace chunk with its name and
+directory; `workspace/HEAD` retains the named/detached descriptor. Detached roots
+are private. Named indexes use `staging/BLAKE3(branch-name)`; prepared revisions
+still record the complete name. Receipts v8 add `context` and `layout_version`
+1..6; primary layouts v1..v7 remain unchanged. Selection is handle-local.
+
+Backups with linked machine bindings use marker v2, retaining a portable
+native-workspace-snapshot descriptor and `snapshot` revision per context instead
+of absolute registration/HEAD/receipt bindings. V1 backups remain readable.
+Restoration explicitly rebinds a portable snapshot in a new directory.

@@ -5,7 +5,7 @@ description: Explorer des révisions et committer indépendamment des branches n
 section: Versionnage
 order: 221
 parent: native-branches
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Sélectionner une révision détachée {#usage}
@@ -87,5 +87,6 @@ auto target = store.native_target();
 auto changes = store.workspace_status(workspace, target, operation);
 ```
 
-Un seul workspace canonique reste sélectionné par Store. Les workspaces liés ou
-partiels et leur déplacement restent des travaux distincts.
+Chaque handle Store sélectionne un contexte. Les [workspaces liés](doc:native-workspaces)
+partagent objets et branches avec des HEAD et index indépendants. Matérialisation
+partielle, déplacement en place et désenregistrement archivé restent à réaliser.

@@ -47,9 +47,12 @@ class Inventory {
 
 public:
   fs::path base;
-  Inventory(const fs::path &directory, const fs::path &store, const OperationOptions &options)
+  Inventory(const fs::path &directory, const Store &storage, const OperationOptions &options, bool restored = false)
       : base(fs::canonical(directory)) {
-    require(base != store && inside(store, base), "native store must be below checkout workspace");
+    if (!restored) storage.validate_native_workspace(base);
+    else require(base != storage.root() && !inside(base, storage.root()) && !inside(storage.root(), base),
+                  "native workspaces must not overlap");
+    const auto &store = storage.root();
     std::vector<std::pair<fs::path, unsigned>> pending{{base, 0}};
     std::size_t budget = 0;
     while (!pending.empty()) {
@@ -181,11 +184,32 @@ bool executable_equal(bool actual, bool expected) {
 #endif
 }
 } // namespace
+void verify_native_restored_directory(const Store &store, const fs::path &directory, std::string_view revision,
+                                      OperationOptions options) {
+  const auto expected = read_native_snapshot(store, revision, options);
+  const Inventory inventory(directory, store, options, true);
+  Bytes buffer(1024 * 1024);
+  std::size_t files = 0;
+  Conflicts conflicts;
+  for (const auto &[path, node] : inventory.nodes()) {
+    throw_if_cancelled(options.stop);
+    if (node.type == Type::directory) continue;
+    const auto wanted = expected.find(path);
+    require(node.type == Type::file && wanted != expected.end() && inventory.parents(path, conflicts) &&
+                inventory.inspect(path, conflicts, true), "restored workspace does not match its snapshot");
+    const auto content = hash_native_file({inventory.base / path_from_utf8(path), path, node.size, node.modified, node.executable},
+                                           buffer, options);
+    require(content == wanted->second.content && executable_equal(node.executable, wanted->second.executable),
+            "restored workspace does not match its snapshot");
+    ++files;
+  }
+  require(files == expected.size(), "restored workspace does not match its snapshot");
+}
 void verify_native_checkout_namespace(const Store &store, const fs::path &directory,
                                       const std::vector<std::string> &target,
                                       const std::vector<std::string> &removed, OperationOptions options,
                                       bool final, bool transitions) {
-  const Inventory inventory(directory, store.root(), options);
+  const Inventory inventory(directory, store, options);
   Conflicts conflicts;
   for (const auto &path : target) {
     throw_if_cancelled(options.stop);
@@ -232,10 +256,14 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
   const NativeCheckoutLayout layout(source, destination, options, source_directories);
   const auto owned_inventory =
       supplied_inventory ? std::optional<Inventory>{}
-                         : std::optional<Inventory>{std::in_place, directory, store.root(), options};
+                         : std::optional<Inventory>{std::in_place, directory, store, options};
   const auto &inventory = supplied_inventory ? *supplied_inventory : *owned_inventory;
   Conflicts conflicts;
-  if (store.refs().contains("checkouts/active"))
+  const auto owner = native_branch_workspace_owner(store, branch);
+  if (owner && *owner != store.native_workspace_name())
+    conflicts.emplace("", "branch_in_other_workspace", *owner);
+  const auto refs = store.refs();
+  if (std::any_of(refs.begin(), refs.end(), [](const auto &entry) { return native_checkout_active_reference(entry.first); }))
     conflicts.emplace("", "checkout_pending", "");
   if (!source_override && !staging["snapshot"].is_null())
     conflicts.emplace("", staging["stale"].get<bool>() ? "stale_staging" : "staging_present", "");
@@ -421,7 +449,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
     for (auto n = path.find('/'); n != path.npos; n = path.find('/', n + 1))
       add_target(path.substr(0, n), true);
   }
-  const Inventory inventory(directory, store.root(), options);
+  const Inventory inventory(directory, store, options);
   for (const auto &[path, node] : inventory.nodes())
     if (node.type == Type::directory) {
       const auto folded = portable_fold(path);
@@ -430,7 +458,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
         displaced.insert(folded);
     }
   NativeHardResetPlan plan{state.head.id, state.index, {}, {}, {}, {}};
-  plan.selection = state.lookup("workspace/HEAD");
+  plan.selection = state.lookup(store.native_workspace_reference("workspace/HEAD"));
   Bytes buffer(1024 * 1024);
   std::map<std::string, std::vector<const NativeSnapshotFile *>> existing;
   for (const auto *snapshot : {&original, &staged, &destination})
@@ -490,7 +518,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
       {"head", state.head.id},
       {"target", target},
       {"index", state.index ? Json(state.index->id) : Json{}},
-      {"selection", state.lookup("workspace/HEAD") ? key_json(*state.lookup("workspace/HEAD")) : Json{}},
+      {"selection", state.lookup(store.native_workspace_reference("workspace/HEAD")) ? key_json(*state.lookup(store.native_workspace_reference("workspace/HEAD"))) : Json{}},
       {"working", std::move(working)},
       {"directories", plan.directories}};
   plan.report =

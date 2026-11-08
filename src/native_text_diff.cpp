@@ -177,19 +177,19 @@ NativeWorkingDiff read_native_working_diff(const Store &store, const fs::path &d
   validate_path(path);
   const auto base = fs::canonical(directory);
   auto before = side(store, source, path, options);
-  const auto file = inspect_native_file(base, store.root(), path, options);
+  const auto file = inspect_native_file(base, store, path, options);
   require(!before.entry.is_null() || file, "native text diff path is absent from both snapshots");
   const auto size = file ? file->size : 0;
   const bool oversized = before.size > limits.max_file_bytes || size > limits.max_file_bytes;
   std::string content;
   if (!oversized)
     load(store, before, options);
-  require(same_file(file, inspect_native_file(base, store.root(), path, options)),
+  require(same_file(file, inspect_native_file(base, store, path, options)),
           "file changed during native text diff; retry operation");
   if (file && !oversized)
     content = working_bytes(*file, options);
   require(fs::canonical(directory) == base &&
-              same_file(file, inspect_native_file(base, store.root(), path, options)),
+              same_file(file, inspect_native_file(base, store, path, options)),
           "file changed during native text diff; retry operation");
   Json target;
   if (file) {
@@ -255,7 +255,7 @@ void verify_native_working_diff(const Store &store, const NativeWorkingDiff &cap
                                 OperationOptions options) {
   require(fs::canonical(capture.requested) == capture.directory &&
               same_file(capture.file,
-                        inspect_native_file(capture.directory, store.root(), capture.path, options)),
+                        inspect_native_file(capture.directory, store, capture.path, options)),
           "file changed during native text diff; retry operation");
 }
 } // namespace syrnck

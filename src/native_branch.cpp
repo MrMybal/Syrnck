@@ -40,15 +40,15 @@ Json Store::create_native_branch(std::string_view name, std::string_view revisio
   validate_id(revision);
   require_no_native_checkout(*this);
   const auto all = refs();
-  const std::string ref = "heads/" + std::string(name), index = "staging/" + std::string(name);
+  const std::string ref = "heads/" + std::string(name), index = native_staging_reference(*this, name);
   require(!all.contains(ref), "branch already exists");
   require(!all.contains(index), "native branch has an orphan staging index");
   const auto head = native_head();
   const auto value = metadata(Kind::revision, revision);
-  const auto selection = native_branch_lookup(all, "workspace/HEAD");
+  const auto selection = native_branch_lookup(all, this->native_workspace_reference("workspace/HEAD"));
   require(compare_update_refs({{ref, {}, ObjectKey{Kind::revision, std::string(revision)}},
                                {index, {}, {}},
-                               {"workspace/HEAD", selection, selection}},
+                               {this->native_workspace_reference("workspace/HEAD"), selection, selection}},
                               options),
           "native branch references changed; retry operation");
   return Json{{"version", 1},

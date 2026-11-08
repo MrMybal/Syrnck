@@ -36,17 +36,17 @@ void verify_native_checkout_namespace(const Store &, const fs::path &, const std
                                       const std::vector<std::string> &removed, OperationOptions,
                                       bool final = true, bool transitions = false);
 // Shared snapshot selection for native commit and working-directory status.
-void visit_native_files(const fs::path &directory, const fs::path &store,
+void visit_native_files(const fs::path &directory, const Store &store,
                         const std::function<void(const NativeFile &)> &, OperationOptions);
 // Enumerate only one file/subtree with the same selection rules as a full
 // scan. Return the replacement scope: an absent, ignored or regular-file
 // ancestor can broaden it. Caller replaces that complete prefix and validates
 // the union with retained paths. Protected storage and case aliases refuse.
-std::string visit_native_scope(const fs::path &directory, const fs::path &store, std::string_view path,
+std::string visit_native_scope(const fs::path &directory, const Store &store, std::string_view path,
                                 const std::function<void(const NativeFile &)> &, OperationOptions);
 // Targeted inspection with shared ignore rules. Only enumerate ancestor
 // directories; reject case aliases, links/reparse points and protected storage.
-std::optional<NativeFile> inspect_native_file(const fs::path &directory, const fs::path &store,
+std::optional<NativeFile> inspect_native_file(const fs::path &directory, const Store &store,
                                               std::string_view path, OperationOptions);
 Json ingest_native_file(const Store &, const NativeFile &, IngestOptions, std::string_view changed_message);
 Json compare_native_snapshots(const Store &, const std::optional<std::string> &source,
@@ -59,4 +59,7 @@ Json indexed_native_observation(const Store &, const fs::path &, const std::opti
                                 NativeSnapshot &, OperationOptions);
 Json plan_native_checkout_files(const Store &, const fs::path &, std::string_view branch,
                                 const NativeSnapshot &destination, OperationOptions);
+// Read-only recovery of an interrupted portable workspace export. Requires an
+// exact complete tree; never replaces an existing working file or follows links.
+void verify_native_restored_directory(const Store &, const fs::path &, std::string_view revision, OperationOptions);
 } // namespace syrnck

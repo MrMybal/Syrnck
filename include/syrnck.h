@@ -87,6 +87,9 @@ SYRNCK_API const char *syrnck_last_error(void);
 SYRNCK_API int syrnck_error_copy(char *out, size_t capacity, size_t *required);
 SYRNCK_API int syrnck_store_open(const char *path, bool create, const unsigned char *key, size_t key_len,
                                  SyrnckStore **out);
+/* Handle-local native workspace selection. NULL/empty selects primary. Named
+ * contexts must already be registered; failure preserves the old selection. */
+SYRNCK_API int syrnck_store_use_workspace(SyrnckStore *store, const char *name);
 SYRNCK_API int syrnck_store_close(SyrnckStore *store);
 /* Caller provides out_id[65]. Ingested files are retained under ffi/<id>. */
 SYRNCK_API int syrnck_ingest_file(SyrnckStore *store, const char *path, char *out_id);
@@ -187,6 +190,12 @@ SYRNCK_API int syrnck_workspace_open(const char *directory, const char *store_pa
                                      const SyrnckWorkspaceOptions *options, SyrnckWorkspace **out);
 SYRNCK_API int syrnck_workspace_open_ex(const char *directory, const char *store_path,
                                         const SyrnckWorkspaceOptions *options,
+                                        const SyrnckCancellation *cancellation, SyrnckWorkspace **out);
+/* Additive ABI 1: observe a registered linked context with an external Store.
+ * Set the same context on the Store before status; registration/path are
+ * verified using that Store's key. NULL/empty name retains primary behavior. */
+SYRNCK_API int syrnck_workspace_open_registered_ex(const char *directory, const char *store_path,
+                                        const char *name, const SyrnckWorkspaceOptions *options,
                                         const SyrnckCancellation *cancellation, SyrnckWorkspace **out);
 SYRNCK_API int syrnck_workspace_close(SyrnckWorkspace *workspace);
 /* One native wait (0..60000 ms). JSON: version, backend, paths, full_scan,

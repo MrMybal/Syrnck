@@ -10,10 +10,11 @@ bool below(const fs::path &path, const fs::path &root) {
   return true;
 }
 } // namespace
-WatchDirectories::WatchDirectories(fs::path root, fs::path storage, std::size_t limit)
+WatchDirectories::WatchDirectories(fs::path root, fs::path storage, std::size_t limit, bool external)
     : root_(std::move(root)), storage_(std::move(storage)), limit_(limit) {
   require(limit_ >= 1 && limit_ <= 65536, "invalid workspace watcher limits");
-  require(root_ != storage_ && below(storage_, root_), "native store must be below watched workspace");
+  require(root_ != storage_ && !below(root_, storage_) && (below(storage_, root_) || external),
+          "native store must be below watched workspace");
 }
 void WatchDirectories::clear() {
   descriptors_.clear();
@@ -27,6 +28,7 @@ const std::string *WatchDirectories::find(int descriptor) const {
 bool WatchDirectories::start(const Add &add, std::stop_token stop) {
   require(paths_.empty(), "directory watches must be rebuilt after registration failure");
   if (!tree(root_, add, stop)) return false;
+  if (!below(storage_, root_)) return true;
   const auto relative = utf8(storage_.lexically_relative(root_));
   // The actual Store still needs its own refs/config watch when it is below
   // an excluded .git/.syrnck directory. Never enumerate its contents.

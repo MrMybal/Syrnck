@@ -13,6 +13,8 @@ var zeroWorkspaceHandle nativeWorkspaceHandle
 
 // WorkspaceOptions' zero value selects native notifications with polling fallback.
 type WorkspaceOptions struct {
+	// Name selects a registered native context; empty observes primary.
+	Name                     string
 	Polling                  bool
 	MaxPaths, MaxDirectories uint32
 }
@@ -67,6 +69,10 @@ func OpenWorkspaceContext(ctx context.Context, directory, storage string, option
 	if err != nil {
 		return nil, err
 	}
+	name, err := text(options.Name)
+	if err != nil {
+		return nil, err
+	}
 	if options.MaxPaths == 0 {
 		options.MaxPaths = 4096
 	}
@@ -82,7 +88,7 @@ func OpenWorkspaceContext(ctx context.Context, directory, storage string, option
 	var handle nativeWorkspaceHandle
 	err = withNativeCancellation(ctx, func(cancellation nativeCancellationHandle) error {
 		var failure error
-		handle, failure = nativeWorkspaceOpen(root, store, &config, cancellation)
+		handle, failure = nativeWorkspaceOpen(root, store, name, &config, cancellation)
 		return failure
 	})
 	if err != nil {

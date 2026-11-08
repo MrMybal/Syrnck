@@ -1,5 +1,6 @@
 #include "cli_watch.hpp"
 #include "watch_journal.hpp"
+#include "native_context.hpp"
 #include <syrnck/watcher.hpp>
 #include <syrnck/working_index.hpp>
 #include <algorithm>
@@ -37,7 +38,7 @@ struct Journal {
     workspace = hash(bytes(utf8(root)));
     selection = hash(bytes(Json::array({command.branch ? Json(*command.branch) : Json{},
                                        command.revision ? Json(*command.revision) : Json{}, command.combined}).dump()));
-    lock = lock_watch_journal(fs::canonical(storage));
+    lock = lock_watch_journal(native_context_local_path(fs::canonical(storage), command.workspace, "watch.lock").parent_path());
   }
   void load(const Store &store, OperationOptions options) {
     const auto old = store.workspace_watch_journal(options);
@@ -88,7 +89,10 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
   require(!(command.branch && command.revision), "choose either --branch or --revision");
   require(!(command.combined && command.revision), "combined native status cannot select an explicit revision");
   if (command.branch) validate_native_target(*command.branch);
-  WorkspaceWatcher watcher(directory, storage, {command.polling, static_cast<std::size_t>(command.max_paths)}, operation.stop);
+  if (!command.workspace.empty()) validate_native_workspace_name(command.workspace);
+  WorkspaceWatchOptions watcher_options{command.polling, static_cast<std::size_t>(command.max_paths)};
+  watcher_options.external_store = !command.workspace.empty();
+  WorkspaceWatcher watcher(directory, storage, watcher_options, operation.stop);
   const auto root = fs::canonical(directory);
   WorkspaceObservation observation(root, storage);
   Journal journal(root, storage, command);
@@ -133,7 +137,7 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
           if (command.revision) revision = store->resolve_native_revision(*command.revision, operation);
           else {
             const auto refs = store->refs();
-            if (const auto found = refs.find(native_revision_reference(branch)); found != refs.end()) {
+            if (const auto found = refs.find(native_revision_reference(*store, branch)); found != refs.end()) {
               require(found->second.kind == Kind::revision, "branch must point to a revision");
               revision = found->second.id;
             }

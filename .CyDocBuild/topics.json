@@ -1094,7 +1094,7 @@
   "native bisect-skip": "native-bisect",
   "native bisect-start": "native-bisect",
   "native bisect-status": "native-bisect",
-  "native blame": "native-file-history",
+  "native blame": "native-blame",
   "native branch": "native-branches",
   "native branch-archive": "native-branches",
   "native branch-archives": "native-branches",
@@ -1124,7 +1124,6 @@
   "native index-clear": "working-index",
   "native log": "native-history",
   "native log-file": "native-file-history",
-  "native blame": "native-blame",
   "native detached": "native-detached",
   "native switch --detach": "native-detached",
   "native switch-plan --detach": "native-detached#recovery",
@@ -1234,5 +1233,9 @@
   "transfer-sessions#validation": "transfer-sessions",
   "unpin": "storage",
   "upload-inventories#validation": "upload-inventories",
-  "usage#cache-de-lectures-vérifiées": "usage#cache-de-lectures-verifiees"
+  "usage#cache-de-lectures-vérifiées": "usage#cache-de-lectures-verifiees",
+  "native workspaces": "native-workspaces",
+  "native workspace-add": "native-workspaces",
+  "native workspace-restore": "native-workspaces#restore",
+  "workspaces": "native-workspaces"
 }

@@ -6,6 +6,8 @@ struct WorkspaceWatchOptions {
   bool polling = false;
   std::size_t max_paths = 4096;
   std::size_t max_directories = 65536;
+  // Observation only. Store-backed status still requires a registered context.
+  bool external_store = false;
 };
 struct WorkspaceChanges {
   std::vector<std::string> paths;

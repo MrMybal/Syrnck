@@ -4,12 +4,12 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Workspace et versionnage {#workspace}
 
-[HEAD nommé et détaché](doc:native-detached) sont pris en charge. Les workspaces natifs multiples/partiels restent à compléter. L’index de travail persistant et l’observateur évitent certains recalculs de hash, sans produire un snapshot atomique du système de fichiers ni un historique complet d’événements. Les notifications OS peuvent déborder ; réanalyses prudentes et polling restent nécessaires.
+[HEAD nommé et détaché](doc:native-detached) sont pris en charge. Les [workspaces natifs liés](doc:native-workspaces) conservent des HEAD/index séparés et des snapshots portables pour les sauvegardes. Matérialisation partielle, déplacement en place et désenregistrement archivé restent à compléter. L’index de travail persistant et l’observateur évitent certains recalculs de hash, sans produire un snapshot atomique du système de fichiers ni un historique complet d’événements. Les notifications OS peuvent déborder ; réanalyses prudentes et polling restent nécessaires.
 
 Les renommages de contenu exact sont reconnus, mais renommages avec édition/copies, intégration aux merges/rebases et synthèse récursive des bases multiples restent incomplets. Les révisions natives v1 n’ont ni auteur ni signature. Respecter les limites de chaque mode de fusion/rebase : la présence d’une commande ne promet pas toute la compatibilité Git.
 

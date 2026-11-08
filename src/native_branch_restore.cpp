@@ -1,4 +1,5 @@
 #include "native_branch_archive.hpp"
+#include "native_context.hpp"
 namespace syrnck {
 namespace {
 struct RestorePlan {
@@ -27,9 +28,12 @@ RestorePlan prepare_restore(const Store &store, const Refs &refs, std::string_vi
   Json blockers = Json::array();
   if (store.checkout_status()["pending"].get<bool>())
     blockers.push_back(Json{{"reason", "pending_checkout"}});
+  const auto owner = native_branch_workspace_owner(store, plan.name);
+  if (owner && *owner != store.native_workspace_name())
+    blockers.push_back(Json{{"reason", "branch_in_other_workspace"}, {"workspace", owner->empty() ? "primary" : *owner}});
   if (refs.contains("heads/" + plan.name))
     blockers.push_back(Json{{"reason", "destination_branch_exists"}});
-  if (refs.contains("staging/" + plan.name))
+  if (refs.contains(native_staging_reference(store, plan.name)))
     blockers.push_back(Json{{"reason", "destination_staging_exists"}});
   if (verify) {
     std::vector<ObjectKey> roots;
@@ -77,11 +81,11 @@ Json Store::restore_native_branch(std::string_view id, const std::optional<std::
     const auto candidate = put(Kind::revision, bytes(plan.candidate.dump())).first;
     require(plan.index == candidate, "native branch staging changed; refresh the plan");
   }
-  const auto head = native_branch_lookup(all, "workspace/HEAD");
+  const auto head = native_branch_lookup(all, this->native_workspace_reference("workspace/HEAD"));
   auto updates = plan.archive.retention_updates(all);
   updates.push_back({"heads/" + plan.name, {}, plan.archive.target});
-  updates.push_back({"staging/" + plan.name, {}, plan.index});
-  updates.push_back({"workspace/HEAD", head, head});
+  updates.push_back({native_staging_reference(*this, plan.name), {}, plan.index});
+  updates.push_back({this->native_workspace_reference("workspace/HEAD"), head, head});
   require(compare_update_refs(updates, options), "native branch references changed; retry operation");
   plan.report["state"] = "restored";
   return plan.report;

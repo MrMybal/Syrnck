@@ -21,7 +21,7 @@ Ces fonctions des sources n’annoncent pas de release précompilée. Le [manuel
 
 ## Limites documentées
 
-- HEAD nommé et détaché sont disponibles. Workspaces natifs multiples/partiels à terminer.
+- HEAD nommé/détaché et workspaces liés indépendants sont disponibles. Matérialisation partielle, déplacement en place et désenregistrement archivé restent à terminer.
 - Le suivi des renommages à contenu exact existe ; renommages modifiés/copies et intégration au merge/rebase restent incomplets. Les révisions natives n’ont ni auteurs structurés ni signatures ; le rebase préservant les merges reste à terminer.
 - L’agent effectue un transfert par invocation. Le watcher observe les changements ; ils ne constituent pas un service complet de synchronisation continue avec versions causales, réconciliation hors ligne, suppressions et propagation des renommages.
 - L’adaptateur Syncthing optionnel couvre les données BEP des fichiers ordinaires. Découverte, appairage, vecteurs de versions, conflits et synchronisation complète de daemons/dossiers sont hors de son périmètre.

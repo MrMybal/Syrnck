@@ -5,15 +5,15 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
                             std::string_view message, const NativeMergeOptions &settings,
                             OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  validate_ref(native_revision_reference(std::string(branch)));
+  validate_ref(native_revision_reference(*this, std::string(branch)));
   validate_id(expected_revision);
   validate_id(source);
   require_no_native_checkout(*this);
   const auto all = refs();
-  const auto head = all.find(native_revision_reference(std::string(branch)));
+  const auto head = all.find(native_revision_reference(*this, std::string(branch)));
   require(head != all.end() && head->second.kind == Kind::revision, "unknown native branch");
   require(head->second.id == expected_revision, "native merge tip changed; inspect the branch and retry");
-  require(!all.contains(native_staging_reference(std::string(branch))), "native merge requires an empty staging index");
+  require(!all.contains(native_staging_reference(*this, std::string(branch))), "native merge requires an empty staging index");
   auto plan = prepare_native_merge(*this, directory, branch, source, settings, true, options);
   require(plan.report["ready"].get<bool>(), "native merge is blocked; inspect native merge-plan");
   const auto mode = plan.report["mode"].get<std::string>();

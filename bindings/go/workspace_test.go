@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,6 +39,96 @@ func decodeWorkspace(t *testing.T, data []byte) workspaceReport {
 		t.Fatal(err)
 	}
 	return result
+}
+
+func TestRegisteredWorkspaceObservation(t *testing.T) {
+	cli := os.Getenv("SYRNCK_TEST_CLI")
+	if cli == "" {
+		t.Skip("native CLI supplies the registered-workspace fixture")
+	}
+	base := tempDirectory(t)
+	primary, linked := filepath.Join(base, "primary"), filepath.Join(base, "linked")
+	if err := os.Mkdir(primary, 0700); err != nil {
+		t.Fatal(err)
+	}
+	storage := filepath.Join(primary, ".syrnck")
+	var environment []string
+	for _, item := range os.Environ() {
+		key, _, _ := strings.Cut(item, "=")
+		switch strings.ToUpper(key) {
+		case "SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG":
+			continue
+		}
+		environment = append(environment, item)
+	}
+	run := func(arguments ...string) []byte {
+		t.Helper()
+		command := exec.Command(cli, append([]string{"--store", storage}, arguments...)...)
+		command.Dir, command.Env = primary, environment
+		result, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("fixture %v: %s: %v", arguments, result, err)
+		}
+		return result
+	}
+	run("init")
+	writeTest(t, filepath.Join(primary, "asset"), []byte("linked baseline"))
+	run("native", "commit", "-m", "Go linked fixture")
+	var fixture struct {
+		Directory string `json:"directory"`
+		Head      struct {
+			Revision string `json:"revision"`
+		} `json:"head"`
+	}
+	if err := json.Unmarshal(run("native", "workspace-add", "linked", linked), &fixture); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(storage, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	w := openWorkspaceTest(t, fixture.Directory, storage, WorkspaceOptions{Name: "linked"})
+	if _, err := w.Status(s, WorkspaceSelection{}); err == nil {
+		t.Fatal("primary Store accepted linked observation")
+	}
+	if err := s.UseWorkspace("linked"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := w.Status(s, WorkspaceSelection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := decodeWorkspace(t, data)
+	if !initial.Clean || initial.Base == nil || *initial.Base != fixture.Head.Revision {
+		t.Fatalf("linked selection differs: %+v", initial)
+	}
+	if err := s.UseWorkspace("missing"); err == nil {
+		t.Fatal("selected missing context")
+	}
+	if err := s.UseWorkspace("linked\x00bad"); err == nil {
+		t.Fatal("selected invalid context")
+	}
+	writeTest(t, filepath.Join(fixture.Directory, "asset"), []byte("changed in linked workspace"))
+	workspacePath(t, w, "asset")
+	data, err = w.Status(s, WorkspaceSelection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := decodeWorkspace(t, data)
+	if changed.Clean || len(changed.Changes) != 1 || changed.Changes[0].Path != "asset" {
+		t.Fatalf("linked observation lost edits: %+v", changed)
+	}
+	if err := s.UseWorkspace(""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Status(s, WorkspaceSelection{}); err == nil {
+		t.Fatal("linked session accepted reset primary context")
+	}
 }
 func openWorkspaceTest(t *testing.T, root, storage string, options WorkspaceOptions) *Workspace {
 	t.Helper()
