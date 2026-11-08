@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -99,8 +99,9 @@ syrnck --store /recovered/project/.syrnck native workspace-restore edit /recover
 Les sauvegardes omettent les liaisons actives aux dossiers et les reçus locaux.
 Elles conservent index, données détachées et racines de cibles terminées, avec un
 descripteur de sélection portable et une racine de révision exacte par workspace
-lié. Le format de sauvegarde v2 enregistre ces exclusions ; les anciennes v1
-restent lisibles.
+lié. Le format v2 enregistre ces exclusions pour les sources expérimentales sans
+capacités requises. Un Store avec capacités de lecteur requises utilise le
+marqueur v3, qui les lie aussi à la sauvegarde. Les v1/v2 restent lisibles.
 
 `workspace-restore NAME DIRECTORY` lie le snapshot portable à un nouveau dossier.
 La branche d’origine est réutilisée si sa tête est inchangée et non réservée.
@@ -134,7 +135,7 @@ ne sont pas déplacés. Les reçus lient contexte et répertoire canonique exact
 un autre contexte ne peut les exécuter. Les reçus terminés restent locaux et
 consultables après changement de sélection et GC.
 
-La campagne Windows x64 a vérifié les 798 points IO observés d’arrêt forcé pour
+La campagne Windows x64 a vérifié les 808 points IO observés d’arrêt forcé pour
 l’enregistrement et l’entrée/sortie/déplacement du checkout lié : Stores en clair
 et chiffrés, reprise/annulation, transitions de namespace, inspection indépendante
 de production et GC après récupération. Ces essais gardent OS et système de
@@ -169,3 +170,13 @@ inchangées.
 Matérialisation partielle, déplacement en place et désenregistrement archivé
 restent à compléter. Ce mode matérialise actuellement des snapshots complets
 et exige leurs objets retenus complets localement.
+
+## Compatibilité des lecteurs {#compatibility}
+
+Enregistrement et restauration portable établissent l’exigence de lecteur
+`linked-workspaces-v1` avant publication de la liaison. Les anciens exécutables
+refusent le Store, même pour les commandes de références ordinaires, et ne
+peuvent donc contourner les réservations de branches. Les lecteurs à jour
+acceptent toujours les configurations classiques. Voir [inspection et mise à
+niveau explicite](doc:settings#reader-features). Cette protection n’active pas la
+matérialisation partielle, qui reste un travail distinct.

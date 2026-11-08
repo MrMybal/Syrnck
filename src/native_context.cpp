@@ -185,6 +185,7 @@ Json Store::register_native_workspace(const fs::path &primary, std::string_view 
   } else
     require(fs::is_directory(status) && !native_link_like(target, status), "invalid native workspace directory");
   target = fs::canonical(target);
+  require_features({"linked-workspaces-v1"}, options);
   const auto registration = put(Kind::chunk, bytes(Json{{"version", 1}, {"type", "native-workspace"},
       {"name", name}, {"directory", utf8(target)}}.dump())).first;
   const auto head = put(Kind::chunk, bytes(Json{{"version", 2}, {"type", "native-head"},
@@ -295,6 +296,7 @@ Json Store::restore_native_workspace(const fs::path &primary, std::string_view n
     updates.push_back({slot, previous, snapshot});
   } else updates.push_back({native_revision_reference(target), branch_tip, snapshot});
   const auto materialized = next_index ? next_index->id : snapshot->id;
+  require_features({"linked-workspaces-v1"}, options);
   if (!exists) export_revision(materialized, destination, options);
   const auto registration = put(Kind::chunk, bytes(Json{{"version", 1}, {"type", "native-workspace"},
       {"name", name}, {"directory", utf8(destination)}}.dump())).first;

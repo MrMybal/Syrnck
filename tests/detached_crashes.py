@@ -53,7 +53,7 @@ class DetachedCrashes(unittest.TestCase):
                 self.command(READER, "bind", trace)
                 events = self.command(PROBE, "trace", trace)
                 self.assertTrue(events)
-                self.assertTrue(all(e["kind"] in {"refs", "chunk", "manifest", "revision", "new", "old", "workspace", "checkout"}
+                self.assertTrue(all(e["kind"] in {"refs", "config", "chunk", "manifest", "revision", "new", "old", "workspace", "checkout"}
                                     for e in events), events)
                 coordinates = {(e["phase"], e["kind"], e["occurrence"]) for e in events}
                 self.assertEqual(len(coordinates), len(events))

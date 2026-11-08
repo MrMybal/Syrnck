@@ -15,6 +15,7 @@ std::optional<Key> key(const Json &info) {
 std::string category(const fs::path &path) {
   const auto name = utf8(path.filename());
   if (name == "refs.json") return "refs";
+  if (name == "config.json") return "config";
   if (name == "checkout.state") return "checkout";
   const auto parent = utf8(path.parent_path().filename());
   if (parent == "new" || parent == "old") return parent;

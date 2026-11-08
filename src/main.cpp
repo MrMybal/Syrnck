@@ -318,6 +318,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                                      Regrouper les objets ; plusieurs packs exigent le format v3
   fsck                               Vérifier les objets et les hashes des fichiers
   config show | reset                Afficher ou réinitialiser les réglages du dépôt
+  config required-features           Afficher les capacités de lecteur requises
+  config require-feature NOM         Exiger une capacité prise en charge
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch BRANCHE] [--directory .]
                 [--workers N] [--buffer-mib N]
@@ -511,6 +513,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                                     Pack loose objects; multiple packs require storage v3
   fsck                              Verify all objects and full file hashes
   config show | reset               Show or reset repository settings
+  config required-features          List required reader capabilities
+  config require-feature NAME       Require a supported reader capability
   config set [--workers N] [--buffer-mib N] [--pack-max-mib N] [--pack-max-objects N]
   native commit [-m MESSAGE] [--branch BRANCH] [--directory .]
                 [--workers N] [--buffer-mib N]
@@ -979,6 +983,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
+      (command == "config" && sub == "require-feature") ||
       (command == "native" &&
        (sub == "workspaces" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
@@ -1006,7 +1011,11 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                                                                 : cli::ProgressMode::none);
   auto observe = [&](const ProgressEvent &event) { control->report(event); };
   if (command == "config") {
-    if (sub == "show") {
+    if (sub == "required-features" || sub == "require-feature") {
+      args.count(sub == "require-feature" ? 1 : 0);
+      if (sub == "require-feature") store.require_features({args.values[0]}, {control->token(), observe});
+      print(Json{{"required_features", store.required_features()}});
+    } else if (sub == "show") {
       args.count(0);
       print(store.settings().json());
     } else if (sub == "reset") {

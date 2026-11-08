@@ -229,3 +229,16 @@ The complete linked-workspace milestone regression ran 185 CTest suites with
 zero failures in 1366.91 seconds using four worker slots. The six real Git
 filter-process cases ran separately and passed; their initial concurrent run
 hit a 20-second fallback `git add` timeout, whose cause was not established.
+
+The required-reader gate campaign subsequently covered 808/808 linked workspace
+termination boundaries (201 + 203 + 201 + 203), including configuration
+publication before linked registration. The additional ten boundaries cover the
+plain/encrypted bootstrap writes. Existing detached campaigns still cover 768/768.
+The regression with 188 suites completed in 1163.48 seconds with 186 passes and two issues:
+the source diagnostic inventory found untranslated preparatory policy messages,
+and Windows refused to start the Release upload-inventory test with a sharing
+violation. Translations were added and localization passed; an antivirus service
+held the Release executable. Its Debug build passed the same test in 1.13 seconds.
+The final ten relevant Release suites passed in 7.61 seconds, including the expanded
+required-feature/copy-consistency cases, contexts, C/Go, help and translations.
+The original Release executable launch remains an environment limitation.

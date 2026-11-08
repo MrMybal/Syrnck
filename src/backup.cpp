@@ -60,8 +60,9 @@ Json marker(const Store &store) {
   require(fs::is_regular_file(status) && !native_link_like(path, status), "invalid backup descriptor");
   const auto data = read_bytes(path, max_object_size);
   const auto value = parse_json(data);
-  require(value.is_object() && value.size() == 9 && value.contains("version") &&
-              value["version"].is_number_unsigned() && (value["version"] == 1 || value["version"] == 2) && value.contains("type") &&
+  require(value.is_object() && value.contains("version") && value["version"].is_number_unsigned() &&
+              ((value["version"] == 1 || value["version"] == 2) ? value.size() == 9
+                                                               : value["version"] == 3 && value.size() == 10) && value.contains("type") &&
               value["type"] == "store-backup" && value.contains("created_at") &&
               value["created_at"].is_number_unsigned() && value.contains("refs_hash") &&
               value["refs_hash"].is_string() && value.contains("settings_hash") &&
@@ -73,6 +74,11 @@ Json marker(const Store &store) {
           "invalid backup descriptor");
   validate_id(value["refs_hash"].get<std::string>());
   validate_id(value["settings_hash"].get<std::string>());
+  if (value["version"] == 3) {
+    require(value.contains("required_features") && value["required_features"].is_array() &&
+                !value["required_features"].empty() && value["required_features"] == Json(store.required_features()),
+            "backup required features changed");
+  } else require(store.required_features().empty(), "backup required features changed");
   std::set<std::string> names;
   for (const auto &name : value["excluded_refs"]) {
     require(name.is_string(), "invalid backup descriptor");
@@ -117,6 +123,7 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
   std::map<ObjectKey, Bytes> generated;
   add_portable_workspaces(source, refs, generated, options);
   const auto settings = source.settings();
+  const auto features = source.required_features();
   auto existing_roots = roots(refs);
   std::erase_if(existing_roots, [&](const auto &root) { return generated.contains(root); });
   auto objects = source.closure(existing_roots, true, options.stop, options.progress);
@@ -124,7 +131,7 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
   const bool linked = std::any_of(excluded.begin(), excluded.end(), [](const auto &name) {
     return name.template get<std::string>().starts_with("workspaces/");
   });
-  auto descriptor = Json{{"version", linked ? 2 : 1},
+  auto descriptor = Json{{"version", !features.empty() ? 3 : linked ? 2 : 1},
                          {"type", "store-backup"},
                          {"created_at", unix_seconds()},
                          {"refs_hash", refs_hash(refs)},
@@ -133,12 +140,14 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
                          {"logical_bytes", 0},
                          {"source_encrypted", source.encrypted()},
                          {"excluded_refs", excluded}};
+  if (!features.empty()) descriptor["required_features"] = features;
   std::uint64_t total = 0, completed = 0;
   Json report;
   atomic_directory(
       target,
       [&](const fs::path &temporary) {
         Store output(temporary, key, true);
+        output.require_features(features, {options.stop});
         output.set_settings(settings);
         for (const auto &object : objects) {
           report_progress(options, {ProgressPhase::transferring, object.id, completed, objects.size()});
@@ -172,7 +181,8 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
       },
       [&] {
         report_progress(options, {ProgressPhase::publishing, utf8(target), completed, objects.size(), true});
-        require(source.refs() == original && source.settings().json() == settings.json(),
+        require(source.refs() == original && source.settings().json() == settings.json() &&
+                    source.required_features() == features,
                 "backup source changed before publication");
       },
       options.stop);
@@ -368,12 +378,14 @@ Json create_repaired_copy(const Store &source, const Store &backup, const fs::pa
   require(!inside(target, backup.root()), "repair copy destination must be outside the backup store");
   const auto plan = prepare_repair(source, backup, options, true);
   const auto settings = source.settings();
+  const auto features = source.required_features();
   auto report = copy_repair_report(plan);
   std::size_t completed = 0;
   atomic_directory(
       target,
       [&](const fs::path &temporary) {
         Store output(temporary, key, true);
+        output.require_features(features, {options.stop});
         output.set_settings(settings);
         for (const auto &object : plan.objects) {
           report_progress(options, {ProgressPhase::transferring, object.id, completed, plan.objects.size()});
@@ -392,7 +404,8 @@ Json create_repaired_copy(const Store &source, const Store &backup, const fs::pa
       [&] {
         report_progress(options,
                         {ProgressPhase::publishing, utf8(target), completed, plan.objects.size(), true});
-        require(source.refs() == plan.original && source.settings().json() == settings.json(),
+        require(source.refs() == plan.original && source.settings().json() == settings.json() &&
+                    source.required_features() == features,
                 "backup source changed before publication");
         require(hash(bytes(marker(backup).dump())) == plan.backup_snapshot,
                 "backup repair donor changed before publication");

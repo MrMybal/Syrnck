@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 2
+revision: 3
 ---
 
 ## Create and select a workspace {#usage}
@@ -97,7 +97,9 @@ syrnck --store /recovered/project/.syrnck native workspace-restore edit /recover
 Backups omit active directory bindings and local checkout receipts. They retain
 all indexes, detached data and completed target roots, plus a portable selection
 descriptor and an exact revision root for each linked workspace. Backup format
-v2 records these additional exclusions; older v1 backups remain readable.
+v2 supports these exclusions for ungated experimental sources. A Store with
+required reader features uses backup marker v3, which additionally binds those
+requirements. V1/v2 backups remain readable.
 
 `workspace-restore NAME DIRECTORY` binds a portable snapshot to a new directory.
 It restores the original branch when its tip is unchanged and unreserved.
@@ -131,7 +133,7 @@ Checkout records bind their context and exact canonical directory; another
 context cannot execute their recovery. Completed receipts remain local to their
 context and are inspectable after later selections and GC.
 
-The Windows x64 campaign verified all 798 observed IO process-termination
+The Windows x64 campaign verified all 808 observed IO process-termination
 boundaries for linked registration and checkout entry/exit/movement, with plain
 and encrypted Stores, resume/abort, namespace transitions, independent production
 inspection and post-recovery GC. This tests process interruption with the OS and
@@ -166,3 +168,12 @@ Object/revision, pack and C ABI versions are unchanged.
 Sparse materialization, in-place workspace relocation and archived unregistering
 remain work to complete. This mode currently materializes complete snapshots and
 requires their complete retained objects locally.
+
+## Reader compatibility {#compatibility}
+
+Registration and portable restore establish the `linked-workspaces-v1` reader
+requirement before publishing a linked binding. Historical executables refuse
+the Store, including ordinary ref commands, so they cannot bypass branch
+reservations. Upgraded readers retain support for legacy configurations. See
+[inspection and explicit upgrade](doc:settings#reader-features); this does not
+enable sparse materialization, which remains separate work.

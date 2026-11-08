@@ -5,7 +5,7 @@ description: Verified offline backups, restore and missing-object repair guide.
 section: Storage
 order: 50
 parent: storage
-revision: 2
+revision: 3
 ---
 
 # Verified offline backups, restore and missing-object repair {#verified-offline-backups-restore-and-missing-object-repair}
@@ -131,8 +131,9 @@ input's existing objects, pack files or references are replaced.
 
 Backups and repaired copies preserve each registered linked selection as portable
 metadata plus a retained exact revision, including its frozen index. Absolute
-registration/HEAD paths and checkout receipts are omitted. Backups containing
-these exclusions use marker v2; existing v1 backups remain supported.
+registration/HEAD paths and checkout receipts are omitted. Feature-free backups
+with these exclusions use marker v2; required-reader Stores use v3. Existing
+v1/v2 backups remain supported.
 
 After restoring the Store inside a new primary directory, run
 `native workspace-restore NAME NEW_DIRECTORY [--branch NAME | --detach]`.
@@ -142,3 +143,13 @@ or detached restoration. Prepared bytes are materialized when an index exists;
 HEAD remains the committed revision. Unprepared working edits are not backed up.
 An interrupted complete export can be retried only if all exported files still
 match. See [workspace restoration](doc:native-workspaces#restore).
+
+## Required-reader preservation {#reader-features}
+
+A feature-gated Store produces backup marker v3, binding its nonempty
+`required_features` list to the backup configuration. Verification rejects a
+changed or stripped requirement, including a marker downgraded to v1/v2 while
+the Store still requires features. Legacy feature-free v1/v2 backups remain
+supported. Restore and repaired copies preserve the source requirements while
+retaining their independently chosen encryption key and existing physical
+export rules. See [required-reader semantics](doc:protocol#required-store-features).

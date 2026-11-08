@@ -26,11 +26,12 @@ struct Store::Impl {
   StoreIoStats io;
   bool bypass_cache = false;
   int format_version = 1;
+  std::vector<std::string> features;
   std::size_t index_cache_budget;
   Impl(fs::path p, std::optional<Key> k, StoreOptions options)
       : root(std::move(p)), key(k), lock(root / "store.lock"), packs(root, options.pack_index_cache_bytes),
         cache(options), index_cache_budget(options.pack_index_cache_bytes) {}
-  void load_config();
+  Json load_config();
   void publish_pack(PackStorage next, std::stop_token = {});
   Bytes read_pack(const PackStorage &source, const ObjectKey &item) {
     auto envelope = source.read(item);
@@ -52,13 +53,30 @@ static std::string key_check(const Key &key) {
   blake3_hasher_finalize(&h, out.data(), out.size());
   return hex(out);
 }
-void Store::Impl::load_config() {
+static void supported_feature(std::string_view feature) {
+  require(feature == "linked-workspaces-v1", "unsupported required store feature");
+}
+Json Store::Impl::load_config() {
   packs.invalidate();
   auto config = parse_json(read_bytes(root / "config.json"));
   require(config.is_object(), "invalid store configuration");
   auto version = config.at("version");
-  require((version == 1 && config.size() == 2) || ((version == 2 || version == 3) && config.size() == 3),
+  const auto additional = config.contains("required_features") ? 1U : 0U;
+  require((version == 1 && config.size() == 2 + additional) ||
+              ((version == 2 || version == 3) && config.size() == 3 + additional),
           "unsupported store configuration");
+  std::vector<std::string> required;
+  if (additional) {
+    const auto &value = config.at("required_features");
+    require(value.is_array() && !value.empty() && value.size() <= 32, "invalid required store features");
+    for (const auto &entry : value) {
+      require(entry.is_string(), "invalid required store features");
+      const auto feature = entry.get<std::string>();
+      supported_feature(feature);
+      require(required.empty() || required.back() < feature, "invalid required store features");
+      required.push_back(feature);
+    }
+  }
   auto expected = key ? Json(key_check(*key)) : Json(nullptr);
   require(config.at("key_check") == expected,
           "store encryption key missing, wrong, or supplied for an unencrypted store");
@@ -68,14 +86,17 @@ void Store::Impl::load_config() {
     require(config.at("packs").is_array(), "invalid v3 pack catalog");
   packs.load(version == 3 ? config.at("packs") : (version == 2 ? config.at("pack") : Json(nullptr)));
   format_version = version.get<int>();
+  features = std::move(required);
+  return config;
 }
 void Store::Impl::publish_pack(PackStorage next, std::stop_token stop) {
   next.set_index_cache_limit(index_cache_budget);
   const bool multiple = format_version >= 3 || next.pack_count() > 1;
-  auto config = Json{{"version", multiple ? 3 : 2},
+  auto document = Json{{"version", multiple ? 3 : 2},
                      {"key_check", key ? Json(key_check(*key)) : Json(nullptr)},
-                     {multiple ? "packs" : "pack", multiple ? next.catalog() : next.metadata()}}
-                    .dump();
+                     {multiple ? "packs" : "pack", multiple ? next.catalog() : next.metadata()}};
+  if (!features.empty()) document["required_features"] = features;
+  const auto config = document.dump();
   try {
     atomic_write(root / "config.json", bytes(config), true, stop);
   } catch (...) {
@@ -120,6 +141,35 @@ const fs::path &Store::root() const {
 }
 bool Store::encrypted() const {
   return impl_->key.has_value();
+}
+std::vector<std::string> Store::required_features() const { return impl_->features; }
+void Store::require_features(const std::vector<std::string> &features, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  require(features.size() <= 32, "invalid required store features");
+  for (const auto &feature : features) supported_feature(feature);
+  if (features.empty()) return;
+  if (std::all_of(features.begin(), features.end(), [&](const auto &feature) {
+        return std::binary_search(impl_->features.begin(), impl_->features.end(), feature);
+      })) return;
+  auto config = impl_->load_config();
+  auto required = impl_->features;
+  required.insert(required.end(), features.begin(), features.end());
+  std::sort(required.begin(), required.end());
+  required.erase(std::unique(required.begin(), required.end()), required.end());
+  if (required == impl_->features) return;
+  const auto path = root() / "config.json";
+  const auto original = read_bytes(path);
+  require(parse_json(original) == config, "store configuration changed; retry operation");
+  config["required_features"] = required;
+  report_progress(options, {ProgressPhase::publishing, "store-features"});
+  require(read_bytes(path) == original, "store configuration changed; retry operation");
+  try {
+    atomic_write(path, bytes(config.dump()), true, options.stop);
+  } catch (...) {
+    impl_->load_config();
+    throw;
+  }
+  impl_->load_config();
 }
 StoreIoStats Store::io_stats() const {
   auto result = impl_->io;
@@ -569,6 +619,14 @@ void Store::write_refs(const Refs &refs, std::stop_token stop) const {
   }
   auto value = encode_refs(refs).dump();
   require(value.size() <= max_object_size, "reference document exceeds 16 MiB");
+  for (auto entry = refs.lower_bound("workspaces/");
+       entry != refs.end() && entry->first.starts_with("workspaces/"); ++entry) {
+    const auto slash = entry->first.find('/', 11);
+    if (slash != std::string::npos && entry->first.substr(slash + 1) == "registration") {
+      require_features({"linked-workspaces-v1"}, {stop});
+      break;
+    }
+  }
   atomic_write(root() / "refs.json", bytes(value), true, stop);
 }
 void Store::set_ref(std::string_view name, const ObjectKey &key, std::stop_token stop) const {

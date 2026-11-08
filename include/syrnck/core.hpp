@@ -349,6 +349,10 @@ public:
   Store &operator=(const Store &) = delete;
   const fs::path &root() const;
   bool encrypted() const;
+  // Required capabilities persist across maintenance and copies. Older readers
+  // reject the extended configuration before opening objects or workspace state.
+  std::vector<std::string> required_features() const;
+  void require_features(const std::vector<std::string> &, OperationOptions = {}) const;
   RepositorySettings settings() const;
   void set_settings(const RepositorySettings &) const;
   StoreIoStats io_stats() const;

@@ -5,7 +5,7 @@ description: Guide : Sauvegardes, restauration et réparation.
 section: Stockage
 order: 50
 parent: storage
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Sauvegardes vérifiées et restauration {#verified-offline-backups-restore-and-missing-object-repair}
@@ -64,8 +64,9 @@ La vérification complète relit volontairement les données conservées. Le par
 
 Sauvegardes et copies réparées gardent chaque sélection liée dans des métadonnées
 portables avec sa révision exacte conservée et son index figé. Les chemins
-absolus registration/HEAD et reçus sont omis. Les sauvegardes contenant ces
-exclusions utilisent le marqueur v2 ; les anciennes v1 restent prises en charge.
+absolus registration/HEAD et reçus sont omis. Sans capacités requises, ces
+exclusions utilisent le marqueur v2 ; avec exigences de lecteur, v3. Les anciennes
+v1/v2 restent prises en charge.
 
 Après restauration du Store dans un nouveau dossier principal, lancer
 `native workspace-restore NOM NOUVEAU_DOSSIER [--branch NOM | --detach]`.
@@ -75,3 +76,13 @@ L’index figé est matérialisé s’il existe ; HEAD garde la révision commit
 Les modifications de travail non préparées ne sont pas sauvegardées. Une
 exportation complète interrompue se reprend seulement si tous ses fichiers
 correspondent encore. Voir [la restauration](doc:native-workspaces#restore).
+
+## Conservation des exigences de lecteur {#reader-features}
+
+Un Store avec capacités requises produit un marqueur v3, liant sa liste non vide
+`required_features` à la configuration sauvegardée. La vérification refuse une
+exigence modifiée ou retirée, y compris un marqueur rétrogradé en v1/v2 alors que
+le Store exige encore des capacités. Les sauvegardes classiques v1/v2 restent
+acceptées. Restauration et copies réparées conservent les exigences source,
+avec leur clé de chiffrement indépendante et les règles d’export existantes.
+Voir [la sémantique des exigences](doc:protocol#required-store-features).

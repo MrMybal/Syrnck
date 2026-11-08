@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -45,13 +45,13 @@ Les révisions sont du JSON compact dans l'ordre `version`, `parents`, `message`
 
 L'enveloppe binaire commence par `SYR1`, puis un octet de mode. Mode 0 : contenu Zstd. Mode 1 : nonce de 24 octets, puis chiffrement XChaCha20-Poly1305 du contenu Zstd, tag inclus. Les données associées sont l'ASCII de `syrnck-envelope-v1:<type>:<id>`. Un objet chiffré ne peut pas être déplacé sous une autre clé sans échec d'authentification.
 
-Sans packs, `config.json` contient `version: 1` et `key_check`. Pour un store chiffré, `key_check` est BLAKE3 keyed du texte `syrnck-store-key-check-v1` avec la clé du store ; sinon il vaut `null`. Les noms de références et IDs restent en clair dans `refs.json`.
+Sans packs, la configuration de base contient `version: 1` et `key_check`. Pour un store chiffré, `key_check` est BLAKE3 keyed du texte `syrnck-store-key-check-v1` avec la clé du store ; sinon il vaut `null`. Les noms de références et IDs restent en clair dans `refs.json`.
 
 Le cache de lecture est uniquement en mémoire et n'ajoute aucun fichier ni champ à ce format. Ses entrées ne sont ni des racines de rétention ni une autorité permettant d'ignorer un objet manquant. Elles proviennent d'un objet validé dans le handle courant et ne sont réutilisées qu'après comparaison cryptographique de l'enveloppe relue. Le nombre de lectures et de décodages peut changer sans modifier les octets logiques des objets ou les règles de validation des hashes de fichiers.
 
 ### Stockage physique v2 avec packs {#stockage-physique-v2-avec-packs}
 
-Pour un seul pack, l'appel explicite à `pack` peut publier une configuration de trois champs : `version: 2`, `key_check` inchangé, et `pack`. `pack` vaut `null` s'il n'y a aucun pack actif ; sinon il contient exactement `name` (32 caractères hexadécimaux minuscules), `objects` (nombre entier positif), `bytes` (taille du pack), `index_hash` (BLAKE3 ordinaire de tout l'index, hexadécimal minuscule). La configuration est le pointeur de publication atomique. Les objets logiques, références, enveloppes et messages réseau gardent leur format v1. Les anciens lecteurs de configuration v1 doivent refuser v2.
+Pour un seul pack, l'appel explicite à `pack` peut publier une configuration de base de trois champs : `version: 2`, `key_check` inchangé, et `pack`. `pack` vaut `null` s'il n'y a aucun pack actif ; sinon il contient exactement `name` (32 caractères hexadécimaux minuscules), `objects` (nombre entier positif), `bytes` (taille du pack), `index_hash` (BLAKE3 ordinaire de tout l'index, hexadécimal minuscule). La configuration est le pointeur de publication atomique. Les objets logiques, références, enveloppes et messages réseau gardent leur format v1. Les anciens lecteurs de configuration v1 doivent refuser v2.
 
 Les fichiers actifs se trouvent à `packs/pack-<name>.syp` et `packs/pack-<name>.syi`. Le pack commence par les 8 octets ASCII `SYRPACK1`, suivis des enveloppes `SYR1` concaténées sans modification. Il n'y a ni espace libre ni donnée non indexée dans une génération. Tous les entiers binaires sont non signés en little-endian.
 
@@ -72,7 +72,7 @@ Les écritures nouvelles restent à `objects/...`. La lecture ordinaire privilé
 
 ### Stockage physique v3 : catalogue de packs {#stockage-physique-v3-catalogue-de-packs}
 
-La configuration v3 contient exactement `version: 3`, `key_check` inchangé et `packs`, un tableau de descripteurs de packs au format v2 décrit ci-dessus. Le tableau peut être vide ou contenir un seul pack ; le moteur ne rétrograde pas implicitement un store v3. Plusieurs packs exigent v3, que les lecteurs v1/v2 doivent refuser. Les formats binaires `SYRPACK1` et `SYRIDX01` restent inchangés.
+La configuration v3 de base contient `version: 3`, `key_check` inchangé et `packs`, un tableau de descripteurs de packs au format v2 décrit ci-dessus. Le tableau peut être vide ou contenir un seul pack ; le moteur ne rétrograde pas implicitement un store v3. Plusieurs packs exigent v3, que les lecteurs v1/v2 doivent refuser. Les formats binaires `SYRPACK1` et `SYRIDX01` restent inchangés.
 
 Les noms de packs doivent être distincts. Une clé `{kind, id}` ne peut figurer que dans un seul pack actif, même si deux copies physiques auraient un contenu identique. Les index sont vérifiés séparément, puis des parcours fusionnés contrôlent les clés lorsque leurs intervalles se recouvrent. Le catalogue est limité à 1 024 packs et à 4 194 304 objets au total, avec toujours au maximum 1 048 576 objets dans chaque index. Les tailles annoncées sont contrôlées avant la lecture des index ; les plages et contenus restent vérifiés ensuite.
 
@@ -150,7 +150,29 @@ Les racines détachées sont privées. Les index nommés utilisent
 Les reçus v8 ajoutent `context` et `layout_version` 1..6 ; les layouts principaux
 v1..v7 ne changent pas. La sélection appartient au handle.
 
-Une sauvegarde contenant ces liaisons utilise le marqueur v2, conservant par
+Sans capacités requises, une sauvegarde de ces liaisons utilise le marqueur v2, conservant par
 contexte un descripteur portable native-workspace-snapshot et la révision
 `snapshot`, sans liaisons absolues registration/HEAD/reçus. Les sauvegardes v1
 restent lisibles. La restauration relie explicitement le snapshot à un nouveau dossier.
+
+## Capacités requises du Store {#required-store-features}
+
+Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
+trié de noms uniques pris en charge (au plus 32). Le nom actuellement accepté est
+`linked-workspaces-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
+aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
+packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne
+reçoivent aucun champ supplémentaire.
+
+L’activation publie atomiquement la configuration avant les liaisons qui
+l’exigent. Une interruption peut laisser l’exigence active sans liaison ; la
+reprise est idempotente. Packs et GC conservent le champ. Ajout seulement, sans
+retrait par l’API normale. Ces exigences de lecteur sont distinctes des capacités
+HTTP négociées et des réglages ajustables.
+
+Le marqueur de sauvegarde v3 ajoute aux neuf champs existants un tableau non vide
+`required_features`, égal à celui de la configuration destination. Exclusions
+identiques à v2. Les marqueurs v1/v2 décrivent des Stores sans capacités requises
+et restent lisibles. Sauvegarde logique, restauration et copie réparée conservent
+les exigences de lecteur source.

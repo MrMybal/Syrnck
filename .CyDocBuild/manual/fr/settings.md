@@ -5,7 +5,7 @@ description: Guide : Préférences du dépôt.
 section: Stockage
 order: 540
 parent: storage
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Préférences du dépôt {#repository-settings}
@@ -27,3 +27,25 @@ syrnck config show
 syrnck config set --workers 4 --buffer-mib 32 --pack-max-mib 512 --pack-max-objects 65536
 syrnck config reset
 ```
+
+## Capacités de lecteur requises {#reader-features}
+
+```text
+syrnck config required-features
+syrnck config require-feature linked-workspaces-v1
+```
+
+Ces exigences décrivent la sémantique du Store, indépendamment des réglages de
+performance. Un workspace lié exige automatiquement `linked-workspaces-v1` avant
+publication de sa liaison. Les anciens exécutables refusent la configuration
+étendue à l’ouverture, évitant de déplacer une branche partagée sans réservation.
+Pour un Store lié expérimental créé avant cette protection, lancer la commande
+explicite avant d’utiliser d’anciens outils. Une publication normale de références
+avec contextes enregistrés établit aussi la protection.
+
+Seuls les noms pris en charge sont acceptés. Activation idempotente, format
+physique et objets préservés ; les exigences survivent aux packs/GC, sauvegarde,
+restauration et copies réparées. `config reset` change les réglages ajustables en
+gardant ces exigences. Aucun retrait ou downgrade automatique. C++ expose
+`required_features()` et `require_features(names, operation)`. Voir
+[le format](doc:protocol#required-store-features).

@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 3
+revision: 4
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -33,7 +33,7 @@ ASCII("syrnck-object-v1") || 0x00 || ASCII(type) || 0x00 || contenu_non_compress
 
 Binary envelopes begin `SYR1`, then a mode byte:0 for Zstd;1 for a 24-byte nonce followed by XChaCha20-Poly1305 encrypted Zstd including tag. Associated ASCII is `syrnck-envelope-v1:<type>:<id>`, so moving ciphertext to another key fails authentication.
 
-Without packs, config has `version:1,key_check`; encrypted key_check is keyed BLAKE3 of `syrnck-store-key-check-v1` with the Store key, otherwise null. Ref names/IDs remain visible in `refs.json`.
+Without packs, the base config has `version:1,key_check`; encrypted key_check is keyed BLAKE3 of `syrnck-store-key-check-v1` with the Store key, otherwise null. Ref names/IDs remain visible in `refs.json`.
 
 The read cache adds no files or fields. It retains nothing and cannot hide missing objects. Entries come from validation in the current handle and are reused only after cryptographic comparison of reread envelopes. Read/decode counts may change, never logical bytes or complete-file validation rules.
 
@@ -47,7 +47,7 @@ The read cache adds no files or fields. It retains nothing and cannot hide missi
 
 ### Physical v2 packs {#stockage-physique-v2-avec-packs}
 
-An explicit pack may publish exactly `version:2,key_check,pack`. `pack` is null or a descriptor with exactly `name` (32 lowercase hex), positive `objects`, pack `bytes`, `index_hash` (ordinary BLAKE3 of the whole index). Config is the atomic publication pointer; logical objects/refs/envelopes/network remain v1. V1-only readers must refuse v2.
+An explicit pack may publish the base fields `version:2,key_check,pack`. `pack` is null or a descriptor with exactly `name` (32 lowercase hex), positive `objects`, pack `bytes`, `index_hash` (ordinary BLAKE3 of the whole index). Config is the atomic publication pointer; logical objects/refs/envelopes/network remain v1. V1-only readers must refuse v2.
 
 Files are `packs/pack-<name>.syp/.syi`. Pack header: eight ASCII bytes `SYRPACK1`, then unchanged concatenated `SYR1` envelopes with no holes/unindexed data. Binary integers are unsigned little-endian.
 
@@ -59,7 +59,7 @@ Writes remain loose; reads prefer loose duplicates, logical inventory counts onc
 
 ### Physical v3 pack catalog {#stockage-physique-v3-catalogue-de-packs}
 
-V3 config has exactly `version:3,key_check,packs`, an array of v2 descriptors. Empty or single-pack arrays stay v3; multiple packs require v3 and older readers must refuse it. Binary pack/index encodings are unchanged.
+The base v3 config has `version:3,key_check,packs`, an array of v2 descriptors. Empty or single-pack arrays stay v3; multiple packs require v3 and older readers must refuse it. Binary pack/index encodings are unchanged.
 
 Names must be distinct and no typed key may occur in two active packs even with identical bytes. Separate index validation plus merged overlapping traversals detect duplicates. Limits:1,024 packs,4,194,304 total objects,1,048,576 per index. Declared sizes are checked before reading indexes, followed by ranges/content validation.
 
@@ -130,7 +130,27 @@ are private. Named indexes use `staging/BLAKE3(branch-name)`; prepared revisions
 still record the complete name. Receipts v8 add `context` and `layout_version`
 1..6; primary layouts v1..v7 remain unchanged. Selection is handle-local.
 
-Backups with linked machine bindings use marker v2, retaining a portable
+Feature-free backups with linked machine bindings use marker v2, retaining a portable
 native-workspace-snapshot descriptor and `snapshot` revision per context instead
 of absolute registration/HEAD/receipt bindings. V1 backups remain readable.
 Restoration explicitly rebinds a portable snapshot in a new directory.
+
+## Required Store features {#required-store-features}
+
+Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
+array of unique supported strings (at most 32). The currently supported name is
+`linked-workspaces-v1`. Unknown, duplicate, empty or malformed requirements fail
+Store open. The extra field deliberately makes historical strict readers reject
+the configuration before reading objects/references. Base pack/index/envelope
+encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.
+
+Enabling publishes the configuration atomically before publishing bindings that
+need it. Interruption may leave the requirement enabled before a binding exists;
+retry is idempotent. Pack and GC retain the field. It is additive and cannot be
+removed through the normal API. Reader requirements are distinct from negotiated
+HTTP capabilities and user-adjustable settings.
+
+Backup marker v3 has the original nine fields plus nonempty `required_features`,
+which must equal the destination Store configuration. Its exclusions follow v2.
+Marker v1/v2 applies to feature-free Stores and remains readable. Logical backup,
+restore and repaired-copy publication preserve source reader requirements.

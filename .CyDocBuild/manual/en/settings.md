@@ -5,7 +5,7 @@ description: Repository settings guide.
 section: Storage
 order: 540
 parent: storage
-revision: 1
+revision: 2
 ---
 
 # Repository settings {#repository-settings}
@@ -57,3 +57,24 @@ An ordinary standalone `config` command otherwise addresses `.syrnck` by default
 
 See [progress and cancellation](doc:operations) for CLI output modes, Ctrl+C and
 the C++ callback interface.
+
+## Required reader features {#reader-features}
+
+```text
+syrnck config required-features
+syrnck config require-feature linked-workspaces-v1
+```
+
+These requirements describe Store semantics, independently of tunable repository
+settings. A linked workspace automatically requires `linked-workspaces-v1` before
+its binding is published. Older executables reject the extended configuration
+at open rather than change shared branches without workspace reservations.
+For experimental linked Stores created before this gate existed, run the
+explicit require command before using older tools. Normal reference publication
+with registered contexts also establishes the gate.
+
+Only supported names are accepted. Enabling is idempotent, preserves physical
+format and objects, and survives pack/GC, backup, restore and repaired copies.
+`config reset` changes tunable settings while retaining reader requirements.
+There is no automatic removal or downgrade. C++ exposes `required_features()`
+and `require_features(names, operation)`. See the [format](doc:protocol#required-store-features).
