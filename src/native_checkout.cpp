@@ -240,7 +240,7 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
                         const NativeSnapshot *source_override = nullptr,
                         const std::optional<std::string> &override_id = {},
                         const std::set<std::string> &source_directories = {},
-                        const Inventory *supplied_inventory = nullptr) {
+                        const Inventory *supplied_inventory = nullptr, bool physical_target = false) {
   throw_if_cancelled(options.stop);
   auto staging = store.staged_status(branch, options);
   const auto materialization = read_native_materialization(store).policy;
@@ -254,11 +254,11 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
   const bool same = target && source_id && *source_id == *target;
   const auto other = supplied || same ? NativeSnapshot{} : read_native_materialized_snapshot(store, *target, materialization, options);
   NativeSnapshot projected;
-  if (supplied && !materialization.complete()) {
+  if (supplied && !physical_target && !materialization.complete()) {
     projected = *supplied;
     project_native_materialization(projected, materialization);
   }
-  const auto &destination = supplied ? (materialization.complete() ? *supplied : projected) : same ? source : other;
+  const auto &destination = supplied ? (physical_target || materialization.complete() ? *supplied : projected) : same ? source : other;
   const NativeCheckoutLayout layout(source, destination, options, source_directories);
   const auto owned_inventory =
       supplied_inventory ? std::optional<Inventory>{}
@@ -395,8 +395,9 @@ Json Store::plan_checkout(const fs::path &directory, std::string_view branch, st
   return plan_checkout_impl(*this, directory, branch, nullptr, target, verify_objects, options);
 }
 Json plan_native_checkout_files(const Store &store, const fs::path &directory, std::string_view branch,
-                                const NativeSnapshot &destination, OperationOptions options) {
-  return plan_checkout_impl(store, directory, branch, &destination, {}, false, options);
+                                const NativeSnapshot &destination, OperationOptions options, bool physical_target) {
+  return plan_checkout_impl(store, directory, branch, &destination, {}, false, options, nullptr, {}, {}, nullptr,
+                            physical_target);
 }
 namespace {
 bool beneath(const std::set<std::string> &prefixes, const std::string &path) {

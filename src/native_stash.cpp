@@ -40,7 +40,7 @@ Json summary(const NativeStashEntry &entry) {
   if (end < message.size())
     while (end && (static_cast<unsigned char>(message[end]) & 0xc0) == 0x80)
       --end;
-  return Json{{"id", entry.id},
+  auto result = Json{{"id", entry.id},
               {"record", entry.record.id},
               {"generation", entry.generation},
               {"branch", entry.branch},
@@ -50,17 +50,21 @@ Json summary(const NativeStashEntry &entry) {
               {"created_at", entry.created_at},
               {"message", message.substr(0, end)},
               {"message_truncated", end < message.size()}};
+  if (!entry.materialization.complete()) result["materialization"] = entry.materialization.definition();
+  return result;
 }
 void verify(const Store &store, const NativeStashEntry &entry, OperationOptions options) {
   (void)store.closure({{Kind::revision, entry.work}}, true, options.stop, options.progress);
 }
 } // namespace
 Json NativeStashEntry::json() const {
-  return Json{{"version", native_target_is_detached(branch) ? 2 : 1}, {"type", "native-stash"},
+  auto result = Json{{"version", !materialization.complete() ? 3 : native_target_is_detached(branch) ? 2 : 1}, {"type", "native-stash"},
               {"id", id},           {"generation", generation},
               {"branch", branch},   {"base", base},
               {"work", work},       {"index", index ? Json(*index) : Json{}},
               {"message", message}, {"created_at", created_at}};
+  if (!materialization.complete()) result["materialization"] = materialization.definition();
+  return result;
 }
 static NativeStashEntry read_stash_from_refs(const Store &store, std::string_view id, bool archived,
                                              OperationOptions options, const Refs &refs,
@@ -74,11 +78,16 @@ static NativeStashEntry read_stash_from_refs(const Store &store, std::string_vie
   entry.record = *key;
   const auto data = store.get(*key);
   const auto value = parse_json(data);
-  require(value.is_object() && value.size() == 10 &&
-              (value.value("version", 0) == 1 || value.value("version", 0) == 2) &&
+  const auto version = value.value("version", 0);
+  require(value.is_object() && ((value.size() == 10 && (version == 1 || version == 2)) ||
+                               (value.size() == 11 && version == 3)) &&
               value.value("type", "") == "native-stash" && value.at("id") == Json(id) &&
               value.at("generation").is_number_unsigned() && value.at("created_at").is_number_unsigned(),
           "invalid native stash record");
+  if (version == 3) {
+    entry.materialization = NativeMaterialization::from_definition(value.at("materialization"));
+    require(!entry.materialization.complete(), "invalid native stash record");
+  }
   entry.branch = value.at("branch").get<std::string>();
   entry.base = value.at("base").get<std::string>();
   entry.work = value.at("work").get<std::string>();
@@ -139,7 +148,6 @@ std::vector<RefUpdate> native_stash_guard(const Store &store, const NativeStashE
 Json NativeStash::save(const fs::path &directory, std::string_view branch, std::string_view message,
                        NativeStashSaveOptions settings, OperationOptions options) const {
   throw_if_cancelled(options.stop);
-  require_complete_native_materialization(store_);
   require_no_native_checkout(store_);
   require(message.size() <= 1024 * 1024, "native stash message exceeds 1 MiB");
   try {
@@ -170,6 +178,7 @@ Json NativeStash::save(const fs::path &directory, std::string_view branch, std::
   auto result = capture_native_hard_reset(
       store_, directory, branch, head, head, plan.report["plan"].get<std::string>(), additional,
       [&](std::string_view work, const NativeHardResetPlan &captured) {
+        entry.materialization = captured.materialization.policy;
         entry.work = work;
         if (captured.index)
           entry.index = captured.index->id;

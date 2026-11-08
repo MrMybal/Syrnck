@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 5
+revision: 6
 ---
 
 ## Create and select a workspace {#usage}
@@ -217,13 +217,14 @@ BLAKE3 digest of the branch name in their slot, preserving the existing maximum
 branch length. The retained snapshot still records the complete branch name.
 Complete linked checkout records use v8 with `context` and `layout_version` (1..6).
 Partial checkout records use v9 with frozen `source_materialization` and
-`target_materialization` definitions, context and layout (1..5). Layout 5 supports
-[recoverable partial hard reset](doc:native-hard-reset#partial-workspaces). The current
+`target_materialization` definitions, context and layout (1..6). Layout 5 supports
+[recoverable partial hard reset](doc:native-hard-reset#partial-workspaces), and
+layout 6 restores [partial stashes](doc:native-stash#partial-workspaces). The current
 static selection requires equal source/target definitions. A canonical v1
 materialization chunk is retained at `workspaces/NAME/workspace/materialization`.
 Object/revision, pack and C ABI versions are unchanged.
 
-Changing a live selection, partial stash, in-place workspace relocation
+Changing a live selection, in-place workspace relocation
 and archived unregistering remain work to complete. Every workspace still
 requires its complete retained objects locally.
 

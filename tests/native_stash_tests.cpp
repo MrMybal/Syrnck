@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "native_target.hpp"
 #include <syrnck/stash.hpp>
 #include <syrnck/workspace.hpp>
 #include <syrnck/backup.hpp>
@@ -290,6 +291,153 @@ void recovery(const fs::path &path, std::string_view phase, bool abort) {
   if (!abort)
     require(stash.archived(id, true)["base"] == s.head, "stash recovery lost archive");
 }
+void partial(const fs::path &base, std::optional<Key> key, unsigned physical,
+             std::string_view pause = {}, bool abort = false) {
+  Fixture f(base / "primary", key);
+  const auto edit = base / "edit";
+  const auto files = Json{{"Source/code", f.file("base code")}, {"Content/A/leaf", f.file("base leaf")},
+      {"Content/B", f.file("base hidden")}};
+  const auto head = f.revision(files);
+  auto next = files;
+  next["Content/C"] = f.file("new hidden head entry");
+  const auto advanced = f.revision(next, Json::array({head}));
+  f.install(head);
+  f.store.create_native_branch("partial", head);
+  f.store.register_partial_native_workspace(f.project, "edit", edit, {"Source", "Content/A/leaf"});
+  f.store.use_native_workspace("edit");
+  f.store.switch_directory(edit, "partial");
+  const auto write = [&](std::string_view name, std::string_view value) {
+    const auto path = edit / path_from_utf8(name);
+    fs::create_directories(path.parent_path());
+    atomic_write(path, bytes(value), true);
+  };
+  write("Source/code", "staged code");
+  const auto initial = f.store.stage_directory(edit, "partial", {"Source"});
+  // Snapshot-only index edits can prepare hidden paths independently of disk.
+  auto staged = f.store.metadata(Kind::revision, initial);
+  staged["files"]["Content/B"] = f.file("staged hidden");
+  const auto index = f.store.put(Kind::revision, bytes(staged.dump())).first;
+  f.store.set_ref(native_staging_reference(f.store, "partial"), index);
+  write("Source/code", "dirty code");
+  write("Source/new", "selected untracked");
+  write("outside/local", "excluded local data");
+  fs::remove_all(edit / "Content");
+  write("Content", "physical ancestor obstruction");
+  f.pack(physical);
+  NativeStash stash(f.store);
+  const auto saved = stash.save(edit, "partial", "partial work", {true});
+  const auto id = saved["stash"]["id"].get<std::string>();
+  const auto shown = stash.show(id, true);
+  require(shown["version"] == 3 && shown["materialization"] == Json::array({"Content/A/leaf", "Source"}) &&
+              shown["index"] == index.id && text(read_bytes(edit / "Content/A/leaf")) == "base leaf" &&
+              !fs::exists(edit / "Content/B") && !fs::exists(edit / "Source/new") &&
+              text(read_bytes(edit / "outside/local")) == "excluded local data",
+          "partial stash did not freeze policy, clean selected paths or preserve excluded files");
+  const auto reset = plan_native_hard_reset(f.store, edit, "partial", advanced);
+  native_hard_reset(f.store, edit, "partial", head, advanced, reset["plan"].get<std::string>());
+  NativeStashApplyOptions settings;
+  settings.restore_index = true;
+  write("Content/B", "new excluded obstruction");
+  const auto obstructed = f.physical();
+  require(stash.plan_apply(edit, "partial", id, settings)["ready"] == false &&
+              text(read_bytes(edit / "Content/B")) == "new excluded obstruction" && f.physical() == obstructed,
+          "partial stash adopted a new excluded file obstructing its physical target");
+  fs::remove(edit / "Content/B");
+  const auto before = f.physical();
+  const auto plan = stash.plan_apply(edit, "partial", id, settings, true);
+  require(plan["version"] == 2 && plan["ready"] == true && f.physical() == before &&
+              stash.plan_apply(edit, "partial", id, settings)["plan"] == plan["plan"],
+          "partial stash plan wrote objects, lost the ancestor or changed with auditing");
+  if (!pause.empty()) {
+    bool paused = false;
+    hook = [&](std::string_view event, const fs::path &) {
+      if (!paused && event == pause) { paused = true; throw Error("partial stash pause"); }
+    };
+    fails([&] { stash.apply(edit, "partial", id, plan["plan"].get<std::string>(), true, settings); });
+    hook = {};
+    require(paused && f.store.checkout_status()["pending"] == true, "partial stash pause was not reached");
+    f.store.recover_checkout(abort);
+  } else {
+    const auto applied = stash.apply(edit, "partial", id, plan["plan"].get<std::string>(), true, settings);
+    require(applied["version"] == 9 && applied["layout_version"] == 6, "partial stash did not use its physical-target journal");
+  }
+  require(f.store.refs().at("heads/partial").id == advanced &&
+              text(read_bytes(edit / "outside/local")) == "excluded local data",
+          "partial stash changed logical HEAD or excluded local data");
+  if (abort) {
+    require(text(read_bytes(edit / "Content/A/leaf")) == "base leaf" &&
+                text(read_bytes(edit / "Source/code")) == "base code" && stash.list()["total"] == 1 &&
+                !f.store.refs().contains(native_staging_reference(f.store, "partial")),
+            "partial stash abort lost the clean projected workspace or removed its saved work");
+  } else {
+    require(text(read_bytes(edit / "Content")) == "physical ancestor obstruction" &&
+                text(read_bytes(edit / "Source/code")) == "dirty code" &&
+                text(read_bytes(edit / "Source/new")) == "selected untracked" && stash.list()["total"] == 0,
+            "partial stash lost the outside-mask ancestor or untracked selected work");
+    const auto restored = f.store.refs().at(native_staging_reference(f.store, "partial"));
+    f.store.export_revision(restored.id, base / "restored-index");
+    require(text(read_bytes(base / "restored-index/Content/B")) == "staged hidden" &&
+                text(read_bytes(base / "restored-index/Content/C")) == "new hidden head entry" &&
+                text(read_bytes(base / "restored-index/Source/code")) == "staged code",
+            "partial stash projected the logical index or lost independently advanced hidden entries");
+  }
+  f.store.gc(true);
+  const auto work = shown["work"].get<std::string>();
+  f.store.export_revision(work, base / "working-recovery");
+  require(text(read_bytes(base / "working-recovery/Content")) == "physical ancestor obstruction" &&
+              !fs::exists(base / "working-recovery/outside"),
+          "partial stash lost physical recovery or captured excluded untracked data");
+  create_backup(f.store, base / "backup", key);
+  Store backup(base / "backup", key);
+  verify_backup(backup);
+  require((abort ? NativeStash(backup).show(id, true) : NativeStash(backup).archived(id, true))["materialization"] ==
+              shown["materialization"], "backup lost the partial stash selection");
+  if (!abort) stash.restore(id);
+  f.store.use_native_workspace("");
+  const auto primary_before = f.physical();
+  fails([&] { stash.plan_apply(f.project, "main", id); });
+  require(f.physical() == primary_before, "cross-policy stash apply changed storage");
+  f.store.fsck();
+}
+void empty_partial_detached(const fs::path &base) {
+  Fixture f(base / "primary");
+  const auto head = f.revision(Json{{"hidden", f.file("base hidden")}});
+  f.install(head);
+  f.write("hidden", "full stash bytes");
+  NativeStash stash(f.store);
+  const auto full = stash.save(f.project, "main", "full")["stash"]["id"].get<std::string>();
+  const auto edit = base / "empty";
+  f.store.register_partial_native_workspace(f.project, "empty", edit, {});
+  f.store.use_native_workspace("empty");
+  f.store.detach_checkout(edit, head);
+  const auto before = f.physical();
+  fails([&] { stash.plan_apply(edit, detached_native_target, full); });
+  require(f.physical() == before, "full stash into an empty partial view wrote objects");
+  f.store.stage_directory(edit, detached_native_target, {"."});
+  const auto slot = native_staging_reference(f.store, detached_native_target);
+  auto index = f.store.metadata(Kind::revision, f.store.refs().at(slot).id);
+  index["files"]["hidden"] = f.file("prepared hidden");
+  const auto prepared = f.store.put(Kind::revision, bytes(index.dump())).first;
+  f.store.set_ref(slot, prepared);
+  atomic_write(edit / "local", bytes("excluded local"), false);
+  const auto saved = stash.save(edit, detached_native_target, "metadata-only stash", {true});
+  const auto id = saved["stash"]["id"].get<std::string>();
+  require(stash.show(id)["version"] == 3 && stash.show(id)["materialization"] == Json::array() &&
+              !f.store.refs().contains(slot), "empty detached stash lost its complete index or empty policy");
+  NativeStashApplyOptions settings;
+  settings.restore_index = true;
+  const auto plan = stash.plan_apply(edit, detached_native_target, id, settings, true);
+  require(plan["ready"] == true, "empty detached stash could not plan full index restoration");
+  stash.apply(edit, detached_native_target, id, plan["plan"].get<std::string>(), true, settings);
+  require(!fs::exists(edit / "hidden") && text(read_bytes(edit / "local")) == "excluded local" &&
+              f.store.native_head()["branch"].is_null() && f.store.native_head()["revision"] == head &&
+              f.store.refs().at("heads/main").id == head,
+          "empty detached stash materialized a hidden tree or moved the logical head");
+  f.store.gc(true);
+  f.store.export_revision(f.store.refs().at(slot).id, base / "index");
+  require(text(read_bytes(base / "index/hidden")) == "prepared hidden", "empty stash lost hidden staged bytes");
+  f.store.fsck();
+}
 } // namespace
 namespace syrnck::testing {
 void io_checkpoint(std::string_view phase, const fs::path &target) {
@@ -308,11 +456,18 @@ int main() {
           key->fill(76);
         }
         workflow(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
+        partial(temporary.path / ("partial-" + std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
       }
     stale_index_and_text(temporary.path / "stale-index-text");
     scanner_bounds(temporary.path / "scanner");
     history_and_conflict(temporary.path / "conflicts");
     default_untracked_and_registry(temporary.path / "registry");
+    empty_partial_detached(temporary.path / "empty-partial");
+    for (const auto phase : {"checkout.prepared", "checkout.evacuated", "checkout.applied", "checkout.committed"}) {
+      partial(temporary.path / ("partial-" + std::string(phase) + "-resume"), {}, 0, phase);
+      if (phase != std::string_view("checkout.committed"))
+        partial(temporary.path / ("partial-" + std::string(phase) + "-abort"), {}, 0, phase, true);
+    }
     for (const auto phase :
          {"checkout.prepared", "checkout.evacuated", "checkout.applied", "checkout.committed"}) {
       recovery(temporary.path / (std::string(phase) + "-resume"), phase, false);

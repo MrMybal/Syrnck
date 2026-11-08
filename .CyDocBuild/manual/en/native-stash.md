@@ -5,7 +5,7 @@ description: Native stash guide.
 section: Version control
 order: 390
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native stash {#native-stash}
@@ -25,8 +25,9 @@ syrnck native stash pop STASH_ID --index --expect-plan PLAN_ID
 ```
 
 Use the canonical 64-character stash ID returned by `push` or `list`. There are
-no mutable positional aliases. `--directory` selects the workspace; the Store
-must be inside it. `--branch` must name its selected branch. Existing pending
+no mutable positional aliases. `--directory` selects the primary workspace or
+the registered linked directory sharing the Store. `--branch` must identify
+the selected named or detached target. Existing pending
 checkout/switch/reset/stash operations must first be recovered.
 
 ## Save and scope {#save-and-scope}
@@ -106,6 +107,36 @@ Before final publication, abort restores the clean pre-apply workspace and leave
 the active stash available. After publication, recovery completes cleanup. Plain
 working/prepared/rollback files follow the same local confidentiality limits as
 [ordinary checkout](doc:native-checkout). Store opening never resumes implicitly.
+
+## Partial workspaces {#partial-workspaces}
+
+Stash supports static [partial workspaces](doc:native-workspaces), including
+detached HEAD and explicit empty selections. Saving captures the selected
+physical working tree and any regular-file obstructions needed to clean it.
+`--include-untracked` follows that same selection and ignore rules. Unrelated
+excluded local files remain in place. The complete old head/index stay retained
+as parents, including all hidden entries and their blocks.
+
+Partial descriptors use version 3 with an inline canonical `materialization`
+array. Full named/detached descriptors retain versions 1/2. Apply requires the
+saved and current prefix definitions to match exactly; crossing between full
+and partial views or different selections is refused before candidate writes.
+The partial apply plan uses v2 and binds the definition and policy object root.
+
+Working replay compares projected base/current trees against the actual saved
+physical tree. Index replay remains complete, so `--index` restores hidden
+prepared edits and preserves independent hidden changes in the newer head.
+Without `--index`, hidden staged data remains available in the saved index
+parent rather than being materialized outside the selection.
+
+Save uses v9 checkout layout 5 and apply/pop use layout 6 with frozen equal
+source/target definitions. Layout 6 projects the logical source and restores
+the full physical candidate. For example, a saved regular file `Content` can
+replace the selected `Content/A/leaf` during apply without adding excluded
+logical `Content/B` to that physical namespace. Abort restores the previous
+clean projected view; final publication combines the complete index and pop
+archive changes while leaving logical HEAD unchanged. GC and portable backup
+retain the descriptor, physical work and full index/history.
 
 ## Drop, restore and retention {#drop-restore-and-retention}
 

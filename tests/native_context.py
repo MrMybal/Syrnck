@@ -1,5 +1,6 @@
 """Shared object storage with isolated native workspace selection and indexes."""
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -168,6 +169,54 @@ class NativeContext(unittest.TestCase):
         self.assertTrue((self.store / "workspaces" / name / "watch-journal").is_file())
         self.assertFalse((self.store / "watch-journal").exists())
         self.assertEqual(json.loads(self.cmd("refs"))["heads/main"]["id"], main)
+
+    def test_partial_stash_physical_ancestor_index_and_french_policy_refusal(self):
+        for name, value in {"Source/code": b"base code", "Content/A/leaf": b"base leaf",
+                            "Content/B": b"hidden asset"}.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(value)
+        head = self.commit("base")
+        (self.root / "Source/code").write_bytes(b"full stash work")
+        full = json.loads(self.cmd("native", "stash", "push", "-m", "full"))["stash"]["id"]
+        self.cmd("native", "branch", "partial", head)
+        self.cmd("native", "workspace-add", "edit", self.edit, "--branch", "partial",
+                 "--include", "Source", "--include", "Content/A/leaf")
+        before = self.snapshot()
+        refused = self.call("--lang", "fr", "--workspace", "edit", "native", "stash", "apply-plan", full, ok=False)
+        self.assertIn("diffère de celle du workspace", refused.stderr.decode("utf-8"))
+        self.assertEqual(self.snapshot(), before)
+        (self.edit / "Source/code").write_bytes(b"staged code")
+        index = self.scoped("edit", "add", ".").stdout.decode().strip()
+        (self.edit / "Source/code").write_bytes(b"dirty code")
+        (self.edit / "Source/new").write_bytes(b"selected new")
+        shutil.rmtree(self.edit / "Content")
+        (self.edit / "Content").write_bytes(b"physical ancestor")
+        (self.edit / "outside").write_bytes(b"keep excluded")
+        saved = json.loads(self.scoped("edit", "stash", "push", "--include-untracked", "-m", "partial").stdout)["stash"]
+        shown = json.loads(self.scoped("edit", "stash", "show", saved["id"], "--verify").stdout)
+        self.assertEqual((shown["version"], shown["materialization"]), (3, ["Content/A/leaf", "Source"]))
+        self.assertEqual((self.edit / "Content/A/leaf").read_bytes(), b"base leaf")
+        self.assertFalse((self.edit / "Content/B").exists())
+        self.assertFalse((self.edit / "Source/new").exists())
+        plan = json.loads(self.scoped("edit", "stash", "apply-plan", saved["id"], "--index", "--verify").stdout)
+        self.assertEqual(plan["version"], 2)
+        applied = json.loads(self.call("--lang", "fr", "--workspace", "edit", "native", "stash", "pop",
+                                      saved["id"], "--index", "--expect-plan", plan["plan"]).stdout)
+        self.assertEqual((applied["version"], applied["layout_version"]), (9, 6))
+        self.assertEqual((self.edit / "Content").read_bytes(), b"physical ancestor")
+        self.assertEqual((self.edit / "outside").read_bytes(), b"keep excluded")
+        self.assertEqual((self.edit / "Source/code").read_bytes(), b"dirty code")
+        self.assertEqual((self.edit / "Source/new").read_bytes(), b"selected new")
+        self.cmd("gc", "--delete")
+        self.cmd("native", "export", index, self.store / "saved-index")
+        self.cmd("native", "export", shown["work"], self.store / "saved-work")
+        self.assertEqual((self.store / "saved-index/Content/B").read_bytes(), b"hidden asset")
+        self.assertEqual((self.store / "saved-index/Source/code").read_bytes(), b"staged code")
+        self.assertEqual((self.store / "saved-work/Content").read_bytes(), b"physical ancestor")
+        self.assertFalse((self.store / "saved-work/outside").exists())
+        refs = json.loads(self.cmd("refs"))
+        self.assertEqual((refs["heads/main"]["id"], refs["heads/partial"]["id"]), (head, head))
 
     def test_portable_backup_restore_and_preserved_frozen_index(self):
         first, main = self.fixture()

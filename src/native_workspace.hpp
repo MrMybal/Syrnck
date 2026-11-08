@@ -61,7 +61,8 @@ Json compare_native_workspace_maps(const NativeSnapshot &, const NativeSnapshot 
 Json indexed_native_observation(const Store &, const fs::path &, const std::optional<std::string> &,
                                 NativeSnapshot &, OperationOptions);
 Json plan_native_checkout_files(const Store &, const fs::path &, std::string_view branch,
-                                const NativeSnapshot &destination, OperationOptions);
+                                  const NativeSnapshot &destination, OperationOptions,
+                                  bool physical_target = false);
 // Read-only recovery of an interrupted portable workspace export. Requires an
 // exact complete tree; never replaces an existing working file or follows links.
 void verify_native_restored_directory(const Store &, const fs::path &, std::string_view revision, OperationOptions,

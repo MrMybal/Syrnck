@@ -262,7 +262,7 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
   if (stored_version == 9) {
     record.source_materialization = NativeMaterialization::from_definition(value.at("source_materialization"));
     record.target_materialization = NativeMaterialization::from_definition(value.at("target_materialization"));
-    require(version >= 1 && version <= 5 && !record.source_materialization.complete() &&
+    require(version >= 1 && version <= 6 && !record.source_materialization.complete() &&
                 record.source_materialization.definition() == record.target_materialization.definition(),
             "invalid native checkout record");
   }
@@ -409,6 +409,10 @@ std::optional<Record> active(const Store &store) {
   if (record.restore_worktree) {
     const auto entry = record.stash();
     const bool archived = record.state == "committed" && record.pop_stash;
+    const auto saved = read_native_stash(store, entry.id, archived);
+    require(saved.record == entry.record && saved.work == entry.work &&
+                saved.materialization.definition() == record.source_materialization.definition(),
+            "invalid native checkout record");
     require(lookup(refs, archived ? entry.archive_name() : entry.name()) == entry.record &&
                 lookup(refs, archived ? entry.archive_work() : entry.work_name()) ==
                     ObjectKey{Kind::revision, entry.work},
@@ -429,11 +433,17 @@ NativeSnapshot source_files(const Store &store, const Record &record, OperationO
   return record.hard_reset ? read_native_snapshot(store, *record.source, options)
       : read_native_materialized_snapshot(store, *record.source, record.source_materialization, options);
 }
+NativeSnapshot target_files(const Store &store, const Record &record, OperationOptions options) {
+  // Stash restores a physical tree. Ancestor obstructions saved outside the
+  // projection must be reinstated, without mixing in hidden logical children.
+  return record.restore_worktree ? read_native_snapshot(store, record.target, options)
+      : read_native_materialized_snapshot(store, record.target, record.target_materialization, options);
+}
 Json actions(const Store &store, const Record &record, OperationOptions options) {
   const auto difference = record.source_materialization.complete() && record.target_materialization.complete()
       ? compare_native_snapshots(store, record.source, record.target, options)
       : compare_native_file_maps(source_files(store, record, options),
-          read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options);
+          target_files(store, record, options), options);
   Json result = Json::array();
   for (const auto &row : difference["changes"]) {
     throw_if_cancelled(options.stop);
@@ -499,7 +509,7 @@ public:
       : store_(store), record(std::move(value)), entries(actions(store, record, options)) {
     if (record.namespace_transition) {
       const auto source = source_files(store, record, options);
-      layout.emplace(source, read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options,
+      layout.emplace(source, target_files(store, record, options), options,
                      record.source_directories);
       require(layout->transition, "invalid native checkout record");
     }
@@ -607,7 +617,9 @@ void Transaction::prepare(OperationOptions options) {
       record.hard_reset
           ? plan_native_checkout_source(store_, record.workspace, record.branch, *record.source,
                                         record.target, record.source_directories, options)
-          : store_.plan_checkout(record.workspace, record.branch, record.target, false, options);
+          : record.restore_worktree && !record.target_materialization.complete()
+              ? plan_native_checkout_files(store_, record.workspace, record.branch, target_files(store_, record, options), options, true)
+              : store_.plan_checkout(record.workspace, record.branch, record.target, false, options);
   require(plan["source"] == (record.source ? Json(*record.source) : Json{}),
           "native checkout references changed");
   for (const auto &conflict : plan["conflicts"])
@@ -658,7 +670,7 @@ void Transaction::apply(OperationOptions options) {
   // only stop tokens through the atomic branch/journal publication.
   const OperationOptions final_options{options.stop};
   std::vector<std::string> target_paths, removed_paths;
-  for (const auto &[path, target] : read_native_materialized_snapshot(store_, record.target, record.target_materialization, final_options)) {
+  for (const auto &[path, target] : target_files(store_, record, final_options)) {
     require(matches(working_path(store_, record, path, false), target.json(), path, final_options),
             "working file changed during native checkout");
     target_paths.push_back(path);
@@ -1375,14 +1387,16 @@ Json native_hard_reset(const Store &store, const fs::path &workspace, std::strin
 Json checkout_native_stash(const Store &store, const fs::path &workspace, std::string_view branch,
                            const NativeStashApplyPlan &planned, bool pop, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  require_complete_native_materialization(store);
   require_no_native_checkout(store);
-  const auto plan = store.plan_checkout(workspace, branch, planned.target, false, options);
+  require(read_native_materialization(store).root == planned.materialization.root,
+          "native checkout references changed");
+  const auto plan = plan_native_checkout_files(store, workspace, branch, planned.files, options, true);
   require(plan["ready"] == true && plan["source"].get<std::string>() == planned.head,
           "native stash workspace changed; refresh the plan");
   Record record;
   record.context = store.native_workspace_name();
   record.restore_worktree = true;
+  record.freeze_materialization(planned.materialization.policy);
   record.workspace = fs::canonical(workspace);
   record.nonce = hex(random_bytes(32));
   record.branch = branch;
@@ -1407,7 +1421,7 @@ Json checkout_native_stash(const Store &store, const fs::path &workspace, std::s
                                  {record.branch_reference(), record.original_head, record.original_head},
                                  {record.index_reference(), {}, {}},
                                  {record.pin("target"), {}, record.destination()},
-                                 {record.pin("source"), {}, record.origin()}};
+                                 {record.pin("source"), {}, record.origin()}, record.materialization_guard()};
   const auto guard = native_stash_guard(store, planned.saved, false);
   updates.insert(updates.end(), guard.begin(), guard.end());
   require(store.compare_update_refs(updates, options), "native checkout references changed");

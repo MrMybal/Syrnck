@@ -115,7 +115,8 @@ void scenario(const fs::path &base, std::optional<Key> key, unsigned physical) {
               !reset_plan["working"].contains("Content/local"),
           "partial hard reset did not plan the selected physical tree");
   NativeStash stash(f.store);
-  fails([&] { stash.save(edit, "partial", "unsupported partial stash"); });
+  require(stash.save(edit, "partial", "clean partial stash")["stash"].is_null(),
+          "clean partial stash captured unrelated excluded data");
   const auto transitioned = f.store.checkout_directory(edit, "partial", b);
   require(transitioned["version"] == 9 && transitioned["layout_version"] == 3 &&
               text(read_bytes(edit / "Source/shape/child")) == "nested" &&

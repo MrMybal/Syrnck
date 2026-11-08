@@ -43,10 +43,13 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
                                                 const NativeStashApplyOptions &settings, bool verify_objects,
                                                 OperationOptions options) {
   throw_if_cancelled(options.stop);
-  require_complete_native_materialization(store);
+  const auto materialization = read_native_materialization(store);
   const NativeRewriteState state(store, branch, options);
   NativeStashApplyPlan plan;
   plan.saved = read_native_stash(store, id, false, options);
+  plan.materialization = materialization;
+  require(plan.saved.materialization.definition() == materialization.policy.definition(),
+          "native stash materialization differs from workspace");
   plan.head = state.head.id;
   plan.selection = state.lookup(store.native_workspace_reference("workspace/HEAD"));
   const auto selection = store.native_head();
@@ -65,8 +68,8 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
     blockers.push_back(Json{{"reason", "staging_exists"}});
   if (store.checkout_status()["pending"].get<bool>())
     blockers.push_back(Json{{"reason", "pending_checkout"}});
-  const auto base = read_native_snapshot(store, plan.saved.base, options);
-  const auto current = read_native_snapshot(store, plan.head, options);
+  const auto base = read_native_materialized_snapshot(store, plan.saved.base, materialization.policy, options);
+  const auto current = read_native_materialized_snapshot(store, plan.head, materialization.policy, options);
   const auto incoming = read_native_snapshot(store, plan.saved.work, options);
   const NativeResolutionSet work_context{"stash",         plan.head,       plan.saved.work,
                                          plan.saved.base, plan.saved.base, {}};
@@ -91,7 +94,8 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
     if (settings.index_resolutions)
       require_native_resolution_context(*settings.index_resolutions, "stash-index", plan.head,
                                         *plan.saved.index, original, original);
-    auto index = merge_native_files(store, baseline, current, staged, options,
+    const auto logical_current = read_native_snapshot(store, plan.head, options);
+    auto index = merge_native_files(store, baseline, logical_current, staged, options,
                                     settings.index_resolutions ? &*settings.index_resolutions : nullptr,
                                     nullptr, text ? &*text : nullptr);
     extra.insert(index.extra_roots.begin(), index.extra_roots.end());
@@ -110,7 +114,7 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
     plan.working_revision = snapshot(native_stash_working_parents(plan.head, plan.saved.work, plan.index),
                                      "Syrnck stash working v1: " + std::string(branch), plan.files, options);
     plan.target = object_id(Kind::revision, bytes(plan.working_revision.dump()));
-    workspace = plan_native_checkout_files(store, directory, branch, plan.files, options);
+    workspace = plan_native_checkout_files(store, directory, branch, plan.files, options, true);
   }
   if (verify_objects) {
     extra.insert({Kind::revision, plan.saved.work});
@@ -120,7 +124,9 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
   }
   const auto work_report = replay_report(work, work_context);
   const auto ready = blockers.empty() && workspace["ready"].get<bool>();
-  const Json context{{"version", 1},
+  const bool partial = !materialization.policy.complete();
+  const auto version = partial ? 2 : 1;
+  Json context{{"version", version},
                      {"type", "native-stash-apply-plan"},
                      {"directory", utf8(fs::canonical(directory))},
                      {"store", utf8(store.root())},
@@ -132,7 +138,11 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
                      {"target", plan.target.empty() ? Json{} : Json(plan.target)},
                      {"target_index", plan.index ? Json(*plan.index) : Json{}},
                      {"restore_index", settings.restore_index}};
-  plan.report = Json{{"version", 1},
+  if (partial) {
+    context["materialization"] = materialization.policy.definition();
+    context["materialization_object"] = key_json(*materialization.root);
+  }
+  plan.report = Json{{"version", version},
                      {"operation", "stash-apply"},
                      {"stash", id},
                      {"record", plan.saved.record.id},
@@ -141,13 +151,17 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
                      {"restore_index", settings.restore_index},
                      {"target", context["target"]},
                      {"target_index", context["target_index"]},
-                     {"plan", hash(bytes("Syrnck stash apply plan v1:" + context.dump()))},
+                     {"plan", hash(bytes(std::string(partial ? "Syrnck stash apply plan v2:" : "Syrnck stash apply plan v1:") + context.dump()))},
                      {"working", work_report},
                      {"index", std::move(index_report)},
                      {"workspace", std::move(workspace)},
                      {"ready", ready},
                      {"blockers", std::move(blockers)},
                      {"objects_verified", verify_objects}};
+  if (partial) {
+    plan.report["materialization"] = context["materialization"];
+    plan.report["materialization_object"] = context["materialization_object"];
+  }
   if (text) {
     plan.report["text_merge"] = text->summary();
     plan.generated = std::move(text->generated);

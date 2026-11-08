@@ -5,14 +5,14 @@ description: Guide : Stash natif.
 section: Versionnage
 order: 390
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Stash natif {#native-stash}
 
 Stash capture fichiers de travail complets et index figé avant nettoyage du workspace sélectionné ; l’application ultérieure restaure ce travail sans avancer la branche. API syrnck/stash.hpp sans dépendance réseau/CLI.
 
-Utiliser l’ID canonique de 64 caractères rendu par push/list, sans alias positionnel mutable. --directory choisit le workspace avec Store intérieur ; --branch doit être la branche sélectionnée. Terminer d’abord toute récupération checkout/switch/reset/stash.
+Utiliser l’ID canonique de 64 caractères rendu par push/list, sans alias positionnel mutable. --directory choisit le workspace principal ou le dossier lié enregistré partageant le Store ; --branch doit identifier la cible nommée ou détachée sélectionnée. Terminer d’abord toute récupération checkout/switch/reset/stash.
 
 ```text
 syrnck native stash push -m "WIP: lighting"
@@ -59,6 +59,36 @@ syrnck native checkout-recover
 syrnck native checkout-recover --abort
 ```
 
+
+## Workspaces partiels {#partial-workspaces}
+
+Stash accepte les [workspaces partiels](doc:native-workspaces) statiques, avec
+HEAD détaché ou sélection explicitement vide. La sauvegarde capture l’arbre
+physique sélectionné et les fichiers ordinaires faisant obstacle à son nettoyage.
+--include-untracked suit cette même sélection et les règles d’exclusion. Les
+fichiers locaux exclus sans rapport restent sur place. Tête/index anciens restent
+parents complets, avec toutes les entrées cachées et leurs blocs.
+
+Les descripteurs partiels utilisent v3 avec tableau canonique `materialization`
+intégré. Les vues complètes nommées/détachées gardent v1/v2. Apply exige des
+définitions sauvegardée/actuelle strictement identiques ; passage complet/partiel
+ou changement de sélection refusé avant écriture des candidats. Le plan partiel
+v2 lie définition et racine de l’objet de politique.
+
+Le rejeu de travail compare base/tête projetées à l’arbre physique sauvegardé.
+Le rejeu d’index reste complet : --index restaure les préparations cachées tout
+en conservant les changements cachés indépendants d’une tête plus récente. Sans
+--index, les données préparées cachées restent dans le parent index sauvegardé,
+sans apparaître hors sélection sur disque.
+
+Save utilise le journal v9 layout 5 ; apply/pop le layout 6 avec définitions
+figées identiques. Le layout 6 projette la source logique et restaure le candidat
+physique complet. Un fichier sauvegardé `Content` peut ainsi remplacer le chemin
+sélectionné `Content/A/leaf`, sans introduire le `Content/B` logique exclu dans
+ce namespace physique. Abort restaure la vue projetée propre précédente ; la
+publication finale combine index complet et archivage du pop, avec HEAD logique
+inchangé. GC et sauvegarde portable conservent descripteur, travail physique et
+index/historique complets.
 
 ## Drop, restauration et rétention {#drop-restore-and-retention}
 

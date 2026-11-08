@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -152,7 +152,7 @@ v1..v7 ne changent pas. La sélection appartient au handle.
 Un contexte partiel conserve un chunk canonique native-materialization v1 sous
 `workspace/materialization`, avec tableau de préfixes littéraux disjoints triés.
 Absence de chunk : tous les chemins ; tableau vide : aucun. Les reçus v9 figent
-les définitions source/cible, contexte et layout (1..5), sans déduire les actions
+les définitions source/cible, contexte et layout (1..6), sans déduire les actions
 de reprise depuis une sélection actuelle mutable. Les politiques statiques
 actuelles exigent deux définitions identiques et restent immuables tant que leur
 contexte est actif.
@@ -160,6 +160,12 @@ Le layout 5 du reset hard garde l’arbre source physique capturé complet, y co
 les ancêtres faisant obstacle hors masque ; seule la cible logique est projetée.
 Tête/index complets restent parents de cette récupération. Le plan de reset hard
 partiel v2 lie le tableau de préfixes et la clé de son objet de politique.
+Le layout 6 d’apply/pop projette la source logique et restaure la cible physique
+complète, ancêtres obstructifs sauvegardés compris. Son plan v2 lie les mêmes
+champs de politique. Un descripteur stash partiel v3 ajoute `materialization`
+aux dix champs initiaux ; les descripteurs complets nommés/détachés restent
+v1/v2. Apply exige une politique sauvegardée/actuelle strictement identique ;
+la fusion d’index reste logique et complète, indépendante de la projection.
 
 Sans capacités requises, une sauvegarde de ces liaisons utilise le marqueur v2, conservant par
 contexte un descripteur portable native-workspace-snapshot et la révision

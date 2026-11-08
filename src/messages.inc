@@ -1042,6 +1042,7 @@ SYRNCK_MESSAGE("native ignore control must use canonical spelling", "Le fichier 
 SYRNCK_MESSAGE("workspace materialization requires a supported reader feature", "La matérialisation du workspace nécessite une capacité de lecture prise en charge")
 SYRNCK_MESSAGE("live workspace materialization is immutable", "La sélection des fichiers d’un workspace actif est immuable")
 SYRNCK_MESSAGE("operation requires complete workspace materialization", "Cette opération nécessite un workspace entièrement matérialisé")
+SYRNCK_MESSAGE("native stash materialization differs from workspace", "La sélection de fichiers du stash natif diffère de celle du workspace")
 SYRNCK_MESSAGE("native path is outside workspace materialization", "Le chemin natif est hors de la sélection du workspace")
 SYRNCK_MESSAGE("native commit references changed; retry operation", "Les références du commit natif ont changé ; recommencez l’opération")
 SYRNCK_MESSAGE("choose either --include or --no-files", "Choisissez soit --include, soit --no-files")

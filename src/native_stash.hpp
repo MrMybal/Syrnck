@@ -7,6 +7,7 @@ struct NativeStashEntry {
   std::optional<std::string> index;
   std::uint64_t generation = 0, created_at = 0;
   ObjectKey record{Kind::chunk, {}};
+  NativeMaterialization materialization;
   Json json() const;
   std::string name() const {
     return "stash/" + id + "/record";
@@ -32,6 +33,7 @@ struct NativeStashApplyPlan {
   NativeSnapshot files;
   NativeGeneratedText generated;
   std::optional<ObjectKey> selection;
+  NativeMaterializationState materialization;
 };
 NativeStashApplyPlan prepare_native_stash_apply(const Store &, const fs::path &, std::string_view branch,
                                                 std::string_view id, const NativeStashApplyOptions &,
