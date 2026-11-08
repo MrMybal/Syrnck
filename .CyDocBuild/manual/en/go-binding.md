@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 4
+revision: 5
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -135,3 +135,16 @@ The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256
 Open with `WorkspaceOptions{Name: "edit"}` and select `store.UseWorkspace("edit")`
 before each status. Empty names use primary. Mismatched context fails; selection
 failure leaves the prior name intact. See [linked contexts](doc:workspace-abi#registered-contexts).
+
+## Native capture and recovery {#native-workspace-actions}
+
+`workspace.NativeState(store)` reads the selected native context, reference,
+revision, materialization and pending checkout. `state.Expected()` freezes the
+exact target/revision/policy identity. Use it for `Capture(store, expected, message)`,
+`PlanCheckout(store, expected, candidate)` and
+`CheckoutOwned(store, expected, candidate, owner)`. Capture retains local changes;
+checkout requires clean working files and preserves a recoverable owned journal.
+`RecoverOwned(store, target, candidate, owner)` resumes only that exact pending
+operation. All five methods have Context variants and enforce the session's
+exact Store/context/directory binding. Mutation errors require re-reading state
+because publication may already have occurred. See the [native action contract](doc:workspace-abi#native-workspace-actions).

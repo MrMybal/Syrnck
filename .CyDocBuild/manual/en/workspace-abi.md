@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 3
+revision: 4
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -215,7 +215,7 @@ the context expires. Lock order remains workspace-then-Store, with the existing
 stable Store order retained by differential copying. Close still waits for any
 active call, so cancel a long call before closing. Ordinary Store methods keep
 their existing cancellation behavior; this context bridge currently applies to
-workspace opening, waiting and status only.
+workspace opening, waiting, status and the guarded native actions below.
 
 ## Scope and validation {#scope-and-validation}
 
@@ -241,3 +241,52 @@ before status. The session retains no Store/key/lock. Linked native watchers
 observe external refs/config metadata conservatively and require periodic full
 audits as primary sessions do. Registration and portable restore are exposed by
 the [CLI and C++ API](doc:native-workspaces), not by C/Go management calls.
+
+## Guarded native workspace actions {#native-workspace-actions}
+
+The additive C ABI also exposes `workspace_native_state_json_ex`,
+`workspace_capture_json_ex`, `workspace_checkout_plan_json_ex`,
+`workspace_checkout_owned_json_ex` and `workspace_recover_owned_json_ex`.
+Use the distributed declarations for the complete signatures. Each call binds
+its supplied Store to the session's exact canonical storage path, registered
+context and directory; even another valid Store is refused.
+
+Read state first. The report includes selected `target`, its actual reference,
+typed `revision` or null, HEAD, materialization policy, staging flag and the
+selected context's checkout status. Reading state during an interruption does
+not recover it. `SyrnckNativeExpected` contains target, nullable revision and
+nullable materialization object ID. NULL means absence, not a wildcard. Capture,
+plan and checkout refuse a changed target, revision or policy before mutations.
+Never update an old expectation merely to force the same operation through.
+
+Capture retains selected working files through the ordinary native commit
+transaction. It preserves ignored files, unmaterialized paths, detached HEAD
+and authored-commit behavior, and refuses existing staging/checkout work. The
+message is at most 64 KiB. Plan verifies the target closure and reports readiness
+without moving refs or changing working bytes. A blocked plan is a successful
+report with `ready:false`. Checkout rechecks those conditions and applies only
+to a clean selected workspace through the recoverable native journal. It uses
+an explicit 64-hex owner identity and the existing reader feature gate.
+
+Before starting a service-owned checkout, durably retain its exact owner,
+candidate and causal input. Recovery accepts only a currently pending journal
+with that owner, candidate, selected target, context and physical workspace.
+A foreign/manual journal or no pending journal is refused. Recovery does not
+require the private key that signed an already prepared target. Signed target
+objects and their signatures stay unchanged.
+
+All methods share allocated output ownership and workspace-then-Store locking.
+Mutation attempts invalidate observation continuity; the next Status reads all
+selected bytes. Native cancellation remains cooperative. A successful native
+publication wins late cancellation. A nonzero result can follow publication or
+leave a resumable journal: read native state and establish the outcome before
+retrying or recovering. Do not infer absence of changes from empty error output.
+Close Store before waiting for notifications or network responses.
+
+Go provides `NativeState`/`NativeStateContext`, `Capture`/`CaptureContext`,
+`PlanCheckout`/`PlanCheckoutContext`, `CheckoutOwned`/`CheckoutOwnedContext` and
+`RecoverOwned`/`RecoverOwnedContext` on Workspace. `state.Expected()` carries
+its exact target/revision/materialization snapshot. Capture returns a revision
+ID; plan/checkout/recovery return canonical `json.RawMessage`. Context methods
+use the same safe per-call cancellation bridge. They do not implement a resident
+BEP controller or automatically announce that a working folder has caught up.

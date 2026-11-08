@@ -10,6 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- Guarded native workspace capture, checkout planning and owned recovery through C/Go, including exact revision/materialization expectations and Store/context binding.
 - Native-backed Syncthing folder catalogs retain causal indexes, tombstones and complete file history atomically; staged downloads release the engine lock during network waits, with real-daemon reconnection qualification.
 - Additive C/Go SDK object creation, unpinned memory/stream preparation and atomic typed reference groups for compound state retained through GC and backups.
 - Native macOS NFD callback filenames normalize to canonical NFC for Syncthing indexes, block requests and reconstruction.

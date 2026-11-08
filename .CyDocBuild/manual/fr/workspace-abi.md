@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -125,3 +125,53 @@ verrou. Les notifications liées surveillent prudemment refs/config externes ;
 les audits complets périodiques restent nécessaires. Enregistrement et
 restauration portable sont exposés par le [CLI et C++](doc:native-workspaces),
 pas par des appels d’administration C/Go.
+
+## Actions natives de workspace protégées {#native-workspace-actions}
+
+L’ABI C enrichie expose `workspace_native_state_json_ex`,
+`workspace_capture_json_ex`, `workspace_checkout_plan_json_ex`,
+`workspace_checkout_owned_json_ex` et `workspace_recover_owned_json_ex`.
+Les déclarations distribuées donnent les signatures complètes. Chaque appel
+vérifie le chemin canonique exact du Store, le contexte enregistré et le dossier
+de la session. Même un autre Store valide est refusé.
+
+Lire l’état d’abord : cible sélectionnée, référence réelle, révision typée ou
+null, HEAD, matérialisation, présence de staging et statut du checkout du
+contexte. Cette lecture ne reprend rien. `SyrnckNativeExpected` contient cible,
+révision nullable et ID nullable de l’objet de sélection partielle. NULL exige
+l’absence, ce n’est pas un joker. Capture, plan et checkout refusent toute cible,
+révision ou politique modifiée avant mutation. Ne pas actualiser l’attente d’une
+ancienne opération uniquement pour la faire passer.
+
+Capture conserve les fichiers sélectionnés par la transaction de commit native.
+Elle respecte fichiers ignorés, chemins non matérialisés, HEAD détaché et auteurs,
+et refuse staging/checkout en cours. Message limité à 64 Kio. Plan vérifie la
+fermeture cible et décrit sa faisabilité sans déplacer de référence ni modifier
+les octets de travail. Un plan bloqué est un rapport réussi avec `ready:false`.
+Checkout recontrôle tout et n’applique qu’à un workspace sélectionné propre,
+via le journal récupérable natif et un propriétaire explicite de 64 caractères
+hexadécimaux. La barrière de version de lecteur existante s’applique.
+
+Avant un checkout contrôlé par le service, conserver durablement propriétaire,
+candidat et entrée causale exacts. La reprise exige un journal actuellement en
+cours avec ces propriétaire, candidat, cible sélectionnée, contexte et dossier.
+Journal manuel/étranger ou absence de journal sont refusés. La reprise n’exige
+pas la clé privée ayant signé une cible déjà préparée ; objet et signature sont
+conservés sans modification.
+
+Propriété des sorties allouées et ordre de verrouillage workspace puis Store
+restent communs. Les tentatives de mutation invalident la continuité ; le prochain
+Status relit tous les octets sélectionnés. Annulation native coopérative ; une
+publication réussie l’emporte sur une annulation tardive. Un statut non nul peut
+suivre une publication ou laisser un journal reprenable : relire l’état et
+établir le résultat avant toute nouvelle tentative. Une sortie vide en erreur
+ne prouve aucune absence de modification. Fermer le Store avant l’attente réseau
+ou des notifications.
+
+Go expose `NativeState`/`NativeStateContext`, `Capture`/`CaptureContext`,
+`PlanCheckout`/`PlanCheckoutContext`, `CheckoutOwned`/`CheckoutOwnedContext` et
+`RecoverOwned`/`RecoverOwnedContext` sur Workspace. `state.Expected()` transporte
+l’attente exacte cible/révision/sélection. Capture rend l’ID ; plan, checkout et
+reprise rendent le `json.RawMessage` canonique. Les variantes Context gardent
+la passerelle d’annulation par appel. Elles n’implémentent pas le contrôleur BEP
+résident et n’annoncent pas automatiquement un dossier de travail à jour.

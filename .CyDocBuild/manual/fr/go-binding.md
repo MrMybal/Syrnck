@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -148,3 +148,16 @@ Ouvrir avec `WorkspaceOptions{Name: "edit"}` puis sélectionner
 `store.UseWorkspace("edit")` avant chaque statut. Un nom vide utilise le principal.
 Un contexte différent échoue ; un nom invalide garde la sélection précédente.
 Voir [les contextes liés](doc:workspace-abi#registered-contexts).
+
+## Capture et reprise natives {#native-workspace-actions}
+
+`workspace.NativeState(store)` lit contexte natif sélectionné, référence,
+révision, matérialisation et checkout en cours. `state.Expected()` fige les
+identités cible/révision/politique exactes. L’utiliser pour
+`Capture(store, expected, message)`, `PlanCheckout(store, expected, candidate)`
+et `CheckoutOwned(store, expected, candidate, owner)`. Capture conserve le travail
+local ; checkout exige un workspace propre et garde un journal récupérable.
+`RecoverOwned(store, target, candidate, owner)` reprend uniquement cette opération
+en cours exacte. Les cinq méthodes ont des variantes Context et vérifient la
+liaison exacte Store/contexte/dossier. Une erreur de mutation exige une relecture :
+la publication peut déjà avoir eu lieu. Voir le [contrat des actions natives](doc:workspace-abi#native-workspace-actions).

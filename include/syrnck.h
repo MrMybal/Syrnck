@@ -48,6 +48,15 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * output proves nothing: an IO error can follow atomic publication, so reload and establish its outcome.
  * See [catalog transactions](doc:go-binding#catalog-transactions) for ownership and an example.
  *
+ * ## Guarded native workspace actions {#native-actions}
+ * workspace_native_state_json_ex reads target, typed revision, materialization and checkout state.
+ * Capture and checkout require the exact SyrnckNativeExpected target/revision/policy object.
+ * Capture retains local working changes; plan is read-only; checkout_owned uses the existing native
+ * journal and refuses dirty work. recover_owned requires the exact persisted owner and candidate.
+ * A session is bound to one Store path, registered context and working directory. Mutations
+ * invalidate observation continuity. On error reload state: publication may already have completed.
+ * See [native actions](doc:workspace-abi#native-workspace-actions) for recovery and locking contracts.
+ *
  * ## Observation and cancellation {#operations}
  * Cancellation handles are one-shot and may be requested from another thread or progress callback.
  * The owning application must serialize destruction against users. A callback borrows its strings
@@ -86,6 +95,15 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * n'autorise pas à recibler un ancien plan. Sur statut non nul, applied remis à zéro ne prouve rien :
  * une erreur IO peut suivre la publication atomique ; relire et établir son résultat avant de réessayer.
  * Voir les [transactions de catalogue](doc:go-binding#catalog-transactions) pour les règles et l'exemple.
+ *
+ * ## Actions natives de workspace protégées {#native-actions}
+ * workspace_native_state_json_ex lit cible, révision typée, matérialisation et état de checkout.
+ * Capture et checkout exigent la cible/révision/objet de sélection exacts dans SyrnckNativeExpected.
+ * Capture conserve le travail local ; plan est consultatif ; checkout_owned utilise le journal
+ * natif et refuse le travail modifié. recover_owned exige propriétaire et candidat persistés exacts.
+ * Une session est liée à un chemin de Store, contexte enregistré et dossier de travail. Les mutations
+ * invalident la continuité d’observation. En erreur, recharger : la publication peut être terminée.
+ * Voir les [actions natives](doc:workspace-abi#native-workspace-actions) pour reprise et verrouillage.
  *
  * ## Observation et annulation {#operations}
  * Une source d'annulation est à usage unique ; la demande est autorisée depuis un autre thread ou
@@ -287,6 +305,51 @@ SYRNCK_API int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, Syrnc
                                                const char *selector, uint32_t mode,
                                                const SyrnckOperation *operation, char **out, size_t *length);
 SYRNCK_API int syrnck_workspace_invalidate(SyrnckWorkspace *workspace);
+/* Native workspace mutation, ABI 1 additive symbols. Every call verifies the
+ * exact Store path, selected registered context and workspace directory. An
+ * expectation is mandatory for capture/plan/checkout: target is the selected
+ * native target (including detached), revision=NULL requires an unborn head.
+ * materialization is its exact policy object ID; NULL requires no policy ref.
+ * Read state first, then use its exact target/revision; stale values fail before
+ * capture, journals or working-file changes. Never retarget a prior operation. */
+typedef struct SyrnckNativeExpected {
+  const char *target;
+  const char *revision;
+  const char *materialization;
+} SyrnckNativeExpected;
+/* Allocated JSON uses string_free; outputs reset to NULL/0 on nonzero status.
+ * State is read-only and includes target/reference, typed revision or null,
+ * HEAD, materialization, staging flag and pending checkout status. It remains
+ * readable during an interrupted checkout; it does not recover anything. */
+SYRNCK_API int syrnck_workspace_native_state_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const SyrnckOperation *, char **out, size_t *length);
+/* Capture selected working files into a retained native revision. Existing
+ * native ignore/partial/detached/authorship rules apply. Message <=64 KiB.
+ * Output {version,revision}; existing pending/staging work is never taken over. */
+SYRNCK_API int syrnck_workspace_capture_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const SyrnckNativeExpected *, const char *message, const SyrnckOperation *, char **out, size_t *length);
+/* Plan verifies the candidate closure without changing working files or refs.
+ * A blocked plan is a successful report with ready=false. Checkout revalidates
+ * all guards and uses the native recoverable journal with the exact 64-hex owner.
+ * It requires a clean selected workspace; it never hard-resets dirty work. */
+SYRNCK_API int syrnck_workspace_checkout_plan_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const SyrnckNativeExpected *, const char *revision, const SyrnckOperation *, char **out, size_t *length);
+SYRNCK_API int syrnck_workspace_checkout_owned_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const SyrnckNativeExpected *, const char *revision, const char *owner, const SyrnckOperation *,
+    char **out, size_t *length);
+/* Recover only a currently pending journal whose owner, candidate, selected
+ * target, workspace and context match exactly. No pending journal is an error.
+ * A foreign/manual journal stays explicit. Candidate/owner must be established
+ * from durable service state, never inferred from untrusted network fields. */
+SYRNCK_API int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const char *target, const char *revision, const char *owner, const SyrnckOperation *,
+    char **out, size_t *length);
+/* Serialize these calls with wait/status/Close and all Store calls. Mutations
+ * invalidate observation continuity; the next Status performs a complete scan.
+ * Successful publication wins late cancellation. Any nonzero mutation result
+ * has an unknown outcome: re-read native state/journal before planning recovery
+ * or retry. Complete objects or a recoverable journal can survive cancellation.
+ * These calls never hold a Store after returning; close it before network waits. */
 #ifdef __cplusplus
 }
 #endif

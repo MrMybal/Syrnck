@@ -13,7 +13,7 @@ struct SyrnckStore {
 };
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
-  syrnck::fs::path directory;
+  syrnck::fs::path directory, storage;
   std::string context;
   syrnck::WorkspaceWatcher watcher;
   syrnck::WorkspaceObservation observation;
@@ -21,7 +21,7 @@ struct SyrnckWorkspace {
   std::size_t max_paths;
   SyrnckWorkspace(const syrnck::fs::path &root, const syrnck::fs::path &storage,
                   syrnck::WorkspaceWatchOptions options, std::stop_token stop, std::string name = {})
-      : directory(syrnck::fs::canonical(root)), context(std::move(name)), watcher(directory, storage, options, stop),
+      : directory(syrnck::fs::canonical(root)), storage(syrnck::fs::canonical(storage)), context(std::move(name)), watcher(directory, storage, options, stop),
         observation(directory, storage), max_paths(options.max_paths) { invalidate(); }
   void invalidate() {
     observation.invalidate();
@@ -120,6 +120,37 @@ template <class Operation> int workspace_boundary(SyrnckWorkspace *workspace, ch
   });
   if (result && workspace) workspace->invalidate();
   return result;
+}
+syrnck::Store &workspace_store(SyrnckWorkspace &session, SyrnckStore *handle) {
+  auto &store = checked(handle);
+  syrnck::require(syrnck::fs::canonical(store.root()) == session.storage,
+                  "workspace observation belongs to another store");
+  syrnck::require(store.native_workspace_name() == session.context, "workspace observation belongs to another context");
+  store.validate_native_workspace(session.directory);
+  const auto head = store.native_head();
+  syrnck::require(head["directory"].is_null() || head["directory"].get<std::string>() == syrnck::utf8(session.directory),
+                  "native HEAD belongs to another workspace");
+  return store;
+}
+std::string expected_native_target(const syrnck::Store &store, const SyrnckNativeExpected *expected) {
+  syrnck::require(expected != nullptr, "null native workspace expectation");
+  const std::string target = checked(expected->target);
+  syrnck::validate_native_target(target);
+  syrnck::require(store.native_target() == target, "native workspace HEAD selection changed");
+  std::optional<syrnck::ObjectKey> old;
+  if (expected->revision) {
+    syrnck::validate_id(expected->revision);
+    old = syrnck::ObjectKey{syrnck::Kind::revision, expected->revision};
+  }
+  const auto refs = store.refs();
+  const auto at = refs.find(syrnck::native_revision_reference(store, target));
+  const auto current = at == refs.end() ? std::optional<syrnck::ObjectKey>{} : std::optional{at->second};
+  syrnck::require(current == old, "native workspace revision changed; reload and replan");
+  const auto materialization = store.native_materialization()["object"];
+  if (expected->materialization) syrnck::validate_id(expected->materialization);
+  syrnck::require(materialization == (expected->materialization ? syrnck::Json(expected->materialization) : syrnck::Json{}),
+      "native workspace materialization changed; reload and replan");
+  return target;
 }
 syrnck::ObjectKey key(const char *kind, const char *id) {
   syrnck::ObjectKey result{syrnck::parse_kind(checked(kind)), checked(id)};
@@ -495,14 +526,10 @@ int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, 
   return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
     const auto options = operation_options(operation);
     syrnck::throw_if_cancelled(options.stop);
-    auto &store = checked(p);
+    auto &store = workspace_store(session, p);
     syrnck::require(mode <= 2, "invalid workspace status mode");
-    syrnck::require(store.native_workspace_name() == session.context, "workspace observation belongs to another context");
     // Identity checks and newly queued hints apply even without an explicit wait.
     session.pending.merge(session.watcher.wait(std::chrono::milliseconds(0), options.stop), session.max_paths);
-    const auto head = store.native_head();
-    syrnck::require(head["directory"].is_null() || head["directory"].get<std::string>() == syrnck::utf8(session.directory),
-                    "native HEAD belongs to another workspace");
     syrnck::require_no_native_checkout(store);
     syrnck::Json report;
     if (mode == 1) {
@@ -528,5 +555,90 @@ int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, 
 }
 int syrnck_workspace_invalidate(SyrnckWorkspace *workspace) {
   return boundary([&] { checked(workspace).invalidate(); });
+}
+int syrnck_workspace_native_state_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const SyrnckOperation *operation, char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto target = store.native_target();
+    const auto refs = store.refs();
+    const auto reference = syrnck::native_revision_reference(store, target);
+    const auto at = refs.find(reference);
+    syrnck::Json revision;
+    if (at != refs.end()) {
+      syrnck::require(at->second.kind == syrnck::Kind::revision, "branch must point to a revision");
+      revision = syrnck::Json{{"kind", "revision"}, {"id", at->second.id}};
+    }
+    json_output(syrnck::Json{{"version", 1}, {"workspace", session.context}, {"target", target},
+        {"reference", reference}, {"revision", revision}, {"head", store.native_head()},
+        {"materialization", store.native_materialization()}, {"checkout", store.checkout_status()},
+        {"staging", refs.contains(syrnck::native_staging_reference(store, target))}}, out, length, options.stop);
+  });
+}
+int syrnck_workspace_capture_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const SyrnckNativeExpected *expected, const char *message, const SyrnckOperation *operation,
+    char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto target = expected_native_target(store, expected);
+    const auto text = checked(message);
+    syrnck::require(std::strlen(text) <= 65536, "native capture message exceeds 64 KiB");
+    auto ingest = store.settings().ingest_options();
+    ingest.stop = options.stop; ingest.progress = options.progress;
+    session.invalidate();
+    const auto id = store.commit_directory(session.directory, target, text, ingest);
+    // A completed native publication wins late cancellation. Output allocation
+    // can still fail: callers must reload state on every nonzero status.
+    json_output(syrnck::Json{{"version", 1}, {"revision", id}}, out, length, {});
+  });
+}
+int syrnck_workspace_checkout_plan_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const SyrnckNativeExpected *expected, const char *revision, const SyrnckOperation *operation,
+    char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto target = expected_native_target(store, expected);
+    const auto id = checked(revision); syrnck::validate_id(id);
+    json_output(store.plan_checkout(session.directory, target, id, true, options), out, length, options.stop);
+  });
+}
+int syrnck_workspace_checkout_owned_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const SyrnckNativeExpected *expected, const char *revision, const char *owner,
+    const SyrnckOperation *operation, char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto target = expected_native_target(store, expected);
+    const auto id = checked(revision), identity = checked(owner);
+    syrnck::validate_id(id); syrnck::validate_id(identity);
+    session.invalidate();
+    const auto report = store.checkout_directory_owned(session.directory, target, id, identity, options);
+    json_output(report, out, length, {});
+  });
+}
+int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const char *target, const char *revision, const char *owner, const SyrnckOperation *operation,
+    char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto selected = checked(target), id = checked(revision), identity = checked(owner);
+    syrnck::validate_native_target(selected); syrnck::validate_id(id); syrnck::validate_id(identity);
+    syrnck::require(store.native_target() == selected, "native workspace HEAD selection changed");
+    const auto pending = store.checkout_status();
+    syrnck::require(pending["pending"].get<bool>() && pending.value("owner", "") == identity &&
+        pending["target"] == id, "native owned recovery target or owner does not match");
+    session.invalidate();
+    const auto report = store.recover_checkout_owned(session.directory, selected, identity, options);
+    json_output(report, out, length, {});
+  });
 }
 }

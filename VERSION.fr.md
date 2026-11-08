@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Capture, planification de checkout et reprise native contrôlée exposées en C/Go, avec attentes exactes de révision/sélection et liaison Store/contexte.
 - Catalogues Syncthing natifs : index causaux, tombstones et historique complet publiés atomiquement ; téléchargements séparés du verrou moteur et reconnexion vérifiée contre le daemon réel.
 - SDK C/Go enrichi : création d’objets, préparation mémoire/flux sans références implicites et groupes atomiques de références typées pour retenir les états composés au GC et en sauvegarde.
 - Noms natifs macOS NFD des callbacks normalisés en NFC canonique pour index, requêtes de blocs et reconstruction Syncthing.
