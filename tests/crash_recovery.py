@@ -1,6 +1,5 @@
 """Kill native writers at deterministic IO boundaries and reopen in fresh processes."""
 import hashlib
-import argparse
 import json
 import os
 from pathlib import Path
@@ -11,6 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from crash_shard import CrashShard
 
 PROBE = Path(sys.argv.pop(1)).resolve(strict=True)
 READER = Path(sys.argv.pop(1)).resolve(strict=True)
@@ -18,16 +18,7 @@ PRODUCTION = Path(sys.argv.pop(1)).resolve(strict=True)
 REBASE_TODO_ONLY = "--rebase-todo-only" in sys.argv
 if REBASE_TODO_ONLY:
     sys.argv.remove("--rebase-todo-only")
-arguments = argparse.ArgumentParser(add_help=False)
-arguments.add_argument("--shard", default="0/1")
-selection, remaining = arguments.parse_known_args()
-sys.argv[1:] = remaining
-try:
-    SHARD_INDEX, SHARD_COUNT = map(int, selection.shard.split("/"))
-    if not 0 <= SHARD_INDEX < SHARD_COUNT <= 64:
-        raise ValueError()
-except ValueError:
-    raise SystemExit("--shard must be INDEX/COUNT with 0 <= INDEX < COUNT <= 64")
+SHARD = CrashShard.from_argv()
 ENV = {key: value for key, value in os.environ.items()
        if key.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced",
@@ -181,7 +172,7 @@ def cases():
             for phase in ("checkout.directory_created", "checkout.directory_removed"):
                 result.append((operation, phase, "namespace-entry", occurrence))
     selected = [row for row in result if row[0].startswith("rebase-todo")] if REBASE_TODO_ONLY else result
-    return selected[SHARD_INDEX::SHARD_COUNT]
+    return SHARD.select(selected)
 
 
 def command(mode, root, *args, ok=True):
@@ -410,6 +401,8 @@ class CrashRecovery(unittest.TestCase):
             self.assertNotIn(label, reader)
 
     def test_release_control_and_exclusive_lock(self):
+        if (False, "commit") not in self.seeds:
+            self.skipTest("commit checkpoints are covered by another shard")
         directory = self.base / "release-control"
         shutil.copytree(self.seeds[False, "commit"], directory)
         root = directory / "store"

@@ -10,8 +10,10 @@ import sys
 import tempfile
 import threading
 import unittest
+from crash_shard import CrashShard
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
+SHARD = CrashShard.from_argv()
 ENV = {key: value for key, value in os.environ.items() if key.upper() not in
        ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 
@@ -33,50 +35,51 @@ class StashCrashes(unittest.TestCase):
             parent = Path(temporary)
             count = 0
             verified = 0
-            for encrypted in (False, True):
-                for action, operation in (("save", "apply"), ("save", "abort"),
-                                          ("apply", "apply"), ("apply", "abort"),
-                                          ("pop", "apply"), ("pop", "abort")):
-                    seed = parent / f"seed-{encrypted}-{action}-{operation}"
-                    self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation)
-                    trace = parent / f"trace-{encrypted}-{action}-{operation}"
-                    shutil.copytree(seed, trace)
-                    events = self.command(PROBE, "trace", trace)
-                    self.assertTrue(events)
-                    self.assertTrue(all(e["kind"] in {"refs", "chunk", "manifest", "revision", "new", "old", "workspace", "checkout"}
-                                        for e in events), events)
-                    coordinates = {(e["phase"], e["kind"], e["occurrence"]) for e in events}
-                    self.assertEqual(len(coordinates), len(events))
-                    self.assertTrue(any(e["phase"] == "checkout.cleaned" for e in events))
-                    for event in events:
-                        with self.subTest(encrypted=encrypted, action=action, operation=operation, event=event):
-                            root = parent / f"case-{count}"
-                            count += 1
-                            shutil.copytree(seed, root)
-                            process = subprocess.Popen([PROBE, "run", str(root), event["phase"],
-                                event["kind"], str(event["occurrence"])], env=ENV,
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                            lines = queue.Queue()
-                            reader = threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True)
-                            reader.start()
-                            try:
-                                line = lines.get(timeout=15)
-                                self.assertTrue(line, "stash probe missed checkpoint")
-                                self.assertEqual(json.loads(line), event)
-                                self.assertIsNone(process.poll())
+            scenarios = [(encrypted, action, operation) for encrypted in (False, True)
+                         for action, operation in (("save", "apply"), ("save", "abort"),
+                                                   ("apply", "apply"), ("apply", "abort"),
+                                                   ("pop", "apply"), ("pop", "abort"))]
+            for encrypted, action, operation in SHARD.select(scenarios):
+                seed = parent / f"seed-{encrypted}-{action}-{operation}"
+                self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation)
+                trace = parent / f"trace-{encrypted}-{action}-{operation}"
+                shutil.copytree(seed, trace)
+                events = self.command(PROBE, "trace", trace)
+                self.assertTrue(events)
+                self.assertTrue(all(e["kind"] in {"refs", "chunk", "manifest", "revision", "new", "old", "workspace", "checkout"}
+                                    for e in events), events)
+                coordinates = {(e["phase"], e["kind"], e["occurrence"]) for e in events}
+                self.assertEqual(len(coordinates), len(events))
+                self.assertTrue(any(e["phase"] == "checkout.cleaned" for e in events))
+                for event in events:
+                    with self.subTest(encrypted=encrypted, action=action, operation=operation, event=event):
+                        root = parent / f"case-{count}"
+                        count += 1
+                        shutil.copytree(seed, root)
+                        process = subprocess.Popen([PROBE, "run", str(root), event["phase"],
+                            event["kind"], str(event["occurrence"])], env=ENV,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        lines = queue.Queue()
+                        reader = threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True)
+                        reader.start()
+                        try:
+                            line = lines.get(timeout=15)
+                            self.assertTrue(line, "stash probe missed checkpoint")
+                            self.assertEqual(json.loads(line), event)
+                            self.assertIsNone(process.poll())
+                            process.kill()
+                            process.communicate(timeout=8)
+                            self.assertNotEqual(process.returncode, 0)
+                        finally:
+                            if process.poll() is None:
                                 process.kill()
                                 process.communicate(timeout=8)
-                                self.assertNotEqual(process.returncode, 0)
-                            finally:
-                                if process.poll() is None:
-                                    process.kill()
-                                    process.communicate(timeout=8)
-                                reader.join(timeout=5)
-                            before = snapshot(root)
-                            self.assertTrue(self.command(READER, "verify", root)["verified"])
-                            self.assertEqual(snapshot(root), before, "fresh reader modified recovery evidence")
-                            self.assertTrue(self.command(READER, "resume", root)["verified"])
-                            verified += 1
+                            reader.join(timeout=5)
+                        before = snapshot(root)
+                        self.assertTrue(self.command(READER, "verify", root)["verified"])
+                        self.assertEqual(snapshot(root), before, "fresh reader modified recovery evidence")
+                        self.assertTrue(self.command(READER, "resume", root)["verified"])
+                        verified += 1
             print(f"{verified}/{count} stash process termination boundaries verified", flush=True)
 
 

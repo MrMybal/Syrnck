@@ -132,6 +132,8 @@ endif()
 if(SYRNCK_BUILD_TESTS)
   enable_testing()
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME crash_shard_selection COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_shard_tests.py)
   if(SYRNCK_BUILD_DOCUMENTATION)
     add_test(NAME documentation COMMAND "${SYRNCK_NODE_EXECUTABLE}" --test
       "${SYRNCK_DOC_WORKSPACE}/tests/manual.test.mjs")
@@ -163,7 +165,7 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME crash_recovery_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
       $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>
       --shard ${shard}/8)
-    set_tests_properties(crash_recovery_${shard} PROPERTIES TIMEOUT 900)
+    set_tests_properties(crash_recovery_${shard} PROPERTIES TIMEOUT 900 PROCESSORS 2)
   endforeach()
   add_test(NAME native_rebase_todo_crashes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
     $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>
@@ -391,9 +393,11 @@ if(SYRNCK_BUILD_TESTS)
   add_executable(syrnck_stash_reader tests/stash_crash_probe.cpp)
   target_include_directories(syrnck_stash_reader PRIVATE src tests)
   target_link_libraries(syrnck_stash_reader PRIVATE syrnck_core)
-  add_test(NAME native_stash_crashes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/stash_crashes.py
-    $<TARGET_FILE:syrnck_stash_crash_probe> $<TARGET_FILE:syrnck_stash_reader>)
-  set_tests_properties(native_stash_crashes PROPERTIES TIMEOUT 600)
+  foreach(shard RANGE 0 3)
+    add_test(NAME native_stash_crashes_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/stash_crashes.py
+      $<TARGET_FILE:syrnck_stash_crash_probe> $<TARGET_FILE:syrnck_stash_reader> --shard ${shard}/4)
+    set_tests_properties(native_stash_crashes_${shard} PROPERTIES TIMEOUT 300 PROCESSORS 2)
+  endforeach()
   add_executable(syrnck_checkout_retention_tests tests/checkout_retention_tests.cpp)
   target_include_directories(syrnck_checkout_retention_tests PRIVATE src tests)
   target_link_libraries(syrnck_checkout_retention_tests PRIVATE syrnck_core)
@@ -422,9 +426,11 @@ if(SYRNCK_BUILD_TESTS)
   add_executable(syrnck_hard_reset_reader tests/hard_reset_crash_probe.cpp)
   target_include_directories(syrnck_hard_reset_reader PRIVATE src tests)
   target_link_libraries(syrnck_hard_reset_reader PRIVATE syrnck_core)
-  add_test(NAME native_hard_reset_crashes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hard_reset_crashes.py
-    $<TARGET_FILE:syrnck_hard_reset_crash_probe> $<TARGET_FILE:syrnck_hard_reset_reader>)
-  set_tests_properties(native_hard_reset_crashes PROPERTIES TIMEOUT 180)
+  foreach(shard RANGE 0 3)
+    add_test(NAME native_hard_reset_crashes_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hard_reset_crashes.py
+      $<TARGET_FILE:syrnck_hard_reset_crash_probe> $<TARGET_FILE:syrnck_hard_reset_reader> --shard ${shard}/4)
+    set_tests_properties(native_hard_reset_crashes_${shard} PROPERTIES TIMEOUT 120 PROCESSORS 2)
+  endforeach()
   add_executable(syrnck_asset_lock_tests tests/asset_lock_tests.cpp)
   target_include_directories(syrnck_asset_lock_tests PRIVATE src tests)
   target_link_libraries(syrnck_asset_lock_tests PRIVATE syrnck_core)
