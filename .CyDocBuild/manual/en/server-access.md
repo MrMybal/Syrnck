@@ -5,7 +5,7 @@ description: Server identities, asset locks and native history transfer guide.
 section: Transfers
 order: 510
 parent: transfers
-revision: 1
+revision: 2
 ---
 
 # Server identities, asset locks and native history transfer {#server-identities-asset-locks-and-native-history-transfer}
@@ -199,6 +199,8 @@ required upload lease. Malformed requests and failed lock operations return
 400; missing objects/receipts return 404. Successful plans can contain conflicts
 without changing the Store. Mutating requests are not automatically retried.
 
-No Syncthing interoperability, service-resident watcher, commit signatures,
+No complete Syncthing interoperability, service-resident watcher, signing-key authorization,
 distributed GC, per-path read isolation or remote audit log is implied by this
-extension. Those remain separate development work.
+extension. Those remain separate development work. [Signed revision objects](doc:native-authorship)
+can be transferred and verified; this access configuration does not authorize
+their public keys or enforce a signed-history requirement.

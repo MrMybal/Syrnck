@@ -31,7 +31,7 @@ A C++20 storage and revision engine for developers working with large project as
 
 Each file version has a complete manifest: its ordered blocks, size and whole-file hash. Versions can share blocks without replaying a chain of binary patches. Removing a commit from a branch does not automatically release its data: branches, tags, indexes, archives and pins retain their dependencies until explicitly retired.
 
-Two workflows share this engine. **Git integration** keeps ordinary code history, branches and merges in Git while selected assets become Syrnck pointers. **Standalone history** provides native commits, staging, branches, tags and recoverable workspace operations. Complete or partial linked working directories share one Store with independent HEADs/indexes, branch reservations and portable backup snapshots. Partial views retain complete logical revisions and asset blocks. Git asset hosting needs a separate Syrnck block server; GitHub does not supply that service automatically.
+Two workflows share this engine. **Git integration** keeps ordinary code history, branches and merges in Git while selected assets become Syrnck pointers. **Standalone history** provides native commits, staging, branches, tags and recoverable workspace operations. Complete or partial linked working directories share one Store with independent HEADs/indexes, branch reservations and portable backup snapshots. Partial views retain complete logical revisions and asset blocks. Optional native identity profiles record original authors and current committers, with Ed25519 commit signatures. Git asset hosting needs a separate Syrnck block server; GitHub does not supply that service automatically.
 
 Embed the engine through C++20. The C ABI and Go binding expose verified storage operations, ranges, reuse plans and workspace observation. The optional Go Syncthing adapter bridges regular-file BEP blocks; complete daemon/folder synchronization remains separate work. The engine has no Unreal runtime dependency and treats assets as ordinary file bytes.
 
@@ -140,7 +140,7 @@ Syrnck’s original code uses the [MIT license](LICENSE). Copyright © 2026 MrMy
 | --- | --- | --- |
 | [BLAKE3 C · 1.8.7](https://github.com/BLAKE3-team/BLAKE3) | [Apache-2.0](third_party/blake3/LICENSE_A2) / [CC0](third_party/blake3/LICENSE_CC0); [LLVM exception](third_party/blake3/LICENSE_A2LLVM) | Native content hashes and object IDs. |
 | [FastCDC 2020 · port from 5.0.0](https://crates.io/crates/fastcdc/5.0.0) | [MIT](third_party/fastcdc/LICENSE) | Native content-defined chunking. |
-| [Monocypher · 4.0.3](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Native authenticated encryption at rest and Ed25519 signatures (C++ API). |
+| [Monocypher · 4.0.3](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Native authenticated encryption at rest and Ed25519 commit signatures. |
 | [nlohmann/json · 3.12.0](https://github.com/nlohmann/json/tree/v3.12.0) | [MIT](third_party/nlohmann/LICENSE.MIT) | Native manifests, revisions and metadata. |
 | [cpp-httplib · 0.28.0](https://github.com/yhirose/cpp-httplib/tree/v0.28.0) | [MIT](third_party/httplib/LICENSE) | HTTP server; network component. |
 | [utf8proc · 2.10.0](https://github.com/JuliaStrings/utf8proc/tree/v2.10.0) | [MIT and Unicode data terms](third_party/utf8proc/LICENSE.md) | Portable path normalization and collision checks. |

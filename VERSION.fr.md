@@ -6,13 +6,14 @@
 
 **Prototype expérimental.** La version `0.1.0` est déclarée par le projet CMake et le CLI. Ces notes décrivent les sources actuelles, pas une release binaire publiée. Aucune release d’application ni aucun installateur n’est actuellement répertorié sur la [page des releases](https://github.com/MrMybal/Syrnck/releases).
 
-Format d’objet v1, formats physiques v1/v2/v3 et ABI C 1 sont des numéros distincts. L’ABI 1 reçoit des points d’entrée supplémentaires : associer bindings et en-têtes à une bibliothèque native correspondante.
+Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1/v2/v3 et ABI C 1 sont des numéros distincts. L’ABI 1 reçoit des points d’entrée supplémentaires : associer bindings et en-têtes à une bibliothèque native correspondante.
 
 ## Changements des sources actuelles
 
 - Stockage de blocs C++20 partagé entre assets Git et révisions natives : manifestes complets, blocs réutilisables, plages vérifiées, packs, sauvegardes et rétention explicite.
 - Historique natif et opérations récupérables du workspace, serveur de blocs authentifié et transferts ponctuels reprenables.
 - HEAD natif détaché avec index privé, changement récupérable et rétention des historiques détachés.
+- Auteurs/committers natifs et signatures Ed25519 facultatives, conservation de l’auteur lors des réécritures et vérification stricte à la lecture/import d’objets.
 - Attribution native des lignes à travers les parents de merges et renommages exacts, contenu stocké vérifié et budgets explicites d’entrée/calcul/sortie.
 - Manuel CyDoc local anglais/français, aide contextuelle `syrnck help`, annotations API d’en-têtes publics et documentation intégrée au build, à l’installation et à la CI.
 - README anglais/français avec installation depuis les sources, périmètre des licences tierces et présentes notes de version.
@@ -21,8 +22,8 @@ Ces fonctions des sources n’annoncent pas de release précompilée. Le [manuel
 
 ## Limites documentées
 
-- HEAD nommé/détaché et workspaces liés indépendants sont disponibles. Matérialisation partielle, déplacement en place et désenregistrement archivé restent à terminer.
-- Le suivi des renommages à contenu exact existe ; renommages modifiés/copies et intégration au merge/rebase restent incomplets. Les révisions natives n’ont ni auteurs structurés ni signatures ; le rebase préservant les merges reste à terminer.
+- HEAD nommé/détaché, workspaces liés indépendants, sélection modifiable avec récupération, hard reset/stash partiels et désenregistrement/restauration archivés sont disponibles. Le déplacement lié reste sur le même système de fichiers ; déplacement primaire ou entre systèmes de fichiers reste à terminer.
+- Le suivi des renommages à contenu exact existe ; renommages modifiés/copies et intégration au merge/rebase restent incomplets. Les auteurs sont facultatifs ; autorisation serveur des clés de signature, coffre système et rebase préservant les merges restent à terminer.
 - L’agent effectue un transfert par invocation. Le watcher observe les changements ; ils ne constituent pas un service complet de synchronisation continue avec versions causales, réconciliation hors ligne, suppressions et propagation des renommages.
 - L’adaptateur Syncthing optionnel couvre les données BEP des fichiers ordinaires. Découverte, appairage, vecteurs de versions, conflits et synchronisation complète de daemons/dossiers sont hors de son périmètre.
 - XChaCha20-Poly1305 protège les objets au repos. Le serveur de confiance reçoit les objets décodés. Chiffrement de bout en bout, récupération des clés et rotation/révocation distribuées restent à terminer. Les fichiers privés de préparation/checkout peuvent être en clair.

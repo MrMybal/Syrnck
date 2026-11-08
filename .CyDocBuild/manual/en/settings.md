@@ -5,7 +5,7 @@ description: Repository settings guide.
 section: Storage
 order: 540
 parent: storage
-revision: 5
+revision: 6
 ---
 
 # Repository settings {#repository-settings}
@@ -87,3 +87,8 @@ format and objects, and survives pack/GC, backup, restore and repaired copies.
 `config reset` changes tunable settings while retaining reader requirements.
 There is no automatic removal or downgrade. C++ exposes `required_features()`
 and `require_features(names, operation)`. See the [format](doc:protocol#required-store-features).
+
+A saved [native identity](doc:native-authorship#identity) is separate from ingestion
+preferences. Saving a profile or a v2 revision enables `authored-revisions-v1`
+before writing it; clearing the profile does not downgrade the Store. The profile
+is machine-local and is not copied by logical backups.

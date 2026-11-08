@@ -1,10 +1,12 @@
 #include "native_rebase.hpp"
 #include "native_rewrite.hpp"
+#include "native_authorship.hpp"
 #include <algorithm>
 namespace syrnck {
 namespace {
-Json candidate(Json revision, std::string_view parent, const NativeSnapshot &files,
-               OperationOptions options) {
+Json candidate(const Store &store, Json revision, std::string_view parent, const NativeSnapshot &files,
+               std::optional<std::uint64_t> clock, OperationOptions options) {
+  const auto author = native_original_author(revision);
   Json entries = Json::object();
   auto &object = entries.get_ref<Json::object_t &>();
   object.reserve(files.size());
@@ -14,14 +16,20 @@ Json candidate(Json revision, std::string_view parent, const NativeSnapshot &fil
   }
   revision["parents"] = Json::array({std::string(parent)});
   revision["files"] = std::move(entries);
-  return revision;
+  if (clock) revision["timestamp"] = *clock;
+  return store.native_commit_metadata(std::move(revision), author);
 }
 } // namespace
 NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &directory, std::string_view branch,
                                        std::string_view base, std::string_view onto,
                                        const NativeRebaseOptions &settings, bool verify_objects,
-                                       OperationOptions options, const NativeRebaseSink &sink) {
+                                       OperationOptions options, const NativeRebaseSink &sink,
+                                       std::optional<std::uint64_t> frozen_clock) {
   throw_if_cancelled(options.stop);
+  const bool identified = !store.native_identity().is_null();
+  require(identified || !settings.committer_timestamp, "native committer timestamp requires an identity");
+  const auto clock = identified ? std::optional{frozen_clock.value_or(settings.committer_timestamp.value_or(unix_seconds()))}
+      : std::optional<std::uint64_t>{};
   std::optional<NativeTextMergeBatch> text;
   if (settings.text_merge)
     text.emplace(store, *settings.text_merge);
@@ -192,7 +200,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
             if (todo.message)
               metadata["message"] = *todo.message;
           }
-          const auto next = candidate(std::move(metadata), attach, combined.files, options);
+          const auto next = candidate(store, std::move(metadata), attach, combined.files, clock, options);
           const auto encoded = next.dump();
           const auto data = bytes(encoded);
           validate_object(Kind::revision, data);
@@ -252,6 +260,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                      {"resolution_context", context.json()},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
+  if (clock) plan.report["committer_timestamp"] = *clock;
   if (text) {
     plan.report["text_merge"] = text->summary();
     plan.generated = std::move(text->generated);

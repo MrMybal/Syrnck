@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 10
+revision: 11
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -22,12 +22,21 @@ Manifests are compact UTF-8 JSON without trailing newline, in order `version,siz
 
 `file_hash` is ordinary BLAKE3 of complete file bytes without domain. Block sizes sum to `size`; reconstruction checks actual sizes and complete hash. Ingest workers/budget do not affect serialized boundaries/order/IDs. Flat manifest size is checked during reading before publication. Peak in-flight statistics are not object fields.
 
-Revisions use compact JSON ordered `version,parents,message,timestamp,files`. UTF-8 path strings sort `files`; entries have `manifest,executable`. String escaping follows v1 canonical output from `nlohmann::ordered_json`; differing reserialization and unknown fields are refused. Independent writers need reference encoding vectors.
+Legacy v1 revisions use compact JSON ordered `version,parents,message,timestamp,files`. UTF-8 path strings sort `files`; entries have `manifest,executable`. String escaping follows v1 canonical output from `nlohmann::ordered_json`; differing reserialization and unknown fields are refused. Independent writers need reference encoding vectors.
 
 ```text
 ASCII("syrnck-object-v1") || 0x00 || ASCII(type) || 0x00 || contenu_non_compressé
 ```
 
+
+## Authored revisions v2 {#authored-revisions}
+
+Opt-in v2 adds `author,committer,signature` between `timestamp` and `files`.
+[The authorship format](doc:native-authorship#format) defines strict person stamps,
+canonical signature fields and the domain-separated signed message. Its reader
+requirement is published before any v2 object. Manifests stay v1; the object-ID
+domain, envelopes, packs, dependencies and HTTP object transport are unchanged.
+Internal working snapshots and unconfigured legacy producers remain v1.
 
 ## Local storage {#stockage-local}
 
@@ -190,7 +199,8 @@ the record inline, without hidden object dependencies.
 
 Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
 array of unique supported strings (at most 32). Supported names are
-`linked-workspaces-v1`, `sparse-workspaces-v1`, `materialization-transitions-v1` and `workspace-relocation-v1`. Unknown, duplicate, empty or malformed requirements fail
+`authored-revisions-v1`, `linked-workspaces-v1`, `sparse-workspaces-v1`,
+`materialization-transitions-v1` and `workspace-relocation-v1`. Unknown, duplicate, empty or malformed requirements fail
 Store open. The extra field deliberately makes historical strict readers reject
 the configuration before reading objects/references. Base pack/index/envelope
 encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.

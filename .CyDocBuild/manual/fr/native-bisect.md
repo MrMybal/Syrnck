@@ -5,7 +5,7 @@ description: Guide : Recherche par bissection.
 section: Versionnage
 order: 210
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Bissection persistante sans checkout {#persistent-native-bisection-without-checkout}
@@ -44,4 +44,6 @@ avec `--workspace NOM`. Plusieurs workspaces peuvent garder des recherches
 indépendantes ; les mutations du Store restent sérialisées par son verrou.
 Le [blame et l’historique des renommages exacts](doc:native-file-history) sont des
 requêtes distinctes. Checkout bisect interactif, exécution automatique de commande,
-sélection de prédicat tenant compte des renommages et signatures restent à réaliser.
+sélection de prédicat tenant compte des renommages restent à réaliser. Les
+[signatures facultatives](doc:native-authorship) sont vérifiées à la lecture
+des révisions ; elles n’authentifient pas les classements good/bad de l’utilisateur.

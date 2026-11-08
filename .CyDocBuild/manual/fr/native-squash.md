@@ -5,7 +5,7 @@ description: Guide : Regroupement de commits.
 section: Versionnage
 order: 360
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Regrouper des commits natifs {#native-commit-squash}
@@ -34,7 +34,7 @@ Une seule transaction déplace la branche et crée `archive/squash/OLD_HEAD_ID` 
 
 Les [archives](doc:native-archives) permettent de retrouver têtes et versions préparées. Elles n’expirent pas automatiquement et gardent toutes les versions intermédiaires après GC. Exporter une révision ou créer une branche pour récupérer les fichiers. Le [retrait avec sauvegarde](doc:archive-retention) est explicite ; squash raccourcit l’historique visible sans récupérer automatiquement l’espace archivé. Retirer la dernière racine autorise la collecte des données exclusives.
 
-Le format v1 reste identique, sans auteur ni signature. C++ et CLI appliquent progression bilingue, annulation coopérative et callbacks non réentrants. L’historique natif n’est pas encore exposé dans les bindings C/Go.
+Avec une [identité native](doc:native-authorship), le squash autonome crée une v2 avec la personne actuelle comme auteur et committer et une nouvelle signature facultative. Le squash du rebase préserve, lui, le premier auteur retenu. Sans identité, la v1 reste identique. C++ et CLI appliquent progression bilingue, annulation coopérative et callbacks non réentrants. L’historique natif n’est pas encore exposé dans les bindings C/Go.
 
 ```cpp
 auto preview = store.plan_squash("main", 3, true, operation);

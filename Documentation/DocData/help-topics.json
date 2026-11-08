@@ -1122,7 +1122,7 @@
   "native head": "native-branches",
   "native history": "native-history",
   "native index-clear": "working-index",
-  "native log": "native-history",
+  "native log": "native-authorship#rewrites",
   "native log-file": "native-file-history",
   "native detached": "native-detached",
   "native switch --detach": "native-detached",
@@ -1254,5 +1254,7 @@
   "native workspace-archive-restore": "native-workspace-archives#restore",
   "workspaces": "native-workspaces",
   "config required-features": "settings#reader-features",
-  "config require-feature": "settings#reader-features"
+  "config require-feature": "settings#reader-features",
+  "native identity": "native-authorship#identity",
+  "native-authorship": "native-authorship"
 }

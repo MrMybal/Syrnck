@@ -70,7 +70,7 @@ Json Store::squash_commits(std::string_view branch, std::string_view expected, s
   revision["message"] = message;
   revision["timestamp"] = unix_seconds();
   throw_if_cancelled(options.stop);
-  const auto next = put(Kind::revision, bytes(revision.dump())).first;
+  const auto next = put(Kind::revision, bytes(native_commit_metadata(std::move(revision)).dump())).first;
   state.publish(*this, "squash", next, {}, options);
   report["target"] = next.id;
   report["state"] = "applied";

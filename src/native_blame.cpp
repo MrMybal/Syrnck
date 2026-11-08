@@ -1,5 +1,6 @@
 #include "text_edits.hpp"
 #include <syrnck/history.hpp>
+#include "native_authorship.hpp"
 #include <algorithm>
 #include <limits>
 #include <sstream>
@@ -194,6 +195,7 @@ Json native_blame(const Store &store, std::string_view revision, std::string_vie
             --end;
           Json summary{{"timestamp", commit["timestamp"]}, {"message", message.substr(0, end)},
                        {"message_truncated", end < message.size()}};
+          append_native_authorship(summary, commit);
           output_bytes += summary.dump().size() + origin.revision.size() + 8;
           if (output_bytes > limits.text.max_output_bytes)
             throw Limited{"output_limit"};

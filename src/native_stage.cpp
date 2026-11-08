@@ -269,13 +269,13 @@ std::string Store::commit_staged(std::string_view branch, std::string_view messa
   const auto timestamp = static_cast<std::uint64_t>(
       std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
           .count());
-  const auto revision = Json{{"version", 1},
+  auto revision = Json{{"version", 1},
                              {"parents", stage.base ? Json::array({stage.base->id}) : Json::array()},
                              {"message", message},
                              {"timestamp", timestamp},
                              {"files", files_json(stage.files)}};
   throw_if_cancelled(options.stop);
-  const auto next = put(Kind::revision, bytes(revision.dump())).first;
+  const auto next = put(Kind::revision, bytes(native_commit_metadata(std::move(revision)).dump())).first;
   require(compare_update_refs({{stage.head_name, stage.head, next}, {stage.stage_name, stage.index, {}}},
                               options),
           "native staging references changed; retry operation");

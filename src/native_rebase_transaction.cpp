@@ -12,7 +12,9 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
   require(found != all.end() && found->second.kind == Kind::revision, "unknown native branch");
   require(found->second.id == expected, "native rebase tip changed; inspect the branch and retry");
   require(!all.contains(native_staging_reference(*this, std::string(branch))), "native rebase requires an empty staging index");
-  auto plan = prepare_native_rebase(*this, directory, branch, base, onto, settings, true, options);
+  const auto clock = native_identity().is_null() ? std::optional<std::uint64_t>{}
+      : std::optional{settings.committer_timestamp.value_or(unix_seconds())};
+  auto plan = prepare_native_rebase(*this, directory, branch, base, onto, settings, true, options, {}, clock);
   require(plan.report["ready"].get<bool>(), "native rebase is blocked; inspect native rebase-plan");
   const auto mode = plan.report["mode"].get<std::string>();
   const auto target = plan.target;
@@ -34,7 +36,7 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
                                   throw_if_cancelled(options.stop);
                                   const auto key = put(Kind::revision, bytes(revision.dump())).first;
                                   require(key.id == id, "native rebase candidate changed; refresh the plan");
-                                });
+                                }, clock);
       require(prepared.report["ready"].get<bool>() && prepared.target == target,
               "native rebase candidate changed; refresh the plan");
     }

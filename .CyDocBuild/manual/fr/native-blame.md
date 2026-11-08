@@ -5,7 +5,7 @@ description: Blame vérifié à travers les merges et renommages exacts.
 section: Versionnage
 order: 251
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Attribuer les lignes {#usage}
@@ -24,8 +24,10 @@ syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow
 Le tableau JSON `lines` conserve numéro final, `revision` et `path` d’origine,
 `source_line` à partir de 1 et `content` exact, y compris LF/CRLF ou absence de
 saut de ligne final. Un fichier vide a zéro ligne. `commits` indexe les dates des
-révisions d’origine et des aperçus de messages bornés. Le format de révision v1
-n’a ni auteur structuré ni signature ; cette commande ne les invente pas.
+révisions d’origine et des aperçus de messages bornés. Les entrées v2 exposent
+aussi `author`, `committer` et l’ID public `signing_key` (null sans signature).
+La v1 ancienne n’a pas ces champs ; la commande ne les invente pas.
+Voir [identité et confiance](doc:native-authorship).
 Les clés JSON et identifiants restent en anglais.
 
 ## Merges et renommages {#lineage}

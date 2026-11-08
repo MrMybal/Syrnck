@@ -5,7 +5,7 @@ description: Verified blame through merge parents and exact renames.
 section: Version control
 order: 251
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 ## Attribute lines {#usage}
@@ -24,8 +24,10 @@ syrnck native blame HEAD Source/Module.cpp --first-parent --no-follow
 The JSON `lines` array keeps final line numbers, origin `revision`, origin `path`,
 one-based `source_line` and exact `content`, including LF/CRLF or a missing final
 newline. Empty files have zero lines. `commits` indexes origin revision timestamps
-and bounded message previews. Revision v1 has no structured author/signature;
-this command does not invent either. JSON keys and identifiers remain English.
+and bounded message previews. V2 entries also expose `author`, `committer` and
+the public `signing_key` (null when unsigned). Legacy v1 has no such fields;
+this command does not invent them. See [identity and trust](doc:native-authorship).
+JSON keys and identifiers remain English.
 
 ## Merges and renames {#lineage}
 

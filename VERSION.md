@@ -6,13 +6,14 @@
 
 **Experimental prototype.** The version `0.1.0` is declared by the CMake project and CLI. These notes describe the current source checkout, not a published binary release. No application release or installer is currently listed on the [release page](https://github.com/MrMybal/Syrnck/releases).
 
-Object format v1, physical store formats v1/v2/v3 and C ABI 1 are separate version numbers. ABI 1 has additive entry points: pair bindings and headers with a matching native library.
+Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/v3 and C ABI 1 are separate version numbers. ABI 1 has additive entry points: pair bindings and headers with a matching native library.
 
 ## Changes in the current checkout
 
 - C++20 block storage shared by Git assets and native revisions: complete manifests, reusable chunks, verified ranges, packs, backups and explicit retention.
 - Native history and recoverable workspace workflows, plus an authenticated block server and resumable one-shot transfers.
 - Detached native HEAD with a private index, recoverable switching and retained detached histories.
+- Native authors/committers and optional Ed25519 signatures, with original authors preserved during rewrites and strict verification on object reads/imports.
 - Native line attribution through merge parents and exact renames, with verified stored content and explicit input/work/output budgets.
 - A local CyDoc manual in English and French, contextual `syrnck help`, public-header API annotations and documentation packaging in build/install/CI.
 - English/French README editions with source installation, scoped dependency notices and these version notes.
@@ -21,8 +22,8 @@ These source features are not an announcement of a prebuilt release. Each operat
 
 ## Documented limitations
 
-- Named/detached HEAD and independent linked workspaces are available. Static partial linked workspaces retain complete logical snapshots. Dynamic selection, partial hard reset/stash, in-place relocation and archived unregistering remain unfinished.
-- Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Native revisions have no structured author or signature fields; merge-preserving rebase remains unfinished.
+- Named/detached HEAD, independent linked workspaces, recoverable live selection changes, partial hard reset/stash and archived unregister/restore are available. Linked relocation stays on the same filesystem; primary/cross-filesystem relocation remains unfinished.
+- Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Authored revisions are opt-in; server signing-key authorization, OS signing-key vaults and merge-preserving rebase remain unfinished.
 - The agent transfers once per invocation. The watcher observes changes; neither provides a complete continuous synchronization service with causal versions, offline conflict reconciliation, deletions and rename propagation.
 - The optional Syncthing adapter covers regular-file BEP data. Device discovery, pairing, version vectors, conflicts and full daemon/folder synchronization are outside that adapter.
 - XChaCha20-Poly1305 protects objects at rest. The trusted server receives decoded objects. End-to-end encryption, key recovery and distributed rotation/revocation remain unfinished. Checkout/staging files can contain plaintext.

@@ -5,7 +5,7 @@ description: Guide : Identités et permissions serveur.
 section: Transferts
 order: 510
 parent: transfers
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Identités, verrous et historique serveur {#server-identities-asset-locks-and-native-history-transfer}
@@ -112,4 +112,4 @@ PUT /v1/refs/NAME accepte root, expected, upload facultatif et locks facultatif.
 
 401 identité invalide ; 403 droits/politique/claim refusés ; 409 concurrence ; 412 bail d’envoi invalide ; 428 bail requis absent ; 400 requête/lock invalide ; 404 objet/reçu absent. Un plan réussi peut contenir des conflits sans mutation. Pas de reprise automatique des requêtes mutantes.
 
-Cette extension n’implique ni synchronisation complète Syncthing, ni service résident, signatures, GC distribué, lecture isolée par chemin ou journal d’audit distant. L’adaptateur BEP séparé couvre uniquement le sous-ensemble décrit dans son [guide](doc:syncthing).
+Cette extension n’implique ni synchronisation complète Syncthing, ni service résident, autorisation des clés de signature, GC distribué, lecture isolée par chemin ou journal d’audit distant. Les [révisions signées](doc:native-authorship) peuvent être transférées et vérifiées ; cette configuration n’autorise pas leurs clés publiques et n’impose pas d’histoire signée. L’adaptateur BEP séparé couvre uniquement le sous-ensemble décrit dans son [guide](doc:syncthing).

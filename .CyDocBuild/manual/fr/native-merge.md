@@ -5,7 +5,7 @@ description: Guide : Fusion de branches.
 section: Versionnage
 order: 300
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Fusion native {#native-merge}
@@ -74,7 +74,7 @@ auto plan = store.plan_merge(project, "main", source_id, settings, true, operati
 
 L’application recalcule toujours un plan entièrement vérifié et exige la tête exacte attendue, capturée sous verrou par le CLI si --expect est omis. Message par défaut Merge SOURCE_ID.
 
-Up-to-date rend state unchanged sans écriture. Fast-forward restaure la révision source exacte sans commit supplémentaire. Divergence : révision v1 aux parents [ancienne cible, source], message et date UTC courante, même avec arbre inchangé. Branches/tags source et HEAD symbolique ne bougent pas.
+Up-to-date rend state unchanged sans écriture. Fast-forward restaure la révision source exacte sans commit supplémentaire. Divergence : révision aux parents [ancienne cible, source], message et date UTC courante, même avec arbre inchangé. Une [identité configurée](doc:native-authorship) crée une v2 avec auteur/committer actuels et signature facultative ; sinon elle reste v1. Branches/tags source et HEAD symbolique ne bougent pas.
 
 --no-ff exige deux parents même en avance rapide ; --ff-only refuse la divergence avec fast_forward_required. Options exclusives, valides au plan/application, sans contourner base, histoires sans lien, conflits ou workspace.
 

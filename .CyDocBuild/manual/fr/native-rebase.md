@@ -5,7 +5,7 @@ description: Guide : Rebase linéaire.
 section: Versionnage
 order: 310
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Rebase linéaire natif {#native-linear-rebase}
@@ -26,13 +26,13 @@ Ordre du plus ancien au plus récent : parent original comme base, résultat vir
 
 Fusion dans la plage : merge_in_range ; fusion à la borne exclue autorisée. Racine atteinte avant BASE : base_not_on_linear_history. Aucun choix arbitraire ni aplatissement silencieux de parents de merge. Défaut 1000 commits, réglable 1..100000 ; dépassement échoue.
 
-BASE = ONTO sur plage valide : à jour et IDs exacts conservés. HEAD = BASE : plage vide proposant le déplacement sur ONTO. Sinon chaque commit garde message/date et reçoit un seul nouveau parent virtuel. Les replays logiquement vides sont conservés comme commits ; changement de représentation seul n’est pas une édition de contenu.
+BASE = ONTO sur plage valide : à jour et IDs exacts conservés. HEAD = BASE : plage vide proposant le déplacement sur ONTO. Sinon chaque commit garde son message et reçoit un seul nouveau parent virtuel. Sans identité, les dates anciennes restent conservées ; avec identité, auteur d’origine conservé et committer actuel avec une date commune figée. Les replays logiquement vides sont conservés comme commits ; changement de représentation seul n’est pas une édition de contenu.
 
 ## Rapport et bornes {#read-only-report-and-bounds}
 
 JSON : head/base/onto/mode, commits ordonnés, steps, completed_commits, target proposée, workspace, ready, blockers. Une étape décrit source/parent d’origine, head virtuelle, target, empty, changements et conflits. Prêt 0 ; bloqué 1 avec JSON ; erreurs d’options/métadonnées en diagnostic. Plage bloquée/conflit : target/workspace null.
 
-Les IDs virtuels suivent l’algorithme de révision ordinaire et la validation complète des métadonnées. Aucun candidat n’est écrit ni fichier/référence déplacé ; un ID proposé peut donc être absent du Store. Même entrée donne les mêmes IDs. --verify audite toute l’histoire head/base/onto et les fichiers ; sans cela, pas d’audit de blocs hors fichiers éligibles aux tentatives textuelles. Chaque étape rend resolution_context vide et resolved ; le contexte global est un modèle de série.
+Les IDs virtuels suivent l’algorithme de révision ordinaire et la validation complète des métadonnées. Aucun candidat n’est écrit ni fichier/référence déplacé ; un ID proposé peut donc être absent du Store. Avec identité, `--committer-time SECONDS` fige la date exposée par `committer_timestamp` ; sinon des invocations distinctes peuvent choisir des dates et IDs différents. Mêmes entrées, identité, clé et date donnent les mêmes IDs. Sans identité, les dates anciennes sont conservées. --verify audite toute l’histoire head/base/onto et les fichiers ; sans cela, pas d’audit de blocs hors fichiers éligibles aux tentatives textuelles. Chaque étape rend resolution_context vide et resolved ; le contexte global est un modèle de série.
 
 Rapports et chaque révision plate limités à 16 Mio. Le plan garde liste d’IDs/rapport bornés et snapshots courants, pas toutes les tables candidates ; il peut relire les métadonnées. Beaucoup de changements par étape peuvent atteindre le plafond avant le compte de commits. C++/CLI, progression bilingue, annulation coopérative et callbacks non réentrants. Historique C/Go et préservation des merges restent à développer ; l’édition interactive linéaire est disponible séparément.
 
@@ -46,7 +46,7 @@ auto plan = store.plan_rebase(project, "feature", old_base, new_base,
 
 ## Appliquer et récupérer {#apply-and-recover}
 
-L’application recalcule/vérifie tout le plan prêt avant stockage, puis répète le calcul déterministe et écrit les candidats complets du plus ancien au plus récent, exigeant l’ID final prédit. Elle ne garde pas toutes leurs tables en mémoire ; révisions v1 immuables, commits vides avec métadonnées source.
+L’application recalcule/vérifie tout le plan prêt avant stockage, puis répète le calcul déterministe et écrit les candidats complets du plus ancien au plus récent, exigeant l’ID final prédit. Elle ne garde pas toutes leurs tables en mémoire ; révisions v1 ou v2 immuables. Les commits vides suivent les [règles d’auteur/committer](doc:native-authorship#rewrites). La récupération utilise les candidats figés sans clé privée de signature.
 
 Seul le dernier candidat est installé via checkout récupérable ; aucune étape intermédiaire ne bouge branche ou fichiers. L’archive checkout protège l’ancienne tête et tout l’historique d’origine ; la nouvelle chaîne protège ONTO et chaque résultat rejoué, même intermédiaire après GC. Retrouver l’ancienne histoire avec native archives --kind checkout. Branches/tags source et HEAD ne changent pas.
 

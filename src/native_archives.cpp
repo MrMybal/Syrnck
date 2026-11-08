@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "native_authorship.hpp"
 #include <algorithm>
 namespace syrnck {
 namespace {
@@ -41,7 +42,7 @@ Json summary(const Store &store, std::string_view name, const ObjectKey &key) {
   if (end < message.size())
     while (end && (static_cast<unsigned char>(message[end]) & 0xc0) == 0x80)
       --end;
-  return Json{{"reference", name},
+  Json result{{"reference", name},
               {"kind", kind},
               {"revision", key.id},
               {"files", value["files"].size()},
@@ -50,6 +51,8 @@ Json summary(const Store &store, std::string_view name, const ObjectKey &key) {
               {"message", message.substr(0, end)},
               {"message_bytes", message.size()},
               {"message_truncated", end != message.size()}};
+  append_native_authorship(result, value);
+  return result;
 }
 } // namespace
 Json Store::native_archives(const std::optional<std::string> &kind, const std::optional<std::string> &after,

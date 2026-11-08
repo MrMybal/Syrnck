@@ -5,7 +5,7 @@ description: Guide : Préférences du dépôt.
 section: Stockage
 order: 540
 parent: storage
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 # Préférences du dépôt {#repository-settings}
@@ -58,3 +58,8 @@ restauration et copies réparées. `config reset` change les réglages ajustable
 gardant ces exigences. Aucun retrait ou downgrade automatique. C++ expose
 `required_features()` et `require_features(names, operation)`. Voir
 [le format](doc:protocol#required-store-features).
+
+Une [identité native](doc:native-authorship#identity) est distincte des préférences
+d’ingestion. Sauver un profil ou une révision v2 active `authored-revisions-v1`
+avant écriture ; effacer le profil ne rétrograde pas le Store. Le profil reste
+propre à la machine et n’est pas copié par les sauvegardes logiques.

@@ -1,4 +1,5 @@
 #include "native_replay.hpp"
+#include "native_authorship.hpp"
 namespace syrnck {
 namespace {
 Json apply_replay(const Store &store, const fs::path &directory, std::string_view branch,
@@ -28,13 +29,15 @@ Json apply_replay(const Store &store, const fs::path &directory, std::string_vie
     throw_if_cancelled(options.stop);
     object.emplace_back(path, Json{{"manifest", file.manifest}, {"executable", file.executable}});
   }
-  const auto revision = Json{{"version", 1},
+  auto revision = Json{{"version", 1},
                              {"parents", Json::array({plan.head})},
                              {"message", message},
                              {"timestamp", unix_seconds()},
                              {"files", files}};
   throw_if_cancelled(options.stop);
-  const auto next = store.put(Kind::revision, bytes(revision.dump())).first;
+  const auto author = kind == NativeReplayKind::revert ? std::optional<Json>{}
+      : std::optional{native_original_author(store.metadata(Kind::revision, source))};
+  const auto next = store.put(Kind::revision, bytes(store.native_commit_metadata(std::move(revision), author).dump())).first;
   auto result = store.checkout_directory(directory, branch, next.id, options);
   result["operation"] = kind == NativeReplayKind::revert ? "revert" : "cherry-pick";
   result["replayed_revision"] = source;

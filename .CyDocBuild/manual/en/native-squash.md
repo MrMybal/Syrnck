@@ -5,7 +5,7 @@ description: Native commit squash guide.
 section: Version control
 order: 360
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native commit squash {#native-commit-squash}
@@ -69,7 +69,10 @@ through destructive GC in plaintext/encrypted and loose/packed Stores. To recove
 a former version, export its ID or create a branch at it. Removing the last root
 with generic reference tools permits GC to collect its exclusive data. Squash
 shortens visible branch history; it does not reclaim archived history automatically.
-Revision v1 is unchanged. Author/signature metadata is not supported by that format.
+With a [native identity](doc:native-authorship), the standalone squash creates
+an authored v2 revision with the current person as author and committer and a new
+optional signature. This differs from rebase squash, which preserves its first
+retained original author. Legacy v1 remains unchanged without an identity.
 
 ```cpp
 auto preview = store.plan_squash("main", 3, true, operation);

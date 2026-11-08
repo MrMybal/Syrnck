@@ -2,6 +2,7 @@
 #include "native_workspace.hpp"
 #include "native_inventory.hpp"
 #include "native_context.hpp"
+#include "native_authorship.hpp"
 #include <chrono>
 #include <fstream>
 #include <regex>
@@ -390,13 +391,14 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
     object.emplace_back(path, std::move(value));
   Json parents = Json::array();
   if (previous) parents.push_back(previous->id);
-  auto value = Json{
+  auto revision = Json{
       {"version", 1},
       {"parents", parents},
       {"message", message},
       {"timestamp", now()},
       {"files",
-       entries}}.dump();
+       entries}};
+  auto value = native_commit_metadata(std::move(revision)).dump();
   if (options.progress)
     invoke_progress(options.progress, {ProgressPhase::publishing, branch});
   throw_if_cancelled(options.stop);
@@ -415,13 +417,18 @@ std::string Store::detach_history(std::string_view branch, std::string_view mess
   require(all.contains(name) && all.at(name).kind == Kind::revision, "unknown native branch");
   auto previous = all.at(name);
   auto revision = metadata(Kind::revision, previous.id);
+  const auto author = native_original_author(revision);
   revision["parents"] = Json::array();
   revision["message"] = message;
   revision["timestamp"] = now();
-  set_ref("archive/" + previous.id, previous);
-  auto value = revision.dump();
+  auto value = native_commit_metadata(std::move(revision), author).dump();
   auto key = put(Kind::revision, bytes(value)).first;
-  set_ref(name, key);
+  const auto archive = "archive/" + previous.id;
+  const auto at = all.find(archive);
+  const auto old = at == all.end() ? std::optional<ObjectKey>{} : std::optional{at->second};
+  require(!old || *old == previous, "native history archive reference is occupied");
+  require(compare_update_refs({{archive, old, previous}, {name, previous, key}}),
+      "native commit references changed; retry operation");
   return key.id;
 }
 void Store::export_revision(std::string_view id, const fs::path &dest, OperationOptions options) const {

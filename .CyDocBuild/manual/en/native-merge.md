@@ -5,7 +5,7 @@ description: Native merge guide.
 section: Version control
 order: 300
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native merge {#native-merge}
@@ -155,8 +155,10 @@ an exact ID. The optional message defaults to `Merge SOURCE_ID`.
 
 Up-to-date returns `state: unchanged` without writing objects or refs. Fast-forward
 checks out the exact source revision without creating a new commit. Divergence
-creates an ordinary v1 revision with parents `[old_target, source]` and the supplied
-message/current UTC timestamp. A same-tree divergent history still creates this
+creates a revision with parents `[old_target, source]` and the supplied
+message/current UTC timestamp. A [configured identity](doc:native-authorship)
+creates v2 with the current person as author/committer and an optional signature;
+otherwise it stays v1. A same-tree divergent history still creates this
 two-parent commit. Source branches/tags and symbolic HEAD do not move.
 
 `--no-ff` requests a two-parent commit even when a fast-forward is possible.

@@ -5,7 +5,7 @@ description: Native commit amendment guide.
 section: Version control
 order: 190
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native commit amendment {#native-commit-amendment}
@@ -54,7 +54,10 @@ native checkout or switch requires recovery. A stale index requires inspection
 and explicit reset; amendment never silently changes its baseline.
 
 The new revision uses the supplied message and current UTC timestamp in seconds.
-The v1 revision format has no author identity or signature fields. An amendment
+With a [native identity](doc:native-authorship), amendment preserves the original
+author and records the current committer and a new optional signature in v2.
+Rewriting an existing v2 revision requires an identity; an old signature is never
+reused. Without an identity, legacy v1 stays unchanged. An amendment
 whose complete serialized metadata is identical can return the existing ID;
 there is no random nonce that forces a new object identity.
 

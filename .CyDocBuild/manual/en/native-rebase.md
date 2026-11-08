@@ -5,7 +5,7 @@ description: Native linear rebase guide.
 section: Version control
 order: 310
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native linear rebase {#native-linear-rebase}
@@ -47,7 +47,9 @@ with `--max-commits` in 1..100,000. Exceeding it fails the bounded traversal.
 With BASE equal to ONTO, a valid range is already up to date and preserves exact
 commit identities. An empty range (HEAD equals BASE) proposes moving the branch
 to ONTO. Otherwise every original commit gets one new parent, its preceding
-virtual result. Original messages and timestamps are preserved. Logically empty
+virtual result. Original messages are preserved. Legacy replay without an identity also preserves
+original timestamps; authored replay preserves the original author and records
+the current committer with one frozen timestamp. Logically empty
 replays are retained as commits instead of being silently dropped. Representation
 changes alone are not content edits, matching cherry-pick's file-level policy.
 
@@ -63,9 +65,12 @@ diagnostics. A blocked range or conflicted result has null target/workspace.
 Virtual candidate IDs use the ordinary revision object identity algorithm and
 complete candidate metadata validation. Planning does not store candidate objects
 or move any reference/file. A proposed ID may therefore not be inspectable in the
-Store. Each candidate preserves the source message/timestamp and uses the computed
-file map and single new parent. Previewing again gives the same IDs for the same
-inputs. `--verify` additionally audits complete original-head/base/onto closures
+Store. Each candidate preserves the source message and original author and uses the
+computed file map and single new parent. With an identity configured,
+`--committer-time SECONDS` fixes the committer clock; the report exposes
+`committer_timestamp`. Separate invocations without that option can choose
+different clocks and IDs. Fixed inputs, identity, signing key and clock give
+the same IDs. Without an identity, legacy source timestamps are retained. `--verify` additionally audits complete original-head/base/onto closures
 and reconstructed file hashes. Metadata-only planning does not audit block payloads.
 Text-enabled plans also reconstruct the eligible conflicted files, even without
 `--verify`. Each step returns its empty `resolution_context` and accepted `resolved` rows;
@@ -102,7 +107,9 @@ Apply recomputes and verifies the entire ready plan before storing candidates.
 It then repeats the deterministic calculation, storing complete new revisions
 oldest first, and checks that the final ID matches the verified preview. It does
 not retain every candidate's full snapshot in memory. Each candidate remains an
-ordinary immutable v1 revision. Empty commits preserve their source metadata.
+ordinary immutable v1 or authored v2 revision. Empty commits follow the same
+[author/committer rules](doc:native-authorship#rewrites). Recovery uses frozen
+candidates and does not need a signing private key.
 
 Only the final candidate is applied to the workspace through the existing
 recoverable checkout journal. Intermediate steps never move the branch or working

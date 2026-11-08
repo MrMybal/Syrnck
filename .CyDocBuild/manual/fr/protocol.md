@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -33,6 +33,15 @@ Le hash `file_hash` est le BLAKE3 ordinaire des octets complets du fichier, sans
 Le nombre de workers et le budget de l'ingestion ne sont pas sérialisés dans le manifeste : ils ne modifient ni les frontières, ni l'ordre des blocs, ni leurs identifiants. La taille sérialisée du manifeste plat est contrôlée pendant la lecture, avant sa publication. Les statistiques d'ingestion exposent séparément `peak_in_flight_bytes` et `peak_in_flight_blocks` ; ces compteurs ne font pas partie du format d'objet.
 
 Les révisions sont du JSON compact dans l'ordre `version`, `parents`, `message`, `timestamp`, `files`. Les chemins de `files` sont triés selon l'ordre des chaînes UTF-8. Une entrée contient `manifest`, puis `executable`. L'échappement des chaînes conserve le format v1 du prototype initial, vérifié par les fixtures de migration et produit par `nlohmann::ordered_json` ; tout document dont la re-sérialisation diffère est refusé. Les champs inconnus sont refusés. Une implémentation indépendante devra tester ses encodages contre des vecteurs de référence avant de produire des objets.
+
+## Révisions avec auteurs v2 {#authored-revisions}
+
+La v2 facultative ajoute `author,committer,signature` entre `timestamp` et `files`.
+[Le format des auteurs](doc:native-authorship#format) définit identités datées,
+champs stricts de signature et message signé avec domaine. L’exigence de lecteur
+précède tout objet v2. Manifests v1, domaine d’ID, enveloppes, packs, dépendances
+et transport HTTP d’objets restent inchangés. Snapshots de travail internes et
+producteurs anciens sans identité restent v1.
 
 ## Stockage local {#stockage-local}
 
@@ -212,7 +221,8 @@ sans dépendances d’objets cachées.
 
 Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
 trié de noms uniques pris en charge (au plus 32). Les noms acceptés sont
-`linked-workspaces-v1`, `sparse-workspaces-v1`, `materialization-transitions-v1` et `workspace-relocation-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+`authored-revisions-v1`, `linked-workspaces-v1`, `sparse-workspaces-v1`,
+`materialization-transitions-v1` et `workspace-relocation-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
 l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
 aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
 packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne

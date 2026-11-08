@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "native_authorship.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <limits>
@@ -302,7 +303,8 @@ Json StoreIoStats::json() const {
               {"index_cached_pages", index_cached_pages}};
 }
 static Json canonical(Kind kind, const Json &j) {
-  require(number(j.at("version")) == 1, "unsupported object version");
+  const auto version = number(j.at("version"));
+  require(version == 1 || (version == 2 && kind == Kind::revision), "unsupported object version");
   if (kind == Kind::manifest) {
     fields(j, {"version", "size", "file_hash", "chunking", "blocks"});
     auto size = number(j.at("size"));
@@ -343,7 +345,8 @@ static Json canonical(Kind kind, const Json &j) {
     return Json{
         {"version", 1}, {"size", size}, {"file_hash", fh}, {"chunking", c.json()}, {"blocks", blocks}};
   }
-  fields(j, {"version", "parents", "message", "timestamp", "files"});
+  if (version == 1) fields(j, {"version", "parents", "message", "timestamp", "files"});
+  else fields(j, {"version", "parents", "message", "timestamp", "author", "committer", "signature", "files"});
   require(j.at("parents").is_array() && j.at("files").is_object(), "invalid revision structure");
   Json parents = Json::array();
   for (const auto &p : j.at("parents")) {
@@ -368,6 +371,15 @@ static Json canonical(Kind kind, const Json &j) {
   Json files = Json::object();
   for (auto &[name, entry] : sorted)
     files[name] = entry;
+  if (version == 2) {
+    const auto author = canonical_native_author(j.at("author"), true), committer = canonical_native_author(j.at("committer"), false);
+    require(committer["timestamp"] == j.at("timestamp"), "native committer timestamp differs from revision");
+    Json result{{"version", 2}, {"parents", parents}, {"message", j.at("message").get<std::string>()},
+        {"timestamp", number(j.at("timestamp"))}, {"author", author}, {"committer", committer}, {"signature", Json{}}};
+    result["files"] = std::move(files);
+    result["signature"] = canonical_native_signature(j.at("signature"), result);
+    return result;
+  }
   return Json{{"version", 1},
               {"parents", parents},
               {"message", j.at("message").get<std::string>()},

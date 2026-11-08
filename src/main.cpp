@@ -3,6 +3,8 @@
 #include "cli_watch.hpp"
 #include "cli_help.hpp"
 #include "cli_text_diff.hpp"
+#include "cli_identity.hpp"
+#include "native_authorship.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -417,7 +419,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native tag-delete NOM --expect RÉVISION
   native tag-archives [--after ID] [--limit 100] [--verify]
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
-  native log [--branch BRANCHE] [--limit 50]
+  native identity [--name NOM --email ADRESSE [--timezone-offset MINUTES] | --clear]
+  native log [--branch BRANCHE] [--limit 50] [--json] [--show-signature]
   native ancestry SOURCE CIBLE [--max-revisions 100000] [--max-links 1000000]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
   native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories] [--text-merge]
@@ -428,6 +431,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
   native rebase-todo BASE --onto RÉVISION    Exporter la séquence modifiable
+    --committer-time SECONDES : figer la date avec une identité configurée.
     --todo FICHIER_JSON ou --interactive : ordre, pick/drop/reword/squash/fixup.
     --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
@@ -625,7 +629,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native tag-delete NAME --expect REVISION
   native tag-archives [--after ID] [--limit 100] [--verify]
   native tag-archive ARCHIVE [--verify] | tag-restore ARCHIVE
-  native log [--branch BRANCH] [--limit 50]
+  native identity [--name NAME --email ADDRESS [--timezone-offset MINUTES] | --clear]
+  native log [--branch BRANCH] [--limit 50] [--json] [--show-signature]
   native ancestry SOURCE TARGET [--max-revisions 100000] [--max-links 1000000]
     Ancestry relations and every best common ancestor.
   native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories] [--text-merge]
@@ -636,6 +641,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
   native rebase-todo BASE --onto REVISION    Export an editable sequence
+    --committer-time SECONDS: freeze the time with a configured identity.
     --todo JSON_FILE or --interactive: order, pick/drop/reword/squash/fixup.
     --resolutions JSON_FILE: per-step choices bound to the head and both bases.
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
@@ -762,6 +768,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (ca)
     ca_path = path_from_utf8(*ca);
   auto command = args.pop();
+  const auto identity_subcommand = [&](std::string_view value) {
+    return value == "identity" || value == "commit" || value == "detach-history" || value == "squash" || value == "merge" ||
+        value == "cherry-pick" || value == "revert" || value == "rebase" || value == "rebase-plan" || value == "rebase-todo";
+  };
+  // Only native revision creation/profile commands consume this secret. Help,
+  // Git children and unrelated commands must not inherit it.
+  if (command != "native" || args.values.empty() || !identity_subcommand(args.values.front())) cli::discard_signing_seed_environment();
   require(!native_workspace || command == "native" || command == "help", "workspace selection is only available for native commands");
   // Documentation is independent of repository state, encryption and credentials.
   if (command == "help") {
@@ -1022,7 +1035,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "config" && sub == "require-feature") ||
       (command == "native" &&
-       (sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub.starts_with("workspace-") || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+       (sub == "identity" || sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub.starts_with("workspace-") || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
         sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
         sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
@@ -1188,6 +1201,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << localize("Verified ", language) << checked
               << localize(" objects and every file hash\n", language);
   } else if (command == "native") {
+    if (sub == "commit" || sub == "detach-history" || sub == "squash" || sub == "merge" || sub == "cherry-pick" ||
+        sub == "revert" || sub == "rebase" || sub == "rebase-plan" || sub == "rebase-todo") cli::load_native_identity(store);
     auto selected_branch = [&] {
       const auto branch = args.option("--branch");
       return branch ? *branch : store.native_target();
@@ -1440,6 +1455,19 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
                                                     {control->token(), observe}, limits)
                           : net::fetch_native_branch(store, remote, remote_branch, remote_name,
                                                      {control->token(), observe}, limits));
+    } else if (sub == "identity") {
+      const auto name = args.option("--name"), email = args.option("--email"), timezone = args.option("--timezone-offset");
+      const bool clear = args.flag("--clear"); args.count(0);
+      require(!clear || (!name && !email && !timezone), "native identity --clear cannot configure a profile");
+      if (clear) { cli::discard_signing_seed_environment(); cli::remove_native_identity(store, {control->token(), observe}); store.clear_native_identity(); }
+      else if (name || email || timezone) {
+        require(name && email, "native identity configuration requires --name and --email");
+        NativeIdentity identity{*name, *email, timezone ? cli::native_timezone_offset(*timezone) : 0};
+        identity.validate(); auto signer = cli::signing_key_environment();
+        store.use_native_identity(identity, std::move(signer));
+        cli::save_native_identity(store, identity, {control->token(), observe});
+      } else cli::load_native_identity(store);
+      print(store.native_identity());
     } else if (sub == "commit") {
       const auto staged = args.flag("--staged");
       const auto amend = args.flag("--amend");
@@ -1981,6 +2009,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
       NativeRebaseOptions settings;
+      if (const auto clock = args.option("--committer-time")) settings.committer_timestamp = integer(*clock);
       if (args.flag("--text-merge"))
         settings.text_merge = text_diff_options(args);
       std::optional<NativeRebaseResolutionSet> resolutions;
@@ -2033,20 +2062,47 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "log") {
       auto branch = selected_branch();
       auto limit = integer(args.option("--limit").value_or("50"));
+      const bool json = args.flag("--json"), show_signature = args.flag("--show-signature");
       args.count(0);
       auto refs = store.refs();
       auto name = native_revision_reference(store, branch);
       require(refs.contains(name), "unknown branch");
       auto current = refs.at(name);
       std::set<std::string> seen;
+      Json rows = Json::array(); std::size_t budget = 512;
       for (std::uint64_t i = 0; i < limit; ++i) {
         require(current.kind == Kind::revision && seen.insert(current.id).second, "invalid history");
         auto j = store.metadata(Kind::revision, current.id);
-        std::cout << current.id << ' ' << j["timestamp"] << ' ' << j["message"].get<std::string>() << '\n';
+        if (json) {
+          Json row{{"revision", current.id}, {"parents", j["parents"]}, {"timestamp", j["timestamp"]}, {"message", j["message"]}};
+          append_native_authorship(row, j);
+          const auto size = row.dump().size() + 1;
+          require(size <= max_object_size - budget, "native log report exceeds 16 MiB"); budget += size;
+          rows.push_back(std::move(row));
+        } else {
+          std::cout << current.id << ' ' << j["timestamp"] << ' ' << j["message"].get<std::string>();
+          if (j.value("version", 1) == 2) {
+            const auto actor = [&](const Json &value) {
+              return value.is_null() ? localize("Unknown author", language)
+                  : value["name"].get<std::string>() + " <" + value["email"].get<std::string>() + '>';
+            };
+            std::cout << " [" << localize("Author: ", language) << actor(j["author"]);
+            if (j["author"].is_null() || j["author"]["name"] != j["committer"]["name"] || j["author"]["email"] != j["committer"]["email"])
+              std::cout << "; " << localize("Committer: ", language) << actor(j["committer"]);
+            std::cout << ']';
+          }
+          if (show_signature) {
+            if (j.value("version", 1) == 2 && !j["signature"].is_null())
+              std::cout << " [" << localize("Signature key: ", language) << j["signature"]["key_id"].get<std::string>() << ']';
+            else std::cout << " [" << localize("Unsigned", language) << ']';
+          }
+          std::cout << '\n';
+        }
         if (j["parents"].empty())
           break;
         current.id = j["parents"][0].get<std::string>();
       }
+      if (json) print(Json{{"version", 1}, {"revisions", rows}});
     } else if (sub == "export") {
       args.count(2);
       store.export_revision(resolve(args.values[0]), path_from_utf8(args.values[1]),

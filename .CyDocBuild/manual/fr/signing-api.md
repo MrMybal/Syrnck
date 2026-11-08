@@ -5,7 +5,7 @@ description: Clés en mémoire à déplacement exclusif, signatures standard et 
 section: API
 order: 650
 parent: integrations
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Signer et vérifier des octets {#usage}
@@ -51,9 +51,9 @@ les zéros négatifs. L’amont vérifie scalaire de signature et équation de c
 
 L’appelant définit les octets signés et leur domaine. Cette API n’établit pas
 confiance d’identité, horodatage fiable, unicité de signature ou validité de
-certificat. Auteurs natifs, signature automatique des commits, autorisation des
-clés côté serveur et coffre de clés système restent des travaux distincts.
-Les formats de révision existants restent inchangés.
+certificat. [Auteurs natifs et signatures de commits](doc:native-authorship) utilisent un
+payload de révision versionné. Autorisation des clés serveur et coffre système
+restent à développer. Les encodages des révisions anciennes restent inchangés.
 
 ## Construction et vérification {#validation}
 

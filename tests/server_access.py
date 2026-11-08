@@ -20,7 +20,8 @@ class ServerAccess(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.env = {k: v for k, v in os.environ.items()
-                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_LANG", "SYRNCK_TOKEN")}
+                    if k.upper() not in ("SYRNCK_KEY", "SYRNCK_LANG", "SYRNCK_TOKEN", "SYRNCK_USER_NAME",
+                                         "SYRNCK_USER_EMAIL", "SYRNCK_USER_TIMEZONE", "SYRNCK_SIGNING_SEED")}
         self.project = self.root / "project"
         self.project.mkdir()
         self.local = self.project / ".syrnck"
@@ -254,6 +255,30 @@ class ServerAccess(unittest.TestCase):
             self.http("PUT", "/v1/objects/chunk/" + "0" * 64, {}, actor="reader", expected=403)
             self.http("PUT", "/v1/refs/main", {"root": root, "expected": None}, actor="reader", expected=403)
             self.http("PUT", "/v1/uploads/" + "2" * 64, dict(request, reference="forbidden"), expected=403)
+
+    def test_signed_native_history_crosses_encrypted_server_without_private_key(self):
+        self.cmd("native", "identity", "--name", "Alice", "--email", "alice@example.invalid")
+        self.env["SYRNCK_SIGNING_SEED"] = "19" * 32
+        first = self.commit("Source/code.cpp", b"signed source\n")
+        value = json.loads(self.cmd("inspect", "revision", first).stdout)
+        self.assertEqual(value["version"], 2)
+        self.assertEqual(value["signature"]["algorithm"], "ed25519")
+        self.env.pop("SYRNCK_SIGNING_SEED")
+        clone = self.root / "signed-clone"
+        with self.serving(strict=True):
+            self.cmd("native", "push", self.url, "--require-lease", actor="alice")
+            self.cmd("init", store=clone)
+            fetched = json.loads(self.cmd("native", "fetch", self.url, "--require-read-lease", actor="reader", store=clone).stdout)
+            self.assertEqual(fetched["revision"], first)
+            self.assertEqual(json.loads(self.cmd("inspect", "revision", first, store=clone).stdout), value)
+            self.assertEqual(json.loads(self.cmd("native", "identity", store=clone).stdout), None)
+        for store, key in ((self.server, True), (clone, False)):
+            self.cmd("gc", "--delete", store=store, key=key)
+            self.cmd("fsck", store=store, key=key)
+            self.assertIn("authored-revisions-v1", json.loads((store / "config.json").read_text())["required_features"])
+            destination = self.root / (store.name + "-signed-export")
+            self.cmd("native", "export", first, destination, store=store, key=key)
+            self.assertEqual((destination / "Source/code.cpp").read_bytes(), b"signed source\n")
 
     def test_forced_publication_retains_previous_remote_history_after_gc(self):
         first = self.commit("Source/code.cpp", b"first source")

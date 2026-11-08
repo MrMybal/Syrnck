@@ -27,7 +27,8 @@ class Workflows(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="syrnck-cpp-")
         self.root = Path(self.tmp.name)
         self.store = self.root / ".syrnck"
-        self.env = {k: v for k, v in os.environ.items() if k.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG", "SYRNCK_SKIP_SMUDGE")}
+        self.env = {k: v for k, v in os.environ.items() if k.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG", "SYRNCK_SKIP_SMUDGE",
+                    "SYRNCK_SIGNING_SEED", "SYRNCK_USER_NAME", "SYRNCK_USER_EMAIL", "SYRNCK_USER_TIMEZONE")}
         self.cmd("init")
 
     def tearDown(self):

@@ -5,7 +5,7 @@ description: Persistent native bisection without checkout guide.
 section: Version control
 order: 210
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 # Persistent native bisection without checkout {#persistent-native-bisection-without-checkout}
@@ -85,4 +85,6 @@ select them with `--workspace NAME`. Searches in different workspaces can remain
 active independently while Store mutations still serialize through its lock.
 [Blame and exact rename history](doc:native-file-history) are separate queries.
 Interactive bisect checkout, automatic command execution, rename-aware predicate
-selection and commit signatures remain work to complete.
+selection remain work to complete. [Optional revision signatures](doc:native-authorship)
+are verified when authored metadata is read; they do not authenticate a user's
+good/bad bisect classification.

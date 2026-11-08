@@ -1,5 +1,6 @@
 #include "native_workspace.hpp"
 #include <syrnck/history.hpp>
+#include "native_authorship.hpp"
 #include <algorithm>
 namespace syrnck {
 namespace {
@@ -127,6 +128,7 @@ Json native_file_history(const Store &store, std::string_view revision, std::str
                {"message", message.substr(0, end)},
                {"message_truncated", end < message.size()},
                {"change", *change}};
+      append_native_authorship(row, metadata);
       budget(used, row);
       rows.push_back(std::move(row));
       if ((*change)["status"] == "renamed")

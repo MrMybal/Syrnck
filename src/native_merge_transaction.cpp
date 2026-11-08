@@ -32,13 +32,13 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
         throw_if_cancelled(options.stop);
         entries.emplace_back(path, Json{{"manifest", file.manifest}, {"executable", file.executable}});
       }
-      const auto revision = Json{{"version", 1},
+      auto revision = Json{{"version", 1},
                                  {"parents", Json::array({plan.head, std::string(source)})},
                                  {"message", message},
                                  {"timestamp", unix_seconds()},
                                  {"files", files}};
       throw_if_cancelled(options.stop);
-      target = put(Kind::revision, bytes(revision.dump())).first.id;
+      target = put(Kind::revision, bytes(native_commit_metadata(std::move(revision)).dump())).first.id;
     }
     result = checkout_directory(directory, branch, target, options);
   }

@@ -1,5 +1,6 @@
 #include "native_workspace.hpp"
 #include "native_context.hpp"
+#include "native_authorship.hpp"
 namespace syrnck {
 namespace {
 std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
@@ -52,7 +53,8 @@ struct Amendment {
     throw_if_cancelled(options.stop);
     revision["message"] = message;
     revision["timestamp"] = unix_seconds();
-    const auto next = store.put(Kind::revision, bytes(revision.dump())).first;
+    const auto author = native_original_author(revision);
+    const auto next = store.put(Kind::revision, bytes(store.native_commit_metadata(std::move(revision), author).dump())).first;
     require(store.compare_update_refs(
                 {{head_name, previous, next}, {stage_name, index, {}}, {archive_name, archive, previous},
                  {materialization.reference, materialization.root, materialization.root}},

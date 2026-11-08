@@ -5,7 +5,7 @@ description: Guide : Modification du dernier commit.
 section: Versionnage
 order: 190
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Modifier le dernier commit natif {#native-commit-amendment}
@@ -20,7 +20,7 @@ Le mode ordinaire réingère le dossier complet avec les exclusions/préférence
 
 Un index sans changement est accepté pour corriger un message. Modes staged/message-only sont exclusifs et refusent les arguments de dossier/pipeline. Le mode dossier accepte `--directory`, `--workers`, `--buffer-mib` et contrôle la liaison au workspace. Tous refusent une récupération checkout/switch en cours. Un index périmé exige inspection et reset explicites.
 
-La nouvelle révision reçoit le message et la date UTC courante en secondes. Le format v1 n’a ni auteur ni signature. Si toute la sérialisation est identique, l’ID existant peut être rendu ; aucun nonce ne force un nouvel ID.
+La nouvelle révision reçoit le message et la date UTC courante en secondes. Avec une [identité native](doc:native-authorship), la v2 préserve l’auteur d’origine et enregistre le committer actuel avec une nouvelle signature facultative. Réécrire une v2 exige une identité ; l’ancienne signature n’est jamais réutilisée. Sans identité, la v1 reste inchangée. Si toute la sérialisation est identique, l’ID existant peut être rendu ; aucun nonce ne force un nouvel ID.
 
 ```text
 # Replace the tip's snapshot with the current selected directory.

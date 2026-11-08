@@ -1,4 +1,5 @@
 #pragma once
+#include <syrnck/authorship.hpp>
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -227,6 +228,8 @@ struct NativeRebaseOptions {
   std::optional<TextDiffOptions> text_merge{};
   // Explicit complete sequence: pick/drop/reword/squash/fixup, with reordering.
   std::optional<NativeRebaseTodo> todo{};
+  // Freeze the committer clock across both candidate-generation passes.
+  std::optional<std::uint64_t> committer_timestamp{};
 };
 struct NativeStageRebaseOptions {
   std::optional<NativeResolutionSet> resolutions{};
@@ -510,13 +513,21 @@ public:
   // legacy workspace; this never changes another handle's selection.
   void use_native_workspace(std::string_view name);
   std::string_view native_workspace_name() const;
+  // Handle-local identity and exclusive signing-key ownership. No secret export.
+  // Identity changes are refused from progress callbacks.
+  void use_native_identity(NativeIdentity, std::optional<SigningKey> = {});
+  void clear_native_identity();
+  Json native_identity() const;
+  // No override means a fresh author. An engaged null preserves an unknown
+  // legacy author during rewriting; an engaged stamp preserves that author.
+  Json native_commit_metadata(Json draft, std::optional<Json> original_author = {}) const;
   std::string native_workspace_reference(std::string_view local) const;
   void validate_native_workspace(const fs::path &) const;
   Json register_native_workspace(const fs::path &primary, std::string_view name,
                                  const fs::path &directory, OperationOptions = {}) const;
-  // Static physical selection: literal disjoint prefixes; an empty vector
+  // Initial physical selection: literal disjoint prefixes; an empty vector
   // materializes no files. Logical revisions/indexes and retained objects stay
-  // complete. The selection cannot change while this context is registered.
+  // complete. Use workspace.hpp for recoverable live selection transitions.
   Json register_partial_native_workspace(const fs::path &primary, std::string_view name,
                                          const fs::path &directory, const std::vector<std::string> &prefixes,
                                          OperationOptions = {}) const;
@@ -581,7 +592,8 @@ public:
                        std::string_view source, std::string_view message, const NativeMergeOptions & = {},
                        OperationOptions = {}) const;
   // Replay the linear range (base, head] onto an exact new base. Planning never
-  // stores candidates; virtual IDs preserve source messages and timestamps.
+  // stores candidates; virtual IDs preserve source messages and authors. With
+  // an identity, the current committer uses one frozen time for both passes.
   Json plan_rebase(const fs::path &, std::string_view branch, std::string_view base, std::string_view onto,
                    const NativeRebaseOptions & = {}, bool verify_objects = false,
                    OperationOptions = {}) const;

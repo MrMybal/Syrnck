@@ -9,6 +9,7 @@
 #include "native_context.hpp"
 #include "native_materialization.hpp"
 #include "native_workspace_relocation.hpp"
+#include "native_authorship.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -21,6 +22,8 @@ namespace syrnck {
 struct Store::Impl {
   fs::path root;
   std::string native_workspace;
+  std::optional<NativeIdentity> native_identity;
+  std::optional<SigningKey> native_signer;
   std::optional<Key> key;
   FileLock lock;
   PackStorage packs;
@@ -57,7 +60,8 @@ static std::string key_check(const Key &key) {
 }
 static void supported_feature(std::string_view feature) {
   require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1" ||
-              feature == "materialization-transitions-v1" || feature == "workspace-relocation-v1", "unsupported required store feature");
+              feature == "materialization-transitions-v1" || feature == "workspace-relocation-v1" ||
+              feature == "authored-revisions-v1", "unsupported required store feature");
 }
 Json Store::Impl::load_config() {
   packs.invalidate();
@@ -279,6 +283,11 @@ Json Store::clear_workspace_watch_journal(OperationOptions options) const {
 }
 std::pair<ObjectKey, bool> Store::put(Kind kind, std::span<const std::uint8_t> data) const {
   validate_object(kind, data);
+  // Canonical metadata always begins with this version field. Gate even
+  // unreferenced v2 objects: historical readers also audit loose metadata.
+  const auto encoded = std::string_view(reinterpret_cast<const char *>(data.data()), data.size());
+  if (kind == Kind::revision && encoded.starts_with("{\"version\":2,"))
+    require_features({"authored-revisions-v1"});
   ObjectKey key{kind, object_id(kind, data)};
   if (contains(key))
     return {key, false};
@@ -602,6 +611,48 @@ Refs Store::refs() const {
   return parse_refs(read_bytes(root() / "refs.json", max_object_size), "invalid refs document");
 }
 std::string_view Store::native_workspace_name() const { return impl_->native_workspace; }
+void Store::use_native_identity(NativeIdentity identity, std::optional<SigningKey> signer) {
+  require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
+  identity.validate();
+  if (signer) (void)signer->public_key();
+  impl_->native_identity = std::move(identity); impl_->native_signer = std::move(signer);
+}
+void Store::clear_native_identity() {
+  require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
+  impl_->native_signer.reset(); impl_->native_identity.reset();
+}
+Json Store::native_identity() const {
+  if (!impl_->native_identity) return {};
+  const auto &identity = *impl_->native_identity;
+  Json result{{"name", identity.name}, {"email", identity.email}, {"timezone_offset", identity.timezone_offset},
+      {"signing_key", Json{}}, {"public_key", Json{}}};
+  if (impl_->native_signer) {
+    const auto key = impl_->native_signer->public_key();
+    result["signing_key"] = signing_key_id(key); result["public_key"] = hex(key);
+  }
+  return result;
+}
+Json Store::native_commit_metadata(Json draft, std::optional<Json> author) const {
+  if (!impl_->native_identity) {
+    require(draft.value("version", 1) == 1 && (!author || author->is_null()),
+        "rewriting authored revisions requires a committer identity");
+    return draft;
+  }
+  const auto committer = native_author_stamp(*impl_->native_identity, draft.at("timestamp"));
+  const auto original = author ? canonical_native_author(*author, true) : committer;
+  Json result{{"version", 2}, {"parents", draft.at("parents")}, {"message", draft.at("message")},
+      {"timestamp", draft.at("timestamp")}, {"author", original}, {"committer", committer},
+      {"signature", Json{}}};
+  result["files"] = std::move(draft.at("files"));
+  if (impl_->native_signer) {
+    const auto key = impl_->native_signer->public_key();
+    const auto message = native_revision_signing_message(result);
+    const auto signature = impl_->native_signer->sign(bytes(message));
+    result["signature"] = Json{{"algorithm", "ed25519"}, {"key_id", signing_key_id(key)},
+        {"public_key", hex(key)}, {"value", hex(signature)}};
+  }
+  return result;
+}
 void Store::use_native_workspace(std::string_view name) {
   require(progress_callback_depth == 0, "cannot select native workspace from a progress callback");
   if (!name.empty()) (void)read_native_workspace_context(*this, name);
