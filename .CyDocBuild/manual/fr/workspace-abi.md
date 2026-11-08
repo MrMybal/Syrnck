@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -107,7 +107,7 @@ _ = changes
 
 ## Portée {#scope-and-validation}
 
-C’est une observation consultative, pas un snapshot verrouillé ou un agent de transfert. Elle ne conserve pas les versions intermédiaires, ne maintient pas d’historique rejouable et n’expose pas le journal de checkpoint du CLI. Un redémarrage recrée l’inventaire et refait un scan complet. Cycle de vie de service, causalité, tombstones, résolution de conflits et interopérabilité complète avec le daemon Syncthing restent à développer.
+C’est une observation consultative, pas un snapshot verrouillé ou un agent de transfert. Elle ne conserve pas les versions intermédiaires, ne maintient pas d’historique rejouable et n’expose pas le journal de checkpoint du CLI. Un redémarrage recrée l’inventaire et refait un scan complet. Causalité et transferts sont gérés au-dessus de cet observateur ; voir le [contrôleur BEP continu](doc:syncthing#folder-controller) et ses limites de dossiers, conflits et service.
 
 ## Contextes enregistrés {#registered-contexts}
 
@@ -175,3 +175,14 @@ l’attente exacte cible/révision/sélection. Capture rend l’ID ; plan, check
 reprise rendent le `json.RawMessage` canonique. Les variantes Context gardent
 la passerelle d’annulation par appel. Elles n’implémentent pas le contrôleur BEP
 résident et n’annoncent pas automatiquement un dossier de travail à jour.
+
+`syrnck_workspace_checkout_status_json_ex(workspace, store, transaction,
+operation, out, length)` lit une transaction 64-hex exacte par le décodeur du
+cœur, sans reprise ni publication. Un reçu terminé rend pending=false et
+state=committed avec propriétaire/source/cible/branche/contexte/dossier originaux.
+La cible retenue correspondante et la liaison au workspace sont vérifiées ; la
+lecture d’un reçu terminé ne compare pas les arbres historiques. Ces faits
+prouvent une application passée, pas la propreté actuelle. Go l’expose par
+`CheckoutStatusContext`. Utiliser un propriétaire durable unique par application,
+conserver les entrées causales avant checkout et capturer les éditions locales
+ultérieures après reconnaissance de la base terminée.

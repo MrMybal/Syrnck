@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 5
+revision: 6
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -128,7 +128,7 @@ Close Stores/sessions explicitly before removing their directories. The trusted 
 
 ## Syncthing {#syncthing}
 
-The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Its native-backed catalog persists folder indexes, vectors, tombstones and verified data; staged downloads avoid holding Store across network waits. Workspace application, discovery, a pairing UI and complete autonomous scheduling remain unfinished.
+The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Its native-backed catalog persists folder indexes, vectors, tombstones and verified data; staged downloads avoid holding Store across network waits. The [continuous file controller](doc:syncthing#folder-controller) applies verified versions to native workspaces with owned recovery. Full directory/symlink semantics, conflict copies, discovery, a pairing UI and standalone service orchestration remain unfinished.
 
 ## Registered workspaces {#registered-workspaces}
 
@@ -148,3 +148,8 @@ checkout requires clean working files and preserves a recoverable owned journal.
 operation. All five methods have Context variants and enforce the session's
 exact Store/context/directory binding. Mutation errors require re-reading state
 because publication may already have occurred. See the [native action contract](doc:workspace-abi#native-workspace-actions).
+
+`CheckoutStatusContext(ctx, store, transaction)` reads one exact journal or
+completed receipt with the core decoder. It verifies the bound Store/context/
+directory. A committed receipt proves past application even if the user has
+edited the working file since; it does not assert that the workspace is clean.

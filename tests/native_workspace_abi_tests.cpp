@@ -129,6 +129,16 @@ void scenario(const fs::path &root, const std::optional<Key> &key, unsigned layo
     const auto pending = handles.state(); const auto selected = pending["target"].get<std::string>();
     result([&](char **out, std::size_t *n) { return syrnck_workspace_recover_owned_json_ex(
         handles.workspace, handles.store, selected.c_str(), target.c_str(), owner.c_str(), nullptr, out, n); });
+    const auto transaction = pending["checkout"]["id"].get<std::string>();
+    const auto receipt = result([&](char **out, std::size_t *n) { return syrnck_workspace_checkout_status_json_ex(
+        handles.workspace, handles.store, transaction.c_str(), nullptr, out, n); });
+    require(!receipt["pending"].get<bool>() && receipt["state"] == "committed" && receipt["owner"] == owner &&
+        receipt["target"] == target && receipt["context"] == context, "native ABI receipt lost completion evidence");
+    result([&](char **out, std::size_t *n) { return syrnck_workspace_checkout_status_json_ex(
+        handles.workspace, handles.store, nullptr, nullptr, out, n); }, false);
+    const std::string absent(64, 'e');
+    result([&](char **out, std::size_t *n) { return syrnck_workspace_checkout_status_json_ex(
+        handles.workspace, handles.store, absent.c_str(), nullptr, out, n); }, false);
     require(handles.state()["revision"]["id"] == target && !handles.state()["checkout"]["pending"].get<bool>(),
         "native ABI recovery did not finish exact candidate");
     require(text(read_bytes(directory / "Source/item/leaf")) == incoming &&
@@ -147,6 +157,42 @@ void scenario(const fs::path &root, const std::optional<Key> &key, unsigned layo
     require(store.metadata(Kind::revision, target)["files"].contains("Hidden/data"), "partial ABI checkout lost full tree");
   }
 }
+void preserves_edit_during_application(const fs::path &root) {
+  std::string original, candidate;
+  {
+    Fixture fixture(root);
+    original = fixture.revision(Json{{"asset", fixture.file("source")}}); fixture.install(original);
+    candidate = fixture.revision(Json{{"asset", fixture.file("incoming")}}, Json::array({original}));
+    fixture.store.set_ref("incoming", {Kind::revision, candidate});
+  }
+  Handles handles(root, root, {}, "");
+  const auto initial = handles.state(); const auto target = initial["target"].get<std::string>();
+  const SyrnckNativeExpected expected{target.c_str(), original.c_str(), nullptr};
+  struct Edit {
+    fs::path path;
+    bool changed = false, failed = false;
+    static void progress(const SyrnckProgress *event, void *user) {
+      auto &edit = *static_cast<Edit *>(user);
+      if (event->phase == SYRNCK_PHASE_PUBLISHING && !edit.changed) {
+        edit.changed = true;
+        try { atomic_write(edit.path, bytes("user edit during application"), true); }
+        catch (...) { edit.failed = true; }
+      }
+    }
+  } edit{root / "asset"};
+  const std::string owner(64, 'c'); const SyrnckOperation operation{nullptr, Edit::progress, &edit};
+  result([&](char **out, std::size_t *n) { return syrnck_workspace_checkout_owned_json_ex(
+      handles.workspace, handles.store, &expected, candidate.c_str(), owner.c_str(), &operation, out, n); }, false);
+  const auto state = handles.state();
+  require(edit.changed && !edit.failed && state["revision"]["id"] == original && state["checkout"]["pending"].get<bool>() &&
+      state["checkout"]["owner"] == owner && text(read_bytes(root / "asset")) == "user edit during application",
+      "active owned application overwrote or acknowledged concurrent local work");
+  result([&](char **out, std::size_t *n) { return syrnck_workspace_recover_owned_json_ex(
+      handles.workspace, handles.store, target.c_str(), candidate.c_str(), owner.c_str(), nullptr, out, n); }, false);
+  require(text(read_bytes(root / "asset")) == "user edit during application" && handles.state()["checkout"]["pending"].get<bool>(),
+      "owned retry overwrote concurrent local work");
+}
+
 }
 int main() {
   try {
@@ -156,6 +202,7 @@ int main() {
         std::optional<Key> key; if (encrypted) { key.emplace(); key->fill(73); }
         scenario(temp.path / (std::to_string(encrypted) + '-' + std::to_string(layout) + '-' + std::to_string(scope)), key, layout, scope);
       }
-    std::cout << "24 native ABI capture/owned recovery scenarios passed\n"; return 0;
+    preserves_edit_during_application(temp.path / "active-edit");
+    std::cout << "24 native ABI capture/owned recovery scenarios and active-edit preservation passed\n"; return 0;
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

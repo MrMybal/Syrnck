@@ -37,6 +37,9 @@ func nativeWorkspaceNative(h nativeWorkspaceHandle, store nativeHandle, mode uin
 	case 4:
 		name = "workspace_recover_owned_json_ex"
 		args = append(base, pointers[0], pointers[2], pointers[3], op, out, size)
+	case 5:
+		name = "workspace_checkout_status_json_ex"
+		args = append(base, pointers[2], op, out, size)
 	}
 	r, _, _ := library.functions[name].Call(args...)
 	runtime.KeepAlive(arguments)

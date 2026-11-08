@@ -1,7 +1,7 @@
 // Package syncthing adapts Syrnck manifests to Syncthing's fixed-block BEP data
 // model, authenticates explicitly paired devices and persists folder indexes.
-// Network scheduling and working-file application remain the embedding
-// application's responsibility.
+// Folder and FolderSession drive continuous native regular-file application.
+// The embedding application owns dialing/listening and service lifecycle.
 package syncthing
 
 import (

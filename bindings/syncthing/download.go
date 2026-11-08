@@ -50,6 +50,18 @@ func (f *StagedFile) Prepare(ctx context.Context, store *syrnck.Store) (FetchRes
 }
 
 func (f *StagedFile) ingest(ctx context.Context, store *syrnck.Store, retained bool) (result FetchResult, err error) {
+	blockSize := uint32(f.info.BlockSize())
+	return f.ingestChunking(ctx, store, retained, syrnck.Chunking{Fixed: true, Min: blockSize, Average: blockSize, Max: blockSize})
+}
+
+// PrepareWithChunking uses an explicit engine chunking policy independently of
+// BEP boundaries. A zero policy selects native FastCDC, matching ordinary native
+// workspace capture. The complete BEP block stream is still verified on import.
+func (f *StagedFile) PrepareWithChunking(ctx context.Context, store *syrnck.Store, chunking syrnck.Chunking) (FetchResult, error) {
+	return f.ingestChunking(ctx, store, false, chunking)
+}
+
+func (f *StagedFile) ingestChunking(ctx context.Context, store *syrnck.Store, retained bool, chunking syrnck.Chunking) (result FetchResult, err error) {
 	result.Stats = f.stats
 	if f.closed || store == nil {
 		return result, errors.New("syrnck BEP: staged file closed or Store missing")
@@ -57,8 +69,6 @@ func (f *StagedFile) ingest(ctx context.Context, store *syrnck.Store, retained b
 	if err = ctx.Err(); err != nil {
 		return result, err
 	}
-	blockSize := uint32(f.info.BlockSize())
-	chunking := syrnck.Chunking{Fixed: true, Min: blockSize, Average: blockSize, Max: blockSize}
 	if retained {
 		result.Manifest, err = store.Ingest(f.path, chunking)
 	} else {

@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 4
+revision: 5
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -16,16 +16,16 @@ It depends on the unmodified Syncthing library at **v2.1.7**, commit
 The core Go binding remains a separate module without external Go dependencies.
 This module requires Go 1.26.2 or later; local validation used Go 1.27.3.
 
-The adapter supports regular file data and explicitly paired, authenticated
-device connections. It is not a resident synchronization daemon, a drop-in
-Syncthing executable or an implementation of its database, discovery, pairing UI,
-workspace application, automatic folder scheduling or conflict-copy policy.
-Its catalog backend persists version vectors, index generations, tombstones and
-verified data. The embedding application still owns working-folder decisions.
+The adapter supports regular-file data, explicitly paired device connections,
+a durable causal catalog and a continuous native-workspace controller.
+`Folder` captures local changes, applies verified incoming versions and retains
+recovery state. `FolderSession` runs that controller over authenticated BEP.
+Discovery, a pairing UI, a standalone service executable and complete Syncthing
+folder semantics remain work to complete; see the controller limits below.
 
 ## Native library and dependencies {#build-and-test}
 
-Build `syrnck_ffi` and prepare the pinned Go dependencies once with `go mod download` from `bindings/syncthing`. The adapter is optional and separate from the core binding. Linux/macOS use cgo and their loader path; those platforms and ARM64 remain to be validated. Distribute the dependencies and notices required by the chosen integration.
+Build `syrnck_ffi` and prepare the pinned Go dependencies once with `go mod download` from `bindings/syncthing`. The adapter is optional and separate from the core binding. Linux/macOS use cgo and their loader path. The earlier catalog and transport passed Linux CI; this new controller is locally qualified on Windows, with current cross-platform execution pending. Distribute the dependencies and notices required by the chosen integration.
 
 ## APIs {#apis}
 
@@ -193,8 +193,9 @@ has not been started. `Close(reason)` releases the stream; wait for the model's
 `Closed` callback before closing native Store handles used by its callbacks.
 The connection metadata contains a stable establishment time and session ID.
 
-The application supplies certificate storage/rotation, the trusted Device ID,
-scheduling, catalog transactions, working-file recovery and conflict handling. Transport encryption authenticates and protects this peer
+The application supplies certificate storage/rotation, trusted Device IDs and
+connection scheduling. The low-level connection accepts an application model;
+`FolderSession` supplies the regular-file controller described below. Transport encryption authenticates and protects this peer
 connection; it does not make an ordinary receiving daemon an untrusted encrypted
 backup. The complete untrusted-device encryption workflow remains to be integrated.
 
@@ -211,7 +212,9 @@ retaining the real daemon, database, scanner, model, puller and REST API.
 The output is `build/qualification/syncthing` (`.exe` on Windows). Without
 `--download`, the helper requires a prepared module cache and makes no implicit
 module download. It verifies the executable's embedded upstream module version
-and refuses adapter/reference version mismatches or modified manifests.
+and refuses adapter/reference version mismatches or modified manifests. It also
+resolves the adapter test dependency graph with its platform cgo setting before
+offline tests, including Darwin’s native watcher dependency.
 
 Set `SYRNCK_SYNCTHING_BINARY` to that executable's absolute path and run:
 
@@ -232,8 +235,10 @@ verified the resulting complete file. Real daemon rename/tombstone announcements
 were also received. This proves transport and regular-file interoperability;
 a further real-daemon test persists full/delta indexes and data, closes native
 Stores during network waits, then reconnects after an offline rename and
-preserves its tombstone. It still does not establish an autonomous folder service. Without the explicit
-binary, the real-daemon test reports a skip; ordinary adapter tests still run.
+preserves its tombstone. The production-controller test additionally reconstructs an actual native
+working folder, returns a post-completion local edit to the daemon, reconnects after
+an offline rename and propagates a local deletion upstream. Without the explicit
+binary, live-daemon tests report a skip; ordinary adapter tests still run.
 
 ## Resume and cancellation {#resume-and-cancellation}
 
@@ -261,3 +266,81 @@ a complete internally retained manifest; its ID is returned alongside the
 error. Callers must handle the error before publishing that result. No partial
 working file is installed. A process kill can leave private temporary data;
 power-loss durability and automatic staging reclamation are not established.
+
+## Continuous working-folder controller {#folder-controller}
+
+Create the native Store and workspace first, then call `NewFolder(ctx, options)`.
+`FolderOptions` binds one catalog/local device, its explicit peer list, the
+working directory, Store and optional registered workspace name. `OpenStore`
+returns a newly opened handle owned by the controller: an encrypted integration
+can obtain its key from the embedding application's provider. No idle Store is
+retained. Close sessions before closing Folder.
+
+`Refresh` captures local working edits using the native watcher/index and
+periodic full audits (five minutes by default). `Invalidate` requests an immediate
+full audit. `ReceiveIndex` persists an authenticated paired device's full/delta
+index. `Step` downloads one missing file, reuses verified blocks across current
+local files, then applies the complete candidate through the native owned
+checkout. Exact-content renames need no payload transfer. Immutable advertised
+bytes stay servable while a new version downloads; incoming indexes can advance
+on a separate worker. Every downloaded descriptor/generation is rechecked before
+attachment, so stale downloads cannot be installed.
+
+Incoming application retains three typed roots for its descriptor, native
+candidate and prepared catalog before touching working files. Protocol publication
+waits for completed native evidence with this operation's unique durable owner,
+source, target and selected branch. `CheckoutStatusContext` uses the core receipt
+decoder, without reconstructing a private record format in Go or diffing entire
+historical asset trees. HEAD equality alone is insufficient. A local edit after
+native completion is captured with the received causal base; it cannot deadlock
+the acknowledgement or be overwritten. A preparation obstructed before any
+native journal starts is retired only after checking the exact original native
+state. Foreign/ambiguous journals remain explicit.
+
+The catalog retains previous complete versions through ordinary native revision
+parents; its pending candidates are also GC roots. Process-termination tests kill
+a real child before and after native publication, run GC, reopen, recover and
+verify the incoming bytes or a subsequent local edit, with plain/encrypted
+Stores. Concurrent protocol versions currently block; automatic conflict copies
+are not yet implemented by this BEP controller.
+
+## Continuous authenticated sessions {#folder-sessions}
+
+`OpenFolderSession(ctx, folder, stream, options)` owns the connected transport,
+checks that the certificate matches the catalog's complete local Device ID,
+authenticates the configured paired peer, then negotiates folder generations and
+full/delta indexes. `PollInterval` defaults to 250 ms (50 ms through one minute).
+The incoming queue defaults to 32 MiB (1 through 128 MiB), includes the batch
+being processed and never blocks the BEP reader waiting for native disk work.
+`Reports`, `Errors` and `Done` expose progress, blocked operations and shutdown.
+`Close` stops workers and waits for the transport/model shutdown.
+
+The embedding application still owns listening/dialing, reconnect backoff,
+certificate/key storage and OS service lifecycle. This module is separate from
+the CMake engine distribution. The controller currently applies regular files
+and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
+platform ownership/xattrs or receive-encrypted folders. It retains incoming
+metadata but does not claim these paths have been applied. It also lacks
+conflict-copy reconciliation, persistent download resume, automatic membership
+changes/history retirement and authored/signature policy for newly synthesized
+incoming native candidates. Large-project performance and power-loss durability
+are not qualified. The native resident publication agent is a separate feature.
+
+`StagedFile.PrepareWithChunking(ctx, store, syrnck.Chunking{})` keeps default
+FastCDC native chunks independent of BEP SHA-256 boundaries. Legacy `Prepare`
+keeps its fixed-BEP chunking. `Catalog.CommitWithRefs` atomically publishes its
+catalog with additional typed reference guards; callers must reload after an
+unknown publication outcome, as with the native CAS.
+
+An external writer can change a file while a native journal is still actively
+installing/verifying it. Native recovery then blocks rather than overwriting
+that work. Preserve the changed data and resolve that journal explicitly;
+automatic preservation/reconciliation during active application remains work
+to complete. File visibility alone is not a completion notification: use the
+controller checkpoint/status. This differs from the supported edit after the
+native receipt has committed, including before its protocol acknowledgement.
+
+The controller maps native filename spelling to canonical NFC protocol names.
+It preserves an existing decomposed native spelling when applying edits and
+rejects two native names that normalize to the same protocol path. An echo or
+rescan cannot turn that spelling difference into a deletion.

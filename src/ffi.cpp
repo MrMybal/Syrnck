@@ -577,6 +577,32 @@ int syrnck_workspace_native_state_json_ex(SyrnckWorkspace *workspace, SyrnckStor
         {"staging", refs.contains(syrnck::native_staging_reference(store, target))}}, out, length, options.stop);
   });
 }
+int syrnck_workspace_checkout_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const char *transaction, const SyrnckOperation *operation, char **out, std::size_t *length) {
+  return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
+    const auto options = operation_options(operation);
+    syrnck::throw_if_cancelled(options.stop);
+    auto &store = workspace_store(session, handle);
+    const auto id = checked(transaction); syrnck::validate_id(id);
+    const auto refs = store.refs();
+    const auto receipt = refs.find(store.native_workspace_reference("checkouts/receipts/" + std::string(id)));
+    syrnck::Json report;
+    if (receipt == refs.end()) report = store.checkout_status(std::string(id));
+    else {
+      // Completed evidence does not need to diff all files in two historical
+      // trees. Keep receipt lookup proportional to metadata, not asset count.
+      report = syrnck::read_native_checkout_receipt(store, receipt->second, id);
+      const auto target = refs.find(store.native_workspace_reference("checkouts/completed/" + std::string(id)));
+      syrnck::require(target != refs.end() && target->second.kind == syrnck::Kind::revision &&
+          target->second.id == report.at("target").get<std::string>(), "native checkout receipt and target disagree");
+      report["pending"] = false;
+    }
+    syrnck::require(report.value("context", "") == session.context &&
+        syrnck::path_from_utf8(report.at("directory").get<std::string>()) == session.directory,
+        "native checkout receipt belongs to another workspace");
+    json_output(report, out, length, options.stop);
+  });
+}
 int syrnck_workspace_capture_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
     const SyrnckNativeExpected *expected, const char *message, const SyrnckOperation *operation,
     char **out, std::size_t *length) {

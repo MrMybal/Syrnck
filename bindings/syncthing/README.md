@@ -35,3 +35,9 @@ Build the pinned test daemon with `python scripts/build_syncthing_reference.py -
 [English](../../Documentation/Documentation.html#/en/syncthing/folder-catalog) · [Français](../../Documentation/Documentation.html#/fr/syncthing/folder-catalog)
 
 [Download without holding Store](../../Documentation/Documentation.html#/en/syncthing/staged-download) · [Téléchargement sans garder le Store](../../Documentation/Documentation.html#/fr/syncthing/staged-download)
+
+## Continuous native working folders
+
+[Controller and recovery](../../Documentation/Documentation.html#/en/syncthing/folder-controller) · [Contrôleur et reprise](../../Documentation/Documentation.html#/fr/syncthing/folder-controller)
+
+[Authenticated sessions](../../Documentation/Documentation.html#/en/syncthing/folder-sessions) · [Sessions authentifiées](../../Documentation/Documentation.html#/fr/syncthing/folder-sessions)

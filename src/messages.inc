@@ -961,6 +961,7 @@ SYRNCK_MESSAGE("unknown completed native checkout target", "cible de checkout na
 SYRNCK_MESSAGE("invalid completed native checkout source", "source de checkout natif terminé invalide")
 SYRNCK_MESSAGE("invalid completed native checkout receipt", "reçu de checkout natif terminé invalide")
 SYRNCK_MESSAGE("native checkout receipt and target disagree", "le reçu et la cible du checkout natif ne correspondent pas")
+SYRNCK_MESSAGE("native checkout receipt belongs to another workspace", "le reçu de checkout natif appartient à un autre workspace")
 SYRNCK_MESSAGE("native checkout receipt and source disagree", "le reçu et la source du checkout natif ne correspondent pas")
 SYRNCK_MESSAGE("completed native checkout still has pending pins", "le checkout natif terminé conserve des protections en attente")
 SYRNCK_MESSAGE("completed native checkout still has private recovery data", "le checkout natif terminé conserve des données privées de récupération")

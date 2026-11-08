@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 4
+revision: 5
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -223,8 +223,9 @@ This is advisory status, not a locked filesystem snapshot or a transfer agent.
 It does not preserve intermediate file versions, maintain a replayable event
 history or expose the CLI's persistent checkpoint journal. A restart always
 creates a new inventory and performs a complete scan. Service lifecycle,
-causal versions, tombstones, conflict resolution and full Syncthing daemon
-interoperability remain separate work.
+causal versions and transfers are managed above this observer; see the separate
+[continuous BEP controller](doc:syncthing#folder-controller) and its remaining
+folder/conflict/service limits.
 
 ## Registered contexts {#registered-contexts}
 
@@ -290,3 +291,14 @@ its exact target/revision/materialization snapshot. Capture returns a revision
 ID; plan/checkout/recovery return canonical `json.RawMessage`. Context methods
 use the same safe per-call cancellation bridge. They do not implement a resident
 BEP controller or automatically announce that a working folder has caught up.
+
+`syrnck_workspace_checkout_status_json_ex(workspace, store, transaction,
+operation, out, length)` reads one exact 64-hex transaction through the core
+journal/receipt decoder, without recovery or publication. A completed receipt
+returns pending=false and state=committed, plus its original owner/source/target/
+branch/context/directory. It verifies the matching retained target and bound
+workspace; completed lookup does not diff historical file trees. These facts
+prove past application, not current working cleanliness. Go exposes this as
+`CheckoutStatusContext`. Use a unique durable owner per pending application,
+retain its causal inputs before checkout and capture later local edits after
+acknowledging that completed base.

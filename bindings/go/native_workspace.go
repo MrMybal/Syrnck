@@ -59,7 +59,7 @@ func (w *Workspace) nativeCall(ctx context.Context, store *Store, mode uint32, e
 		}
 		arguments[i] = data
 	}
-	if mode != 0 && expected.Target == "" {
+	if mode >= 1 && mode <= 4 && expected.Target == "" {
 		return nil, errors.New("syrnck: native target expectation required")
 	}
 	if len(message) > 65536 {
@@ -157,4 +157,14 @@ func (w *Workspace) RecoverOwned(store *Store, target, candidate, owner string) 
 // those values from the service's durable state. No pending journal is an error.
 func (w *Workspace) RecoverOwnedContext(ctx context.Context, store *Store, target, candidate, owner string) (json.RawMessage, error) {
 	return w.nativeCall(ctx, store, 4, NativeExpectation{Target: target}, candidate, owner, "")
+}
+
+// CheckoutStatusContext reads an exact journal or completed receipt using the
+// native decoder. A committed receipt proves a past application; subsequent
+// local edits are independent work and must be captured with its causal base.
+func (w *Workspace) CheckoutStatusContext(ctx context.Context, store *Store, transaction string) (json.RawMessage, error) {
+	if transaction == "" {
+		return nil, errors.New("syrnck: checkout transaction required")
+	}
+	return w.nativeCall(ctx, store, 5, NativeExpectation{}, transaction, "", "")
 }

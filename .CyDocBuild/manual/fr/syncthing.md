@@ -5,18 +5,24 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
 
 Ce module Go optionnel relie le C++ au modèle de blocs BEP via la bibliothèque Syncthing non modifiée **v2.1.7**, commit `d6d0181f7d46`, pseudo-version figée dans go.mod/go.sum. Le binding cœur reste séparé, sans dépendances Go externes. Le module demande Go 1.26.2+.
 
-Il gère les fichiers ordinaires et les connexions authentifiées entre appareils explicitement associés. Le catalogue conserve vecteurs de versions, générations d’index, tombstones et données vérifiées. Daemon résident, remplacement de l’exécutable Syncthing, découverte, interface d’appairage, application au workspace et orchestration automatique restent à la charge de l’application intégratrice.
+Le module gère données de fichiers ordinaires, connexions à appareils associés,
+catalogue causal durable et contrôleur continu de workspace natif. `Folder`
+capture les changements locaux, applique les versions entrantes vérifiées et
+conserve l’état de reprise ; `FolderSession` le fait fonctionner sur BEP
+authentifié. Découverte, interface d’appairage, exécutable de service autonome et
+sémantique complète des dossiers Syncthing restent à terminer, selon les limites
+précisées ci-dessous.
 
 ## Bibliothèque native et dépendances {#build-and-test}
 
-Compiler `syrnck_ffi` et télécharger une fois les dépendances Go figées avec `go mod download` depuis `bindings/syncthing`. L’adaptateur est optionnel, séparé du binding cœur. Linux/macOS utilisent cgo et le chemin du chargeur approprié ; ces plateformes et ARM64 restent à valider. Ne distribuer que les dépendances et notices requises pour l’intégration choisie.
+Compiler `syrnck_ffi` et télécharger une fois les dépendances Go figées avec `go mod download` depuis `bindings/syncthing`. L’adaptateur est optionnel, séparé du binding cœur. Linux/macOS utilisent cgo et leur chemin de chargeur. Catalogue et transport précédents ont passé la CI Linux ; ce nouveau contrôleur est vérifié localement sous Windows, son exécution multiplateforme reste à qualifier. Ne distribuer que les dépendances et notices requises pour l’intégration choisie.
 
 ## API {#apis}
 
@@ -208,3 +214,81 @@ Sans `ResumeDirectory`, Fetch utilise un fichier temporaire privé retiré au re
 Chaque plage de staging est rehashée au retry. Seules les plages complètes conformes sont réutilisées ; partielles/corrompues redemandées. Les trous remplis de zéro peuvent satisfaire un bloc zéro sans requête. Flush tous les 16 blocs et avant ingestion. Annulation préserve le staging fourni par l’appelant, qui reste **en clair même avec Store chiffré** ; protéger l’emplacement. Le retrait des dossiers terminés est explicite.
 
 Le contexte est vérifié entre appels natifs/étapes réseau/blocs. La préparation sans racine implicite propage l’annulation dans l’ingestion native ; l’ingestion retenue historique et la vérification complète terminent leur appel natif synchrone courant. Une annulation tardive ou changement détecté peut laisser un manifeste complet retenu, dont l’ID accompagne l’erreur. Traiter l’erreur avant publication. Aucun fichier de travail partiel installé. Un kill peut laisser du privé ; durabilité après coupure et retrait automatique ne sont pas établis.
+
+## Contrôleur continu de dossier de travail {#folder-controller}
+
+Créer d’abord Store et workspace natifs puis appeler `NewFolder(ctx, options)`.
+`FolderOptions` lie catalogue, Device ID local, pairs explicites, dossier, Store
+et contexte enregistré facultatif. `OpenStore` retourne un nouveau handle que le
+contrôleur possède et ferme ; une intégration chiffrée obtient sa clé auprès du
+fournisseur de l’application. Aucun Store n’est gardé au repos. Fermer les sessions
+avant Folder.
+
+`Refresh` capture les changements avec watcher/index natifs et audits complets
+périodiques (cinq minutes par défaut). `Invalidate` demande un audit immédiat.
+`ReceiveIndex` conserve l’index complet/delta d’un appareil associé authentifié.
+`Step` télécharge un fichier manquant, réutilise les blocs vérifiés des fichiers
+locaux, puis applique le candidat complet par checkout natif à propriétaire.
+Un renommage exact ne transfère aucun payload. Les octets immuables annoncés
+restent servables pendant le téléchargement ; un worker séparé reçoit les index.
+Génération et descripteur téléchargé sont recontrôlés avant attachement : une
+réponse périmée ne peut pas être installée.
+
+Trois racines typées conservent descripteur, candidat natif et catalogue préparé
+avant l’application. La publication protocolaire attend la preuve native de fin
+avec propriétaire durable unique, source, cible et branche sélectionnée exacts.
+`CheckoutStatusContext` utilise le décodeur de reçus du cœur, sans réimplémenter
+son format privé en Go ni comparer tous les arbres historiques d’assets. Une
+égalité de HEAD seule ne suffit pas. Une édition après fin native est capturée
+avec la base causale reçue, sans blocage de l’accusé ni écrasement. Une préparation
+obstruée avant tout journal natif est retirée uniquement après vérification de
+l’état natif original exact. Les journaux étrangers ou ambigus restent explicites.
+
+Les parents des révisions du catalogue conservent les versions complètes ; les
+candidats en attente sont aussi des racines de GC. Les tests terminent brutalement
+un vrai processus avant/après publication native, exécutent le GC, rouvrent,
+reprennent et vérifient les données reçues ou leur édition locale ultérieure,
+avec Stores chiffrés et non chiffrés. Les versions protocolaires concurrentes
+bloquent actuellement ; les copies de conflit automatiques de ce contrôleur BEP
+restent à réaliser.
+
+## Sessions authentifiées continues {#folder-sessions}
+
+`OpenFolderSession(ctx, folder, stream, options)` possède le transport connecté,
+vérifie le Device ID local complet du certificat, authentifie le pair configuré,
+puis négocie générations et index complets/deltas du dossier. `PollInterval` vaut
+250 ms par défaut (50 ms à une minute). La file entrante vaut 32 Mio par défaut
+(1 à 128 Mio), inclut le batch en traitement et ne bloque jamais le lecteur BEP
+sur le travail disque natif. `Reports`, `Errors` et `Done` exposent progression,
+blocages et fin. `Close` arrête les workers et attend transport/callback de fin.
+
+L’application intégratrice gère écoute/connexion, délai de reconnexion,
+certificats/clés et cycle de vie de service OS. Ce module est séparé de la
+distribution CMake du moteur. Le contrôleur applique les fichiers ordinaires et
+leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
+vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
+entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
+Copies de conflit, reprise persistante de téléchargement, gestion automatique
+des membres/retrait d’historique et politique d’auteur/signature des nouveaux
+candidats natifs entrants restent à réaliser. Performances à grande échelle et
+durabilité face à une coupure électrique ne sont pas qualifiées. L’agent natif
+résident de publication est une autre fonctionnalité.
+
+`StagedFile.PrepareWithChunking(ctx, store, syrnck.Chunking{})` conserve les blocs
+FastCDC natifs par défaut indépendamment des frontières SHA-256 BEP. `Prepare`
+garde ses blocs fixes BEP. `Catalog.CommitWithRefs` publie atomiquement catalogue
+et gardes de références typées additionnelles ; recharger après un résultat de
+publication inconnu, selon les règles du CAS natif.
+
+Une édition externe pendant installation/vérification d’un journal natif actif
+bloque la reprise pour ne pas écraser ce travail. Conserver les données modifiées
+et résoudre explicitement le journal ; préservation/réconciliation automatique
+pendant l’application active reste à terminer. La visibilité du fichier seule ne
+signale pas la fin : utiliser le checkpoint/statut du contrôleur. C’est distinct
+de l’édition prise en charge après le reçu natif committed, y compris avant son
+accusé de réception protocolaire.
+
+Le contrôleur associe l’orthographe native aux noms NFC du protocole, conserve
+l’orthographe décomposée existante lors des éditions et refuse deux noms natifs
+qui se normalisent vers le même chemin. Écho et nouveau scan ne transforment
+pas cette différence d’orthographe en suppression.

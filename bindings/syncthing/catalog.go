@@ -599,7 +599,9 @@ func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
 				a.Sequence, b.Sequence = 0, 0
 				x, _ := json.Marshal(a)
 				y, _ := json.Marshal(b)
-				if !bytes.Equal(x, y) || entry.Manifest != existing.Manifest {
+				// Native manifests may use different chunk boundaries for the
+				// same verified BEP block stream. Their IDs are not file identities.
+				if !bytes.Equal(x, y) {
 					return errors.New("syrnck BEP: equal vector has unequal data")
 				}
 				return nil
@@ -622,30 +624,71 @@ func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
 // after peer reset, rename or deletion. No implicit per-file ffi/ pins are used.
 // An IO error is an unknown publication outcome: reload before any retry.
 func (c *Catalog) Commit(ctx context.Context, store *syrnck.Store) error {
+	return c.CommitWithRefs(ctx, store, nil)
+}
+
+// CommitWithRefs publishes the catalog and additional expected-value reference
+// updates in one native CAS. This couples a service checkpoint to its exact
+// catalog/data closure. The catalog reference itself cannot appear in updates.
+// On any error reload every affected root to establish the publication outcome.
+func (c *Catalog) CommitWithRefs(ctx context.Context, store *syrnck.Store, updates []syrnck.RefUpdate) error {
+	name := catalogRef(c.state.Device, c.state.Folder)
+	for _, update := range updates {
+		if update.Name == name {
+			return errors.New("syrnck BEP: duplicate catalog publication root")
+		}
+	}
+	key, data, err := c.prepare(ctx, store)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(data, c.original) && len(updates) == 0 {
+		return nil
+	}
+	var expected *syrnck.ObjectKey
+	if c.tip.ID != "" {
+		old := c.tip
+		expected = &old
+	}
+	group := make([]syrnck.RefUpdate, 0, len(updates)+1)
+	group = append(group, syrnck.RefUpdate{Name: name, Expected: expected, Value: &key})
+	group = append(group, updates...)
+	applied, err := store.CompareRefsContext(ctx, group)
+	if err != nil {
+		return fmt.Errorf("syrnck BEP catalog publication (reload to establish outcome): %w", err)
+	}
+	if !applied {
+		return ErrCatalogStale
+	}
+	c.tip, c.original = key, bytes.Clone(data)
+	return nil
+}
+
+func (c *Catalog) prepare(ctx context.Context, store *syrnck.Store) (syrnck.ObjectKey, []byte, error) {
 	if store == nil {
-		return errors.New("syrnck BEP: catalog Store required")
+		return syrnck.ObjectKey{}, nil, errors.New("syrnck BEP: catalog Store required")
 	}
 	if err := validateCatalogState(c.state); err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
 	data, err := json.Marshal(c.state)
 	if err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
 	if len(data) > syrnck.MaxObjectSize {
-		return errors.New("syrnck BEP: catalog exceeds 16 MiB")
+		return syrnck.ObjectKey{}, nil, errors.New("syrnck BEP: catalog exceeds 16 MiB")
 	}
 	refs, err := store.RefsContext(ctx)
 	if err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
 	name := catalogRef(c.state.Device, c.state.Folder)
 	current, present := refs[name]
 	if present != (c.tip.ID != "") || present && current != c.tip {
-		return ErrCatalogStale
+		return syrnck.ObjectKey{}, nil, ErrCatalogStale
 	}
 	if bytes.Equal(data, c.original) {
-		return nil
+		return c.tip, data, nil
 	}
 	groups := [][]CatalogEntry{c.state.Files}
 	for _, peer := range c.state.Peers {
@@ -655,38 +698,28 @@ func (c *Catalog) Commit(ctx context.Context, store *syrnck.Store) error {
 		for _, entry := range entries {
 			if entry.Manifest != "" {
 				if err := verifyCatalogData(ctx, store, c.state.Folder, entry.Info, entry.Manifest); err != nil {
-					return err
+					return syrnck.ObjectKey{}, nil, err
 				}
 			}
 		}
 	}
 	stateID, err := store.PrepareBytesContext(ctx, data, syrnck.Chunking{})
 	if err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
 	revision := catalogRevision{Version: 1, Parents: []string{}, Message: "Syrnck BEP folder catalog v1", Files: catalogDataFiles(c.state)}
-	var expected *syrnck.ObjectKey
 	if c.tip.ID != "" {
 		old := c.tip
-		expected = &old
 		revision.Parents = append(revision.Parents, old.ID)
 	}
 	revision.Files["catalog.json"] = catalogRevisionFile{Manifest: stateID}
 	encoded, err := json.Marshal(revision)
 	if err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
 	key, err := store.PutContext(ctx, "revision", encoded)
 	if err != nil {
-		return err
+		return syrnck.ObjectKey{}, nil, err
 	}
-	applied, err := store.CompareRefsContext(ctx, []syrnck.RefUpdate{{Name: name, Expected: expected, Value: &key}})
-	if err != nil {
-		return fmt.Errorf("syrnck BEP catalog publication (reload to establish outcome): %w", err)
-	}
-	if !applied {
-		return ErrCatalogStale
-	}
-	c.tip, c.original = key, bytes.Clone(data)
-	return nil
+	return key, data, nil
 }

@@ -53,6 +53,8 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * Capture and checkout require the exact SyrnckNativeExpected target/revision/policy object.
  * Capture retains local working changes; plan is read-only; checkout_owned uses the existing native
  * journal and refuses dirty work. recover_owned requires the exact persisted owner and candidate.
+ * checkout_status_json_ex reads an exact core journal/receipt without applying it. Completed receipts
+ * prove past application with owner/source/target evidence; subsequent local edits remain separate.
  * A session is bound to one Store path, registered context and working directory. Mutations
  * invalidate observation continuity. On error reload state: publication may already have completed.
  * See [native actions](doc:workspace-abi#native-workspace-actions) for recovery and locking contracts.
@@ -101,6 +103,8 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * Capture et checkout exigent la cible/révision/objet de sélection exacts dans SyrnckNativeExpected.
  * Capture conserve le travail local ; plan est consultatif ; checkout_owned utilise le journal
  * natif et refuse le travail modifié. recover_owned exige propriétaire et candidat persistés exacts.
+ * checkout_status_json_ex lit journal/reçu exact par le cœur sans application. Un reçu terminé prouve
+ * l’application passée par propriétaire/source/cible ; une édition ultérieure reste du travail séparé.
  * Une session est liée à un chemin de Store, contexte enregistré et dossier de travail. Les mutations
  * invalident la continuité d’observation. En erreur, recharger : la publication peut être terminée.
  * Voir les [actions natives](doc:workspace-abi#native-workspace-actions) pour reprise et verrouillage.
@@ -323,6 +327,11 @@ typedef struct SyrnckNativeExpected {
  * readable during an interrupted checkout; it does not recover anything. */
 SYRNCK_API int syrnck_workspace_native_state_json_ex(SyrnckWorkspace *, SyrnckStore *,
     const SyrnckOperation *, char **out, size_t *length);
+/* Read one exact native journal/receipt through the core decoder. transaction
+ * must be its 64-hex ID. No recovery or refs mutation. A completed receipt
+ * proves past application, not that working files are still clean. */
+SYRNCK_API int syrnck_workspace_checkout_status_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const char *transaction, const SyrnckOperation *, char **out, size_t *length);
 /* Capture selected working files into a retained native revision. Existing
  * native ignore/partial/detached/authorship rules apply. Message <=64 KiB.
  * Output {version,revision}; existing pending/staging work is never taken over. */

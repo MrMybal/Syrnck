@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -140,7 +140,7 @@ Fermer explicitement les Stores et sessions avant de retirer leurs répertoires.
 
 ## Syncthing {#syncthing}
 
-Le module optionnel [Syncthing](doc:syncthing) adapte les manifests aux blocs fixes SHA-256 BEP via la bibliothèque Syncthing v2.1.7 figée. Connexions d’appareils authentifiées et transferts différentiels sont vérifiés contre son daemon réel. Objets et CDC Syrnck gardent leur format. Le catalogue conserve index, vecteurs, tombstones et données vérifiées dans le moteur ; le téléchargement séparé ne garde pas le Store pendant l’attente réseau. Application au workspace, découverte, interface d’appairage et orchestration entièrement autonome restent à terminer.
+Le module optionnel [Syncthing](doc:syncthing) adapte les manifests aux blocs fixes SHA-256 BEP via la bibliothèque Syncthing v2.1.7 figée. Connexions d’appareils authentifiées et transferts différentiels sont vérifiés contre son daemon réel. Objets et CDC Syrnck gardent leur format. Le catalogue conserve index, vecteurs, tombstones et données vérifiées dans le moteur ; le téléchargement séparé ne garde pas le Store pendant l’attente réseau. Le [contrôleur continu de fichiers](doc:syncthing#folder-controller) applique les versions vérifiées aux workspaces natifs avec reprise à propriétaire. Sémantique complète des dossiers/liens, copies de conflit, découverte, interface d’appairage et orchestration de service autonome restent à terminer.
 
 ## Workspaces enregistrés {#registered-workspaces}
 
@@ -161,3 +161,8 @@ local ; checkout exige un workspace propre et garde un journal récupérable.
 en cours exacte. Les cinq méthodes ont des variantes Context et vérifient la
 liaison exacte Store/contexte/dossier. Une erreur de mutation exige une relecture :
 la publication peut déjà avoir eu lieu. Voir le [contrat des actions natives](doc:workspace-abi#native-workspace-actions).
+
+`CheckoutStatusContext(ctx, store, transaction)` lit un journal ou reçu terminé
+exact par le décodeur du cœur, avec liaison Store/contexte/dossier vérifiée. Un
+reçu committed prouve une application passée, même après une édition locale ; il
+ne prétend pas que le workspace est encore propre.

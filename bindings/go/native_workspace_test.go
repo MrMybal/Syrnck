@@ -96,8 +96,32 @@ func TestNativeWorkspaceCapturePlanAndOwnedCheckout(t *testing.T) {
 				t.Fatal("dirty workspace overwritten")
 			}
 			writeTest(t, filepath.Join(root, "asset"), []byte("first local bytes"))
-			if _, err := workspace.CheckoutOwned(store, current.Expected(), candidate.ID, strings.Repeat("a", 64)); err != nil {
+			completed, err := workspace.CheckoutOwned(store, current.Expected(), candidate.ID, strings.Repeat("a", 64))
+			if err != nil {
 				t.Fatal(err)
+			}
+			var transaction struct {
+				ID string `json:"id"`
+			}
+			if err = json.Unmarshal(completed, &transaction); err != nil {
+				t.Fatal(err)
+			}
+			receipt, err := workspace.CheckoutStatusContext(context.Background(), store, transaction.ID)
+			var proof struct {
+				Pending              bool `json:"pending"`
+				State, Owner, Target string
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = json.Unmarshal(receipt, &proof); err != nil || proof.Pending || proof.State != "committed" || proof.Owner != strings.Repeat("a", 64) || proof.Target != candidate.ID {
+				t.Fatalf("incorrect completion proof: %s %v", receipt, err)
+			}
+			if _, err = workspace.CheckoutStatusContext(context.Background(), store, ""); err == nil {
+				t.Fatal("empty transaction accepted")
+			}
+			if _, err = workspace.CheckoutStatusContext(context.Background(), store, strings.Repeat("e", 64)); err == nil {
+				t.Fatal("unknown transaction accepted")
 			}
 			data, err := os.ReadFile(filepath.Join(root, "asset", "leaf"))
 			if err != nil || !bytes.Equal(data, []byte("incoming complete bytes")) {

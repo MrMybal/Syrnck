@@ -45,6 +45,8 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("help", "syncthing", "--section", "reference-daemon", "--print-url").stdout.strip().endswith("#/en/syncthing/reference-daemon"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "syncthing", "--section", "folder-catalog", "--print-url").stdout.strip().endswith("#/fr/syncthing/folder-catalog"))
         self.assertTrue(self.run_cli("help", "syncthing", "--section", "staged-download", "--print-url").stdout.strip().endswith("#/en/syncthing/staged-download"))
+        self.assertTrue(self.run_cli("help", "syncthing", "--section", "folder-controller", "--print-url").stdout.strip().endswith("#/en/syncthing/folder-controller"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "syncthing", "--section", "folder-sessions", "--print-url").stdout.strip().endswith("#/fr/syncthing/folder-sessions"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "api-c-abi", "--section", "catalogs", "--print-url").stdout.strip().endswith("#/fr/api-c-abi/catalogs"))
         self.assertTrue(self.run_cli("help", "go-binding", "--section", "catalog-transactions", "--print-url").stdout.strip().endswith("#/en/go-binding/catalog-transactions"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "workspace-abi", "--section", "native-workspace-actions", "--print-url").stdout.strip().endswith("#/fr/workspace-abi/native-workspace-actions"))
