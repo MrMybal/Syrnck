@@ -125,7 +125,9 @@ class ServerAccess(unittest.TestCase):
             self.http("POST", "/v1/locks/acquire", {"owner": "admin", "paths": paths, "seconds": 60}, expected=400)
             self.http("POST", "/v1/locks/acquire", {"paths": ["Source/code.cpp"], "seconds": 60}, actor="bob", expected=403)
             self.http("POST", "/v1/locks/acquire", {"paths": paths, "seconds": 60}, actor="reader", expected=403)
-            acquired = self.lock(*paths, seconds=1)
+            # Keep live-ACL assertions independent of one-second wall-clock
+            # rounding and slow durable record writes on busy test machines.
+            acquired = self.lock(*paths, seconds=8)
             self.assertTrue(all(row["owner"] == "alice" for row in acquired["locks"]))
             self.http("POST", "/v1/locks/acquire", {"paths": [paths[0].lower(), "Content/Other"], "seconds": 60}, actor="bob", expected=400)
             page = self.http("POST", "/v1/locks/list", {"after": None, "limit": 100}, actor="reader")
@@ -133,7 +135,8 @@ class ServerAccess(unittest.TestCase):
             claims = self.claims(acquired)
             self.http("POST", "/v1/locks/release", {"claims": claims}, actor="bob", expected=400)
             self.http("POST", "/v1/locks/prune", {"delete": True}, expected=403)
-            time.sleep(1.05)
+            expires = max(row["expires_at"] for row in acquired["locks"])
+            time.sleep(max(0, expires - time.time()) + 0.05)
             replacement = self.lock(*paths, actor="bob")
             self.assertGreater(replacement["locks"][0]["fence"], acquired["locks"][0]["fence"])
             self.http("POST", "/v1/locks/release", {"claims": claims}, expected=400)

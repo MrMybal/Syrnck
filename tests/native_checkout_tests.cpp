@@ -204,10 +204,15 @@ void scenario(const fs::path &project, std::optional<Key> key, unsigned storage)
         path_from_utf8(store.checkout_status()["data_directory"].get<std::string>()) / "new/0.bin";
     require(edited_during_undo && text(read_bytes(rescued_stage)) == "edit immediately before undo move",
             "undo-move race lost working bytes");
-    fails([&] { store.recover_checkout(true); }); // Restores old bytes, retains the changed private file.
-    require(store.checkout_status()["state"] == "aborted" &&
+    // Restores old bytes, retaining the changed private file. Include the actual
+    // failure/state when an earlier OS error prevents reaching that boundary.
+    std::string undo_error;
+    try { store.recover_checkout(true); }
+    catch (const Error &error) { undo_error = error.what(); }
+    const auto undo_status = store.checkout_status();
+    require(!undo_error.empty() && undo_status["state"] == "aborted" &&
                 text(read_bytes(project / "asset.bin")) == original,
-            "abort cleanup did not retain its completed rollback marker");
+            "abort cleanup did not retain its completed rollback marker: " + undo_error + " / " + undo_status.dump());
     write(project / "rescued-undo", text(read_bytes(rescued_stage)));
     fs::remove(rescued_stage); // Only after preserving this fixture's changed private file.
     store.recover_checkout();

@@ -38,9 +38,19 @@ std::string contents(const Store &store, std::string_view revision, const std::s
 }
 std::map<std::string, std::string> physical(const Store &store) {
   std::map<std::string, std::string> result;
-  for (const auto &entry : fs::recursive_directory_iterator(store.root()))
-    if (entry.is_regular_file() && entry.path().filename() != "store.lock")
-      result.emplace(utf8(entry.path().lexically_relative(store.root())), hash(read_bytes(entry.path())));
+  for (const auto &entry : fs::recursive_directory_iterator(store.root())) {
+    const bool temporary = entry.path().extension() == ".tmp";
+    if (temporary && transient_metadata_disappeared(entry.path()))
+      continue;
+    if (entry.is_regular_file() && entry.path().filename() != "store.lock") {
+      try {
+        result.emplace(utf8(entry.path().lexically_relative(store.root())), hash(read_bytes(entry.path())));
+      } catch (const Error &) {
+        if (!temporary || !transient_metadata_disappeared(entry.path()))
+          throw;
+      }
+    }
+  }
   return result;
 }
 std::string identity(const Json &plan) {
