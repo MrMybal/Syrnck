@@ -238,13 +238,11 @@ int main() {
       atomic_write(foreign, bytes("persistent foreign temporary entry"), false);
       fails([&] { target.gc(true); });
       check(target.contains(retained) && target.contains(garbage) && fs::exists(foreign));
-      std::jthread disappearance([&] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        std::error_code error;
-        fs::remove(foreign, error);
-      });
+      // Scheduler latency is not bounded by the production 50 ms grace period.
+      // Exercise the observed-disappearance path without a timed worker.
+      check(fs::remove(foreign));
+      check(transient_metadata_disappeared(foreign));
       check(target.gc(true)["unreachable_objects"] == 1);
-      disappearance.join();
       check(target.contains(retained) && !target.contains(garbage) && !fs::exists(foreign));
       check(target.fsck() == 1);
     }

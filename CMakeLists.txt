@@ -156,9 +156,14 @@ if(SYRNCK_BUILD_TESTS)
   add_executable(syrnck_recovery_reader tests/crash_probe.cpp)
   target_include_directories(syrnck_recovery_reader PRIVATE src)
   target_link_libraries(syrnck_recovery_reader PRIVATE syrnck_core)
-  add_test(NAME crash_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
-    $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>)
-  set_tests_properties(crash_recovery PROPERTIES TIMEOUT 900)
+  # Keep every checkpoint while bounding each CTest process on hosted Windows
+  # runners. Each shard owns separate temporary stores and tests both key modes.
+  foreach(shard RANGE 0 7)
+    add_test(NAME crash_recovery_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
+      $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>
+      --shard ${shard}/8)
+    set_tests_properties(crash_recovery_${shard} PROPERTIES TIMEOUT 900)
+  endforeach()
   add_test(NAME native_rebase_todo_crashes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_recovery.py
     $<TARGET_FILE:syrnck_crash_probe> $<TARGET_FILE:syrnck_recovery_reader> $<TARGET_FILE:syrnck_ffi>
     --rebase-todo-only CrashRecovery.test_hard_kill_reopen_and_resume)

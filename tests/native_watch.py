@@ -297,7 +297,11 @@ class NativeWatch(unittest.TestCase):
             self.assertTrue(overflow["full_scan"])
             self.assertEqual(overflow["paths"], [])
             self.assertEqual(overflow["status"]["working_index"]["reused_files"], 0)
-            self.assertEqual(overflow["status"]["counts"]["untracked"], 128)
+            # The first overflow scan can overlap the producer. The observer
+            # must recover every later write, not claim an atomic OS snapshot.
+            complete = overflow if overflow["status"]["counts"]["untracked"] == 128 else run.until(
+                lambda f: f["type"] == "status" and f["status"]["counts"]["untracked"] == 128)
+            self.assertEqual(complete["status"]["counts"]["untracked"], 128)
 
     def test_restart_uses_full_observation_for_offline_edits(self):
         self.baseline()

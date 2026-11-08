@@ -49,6 +49,14 @@ std::string glob(std::string_view input) {
         out += '^';
         ++start;
       }
+      require(start < end, "invalid ignore pattern");
+      // libc++ can accept reversed ranges as empty classes whereas other
+      // ECMAScript implementations reject them. Reject them before compiling
+      // so every platform reports the same malformed configuration.
+      for (auto k = start; k + 2 < end; ++k)
+        if (input[k + 1] == '-')
+          require(static_cast<unsigned char>(input[k]) <= static_cast<unsigned char>(input[k + 2]),
+                  "invalid ignore pattern");
       for (auto k = start; k < end; ++k) {
         if (input[k] == '\\')
           out += "\\\\";

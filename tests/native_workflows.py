@@ -103,6 +103,28 @@ class NativeWorkflows(unittest.TestCase):
         report = json.loads(self.call("native", "diff", first, second).stdout)
         self.assertEqual(report["counts"], {"added": 1, "removed": 0, "modified": 0, "unchanged": 0})
 
+    def test_ignore_character_classes_and_invalid_ranges_are_portable(self):
+        for name in ("a", "b", "z", "-", "payload"):
+            (self.root / name).write_bytes(b"retained")
+        ignore = self.root / ".syrnckignore"
+        for pattern, expected in (("[a-c]", {"-", "z", "payload"}),
+                                  ("[!a-c]", {"a", "b", "payload"}),
+                                  ("[a-cx-z]", {"-", "payload"}),
+                                  ("[-ab]", {"z", "payload"}),
+                                  ("[ab-]", {"z", "payload"})):
+            with self.subTest(pattern=pattern):
+                ignore.write_text(pattern + "\n", encoding="utf-8")
+                report = json.loads(self.call("native", "status").stdout)
+                self.assertEqual({entry["path"] for entry in report["changes"]}, expected | {".syrnckignore"})
+        before = self.snapshot()
+        for pattern in ("[z-a]", "[9-0]", "[!z-a]", "[]", "[!]"):
+            with self.subTest(pattern=pattern):
+                ignore.write_text(pattern + "\n", encoding="utf-8")
+                for command in (("native", "status"), ("native", "commit", "-m", "invalid ignore")):
+                    error = self.call(*command, ok=False)
+                    self.assertIn(b"invalid ignore pattern", error.stderr)
+                self.assertEqual(self.snapshot(), before)
+
     def test_argument_errors_missing_metadata_and_wrong_branch_kind(self):
         (self.root / "file").write_bytes(b"retained")
         revision = self.commit("first")

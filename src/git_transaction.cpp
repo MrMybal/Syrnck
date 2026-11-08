@@ -68,9 +68,15 @@ struct Owned {
     value = replacement;
   }
 };
+struct CloseFile {
+  void operator()(std::FILE *file) const noexcept {
+    if (file)
+      (void)std::fclose(file);
+  }
+};
 class Transaction {
   Owned input_, output_, child_input_, child_output_;
-  std::unique_ptr<std::FILE, decltype(&std::fclose)> errors_{nullptr, &std::fclose};
+  std::unique_ptr<std::FILE, CloseFile> errors_;
 #ifdef _WIN32
   Owned process_;
 #else
