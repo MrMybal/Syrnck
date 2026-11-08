@@ -40,7 +40,8 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
       throw_if_cancelled(options.stop);
       target = put(Kind::revision, bytes(native_commit_metadata(std::move(revision)).dump())).first.id;
     }
-    result = checkout_directory(directory, branch, target, options);
+    result = settings.checkout_owner ? checkout_directory_owned(directory, branch, target, *settings.checkout_owner, options)
+                                    : checkout_directory(directory, branch, target, options);
   }
   result["operation"] = "merge";
   result["mode"] = mode;

@@ -39,6 +39,8 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("help", "native", "switch", "--detach", "--print-url").stdout.strip().endswith("#/en/native-detached"))
         self.assertTrue(self.run_cli("help", "agent", "run", "--print-url").stdout.strip().endswith("#/en/resident-agent"))
         self.assertTrue(self.run_cli("help", "agent", "run", "--section", "bidirectional", "--print-url").stdout.strip().endswith("#/en/resident-agent/bidirectional"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "checkout", "--section", "owned-recovery", "--print-url").stdout.strip().endswith("#/fr/native-checkout/owned-recovery"))
+        self.assertTrue(self.run_cli("help", "agent", "push", "--section", "publication-bookkeeping", "--print-url").stdout.strip().endswith("#/en/transfers/publication-bookkeeping"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "agent", "run", "--section", "recovery", "--print-url").stdout.strip().endswith("#/fr/resident-agent/recovery"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "switch-plan", "--detach", "--print-url").stdout.strip().endswith("#/fr/native-detached/recovery"))
         for command in ("workspaces", "workspace-add"):

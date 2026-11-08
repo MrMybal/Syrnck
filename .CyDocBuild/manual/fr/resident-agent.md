@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Fonctionnement continu {#run}
@@ -35,7 +35,7 @@ existants sans changer les fichiers. En mode bidirectionnel, les historiques
 existants peuvent encore produire une révision de fusion comme décrit ci-dessous.
 
 Synchronisation entièrement autonome de dossiers, copies conflictuelles
-automatiques, récupération automatique d’un checkout interrompu, installation
+automatiques, installation
 comme service système et interopérabilité complète avec un daemon Syncthing
 restent à terminer. Voir les [limites actuelles](doc:limits).
 
@@ -98,8 +98,19 @@ d’origine doit d’abord se réconcilier, même si HEAD local a progressé. Un
 de succès passé n’autorise pas à écraser un changement distant ultérieur. Un
 conflit enregistré demande une résolution explicite ; l’agent ne supprime jamais
 automatiquement ce journal. Après résolution du problème d’historique ou de
-politique, il réessaie. Un checkout incomplet ou un index de préparation occupé
-bloque capture et publication jusqu’à sa résolution.
+politique, il réessaie. Le mode bidirectionnel peut [reprendre son propre checkout interrompu](doc:native-checkout#owned-recovery)
+hors ligne sans signer à nouveau sa cible figée. Les checkouts manuels, d’autres
+sessions ou en mode publication seule restent bloqués. Un index de préparation
+occupé bloque capture et publication jusqu’à sa libération.
+
+La référence typée `sync/push/SERVICE/observed` conserve le dernier historique
+distant confirmé avant application des fichiers et avant de terminer une session
+d’envoi. Les observations précédentes restent sous `archive/agent-observation/`.
+Suppression ou recul de cet historique est bloqué même si un crash précède le
+point de reprise reconnu. Une nouvelle session peut importer les reçus natifs
+complets encore disponibles comme faits historiques, sans autoriser l’écrasement
+d’un changement distant ultérieur. `resident-sync-v1` protège cet état avant
+publication et reste activé après nettoyage ou changement de mode.
 
 Des changements hors ligne peuvent toujours devenir des snapshots locaux signés.
 La reconnexion transfère leurs blocs manquants. Le redémarrage rescane le
@@ -128,10 +139,11 @@ commandes CLI peuvent passer entre les cycles. Scans et transferts réseau
 gardent son verrou exclusif ; un transfert volumineux peut retarder les commandes.
 
 La sortie standard produit des lignes NDJSON lorsque l’état sémantique change.
-`state` vaut `empty`, `pushed`, `pulled`, `synced`, `uncommitted`, `blocked` ou `unavailable`.
+`state` vaut `empty`, `pushed`, `pulled`, `recovered`, `synced`, `uncommitted`, `blocked` ou `unavailable`.
 Les codes de raison distinguent index, checkout, réécritures, références
 supprimées, historiques concurrents et publications incertaines. Les lignes
 incluent les révisions locales/distantes et la référence reconnue si connues.
+`last_observed_remote` expose l’historique conservé avant même ce point de reprise.
 `merged: true` signale une fusion locale automatique ; les rapports checkout/merge
 décrivent l’application entrante ou ses blocages lorsque nécessaire.
 `working_clean: null` demande un nouvel audit, notamment juste après un snapshot

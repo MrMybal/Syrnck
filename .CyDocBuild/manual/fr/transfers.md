@@ -4,7 +4,7 @@ title: Transferts et publication
 description: Guide : Transferts et publication.
 section: Transferts
 order: 400
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Transfert, progression et publication {#transfer-progress-cancellation-and-publication}
@@ -76,3 +76,32 @@ L’annulation coopérative ordinaire rend 130, sans retirer objets vérifiés o
 ## Ressources et limites {#validation-and-remaining-work}
 
 Les requêtes d’objets sont séquentielles par défaut ; [parallélisme borné](doc:parallel-transfers), [reprises et débit](doc:transfer-policy) et [journaux persistants](doc:transfer-sessions) sont optionnels ou explicitement configurés. Push matérialise encore fermeture et liste triée ; pull conserve un ensemble visité et une file de parcours. Le suivi local ne constitue pas une synchronisation continue complète ; la rétention distribuée reste à développer. L’intégration Git dispose séparément de ses [catalogues et hooks](doc:git-assets).
+
+## Conserver la publication prouvée avant de terminer la session {#publication-bookkeeping}
+
+Des surcharges C++ de `push_expected` et `resume` acceptent un `PublicationObserver`
+en dernier argument :
+
+```cpp
+syrnck::net::PublicationObserver record = [&](const syrnck::ObjectKey &published) {
+  store.set_ref("confirmed-publication", published);
+};
+remote.push_expected(store, root, "main", observed, operation, transfer, record);
+remote.resume(store, session_id, operation, transfer, record);
+```
+
+Le callback synchrone s’exécute sur le thread appelant après preuve du succès,
+avant de marquer la session complète. Il s’exécute aussi quand une reprise confirme
+un ancien reçu, ou lors d’une reprise explicite d’un envoi déjà terminé. C’est un
+fait de publication passé, pas une affirmation sur la valeur actuelle de la
+référence distante. Cet observateur est réservé à l’envoi et doit être idempotent.
+Y conserver les traces durables ; l’agent résident y retient l’historique distant.
+
+Une fois cette frontière commencée, terminer le journal n’est pas annulé par un
+arrêt demandé dans le callback. Pour un envoi inachevé, un échec du callback ou
+de l’écriture de fin laisse le journal récupérable, sans rejouer automatiquement
+le CAS. Un reçu déjà terminé le reste si un callback répété échoue ; cet
+observateur peut être réessayé explicitement.
+Les surcharges sans observateur gardent leur comportement. L’échec n’autorise pas
+le remplacement d’une référence changée ensuite. Voir les
+[sessions persistantes](doc:transfer-sessions).

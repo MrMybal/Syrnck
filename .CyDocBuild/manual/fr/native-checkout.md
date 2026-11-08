@@ -5,7 +5,7 @@ description: Guide : Checkout récupérable.
 section: Versionnage
 order: 230
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Checkout natif récupérable {#recoverable-native-checkout}
@@ -47,6 +47,36 @@ Sans opération active, `checkout-status` donne `pending: false`. Sinon : identi
 La récupération utilise exactement branche/répertoire enregistrés, sans override. Ouvrir le Store ne touche pas les fichiers ; copier/déplacer un journal n’est pas supporté. Une récupération terminée est idempotente. Si un fichier public/privé a changé, les octets sont préservés et l’étape risquée refusée : inspecter et sauvegarder les edits avant reprise. Une source modifiée juste avant sa sauvegarde est restaurée telle quelle. Le marqueur `aborted` précède le nettoyage pour ne pas confondre un fichier ultérieur. Des parents vides nouveaux peuvent rester ; aucune suppression récursive.
 
 Pendant l’opération, GC même simulé, commit, add, reset, commit figé et détachement sont bloqués. Pack et consultation restent possibles. Les opérations génériques de références ne contournent pas la récupération : leurs mutations peuvent la bloquer. Ne pas éditer/répliquer les racines actives.
+
+## Reprise contrôlée par l’agent résident {#owned-recovery}
+
+L’[agent résident bidirectionnel](doc:resident-agent) marque ses checkouts entrants
+et ceux des fusions avec un propriétaire explicite. Le journal v11 fige propriétaire,
+contexte et les deux définitions de matérialisation, avec layout 1 ou 3 pour
+l’application ordinaire ou les transitions de namespace. Le propriétaire participe
+à l’ID immuable. `resident-sync-v1` est établi avant observations persistantes ou
+journaux avec propriétaire ; les anciens lecteurs refusent le Store au lieu
+d’ignorer ce nouvel état. Les encodages sans propriétaire ne changent pas.
+
+```cpp
+store.checkout_directory_owned(project, "main", target, owner_id, operation);
+store.recover_checkout_owned(project, "main", owner_id, operation);
+```
+
+La reprise vérifie propriétaire, contexte sélectionné, workspace physique actuel
+et cible HEAD avant toute application. Cet ID sert à la coordination, pas à
+l’authentification face à un écrivain local autorisé du Store. L’agent exige aussi
+que son observation distante conservée soit ancêtre de la cible préparée. Une
+autre adresse, un autre workspace ou une session de publication seule restent bloqués.
+
+Une transaction active de l’agent peut finir hors ligne sans clé privée : la
+cible entrante ou de fusion signée est déjà figée et retenue. La reprise ne
+recompose ni ne signe de révision. Une nouvelle opération signée exige toujours
+l’identité de signature. Les transactions manuelles ou étrangères demandent
+`checkout-recover` explicite ; ouvrir le Store seul ne reprend rien.
+Les reçus terminés restent consultables et retenus suivant les règles existantes.
+Les sauvegardes conservent exigences de lecteur et révisions complètes, sans
+activer un ancien checkout physique dans un dossier restauré.
 
 ## Journal, rétention et données privées {#journal-retention-and-private-data}
 

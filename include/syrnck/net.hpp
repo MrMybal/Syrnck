@@ -7,6 +7,10 @@ namespace syrnck::net {
 struct PublicationUncertain : Error {
   using Error::Error;
 };
+// Synchronous durable bookkeeping after proven publication, before completing
+// its session. The fact can be historical; it does not imply a current ref.
+// Implementations must be idempotent. A failure preserves the unfinished journal.
+using PublicationObserver = std::function<void(const ObjectKey &)>;
 enum class ObjectCompression { automatic, disabled, zstd };
 struct TransferOptions {
   std::size_t max_requests = 1;
@@ -52,13 +56,21 @@ public:
   // existing uncertain sessions explicitly, without recapturing an expectation.
   Json push_expected(const Store &, const ObjectKey &, std::string_view remote_ref,
                      const std::optional<ObjectKey> &expected, OperationOptions = {}, TransferOptions = {}) const;
+  Json push_expected(const Store &, const ObjectKey &, std::string_view remote_ref,
+                     const std::optional<ObjectKey> &expected, OperationOptions, TransferOptions,
+                     const PublicationObserver &) const;
   Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {},
             TransferOptions = {}) const;
   Json resume(const Store &, std::string_view session, OperationOptions = {}, TransferOptions = {}) const;
+  Json resume(const Store &, std::string_view session, OperationOptions, TransferOptions,
+              const PublicationObserver &) const;
 
 private:
   Json push_impl(const Store &, const ObjectKey &, std::string_view,
-                 const std::optional<std::optional<ObjectKey>> &, OperationOptions, TransferOptions) const;
+                 const std::optional<std::optional<ObjectKey>> &, OperationOptions, TransferOptions,
+                 const PublicationObserver & = {}) const;
+  Json resume_impl(const Store &, std::string_view, OperationOptions, TransferOptions,
+                   const PublicationObserver &) const;
   std::string base_, token_;
   std::optional<fs::path> ca_;
   bool negotiate_compression(std::optional<bool> &, OperationOptions, const TransferOptions &) const;

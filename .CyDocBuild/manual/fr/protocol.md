@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 11
+sourceRevision: 12
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -219,10 +219,17 @@ sans dépendances d’objets cachées.
 
 ## Capacités requises du Store {#required-store-features}
 
+Le journal natif v11 ajoute un `owner` hexadécimal minuscule de 64 caractères,
+un contexte et des définitions source/cible de matérialisation identiques. Son
+layout 1 ou 3 couvre application ordinaire ou namespace, y compris workspaces
+liés, partiels et détachés. Propriétaire et définitions figées participent à
+l’identité de transaction. Les layouts sans propriétaire gardent leurs encodages.
+Voir la [reprise contrôlée](doc:native-checkout#owned-recovery).
+
 Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
 trié de noms uniques pris en charge (au plus 32). Les noms acceptés sont
 `authored-revisions-v1`, `linked-workspaces-v1`, `sparse-workspaces-v1`,
-`materialization-transitions-v1` et `workspace-relocation-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+`materialization-transitions-v1`, `resident-sync-v1` et `workspace-relocation-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
 l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
 aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
 packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne

@@ -27,7 +27,7 @@ int entry(int argc, char **argv) {
     std::stop_source stop;
     std::jthread late;
     auto caller = std::this_thread::get_id();
-    std::size_t events = 0, completed = 0;
+    std::size_t events = 0, completed = 0, publication_events = 0;
     bool bytes_seen = false;
     OperationOptions options{stop.get_token(), [&](const ProgressEvent &event) {
                                require(caller == std::this_thread::get_id(),
@@ -92,7 +92,20 @@ int entry(int argc, char **argv) {
     }
     try {
       Json result;
-      if (operation == "push")
+      if (mode.starts_with("record")) {
+        net::PublicationObserver observer = [&](const ObjectKey &published) {
+          require(caller == std::this_thread::get_id() && published == root, "publication observer received another thread or root");
+          ++publication_events;
+          const auto session = store.transfer_session(TransferSession::identity("push", remote.endpoint_fingerprint(), root, argv[7]));
+          require(session && (session->state == "publishing" || session->state == "uncertain" || session->state == "complete"), "publication observer ran before a durable publication marker");
+          store.set_ref("publication-proof", root);
+          if (mode == "record-fail") throw Error("publication bookkeeping sentinel");
+          if (mode == "record-stop" || mode == "record-resume-stop") stop.request_stop();
+        };
+        if (mode == "record-resume" || mode == "record-resume-stop")
+          result = remote.resume(store, TransferSession::identity("push", remote.endpoint_fingerprint(), root, argv[7]), options, limits, observer);
+        else result = remote.push_expected(store, root, argv[7], {}, options, limits, observer);
+      } else if (operation == "push")
         result = remote.push(store, root, argv[7], options, limits);
       else if (operation == "pull")
         result = remote.pull(store, root, argv[7], options, limits);
@@ -100,16 +113,16 @@ int entry(int argc, char **argv) {
         (void)remote.refs(options);
         result = Json::object();
       }
-      require(mode == "ok" || mode == "late" || mode == "renew", "network probe expected failure");
+      require(mode == "ok" || mode == "late" || mode == "renew" || mode == "record-resume" || mode == "record-stop" || mode == "record-resume-stop", "network probe expected failure");
       std::cout << Json{{"result", result},
                         {"events", events},
                         {"completed", completed},
                         {"bytes_seen", bytes_seen},
-                        {"stopped", stop.stop_requested()}}
+                        {"stopped", stop.stop_requested()}, {"publication_events", publication_events}}
                        .dump()
                 << '\n';
     } catch (const net::PublicationUncertain &) {
-      require(mode == "uncertain", "unexpected uncertain publication");
+      require(mode == "uncertain" || mode == "record-fail", "unexpected uncertain publication");
       std::cout << "{\"uncertain\":true}\n";
     } catch (const Cancelled &) {
       require(mode == "pre" || mode == "transfer" || mode == "publish" || mode == "backoff" ||

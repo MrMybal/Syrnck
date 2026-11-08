@@ -194,6 +194,9 @@ struct NativeMergeOptions {
   // Opt in to bounded automatic text composition of unresolved content conflicts.
   // The shared native batch also caps attempts at 64 and inputs/results at 16 MiB.
   std::optional<TextDiffOptions> text_merge{};
+  // An explicit process/session tag permits guarded checkout recovery. It is
+  // not an identity credential and never changes the signed revision payload.
+  std::optional<std::string> checkout_owner{};
 };
 struct NativeRebaseResolutionSet {
   std::string head, base, onto;
@@ -501,8 +504,14 @@ public:
   // archive. Interrupted operations require explicit recovery; no force mode.
   Json checkout_directory(const fs::path &, std::string_view branch, std::string_view target,
                           OperationOptions = {}) const;
+  Json checkout_directory_owned(const fs::path &, std::string_view branch, std::string_view target,
+                                std::string_view owner, OperationOptions = {}) const;
   Json checkout_status(const std::optional<std::string> &transaction = {}) const;
   Json recover_checkout(bool abort = false, OperationOptions = {}) const;
+  // Only finish a transaction with this owner, selected context, physical
+  // workspace and HEAD target. Manual and other-session transactions refuse.
+  Json recover_checkout_owned(const fs::path &, std::string_view branch, std::string_view owner,
+                              OperationOptions = {}) const;
   // Current symbolic branch or detached revision; legacy stores select main.
   // Switching journals workspace changes without moving named branch tips.
   Json native_head() const;

@@ -4,7 +4,7 @@ title: Transfer progress, cancellation and publication
 description: Transfer progress, cancellation and publication guide.
 section: Transfers
 order: 400
-revision: 2
+revision: 3
 ---
 
 # Transfer progress, cancellation and publication {#transfer-progress-cancellation-and-publication}
@@ -154,3 +154,30 @@ Persistent sessions support explicit resume, saved reference expectations and
 local GC holds; see [journal guarantees and limits](doc:transfer-sessions).
 Push still materializes its closure and sorted object list; pull retains a seen
 set and pending traversal. A complete resident sync service and distributed retention remain future work. [Git push/checkout integration](doc:git-assets) is available through catalogs, policies and opt-in hooks.
+
+## Record proven publication before session completion {#publication-bookkeeping}
+
+C++ overloads of `push_expected` and `resume` accept a final `PublicationObserver`:
+
+```cpp
+syrnck::net::PublicationObserver record = [&](const syrnck::ObjectKey &published) {
+  store.set_ref("confirmed-publication", published);
+};
+remote.push_expected(store, root, "main", observed, operation, transfer, record);
+remote.resume(store, session_id, operation, transfer, record);
+```
+
+The synchronous callback runs on the caller's thread after success is proven,
+before the session is marked complete. It also runs when recovery confirms an
+older receipt, or when explicitly resuming a completed push. This is a historical
+publication fact: it does not assert that the remote reference still has that
+value. The observer is push-only and must be idempotent. Keep durable bookkeeping
+inside it; the resident agent records its retained remote history this way.
+
+Once this bookkeeping boundary begins, completing its journal is not cancelled
+by a stop arriving inside the callback. For an unfinished push, a callback or
+completion-write failure leaves the journal available for recovery; it never
+causes an automatic CAS replay. An already completed receipt stays complete if
+a repeated callback fails, and that observer can be retried explicitly. Existing overloads without an observer keep their behavior. An
+observer failure does not authorize replacing a remote reference that changed
+later. See [persistent sessions](doc:transfer-sessions).

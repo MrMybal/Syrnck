@@ -290,7 +290,7 @@ class ResidentAgent(unittest.TestCase):
             (other / "Source/code.cpp").write_bytes(b"remote\n")
             alternate = self.cmd("--workspace", "other", "native", "commit", "-m", "alternate").stdout.decode().strip()
             self.publish(alternate, name="scratch")
-            agent.state("blocked", reason="diverged")
+            agent.state("blocked", reason="remote_history_rewritten")
             self.assertEqual((self.project / "Source/code.cpp").read_bytes(), b"local\n")
             self.assertEqual(json.loads(self.cmd("native", "head").stdout)["revision"], local)
             self.assertTrue(any(name.startswith("remotes/agent-") and key["id"] == alternate
@@ -327,6 +327,18 @@ class ResidentAgent(unittest.TestCase):
             agent.state("synced", local_revision=first)
             self.assertEqual(agent.process.wait(timeout=10), 0)
         self.assertEqual(self.refs(), before)
+
+    def test_completed_legacy_receipt_cannot_recreate_a_deleted_remote_branch(self):
+        first = self.commit("Source/code.cpp", b"published outside resident mode\n")
+        with self.serving(strict=True):
+            self.publish(first, name="scratch")
+        self.assertFalse(any(name.startswith("sync/push/") for name in self.refs()))
+        self.cmd("unpin", "scratch", store=self.server, key=True)
+        with self.serving(strict=True), self.agent("--commits-only", "--max-updates", "1") as agent:
+            blocked = agent.state("blocked", reason="remote_deleted")
+            self.assertEqual(blocked["last_observed_remote"], first)
+            self.assertEqual(agent.process.wait(timeout=10), 2)
+            self.assertNotIn("scratch", self.http("GET", "/v1/refs"))
 
 
 if __name__ == "__main__":

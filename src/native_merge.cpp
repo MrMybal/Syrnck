@@ -5,6 +5,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                                      std::string_view source, const NativeMergeOptions &settings,
                                      bool verify_objects, OperationOptions options) {
   throw_if_cancelled(options.stop);
+  if (settings.checkout_owner) validate_id(*settings.checkout_owner);
   if (settings.text_merge)
     settings.text_merge->validate();
   require(!settings.no_fast_forward || !settings.fast_forward_only, "choose either --no-ff or --ff-only");

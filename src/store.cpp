@@ -61,7 +61,7 @@ static std::string key_check(const Key &key) {
 static void supported_feature(std::string_view feature) {
   require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1" ||
               feature == "materialization-transitions-v1" || feature == "workspace-relocation-v1" ||
-              feature == "authored-revisions-v1", "unsupported required store feature");
+              feature == "authored-revisions-v1" || feature == "resident-sync-v1", "unsupported required store feature");
 }
 Json Store::Impl::load_config() {
   packs.invalidate();

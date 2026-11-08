@@ -5,7 +5,7 @@ description: Repository settings guide.
 section: Storage
 order: 540
 parent: storage
-revision: 6
+revision: 7
 ---
 
 # Repository settings {#repository-settings}
@@ -92,3 +92,9 @@ A saved [native identity](doc:native-authorship#identity) is separate from inges
 preferences. Saving a profile or a v2 revision enables `authored-revisions-v1`
 before writing it; clearing the profile does not downgrade the Store. The profile
 is machine-local and is not copied by logical backups.
+
+The [resident synchronization agent](doc:resident-agent) establishes
+`resident-sync-v1` before publication bookkeeping or an owned checkout. This
+protects retained remote observations and guarded journal v11 recovery. The
+requirement survives completion, GC and logical backup/restore; merely reading an
+ordinary legacy Store does not enable it.

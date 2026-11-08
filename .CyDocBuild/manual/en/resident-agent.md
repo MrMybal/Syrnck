@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 2
+revision: 3
 ---
 
 ## Run continuously {#run}
@@ -34,8 +34,8 @@ publication direction it only publishes existing commits and never changes
 working files. With bidirectional mode, existing histories may still produce
 a merge revision as described below.
 
-Complete unattended folder synchronization, automatic conflict copies, automatic
-recovery of an interrupted checkout, OS service installation and complete
+Complete unattended folder synchronization, automatic conflict copies,
+OS service installation and complete
 Syncthing daemon interoperability remain unfinished. See [current limits](doc:limits).
 
 ## Exchange revisions in both directions {#bidirectional}
@@ -94,8 +94,19 @@ must reconcile first, even when local HEAD has since advanced. A receipt proving
 past success does not authorize overwriting a later remote change. A recorded
 transfer conflict requires explicit resolution; the agent never discards that
 journal automatically. After resolving the underlying history or policy issue,
-the process retries. An incomplete checkout or occupied staging index blocks
-capture and publication until it is completed or cleared.
+the process retries. Bidirectional mode can [resume its own interrupted checkout](doc:native-checkout#owned-recovery)
+offline, without re-signing its frozen target. Manual, other-session and
+publication-only checkouts stay blocked. An occupied staging index blocks capture
+and publication until it is cleared.
+
+The typed `sync/push/SERVICE/observed` reference records the latest confirmed
+remote history before incoming file application and before completing a push
+session. Earlier observations remain under `archive/agent-observation/` roots.
+Deletion or rewind of that observed history is blocked even when a crash happened
+before the acknowledged checkpoint. An initial service can import surviving
+completed native transfer receipts as historical facts. These facts never
+authorize overwriting a later remote change. `resident-sync-v1` gates this state
+before any publication; it remains enabled after cleanup or mode changes.
 
 Offline local edits can still become signed local snapshots. Reconnecting sends
 their missing blocks. Restarting rescans the selected workspace and reuses
@@ -122,10 +133,11 @@ other CLI commands can run between cycles. Scans and network transfers still
 hold its exclusive lock; large transfers can delay other commands.
 
 Standard output contains NDJSON frames only when semantic status changes.
-`state` is `empty`, `pushed`, `pulled`, `synced`, `uncommitted`, `blocked` or `unavailable`.
+`state` is `empty`, `pushed`, `pulled`, `recovered`, `synced`, `uncommitted`, `blocked` or `unavailable`.
 Canonical reason codes distinguish staging, checkout, remote/local rewrites,
 deleted references, concurrent histories and uncertain publications. Frames
 include local/remote revision IDs and the acknowledged baseline when known.
+`last_observed_remote` reports retained knowledge even before that checkpoint.
 `merged: true` identifies an automatically composed local merge; checkout/merge
 reports describe incoming application or blockers when relevant.
 `working_clean: null` means a new audit is required, including immediately after

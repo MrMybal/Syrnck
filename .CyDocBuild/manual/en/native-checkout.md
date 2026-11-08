@@ -5,7 +5,7 @@ description: Recoverable native checkout guide.
 section: Version control
 order: 230
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Recoverable native checkout {#recoverable-native-checkout}
@@ -111,6 +111,36 @@ staged commit and history detachment are blocked. Packing and read-only
 inspection remain available. Generic reference/admin operations are not a
 checkout override: changing a branch or internal retention root can make
 recovery refuse to proceed. Do not edit or replicate the active checkout roots.
+
+## Guarded recovery by a resident agent {#owned-recovery}
+
+The [bidirectional resident agent](doc:resident-agent) marks its incoming checkouts
+and merge checkouts with an explicit owner ID. Journal v11 freezes that owner,
+context and both materialization definitions, with layout 1 or 3 for ordinary or
+namespace application. The owner participates in the immutable transaction ID.
+`resident-sync-v1` is established before durable observations or owned journals;
+older readers reject the Store instead of ignoring the new recovery state.
+Unowned checkout encodings remain unchanged.
+
+```cpp
+store.checkout_directory_owned(project, "main", target, owner_id, operation);
+store.recover_checkout_owned(project, "main", owner_id, operation);
+```
+
+The recovery method checks the owner, selected context, current physical workspace
+and HEAD target before applying anything. The ID is a coordination tag, not an
+authentication credential against a trusted local Store writer. An agent also
+requires its retained remote observation to be an ancestor of the prepared target.
+Another endpoint, workspace or publication-only session leaves it blocked.
+
+Active owned transactions can finish offline without a signing private key: the
+exact incoming or signed merge target is already frozen and retained. Recovery
+does not compose or re-sign a revision. Starting a new signed operation still
+requires the signing identity. Manual or unrelated transactions require the
+ordinary explicit `checkout-recover`; opening a Store alone performs no recovery.
+Completed owned receipts remain inspectable and retained under the same rules
+as other receipts. Backups preserve reader requirements and complete revision
+data, without activating old physical checkout state in a restored directory.
 
 ## Journal, retention and private data {#journal-retention-and-private-data}
 

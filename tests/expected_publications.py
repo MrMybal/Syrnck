@@ -26,6 +26,36 @@ class RaceRepository(journals.JournalRepository):
 class ExpectedPublications(unittest.TestCase):
     setUp = base.NetworkOperations.setUp
     cmd = base.NetworkOperations.cmd
+    probe = base.NetworkOperations.probe
+
+    def test_publication_bookkeeping_precedes_completion_and_resumes_without_cas_replay(self):
+        with base.server(RaceRepository) as remote:
+            self.assertTrue(self.probe(remote, "record-fail")["uncertain"])
+            record, = self.sessions()
+            self.assertEqual(record["state"], "publishing")
+            self.assertEqual(remote.refs["asset"], self.root_key)
+            refs = json.loads(self.cmd("refs").stdout)
+            self.assertEqual(refs["publication-proof"], self.root_key)
+            self.cmd("unpin", self.source_ref)
+            self.cmd("gc", "--delete")
+            resumed = self.probe(remote, "record-resume-stop")
+            self.assertTrue(resumed["stopped"])
+            self.assertEqual(resumed["publication_events"], 1)
+            self.assertTrue(resumed["result"]["reconciled"])
+            self.assertEqual(self.sessions()[0]["state"], "complete")
+            self.assertEqual(remote.calls.count(("PUT", "/v1/refs/asset")), 1)
+            calls, before = list(remote.calls), self.snapshot()
+            self.assertEqual(self.probe(remote, "record-resume")["publication_events"], 1)
+            self.assertEqual(remote.calls, calls)
+            self.assertEqual(self.snapshot(), before)
+
+    def test_stop_during_publication_bookkeeping_finishes_the_committed_boundary(self):
+        with base.server(RaceRepository) as remote:
+            result = self.probe(remote, "record-stop")
+            self.assertTrue(result["stopped"])
+            self.assertEqual(result["publication_events"], 1)
+            self.assertEqual(self.sessions()[0]["state"], "complete")
+            self.assertEqual(remote.refs["asset"], self.root_key)
 
     def snapshot(self):
         return {p.relative_to(self.source).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

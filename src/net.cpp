@@ -109,10 +109,12 @@ void save_failure(const Store &store, TransferSession &session, std::string_view
   } catch (...) {
   }
 }
-Json reconciled(const Store &store, TransferSession &session, const OperationOptions &options) {
+Json reconciled(const Store &store, TransferSession &session, const OperationOptions &options,
+                const PublicationObserver &published = {}) {
   report_progress(options, {ProgressPhase::publishing, session.reference});
+  if (published) published(session.root);
   session.state = "complete";
-  store.write_transfer_session(session, options.stop);
+  store.write_transfer_session(session, published ? std::stop_token{} : options.stop);
   return transfer_result(session, 0, 0, 0, {}, true);
 }
 } // namespace
@@ -232,8 +234,15 @@ Json Remote::push_expected(const Store &store, const ObjectKey &root, std::strin
   return push_impl(store, root, name, std::optional<std::optional<ObjectKey>>{std::in_place, expected},
       std::move(options), std::move(limits));
 }
+Json Remote::push_expected(const Store &store, const ObjectKey &root, std::string_view name,
+    const std::optional<ObjectKey> &expected, OperationOptions options, TransferOptions limits,
+    const PublicationObserver &published) const {
+  return push_impl(store, root, name, std::optional<std::optional<ObjectKey>>{std::in_place, expected},
+      std::move(options), std::move(limits), published);
+}
 Json Remote::push_impl(const Store &store, const ObjectKey &root, std::string_view name,
-    const std::optional<std::optional<ObjectKey>> &expected, OperationOptions options, TransferOptions limits) const {
+    const std::optional<std::optional<ObjectKey>> &expected, OperationOptions options, TransferOptions limits,
+    const PublicationObserver &published) const {
   limits.validate();
   if (expected && *expected) {
     validate_id((*expected)->id);
@@ -262,11 +271,11 @@ Json Remote::push_impl(const Store &store, const ObjectKey &root, std::string_vi
           OperationOptions control) { return request(method, path, body, std::move(control), &limits); });
   if (!fresh) {
     if (protection.receipt())
-      return reconciled(store, session, options);
+      return reconciled(store, session, options, published);
     if (session.state == "publishing" || session.state == "uncertain" || session.state == "conflict") {
       if (actual == root) {
         protection.confirm();
-        return reconciled(store, session, options);
+        return reconciled(store, session, options, published);
       }
       if (session.state != "conflict") {
         save_failure(store, session, "uncertain");
@@ -285,7 +294,7 @@ Json Remote::push_impl(const Store &store, const ObjectKey &root, std::string_vi
     store.write_transfer_session(session, options.stop);
   protection.acquire();
   if (protection.published())
-    return reconciled(store, session, options);
+    return reconciled(store, session, options, published);
   std::size_t sent = 0, reused = 0;
   std::uint64_t total = 0;
   detail::TransferStats stats;
@@ -361,8 +370,9 @@ Json Remote::push_impl(const Store &store, const ObjectKey &root, std::string_vi
     throw PublicationUncertain(
         "remote reference publication outcome is unknown; inspect the remote reference before retrying");
   }
-  session.state = "complete";
   try {
+    if (published) published(root);
+    session.state = "complete";
     store.write_transfer_session(session);
   } catch (...) {
     throw PublicationUncertain(
@@ -454,15 +464,26 @@ Json Remote::pull(const Store &store, const ObjectKey &root, std::string_view na
 }
 Json Remote::resume(const Store &store, std::string_view id, OperationOptions options,
                     TransferOptions limits) const {
+  return resume_impl(store, id, std::move(options), std::move(limits), {});
+}
+Json Remote::resume(const Store &store, std::string_view id, OperationOptions options,
+                    TransferOptions limits, const PublicationObserver &published) const {
+  return resume_impl(store, id, std::move(options), std::move(limits), published);
+}
+Json Remote::resume_impl(const Store &store, std::string_view id, OperationOptions options,
+                         TransferOptions limits, const PublicationObserver &published) const {
   limits.validate();
   throw_if_cancelled(options.stop);
   auto session = store.transfer_session(id);
   require(session.has_value(), "unknown transfer session");
   require(session->endpoint == hash(bytes(base_)), "transfer session belongs to a different endpoint");
-  if (session->state == "complete")
+  require(!published || session->direction == "push", "publication observer is only available for push");
+  if (session->state == "complete") {
+    if (published) published(session->root);
     return transfer_result(*session, 0, 0, 0, {}, true);
+  }
   if (session->direction == "push")
-    return push(store, session->root, session->reference, std::move(options), limits);
+    return push_impl(store, session->root, session->reference, {}, std::move(options), limits, published);
   return pull(store, session->root, session->reference, std::move(options), limits);
 }
 void serve(Store &store, std::string_view token, std::string_view listen, Language language,

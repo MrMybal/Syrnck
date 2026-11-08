@@ -5,7 +5,7 @@ description: Guide : Préférences du dépôt.
 section: Stockage
 order: 540
 parent: storage
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 # Préférences du dépôt {#repository-settings}
@@ -63,3 +63,9 @@ Une [identité native](doc:native-authorship#identity) est distincte des préfé
 d’ingestion. Sauver un profil ou une révision v2 active `authored-revisions-v1`
 avant écriture ; effacer le profil ne rétrograde pas le Store. Le profil reste
 propre à la machine et n’est pas copié par les sauvegardes logiques.
+
+L’[agent résident de synchronisation](doc:resident-agent) établit `resident-sync-v1`
+avant les traces de publication ou un checkout avec propriétaire. Cette exigence
+protège observations distantes conservées et reprise contrôlée du journal v11.
+Elle survit à la fin, au GC et aux sauvegardes/restaurations logiques ; lire un
+Store classique seul ne l’active pas.

@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 11
+revision: 12
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -197,10 +197,17 @@ the record inline, without hidden object dependencies.
 
 ## Required Store features {#required-store-features}
 
+Owned native checkout journal v11 adds a 64-character lowercase hexadecimal
+`owner`, a context and identical source/target materialization definitions. Its
+layout is 1 or 3, covering ordinary or namespace application, including linked,
+partial and detached workspaces. The owner and frozen definitions participate in
+the transaction identity. Unowned layouts retain their existing encodings. See
+[guarded recovery](doc:native-checkout#owned-recovery).
+
 Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
 array of unique supported strings (at most 32). Supported names are
 `authored-revisions-v1`, `linked-workspaces-v1`, `sparse-workspaces-v1`,
-`materialization-transitions-v1` and `workspace-relocation-v1`. Unknown, duplicate, empty or malformed requirements fail
+`materialization-transitions-v1`, `resident-sync-v1` and `workspace-relocation-v1`. Unknown, duplicate, empty or malformed requirements fail
 Store open. The extra field deliberately makes historical strict readers reject
 the configuration before reading objects/references. Base pack/index/envelope
 encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.

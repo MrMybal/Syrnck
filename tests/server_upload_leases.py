@@ -231,7 +231,10 @@ class ServerUploadLeases(unittest.TestCase):
                       "expected": self.root_key}, expected=204)
             refs_path = self.remote_store / "refs.json"
             timestamp = refs_path.stat().st_mtime_ns
-            recovered = self.resume(proxy.url, record["id"])
+            completion = self.probe(proxy, "record-resume")
+            recovered = completion["result"]
+            self.assertEqual(completion["publication_events"], 1)
+            self.assertEqual(json.loads(self.cmd("refs").stdout)["publication-proof"], self.root_key)
             self.assertTrue(recovered["reconciled"])
             self.assertEqual(proxy.calls.count(("PUT", "/v1/refs/asset")), 1)
             self.assertEqual(refs_path.stat().st_mtime_ns, timestamp)
