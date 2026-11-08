@@ -140,7 +140,7 @@ Le code original de Syrnck utilise la [licence MIT](LICENSE). Copyright © 2026 
 | --- | --- | --- |
 | [BLAKE3 C · 1.8.7](https://github.com/BLAKE3-team/BLAKE3) | [Apache-2.0](third_party/blake3/LICENSE_A2) / [CC0](third_party/blake3/LICENSE_CC0) ; [exception LLVM](third_party/blake3/LICENSE_A2LLVM) | Hashes de contenu et IDs d’objets natifs. |
 | [FastCDC 2020 · port depuis 5.0.0](https://crates.io/crates/fastcdc/5.0.0) | [MIT](third_party/fastcdc/LICENSE) | Découpage natif dépendant du contenu. |
-| [Monocypher · 4.0.2](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Chiffrement authentifié natif au repos. |
+| [Monocypher · 4.0.3](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Chiffrement authentifié au repos et signatures Ed25519 (API C++). |
 | [nlohmann/json · 3.12.0](https://github.com/nlohmann/json/tree/v3.12.0) | [MIT](third_party/nlohmann/LICENSE.MIT) | Manifestes, révisions et métadonnées natifs. |
 | [cpp-httplib · 0.28.0](https://github.com/yhirose/cpp-httplib/tree/v0.28.0) | [MIT](third_party/httplib/LICENSE) | Serveur HTTP ; composant réseau. |
 | [utf8proc · 2.10.0](https://github.com/JuliaStrings/utf8proc/tree/v2.10.0) | [MIT et conditions des données Unicode](third_party/utf8proc/LICENSE.md) | Normalisation des chemins et détection des collisions portables. |

@@ -140,7 +140,7 @@ Syrnck’s original code uses the [MIT license](LICENSE). Copyright © 2026 MrMy
 | --- | --- | --- |
 | [BLAKE3 C · 1.8.7](https://github.com/BLAKE3-team/BLAKE3) | [Apache-2.0](third_party/blake3/LICENSE_A2) / [CC0](third_party/blake3/LICENSE_CC0); [LLVM exception](third_party/blake3/LICENSE_A2LLVM) | Native content hashes and object IDs. |
 | [FastCDC 2020 · port from 5.0.0](https://crates.io/crates/fastcdc/5.0.0) | [MIT](third_party/fastcdc/LICENSE) | Native content-defined chunking. |
-| [Monocypher · 4.0.2](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Native authenticated encryption at rest. |
+| [Monocypher · 4.0.3](https://monocypher.org/) | [BSD-2-Clause / CC0](third_party/monocypher/LICENCE.md) | Native authenticated encryption at rest and Ed25519 signatures (C++ API). |
 | [nlohmann/json · 3.12.0](https://github.com/nlohmann/json/tree/v3.12.0) | [MIT](third_party/nlohmann/LICENSE.MIT) | Native manifests, revisions and metadata. |
 | [cpp-httplib · 0.28.0](https://github.com/yhirose/cpp-httplib/tree/v0.28.0) | [MIT](third_party/httplib/LICENSE) | HTTP server; network component. |
 | [utf8proc · 2.10.0](https://github.com/JuliaStrings/utf8proc/tree/v2.10.0) | [MIT and Unicode data terms](third_party/utf8proc/LICENSE.md) | Portable path normalization and collision checks. |

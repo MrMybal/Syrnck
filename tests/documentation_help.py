@@ -42,6 +42,8 @@ class DocumentationHelp(unittest.TestCase):
             self.assertTrue(self.run_cli("help", "native", command, "--print-url").stdout.strip().endswith("#/en/native-workspaces"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "workspace-restore", "--print-url").stdout.strip().endswith("#/fr/native-workspaces/restore"))
         for language in ("en", "fr"):
+            self.assertTrue(self.run_cli("--lang", language, "help", "signing", "--print-url")
+                            .stdout.strip().endswith(f"#/{language}/signing-api"))
             self.assertTrue(self.run_cli("--lang", language, "help", "native", "materialization", "--print-url")
                             .stdout.strip().endswith(f"#/{language}/native-workspaces/partial"))
             for command, section in (("workspace-unregister-plan", "unregister"), ("workspace-unregister", "unregister"),

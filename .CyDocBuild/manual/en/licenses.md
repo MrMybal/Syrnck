@@ -4,7 +4,7 @@ title: License and third-party notices
 description: License and third-party notices
 section: Syrnck
 order: 999
-revision: 1
+revision: 2
 ---
 
 ## Syrnck license {#license}
@@ -46,7 +46,7 @@ The local reader uses CyDoc 0.1.0 (MIT), marked (MIT) and Prism (MIT); esbuild (
 | --- | --- | --- | --- |
 | BLAKE3 C implementation | 1.8.7 | `c/` of the official blake3 1.8.7 crate, matching the Rust prototype's hash implementation | Apache-2.0 / CC0; LLVM exception where applicable, included in `third_party/blake3/LICENSE_*` |
 | FastCDC 2020 port and gear/mask tables | fastcdc 5.0.0, normalization 1, seed 0 | Nathan Fiedler's fastcdc crate, `v2020::cut_gear` and tables | MIT; `third_party/fastcdc/LICENSE` |
-| Monocypher | 4.0.2 | [Official download](https://monocypher.org/download/monocypher-4.0.2.tar.gz), `src/monocypher.c`, `src/monocypher.h` | BSD-2-Clause / CC0; included `LICENCE.md` |
+| Monocypher | 4.0.3 | [Official download](https://monocypher.org/download/monocypher-4.0.3.tar.gz), `src/monocypher.c`, `src/monocypher.h`, optional `monocypher-ed25519.c` / `.h` | BSD-2-Clause / CC0; included `LICENCE.md` |
 | nlohmann/json | 3.12.0 | [Official release](https://github.com/nlohmann/json/releases/tag/v3.12.0), single-header distribution | MIT; included `LICENSE.MIT` |
 | cpp-httplib | 0.28.0 | [Official repository](https://github.com/yhirose/cpp-httplib/tree/v0.28.0), HTTP server only | MIT; included `LICENSE` |
 | utf8proc | 2.10.0 | [Official repository](https://github.com/JuliaStrings/utf8proc/tree/v2.10.0) | MIT and Unicode data terms; included `LICENSE.md` |

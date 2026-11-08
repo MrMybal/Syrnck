@@ -1228,6 +1228,8 @@
   "serve": "server-access",
   "server-read-leases#validation": "server-read-leases",
   "settings": "settings",
+  "signing": "signing-api",
+  "api signing": "signing-api",
   "syncthing#interoperability-evidence": "syncthing",
   "token-hash": "server-access",
   "transfer-sessions#validation": "transfer-sessions",
