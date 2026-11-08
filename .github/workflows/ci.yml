@@ -35,12 +35,16 @@ jobs:
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Fetch verified dependency archives
         run: python scripts/fetch_dependencies.py
+      - name: Build pinned Syncthing reference daemon
+        run: python scripts/build_syncthing_reference.py --download
       - name: Configure
-        run: python scripts/build.py configure
+        run: python scripts/build.py configure -DSYRNCK_TEST_SYNCTHING=ON
       - name: Build
         run: python scripts/build.py build
       - name: Test
         run: python scripts/build.py test --parallel 4
+        env:
+          SYRNCK_SYNCTHING_BINARY: ${{ github.workspace }}/build/qualification/syncthing${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: Install distribution
         run: cmake --install build --config Release --prefix dist
       - uses: actions/upload-artifact@v4

@@ -35,7 +35,7 @@ Deux parcours utilisent ce moteur. **L’intégration Git** garde l’historique
 
 L’agent résident `syrnck agent run` surveille les fichiers sélectionnés, capture des snapshots natifs et reprend les publications protégées après des modifications hors ligne. Il conserve le contenu des workspaces partiels. `--bidirectional` applique les révisions entrantes sur un workspace propre et fusionne les historiques concurrents compatibles ; `--conflict-copies` conserve facultativement les versions concurrentes d’assets dans des copies voisines déterministes et suivies. Conflits de structure non résolus, suppressions et reculs distants déjà observés sont bloqués. Ses transactions contrôlées reprennent hors ligne sans signer à nouveau les cibles préparées. Le service de dossiers entièrement autonome reste à terminer.
 
-Le moteur s’intègre en C++20. L’ABI C et le binding Go exposent stockage vérifié, plages, plans de réutilisation et observation du workspace. L’adaptateur Go Syncthing optionnel relie les blocs BEP de fichiers ordinaires ; la synchronisation complète de daemons/dossiers reste distincte. Le moteur ne dépend pas du runtime Unreal et traite les assets comme des octets de fichiers ordinaires.
+Le moteur s’intègre en C++20. L’ABI C et le binding Go exposent stockage vérifié, plages, plans de réutilisation et observation du workspace. L’adaptateur Go Syncthing optionnel échange les blocs BEP de fichiers ordinaires par connexions TLS à appareils épinglés, vérifiées contre le daemon amont réel ; la synchronisation autonome et persistante des dossiers reste à terminer. Le moteur ne dépend pas du runtime Unreal et traite les assets comme des octets de fichiers ordinaires.
 
 <a id="quick-start"></a>
 

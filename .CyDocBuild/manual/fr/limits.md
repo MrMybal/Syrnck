@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 15
+sourceRevision: 16
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -17,7 +17,7 @@ Les renommages de contenu exact sont reconnus, mais renommages avec édition/cop
 
 Les serveurs configurés fournissent utilisateurs/rôles, contrôles de branches et baux d’assets expirables. Transfert de l’historique natif et publication des catalogues Git restent distincts d’une transaction distribuée multi-serveur. L’[agent résident de publication](doc:resident-agent) capture changements, suppressions et renommages exacts locaux, garde des snapshots hors ligne et reprend les publications natives protégées. Le mode bidirectionnel facultatif applique les descendants entrants par checkout récupérable et fusionne les historiques concurrents compatibles. Conflits non résolus, suppressions/reculs distants reconnus et réécritures locales sont bloqués. L’agent reprend uniquement ses transactions de checkout/fusion contrôlées, y compris hors ligne pour une cible signée préparée sans clé privée. La reprise manuelle ou étrangère reste explicite. La [politique explicite de copies de conflit](doc:resident-agent#conflict-copies) conserve les contenus concurrents ; les collisions de structure bloquent toujours. L’installation comme service système reste à terminer.
 
-L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers ordinaires. Base de données, découverte, association d’appareils, vecteurs de versions, copies conflictuelles et synchronisation complète de dossiers relèvent de l’application hôte ou de travaux futurs.
+L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers ordinaires et [connexions à appareils épinglés](doc:syncthing#device-connections). Un daemon amont réel vérifie les transferts différentiels dans les deux sens. Intégration de base de données, découverte, interface d’appairage, vecteurs persistants, tombstones du workspace et synchronisation complète des dossiers restent à implémenter.
 
 ## Sécurité, rétention et récupération {#security}
 

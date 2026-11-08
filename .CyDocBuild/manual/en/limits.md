@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 15
+revision: 16
 ---
 
 ## Workspace and versioning {#workspace}
@@ -17,7 +17,7 @@ Exact-content renames are recognized, while edited renames/copies, their merge/r
 
 Configured servers provide users/roles, branch checks and expiring asset leases. Native history transfer and Git catalog publication remain separate from a distributed multi-server transaction. The [resident publication agent](doc:resident-agent) captures local edits, deletions and exact renames, retains offline snapshots and retries guarded native pushes. The optional bidirectional mode applies incoming descendants through recoverable checkout and merges compatible concurrent histories. Unresolved conflicts, acknowledged remote deletions/rewinds and rewritten local history are blocked. The agent resumes only its own guarded checkout/merge transactions, including offline recovery of prepared signed targets without a private signing key. Manual or unrelated recovery stays explicit. The explicit [conflict-copy policy](doc:resident-agent#conflict-copies) preserves concurrent file contents; namespace collisions still block. OS service installation remains unfinished.
 
-The Syncthing adapter handles regular-file block indexes/requests/responses. Database integration, discovery, device pairing, version vectors, conflict copies and complete folder synchronization belong to the embedding application or future work.
+The Syncthing adapter handles regular-file block indexes/requests/responses and [pinned device connections](doc:syncthing#device-connections). A real upstream daemon is tested for differential transfers in both directions. Database integration, discovery, a pairing UI, persistent version vectors, workspace tombstones and complete folder synchronization still require implementation.
 
 ## Security, retention and recovery {#security}
 

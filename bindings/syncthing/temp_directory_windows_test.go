@@ -3,10 +3,15 @@ package syncthing
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func hideReferenceProcess(command *exec.Cmd) {
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+}
 
 func tempDirectory(t testing.TB) string {
 	t.Helper()

@@ -23,3 +23,9 @@ Run `syrnck help syncthing` to open installed help. / Pour ouvrir l’aide insta
 ## Interoperability evidence
 
 [English](../../Documentation/Documentation.html#/en/syncthing) · [Français](../../Documentation/Documentation.html#/fr/syncthing)
+
+## Device connections and reference daemon
+
+[English](../../Documentation/Documentation.html#/en/syncthing/device-connections) · [Français](../../Documentation/Documentation.html#/fr/syncthing/device-connections)
+
+Build the pinned test daemon with `python scripts/build_syncthing_reference.py --download`, then set `SYRNCK_SYNCTHING_BINARY` to its absolute path before running the adapter tests. / Compiler le daemon de test figé puis définir son chemin absolu avant les tests.

@@ -5,14 +5,14 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
 
 Ce module Go optionnel relie le C++ au modèle de blocs BEP via la bibliothèque Syncthing non modifiée **v2.1.7**, commit `d6d0181f7d46`, pseudo-version figée dans go.mod/go.sum. Le binding cœur reste séparé, sans dépendances Go externes. Le module demande Go 1.26.2+.
 
-Il gère les données des fichiers ordinaires. Daemon résident, exécutable Syncthing interchangeable, base de données, découverte, appairage, vecteurs de versions, suppressions, renommages et politique de copies conflictuelles restent à la charge de l’application intégratrice.
+Il gère les fichiers ordinaires et les connexions authentifiées entre appareils explicitement associés. Daemon résident, remplacement de l’exécutable Syncthing, base de données, découverte, interface d’appairage, réconciliation persistante des vecteurs de versions, suppressions/renommages du workspace et politique de conflits restent à la charge de l’application intégratrice.
 
 ## Bibliothèque native et dépendances {#build-and-test}
 
@@ -43,6 +43,86 @@ result, err := syncthing.Fetch(ctx, destination, "project", incomingInfo,
 // Check err before using result.Manifest or publishing a workspace revision.
 ```
 
+
+## Authentifier une connexion d’appareil {#device-connections}
+
+`OpenDeviceConnection(ctx,stream,DeviceOptions,model)` prend possession d’un
+`net.Conn` connecté et non chiffré, y compris en cas d’échec. Fournir un certificat
+TLS local unique, sa clé privée `crypto.Signer` correspondante et le
+`protocol.DeviceID` du pair explicitement associé. `Server: true` sélectionne le
+côté acceptant. Auto-connexion, identités vides/réservées, clés malformées et
+discordance certificat/clé sont refusées. Ne modifier ni certificat ni clé en cours d’utilisation.
+
+TLS 1.3 ou ultérieur et ALPN `bep/1.0` sont exigés. Le Hello amont borné est
+échangé avant de rejeter un pair non associé, puis l’identité SHA-256 de son
+unique certificat est comparée exactement. C’est un épinglage de certificat :
+DNS, CA Web PKI, expiration, découverte et nom Hello n’accordent pas l’accès.
+`PeerHello` contient des descriptions non fiables. Aucun modèle applicatif
+n’est attaché avant la vérification réussie.
+
+```go
+session, err := syncthing.OpenDeviceConnection(ctx, stream, syncthing.DeviceOptions{
+    Certificate: deviceCertificate,
+    RemoteDevice: pairedDeviceID,
+    Hello: protocol.Hello{DeviceName: "Asset workstation"},
+}, folderModel)
+// Traiter err avant utilisation. Démarrage explicite, puis ClusterConfig comme
+// premier message après authentification. Le modèle autorise chaque dossier.
+session.Start()
+session.ClusterConfig(clusterConfig, nil)
+// Envoyer un Index complet avant les mises à jour, sauf accord persistant
+// d’index delta. Fetch peut utiliser session.Request pour les blocs vérifiés.
+```
+
+`HandshakeTimeout` vaut 20 secondes par défaut et accepte de 100 ms à une minute.
+Il couvre TLS et Hello ; une échéance du contexte plus proche l’emporte. La
+compression des métadonnées amont est le défaut ; Never/Always sont acceptés.
+Le contexte contrôle toute la session, même authentifiée mais pas encore démarrée.
+`Close(reason)` libère le flux ; attendre le callback `Closed` du modèle avant
+de fermer les handles natifs qu’utilisent ses callbacks. Les métadonnées de
+connexion gardent une date d’établissement et un ID de session stables.
+
+L’application fournit stockage/rotation des certificats, Device ID de confiance,
+planification, état persistant des dossiers/index, vecteurs de versions,
+tombstones et résolution des conflits. Le chiffrement du transport protège et
+authentifie ce pair ; un daemon recevant des données ordinaires ne devient pas
+une sauvegarde chiffrée non fiable. Le parcours complet de chiffrement vers un
+appareil non fiable reste à intégrer.
+
+## Vérifier avec le daemon de référence {#reference-daemon}
+
+```text
+python scripts/build_syncthing_reference.py --download
+```
+
+Ce helper de test facultatif compile `cmd/syncthing` à la version exacte du module
+de l’adaptateur avec les manifests figés `tests/syncthing-reference/go.mod` et
+`go.sum`. Le tag amont `noassets` omet les ressources d’interface web et conserve
+daemon réel, base de données, scanner, modèle, puller et API REST. La sortie est
+`build/qualification/syncthing` (`.exe` sous Windows). Sans `--download`, le cache
+de modules doit être prêt : aucun téléchargement implicite. La version amont
+embarquée est contrôlée ; version différente ou manifests modifiés sont refusés.
+
+Définir `SYRNCK_SYNCTHING_BINARY` avec son chemin absolu puis exécuter :
+
+```text
+python scripts/test_go.py --library build/Release/syrnck_ffi.dll --module syncthing --check-pointers
+```
+
+Sous Linux/macOS, fournir le chemin de la bibliothèque partagée construite. La
+CI des trois plateformes active explicitement l’adaptateur et ce test. Le daemon
+utilise configuration, clés et dossier neufs propres au test, écoute uniquement
+en loopback, désactive découverte/relais/NAT/mises à jour/rapports et est terminé
+après le test. Aucun profil Syncthing installé n’est lu ou modifié.
+
+La vérification locale Windows a exercé les deux sens contre le daemon amont
+non modifié : un asset de 384 Kio à blocs déplacés/réutilisés transfère uniquement
+le bloc absent de 128 Kio dans chaque sens. La reconstruction dans un stockage
+Syrnck chiffré vérifie le fichier complet. Les annonces réelles de renommage et
+tombstone ont aussi été reçues. Cela prouve transport et interopérabilité des
+fichiers ordinaires ; le service autonome et persistant de dossiers reste à faire.
+Sans binaire explicite, ce test annonce qu’il est ignoré ; les tests ordinaires
+de l’adaptateur continuent de s’exécuter.
 
 ## Reprise et annulation {#resume-and-cancellation}
 

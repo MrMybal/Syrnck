@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 1
+revision: 2
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -16,10 +16,11 @@ It depends on the unmodified Syncthing library at **v2.1.7**, commit
 The core Go binding remains a separate module without external Go dependencies.
 This module requires Go 1.26.2 or later; local validation used Go 1.27.3.
 
-The adapter supports regular file data. It is not a resident synchronization
-daemon, a drop-in Syncthing executable or an implementation of its database,
-discovery, device pairing, version-vector reconciliation, deletions, renames or
-conflict-copy policy. The embedding application owns those decisions.
+The adapter supports regular file data and explicitly paired, authenticated
+device connections. It is not a resident synchronization daemon, a drop-in
+Syncthing executable or an implementation of its database, discovery, pairing UI,
+durable version-vector reconciliation, workspace deletions/renames or conflict
+policy. The embedding application still owns those folder decisions.
 
 ## Native library and dependencies {#build-and-test}
 
@@ -78,6 +79,85 @@ branch reference.
 for targeted whole-file validation, including chunks, sizes and `file_hash`.
 They write no destination or reference and stream through bounded native chunk
 buffers. This binding requires a rebuilt native library exporting that symbol.
+
+## Authenticate a device connection {#device-connections}
+
+`OpenDeviceConnection(ctx, stream, DeviceOptions, model)` takes ownership of an
+unsecured connected `net.Conn`, including on failure. Supply one local TLS leaf
+certificate with its matching `crypto.Signer` private key and the explicitly
+paired peer's `protocol.DeviceID`. `Server: true` selects the accepting side.
+Self connections, empty/sentinel identities, malformed keys and certificate/key
+mismatches are rejected. Do not mutate the certificate or key while in use.
+
+The connection requires TLS 1.3 or later and `bep/1.0` ALPN. It exchanges the
+bounded upstream Hello before rejecting an unpaired peer, then verifies the
+SHA-256 identity of the exact single peer certificate. This is certificate
+pinning: DNS, a Web PKI CA, certificate expiry, discovery and Hello names do not
+grant membership. `PeerHello` contains untrusted descriptive information.
+No application model is attached until verification succeeds.
+
+```go
+session, err := syncthing.OpenDeviceConnection(ctx, stream, syncthing.DeviceOptions{
+    Certificate: deviceCertificate,
+    RemoteDevice: pairedDeviceID,
+    Hello: protocol.Hello{DeviceName: "Asset workstation"},
+}, folderModel)
+// Handle err before use. Start is explicit; ClusterConfig must be the first
+// post-authentication message. The model must authorize every shared folder.
+session.Start()
+session.ClusterConfig(clusterConfig, nil)
+// Send a full Index before updates, unless a persisted delta-index agreement
+// permits otherwise. Fetch can use session.Request for verified block data.
+```
+
+`HandshakeTimeout` defaults to 20 seconds and accepts 100 ms through one minute.
+It covers TLS and Hello; an earlier context deadline wins. Compression defaults
+to the reference metadata policy; Never/Always are also accepted. The context
+controls the complete session lifetime, including an authenticated session that
+has not been started. `Close(reason)` releases the stream; wait for the model's
+`Closed` callback before closing native Store handles used by its callbacks.
+The connection metadata contains a stable establishment time and session ID.
+
+The application supplies certificate storage/rotation, the trusted Device ID,
+scheduling, persistent folder/index state, version vectors, tombstones and
+conflict handling. Transport encryption authenticates and protects this peer
+connection; it does not make an ordinary receiving daemon an untrusted encrypted
+backup. The complete untrusted-device encryption workflow remains to be integrated.
+
+## Qualify against the reference daemon {#reference-daemon}
+
+```text
+python scripts/build_syncthing_reference.py --download
+```
+
+This optional test helper compiles `cmd/syncthing` from the exact adapter module
+version using the checked-in `tests/syncthing-reference/go.mod` and `go.sum`.
+It uses the upstream `noassets` build tag, which omits the web UI assets while
+retaining the real daemon, database, scanner, model, puller and REST API.
+The output is `build/qualification/syncthing` (`.exe` on Windows). Without
+`--download`, the helper requires a prepared module cache and makes no implicit
+module download. It verifies the executable's embedded upstream module version
+and refuses adapter/reference version mismatches or modified manifests.
+
+Set `SYRNCK_SYNCTHING_BINARY` to that executable's absolute path and run:
+
+```text
+python scripts/test_go.py --library build/Release/syrnck_ffi.dll --module syncthing --check-pointers
+```
+
+On Linux/macOS provide the built shared library path instead. The three-platform
+CI enables the adapter and this reference test explicitly. The reference daemon
+test uses fresh test-owned configuration, keys and folder storage, binds only
+loopback, disables discovery/relays/NAT/upgrades/reporting and terminates its
+process after the test. It never reads or changes an installed Syncthing profile.
+
+Local Windows verification exercised both directions against the unmodified
+upstream daemon: a 384 KiB asset with moved/reused blocks transferred one missing
+128 KiB block in each direction. Reconstruction into encrypted Syrnck storage
+verified the resulting complete file. Real daemon rename/tombstone announcements
+were also received. This proves transport and regular-file interoperability;
+it does not establish a durable, autonomous folder service. Without the explicit
+binary, the real-daemon test reports a skip; ordinary adapter tests still run.
 
 ## Resume and cancellation {#resume-and-cancellation}
 

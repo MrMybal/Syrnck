@@ -2,7 +2,12 @@
 
 package syncthing
 
-import "testing"
+import (
+	"os/exec"
+	"testing"
+)
+
+func hideReferenceProcess(*exec.Cmd) {}
 
 func tempDirectory(t testing.TB) string {
 	t.Helper()

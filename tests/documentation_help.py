@@ -41,6 +41,8 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("help", "agent", "run", "--section", "bidirectional", "--print-url").stdout.strip().endswith("#/en/resident-agent/bidirectional"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "agent", "run", "--section", "conflict-copies", "--print-url").stdout.strip().endswith("#/fr/resident-agent/conflict-copies"))
         self.assertTrue(self.run_cli("help", "native", "merge", "--section", "conflict-copies", "--print-url").stdout.strip().endswith("#/en/native-merge/conflict-copies"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "syncthing", "--section", "device-connections", "--print-url").stdout.strip().endswith("#/fr/syncthing/device-connections"))
+        self.assertTrue(self.run_cli("help", "syncthing", "--section", "reference-daemon", "--print-url").stdout.strip().endswith("#/en/syncthing/reference-daemon"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "checkout", "--section", "owned-recovery", "--print-url").stdout.strip().endswith("#/fr/native-checkout/owned-recovery"))
         self.assertTrue(self.run_cli("help", "agent", "push", "--section", "publication-bookkeeping", "--print-url").stdout.strip().endswith("#/en/transfers/publication-bookkeeping"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "agent", "run", "--section", "recovery", "--print-url").stdout.strip().endswith("#/fr/resident-agent/recovery"))
