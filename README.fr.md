@@ -103,6 +103,12 @@ cd Syrnck
 
 ### Compiler et installer
 
+Préchargement facultatif : `python scripts/fetch_dependencies.py` reprend les
+erreurs de téléchargement transitoires et vérifie les empreintes SHA-256 partagées
+avec CMake dans `cmake/dependencies.json`. Les archives vérifiées sous
+`.tools/downloads` sont réutilisées sans réseau ; une archive en cache invalide
+est refusée. Utiliser `--core-only` pour préparer seulement la bibliothèque de stockage.
+
 ```text
 python scripts/build.py configure
 python scripts/build.py build

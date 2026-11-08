@@ -136,6 +136,9 @@ if(SYRNCK_BUILD_TESTS)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
   add_test(NAME crash_shard_selection COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_shard_tests.py)
+  add_test(NAME dependency_downloads COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dependency_downloads.py)
+  set_tests_properties(dependency_downloads PROPERTIES TIMEOUT 30)
   if(SYRNCK_BUILD_DOCUMENTATION)
     add_test(NAME documentation COMMAND "${SYRNCK_NODE_EXECUTABLE}" --test
       "${SYRNCK_DOC_WORKSPACE}/tests/manual.test.mjs")

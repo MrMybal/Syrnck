@@ -103,6 +103,12 @@ cd Syrnck
 
 ### Build and install
 
+Optional archive prefetch: `python scripts/fetch_dependencies.py` retries transient
+download failures and verifies the SHA-256 pins shared with CMake in
+`cmake/dependencies.json`. Verified archives in `.tools/downloads` are reused
+without network access; an invalid cached archive is refused. Use `--core-only`
+when preparing only the storage library.
+
 ```text
 python scripts/build.py configure
 python scripts/build.py build
