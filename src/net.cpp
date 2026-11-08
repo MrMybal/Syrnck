@@ -222,6 +222,7 @@ void ServeOptions::validate() const {
   if (access)
     (void)detail::ServerAccess(*access);
 }
+std::string Remote::endpoint_fingerprint() const { return hash(bytes(base_)); }
 Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
   return push_impl(store, root, name, {}, std::move(options), std::move(limits));

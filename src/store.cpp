@@ -621,6 +621,14 @@ void Store::clear_native_identity() {
   require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
   impl_->native_signer.reset(); impl_->native_identity.reset();
 }
+std::optional<NativeIdentityContext> Store::take_native_identity() {
+  require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
+  if (!impl_->native_identity) return {};
+  std::optional<NativeIdentityContext> result{NativeIdentityContext{
+      std::move(*impl_->native_identity), std::move(impl_->native_signer)}};
+  impl_->native_signer.reset(); impl_->native_identity.reset();
+  return result;
+}
 Json Store::native_identity() const {
   if (!impl_->native_identity) return {};
   const auto &identity = *impl_->native_identity;

@@ -517,6 +517,7 @@ public:
   // Identity changes are refused from progress callbacks.
   void use_native_identity(NativeIdentity, std::optional<SigningKey> = {});
   void clear_native_identity();
+  std::optional<NativeIdentityContext> take_native_identity();
   Json native_identity() const;
   // No override means a fresh author. An engaged null preserves an unknown
   // legacy author during rewriting; an engaged stamp preserves that author.

@@ -519,6 +519,7 @@
   "agent pull": "transfers",
   "agent push": "transfers",
   "agent resume": "transfer-sessions",
+  "agent run": "resident-agent",
   "agent sessions": "transfer-sessions",
   "architecture#fichiers-et-révisions": "architecture#fichiers-et-revisions",
   "architecture#intégrité-et-limites-actuelles": "architecture#integrite-et-limites-actuelles",

@@ -37,6 +37,8 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("help", "--print-url").stdout.strip().endswith("#/en/overview"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "tags", "--print-url").stdout.strip().endswith("#/fr/native-tags"))
         self.assertTrue(self.run_cli("help", "native", "switch", "--detach", "--print-url").stdout.strip().endswith("#/en/native-detached"))
+        self.assertTrue(self.run_cli("help", "agent", "run", "--print-url").stdout.strip().endswith("#/en/resident-agent"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "agent", "run", "--section", "recovery", "--print-url").stdout.strip().endswith("#/fr/resident-agent/recovery"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "switch-plan", "--detach", "--print-url").stdout.strip().endswith("#/fr/native-detached/recovery"))
         for command in ("workspaces", "workspace-add"):
             self.assertTrue(self.run_cli("help", "native", command, "--print-url").stdout.strip().endswith("#/en/native-workspaces"))

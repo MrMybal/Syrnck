@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 11
+sourceRevision: 12
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -15,7 +15,7 @@ Les renommages de contenu exact sont reconnus, mais renommages avec édition/cop
 
 ## Équipe et synchronisation continue {#sync}
 
-Les serveurs configurés fournissent utilisateurs/rôles, contrôles de branches et baux d’assets expirables. Transfert de l’historique natif et publication des catalogues Git restent distincts d’une transaction distribuée multi-serveur. L’agent de transfert est ponctuel. La surveillance locale ne constitue pas un service résident complet avec propagation des suppressions/renommages, conflits hors ligne et réconciliation causale.
+Les serveurs configurés fournissent utilisateurs/rôles, contrôles de branches et baux d’assets expirables. Transfert de l’historique natif et publication des catalogues Git restent distincts d’une transaction distribuée multi-serveur. L’[agent résident de publication](doc:resident-agent) capture changements, suppressions et renommages exacts locaux, garde des snapshots hors ligne et reprend les publications natives protégées. Il bloque descendants distants, historiques divergents, suppressions/reculs distants reconnus et réécritures locales. Réconciliation bidirectionnelle complète, copies conflictuelles automatiques et installation comme service système restent à terminer.
 
 L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers ordinaires. Base de données, découverte, association d’appareils, vecteurs de versions, copies conflictuelles et synchronisation complète de dossiers relèvent de l’application hôte ou de travaux futurs.
 

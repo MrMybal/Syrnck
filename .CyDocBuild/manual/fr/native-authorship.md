@@ -5,7 +5,7 @@ description: Auteur d’origine, committer actuel et signatures Ed25519 facultat
 section: Versionnage
 order: 305
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Configurer une identité {#identity}
@@ -57,7 +57,13 @@ store.clear_native_identity();
 
 Le Store possède exclusivement la clé déplacée. La bibliothèque ne lit pas
 automatiquement profil CLI ou environnement. `native_identity()` expose profil
-et clé publics ; aucun export de clé privée. Voir la
+et clé publics ; aucun export de clé privée.
+`take_native_identity()` détache un `NativeIdentityContext` déplaçable contenant
+profil et éventuelle clé. Déplacer les deux vers le Store suivant avec
+`use_native_identity()` avant de libérer le contexte. Un processus résident peut
+ainsi utiliser des handles verrouillés courts sans copier ni exporter la graine.
+L’ancien handle devient non configuré ; prendre un contexte vide renvoie null.
+Changer ou détacher l’identité dans un callback de progression est refusé. Voir la
 [primitive de signature](doc:signing-api) pour propriété des graines et vérification.
 
 ## Règles d’auteur et de committer {#rewrites}

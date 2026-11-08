@@ -4,7 +4,7 @@ title: Syrnck
 description: Syrnck
 section: Syrnck
 order: 0
-revision: 1
+revision: 2
 ---
 
 ## Choose your workflow {#getting-started}
@@ -17,7 +17,7 @@ Start with the [walkthrough](doc:usage), then choose [Git assets](doc:git-assets
 
 Git keeps ordinary text/code history, branches, review, merge and other Git features; Syrnck filters store selected assets as pointers. Hosting Git pointers on GitHub/GitLab does not provide a Syrnck block server. A separate block store/server is required for shared asset data.
 
-The standalone engine has commits, frozen staging, branches, tags, recoverable checkout, merge, linear/interactive rebase, cherry-pick, revert, squash, reset, stash, exact rename history and bisect. Each command's guide states its conflict and publication rules. [Transfers](doc:transfers) publish only complete verified object closures. [Permissions and asset leases](doc:server-access) control configured servers.
+The standalone engine has commits, frozen staging, branches, tags, recoverable checkout, merge, linear/interactive rebase, cherry-pick, revert, squash, reset, stash, exact rename history and bisect. Each command's guide states its conflict and publication rules. [Transfers](doc:transfers) publish only complete verified object closures. The [resident publication agent](doc:resident-agent) watches local changes and retries native pushes, including after offline edits. [Permissions and asset leases](doc:server-access) control configured servers.
 
 The [C++/C/Go integrations](doc:integrations) include a regular-file [Syncthing BEP adapter](doc:syncthing). It is not a resident Syncthing daemon. There is no Unreal plugin; the engine stores ordinary asset bytes without interpreting Unreal objects.
 

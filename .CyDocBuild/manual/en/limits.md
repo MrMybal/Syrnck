@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 11
+revision: 12
 ---
 
 ## Workspace and versioning {#workspace}
@@ -15,7 +15,7 @@ Exact-content renames are recognized, while edited renames/copies, their merge/r
 
 ## Team operation and continuous synchronization {#sync}
 
-Configured servers provide users/roles, branch checks and expiring asset leases. Native history transfer and Git catalog publication remain separate from a distributed multi-server transaction. The transfer agent is one-shot. Workspace watch observes local changes; it is not a complete resident synchronization service with deletion/rename propagation, offline conflict recovery or causal version reconciliation.
+Configured servers provide users/roles, branch checks and expiring asset leases. Native history transfer and Git catalog publication remain separate from a distributed multi-server transaction. The [resident publication agent](doc:resident-agent) captures local edits, deletions and exact renames, retains offline snapshots and retries guarded native pushes. It blocks remote descendants, divergent histories, acknowledged remote deletions/rewinds and rewritten local history. Full bidirectional reconciliation, automatic conflict copies and OS service installation remain unfinished.
 
 The Syncthing adapter handles regular-file block indexes/requests/responses. Database integration, discovery, device pairing, version vectors, conflict copies and complete folder synchronization belong to the embedding application or future work.
 

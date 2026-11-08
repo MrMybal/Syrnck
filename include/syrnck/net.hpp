@@ -41,6 +41,7 @@ void serve(Store &, std::string_view token, std::string_view listen = "127.0.0.1
 class Remote {
 public:
   Remote(std::string url, std::string token, std::optional<fs::path> ca = {});
+  std::string endpoint_fingerprint() const;
   Refs refs(OperationOptions = {}, TransferOptions = {}) const;
   Json identity(OperationOptions = {}) const;
   Json locks(std::string_view action, const Json &request = Json::object(), OperationOptions = {}) const;

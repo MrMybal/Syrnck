@@ -5,7 +5,7 @@ description: Guide : Sessions de transfert persistantes.
 section: Transferts
 order: 590
 parent: transfers
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Sessions de transfert persistantes {#persistent-transfer-sessions}
@@ -58,4 +58,4 @@ Toute session inachevée contribue sa racine au GC. Push exige une source compl�
 
 `agent forget ID` retire le journal et sa protection, sans modifier références ou payloads. Le GC peut ensuite collecter les objets inaccessibles. Un nom de fichier valide peut être abandonné même si son contenu est mal formé. Les reçus complets ne protègent pas leurs racines. Prune prévisualise nombres complets/inachevés ; `--delete` valide tout l’inventaire puis retire uniquement les complets. Une annulation peut en retirer un sous-ensemble, avec nouvel essai sûr. Voir la [rétention sélective](doc:selective-retention).
 
-Tous les GC doivent comprendre ces journaux. Les [baux d’envoi et reçus](doc:server-upload-leases) peuvent confirmer un accusé perdu après changement de référence ; l’expiration permet la collecte serveur et la reprise renégocie/réenvoie depuis la source protégée. Les [baux de lecture](doc:server-read-leases) protègent le pull et les [inventaires](doc:upload-inventories) les objets déclarés. GC distribué et récupération en arrière-plan restent à développer. La liste des sessions matérialise son résultat ; les reçus occupent du disque jusqu’à purge/abandon.
+Tous les GC doivent comprendre ces journaux. Les [baux d’envoi et reçus](doc:server-upload-leases) peuvent confirmer un accusé perdu après changement de référence ; l’expiration permet la collecte serveur et la reprise renégocie/réenvoie depuis la source protégée. Les [baux de lecture](doc:server-read-leases) protègent le pull et les [inventaires](doc:upload-inventories) les objets déclarés. Le GC distribué reste à développer. L’[agent résident de publication native](doc:resident-agent) peut reprendre les envois natifs ; il ne fournit pas de pull général en arrière-plan ni de réconciliation de dossiers. La liste des sessions matérialise son résultat ; les reçus occupent du disque jusqu’à purge/abandon.

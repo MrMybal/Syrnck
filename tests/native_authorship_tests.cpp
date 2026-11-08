@@ -4,7 +4,9 @@
 #include <chrono>
 #include <thread>
 #include <iostream>
+#include <type_traits>
 using namespace native_test;
+static_assert(!std::is_copy_constructible_v<NativeIdentityContext>);
 namespace {
 SigningKey signer(std::uint8_t value) { Key seed; seed.fill(value); return SigningKey::from_seed(seed); }
 void signed_revision(const Store &store, const std::string &id, std::string_view author, std::string_view committer) {
@@ -112,6 +114,7 @@ void rebase(const fs::path &base, bool fixed_clock) {
         if (!paused && event.phase == ProgressPhase::planning && event.complete) {
           paused = true;
           fails([&] { f.store.clear_native_identity(); });
+          fails([&] { (void)f.store.take_native_identity(); });
           if (!fixed_clock) std::this_thread::sleep_for(std::chrono::milliseconds(1100));
         }
       }});
@@ -154,6 +157,30 @@ void producers(const fs::path &base) {
   for (const auto &id : {incoming, picked, reverted, merged, squashed, detached})
     (void)f.store.closure({{Kind::revision, id}}, true);
 }
+void identity_session(const fs::path &base) {
+  const auto expected_key = signing_key_id(signer(28).public_key());
+  std::optional<NativeIdentityContext> context{NativeIdentityContext{{"Resident", "resident@example.invalid", 90}, signer(28)}};
+  std::string previous;
+  for (unsigned index = 0; index < 3; ++index) {
+    Fixture f(base / std::to_string(index));
+    f.write("code", "same process, a fresh Store handle");
+    f.store.use_native_identity(std::move(context->identity), std::move(context->signer));
+    context.reset();
+    const auto revision = f.store.commit_directory(f.project, "main", "resident commit");
+    signed_revision(f.store, revision, "Resident", "Resident");
+    require(f.store.native_identity()["signing_key"] == expected_key, "resident identity lost its original signing key");
+    context = f.store.take_native_identity();
+    require(context && context->identity.timezone_offset == 90 && context->signer &&
+        signing_key_id(context->signer->public_key()) == expected_key && f.store.native_identity().is_null(), "taking identity did not transfer exclusive ownership");
+    require(!f.store.take_native_identity(), "empty identity returned a second context");
+    previous = revision;
+  }
+  Fixture f(base / "unsigned");
+  f.store.use_native_identity({"Unsigned", "unsigned@example.invalid", 0});
+  auto unsigned_context = f.store.take_native_identity();
+  require(unsigned_context && !unsigned_context->signer && unsigned_context->identity.name == "Unsigned", "unsigned identity could not move between handles");
+  require(context->signer->sign(bytes(previous)).size() == 64, "transferred signing key was wiped by a former Store destructor");
+}
 }
 int main() {
   Temporary temporary;
@@ -165,6 +192,7 @@ int main() {
     malformed(temporary.path / "malformed");
     rebase(temporary.path / "rebase-fixed", true); rebase(temporary.path / "rebase-clock", false);
     producers(temporary.path / "producers");
+    identity_session(temporary.path / "identity-session");
     std::cout << "Authored signatures preserve original authors, independent committers and stable rewrite candidates\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

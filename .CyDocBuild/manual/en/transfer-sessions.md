@@ -5,7 +5,7 @@ description: Persistent transfer sessions guide.
 section: Transfers
 order: 590
 parent: transfers
-revision: 2
+revision: 3
 ---
 
 # Persistent transfer sessions {#persistent-transfer-sessions}
@@ -143,5 +143,5 @@ Those receipts can confirm a lost acknowledgement even after a later reference
 change. An expired lease can permit offline server GC; resume renegotiates and
 reuploads missing objects from the protected source. [Read leases](doc:server-read-leases)
 protect pull sources until all required objects are local. [Upload inventories](doc:upload-inventories)
-retain declared server objects selectively. Distributed GC and background recovery remain future work. Session
+retain declared server objects selectively. Distributed GC remains future work. The [resident native publication agent](doc:resident-agent) can resume native pushes; it does not provide general background pull or folder reconciliation. Session
 listing materializes its result; receipts consume disk space until pruned or forgotten.

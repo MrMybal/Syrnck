@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "cli_control.hpp"
 #include "cli_watch.hpp"
+#include "cli_agent.hpp"
 #include "cli_help.hpp"
 #include "cli_text_diff.hpp"
 #include "cli_identity.hpp"
@@ -491,6 +492,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
+  agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only]
+             [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
+             [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
+                                    Surveiller, créer des snapshots et publier en continu
   agent push URL RÉF_LOCALE RÉF_DISTANTE [--expect absent|TYPE:ID]
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
@@ -701,6 +706,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
+  agent run URL [--directory DIR] [--remote-branch main] [--commits-only]
+             [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
+             [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
+                                    Watch, snapshot and publish continuously
   agent push URL LOCAL_REF REMOTE_REF [--expect absent|KIND:ID]
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
@@ -774,8 +783,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   };
   // Only native revision creation/profile commands consume this secret. Help,
   // Git children and unrelated commands must not inherit it.
-  if (command != "native" || args.values.empty() || !identity_subcommand(args.values.front())) cli::discard_signing_seed_environment();
-  require(!native_workspace || command == "native" || command == "help", "workspace selection is only available for native commands");
+  const bool agent_run = command == "agent" && !args.values.empty() && args.values.front() == "run";
+  if (!agent_run && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
+  require(!native_workspace || command == "native" || command == "help" || agent_run,
+      "workspace selection is only available for native commands and agent run");
   // Documentation is independent of repository state, encryption and credentials.
   if (command == "help") {
     const auto directory = args.option("--directory");
@@ -853,6 +864,35 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
           return store;
         }, language,
         {control->token(), [&](const ProgressEvent &event) { control->report(event); }});
+  }
+  if (command == "agent" && sub == "run") {
+    cli::AgentCommand request;
+    request.remote_branch = args.option("--remote-branch").value_or("main");
+    request.branch = args.option("--branch");
+    request.commits_only = args.flag("--commits-only"); request.polling = args.flag("--polling");
+    request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
+    request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
+    request.audit_ms = integer(args.option("--audit-ms").value_or("300000"));
+    request.remote_poll_ms = integer(args.option("--remote-poll-ms").value_or("5000"));
+    request.duration_ms = integer(args.option("--duration-ms").value_or("0"));
+    request.max_updates = integer(args.option("--max-updates").value_or("0"));
+    request.max_paths = integer(args.option("--max-paths").value_or("4096"));
+    const auto supplied_directory = args.option("--directory");
+    auto directory = path_from_utf8(supplied_directory.value_or("."));
+    const auto text = args.flag("--progress"), json = args.flag("--progress-json");
+    require(!(text && json), "choose one progress output mode");
+    auto limits = transfer_options(args); request.validate(); args.count(1);
+    require(token.has_value(), "set SYRNCK_TOKEN");
+    request.directory_from_workspace = !supplied_directory && native_workspace && !native_workspace->empty();
+    net::Remote remote(args.values[0], *token, ca_path);
+    control = std::make_unique<cli::OperationControl>(language, json ? cli::ProgressMode::json
+        : text ? cli::ProgressMode::text : cli::ProgressMode::none);
+    return cli::run_agent(directory, root, request, remote,
+        [&] {
+          auto store = std::make_unique<Store>(root, read_key(), false, store_options);
+          if (native_workspace) store->use_native_workspace(*native_workspace);
+          return store;
+        }, language, {control->token(), [&](const ProgressEvent &event) { control->report(event); }}, limits);
   }
   if (command == "git" && (sub == "smudge" || sub == "filter-process")) {
     auto directory = path_from_utf8(args.option("--directory").value_or("."));

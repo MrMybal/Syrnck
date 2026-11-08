@@ -33,6 +33,8 @@ Each file version has a complete manifest: its ordered blocks, size and whole-fi
 
 Two workflows share this engine. **Git integration** keeps ordinary code history, branches and merges in Git while selected assets become Syrnck pointers. **Standalone history** provides native commits, staging, branches, tags and recoverable workspace operations. Complete or partial linked working directories share one Store with independent HEADs/indexes, branch reservations and portable backup snapshots. Partial views retain complete logical revisions and asset blocks. Optional native identity profiles record original authors and current committers, with Ed25519 commit signatures. Git asset hosting needs a separate Syrnck block server; GitHub does not supply that service automatically.
 
+The resident `syrnck agent run` watches selected local files, captures native snapshots and retries guarded publication after offline edits. It preserves partial workspace content and stops on concurrent histories or acknowledged remote deletions/rewinds. Full bidirectional folder synchronization remains unfinished.
+
 Embed the engine through C++20. The C ABI and Go binding expose verified storage operations, ranges, reuse plans and workspace observation. The optional Go Syncthing adapter bridges regular-file BEP blocks; complete daemon/folder synchronization remains separate work. The engine has no Unreal runtime dependency and treats assets as ordinary file bytes.
 
 <a id="quick-start"></a>

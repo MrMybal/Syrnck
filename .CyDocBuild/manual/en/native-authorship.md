@@ -5,7 +5,7 @@ description: Original authors, current committers and optional Ed25519 signature
 section: Version control
 order: 305
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 ## Configure an identity {#identity}
@@ -55,7 +55,13 @@ store.clear_native_identity();
 
 The Store owns the moved key exclusively. The library does not read the CLI
 profile or environment automatically. `native_identity()` returns public profile
-and key information; no private-key export is provided. See the
+and key information; no private-key export is provided.
+`take_native_identity()` detaches a move-only `NativeIdentityContext` containing
+the profile and optional signing key. Move both into the next Store with
+`use_native_identity()` before releasing the context. This supports short-lived
+locked handles in a resident process without copying or exporting seed bytes.
+The former handle becomes unconfigured; taking an empty context returns null.
+Changing or taking identity inside a progress callback is refused. See the
 [signing primitive](doc:signing-api) for seed ownership and strict verification.
 
 ## Author and committer rules {#rewrites}

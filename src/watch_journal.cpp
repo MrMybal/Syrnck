@@ -1,8 +1,10 @@
 #include "watch_journal.hpp"
 #include "native_workspace.hpp"
 namespace syrnck {
-std::unique_ptr<FileLock> lock_watch_journal(const fs::path &storage) {
-  const auto path = storage / "watch.lock";
+std::unique_ptr<FileLock> lock_watch_journal(const fs::path &storage, std::string_view filename) {
+  validate_ref(filename);
+  require(filename.find('/') == filename.npos, "invalid native workspace local filename");
+  const auto path = storage / path_from_utf8(filename);
   const auto status = fs::symlink_status(path);
   require(!fs::exists(status) || (fs::is_regular_file(status) && !native_link_like(path, status)),
           "invalid workspace watch lock");
