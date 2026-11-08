@@ -43,6 +43,8 @@ class DocumentationHelp(unittest.TestCase):
         self.assertTrue(self.run_cli("help", "native", "merge", "--section", "conflict-copies", "--print-url").stdout.strip().endswith("#/en/native-merge/conflict-copies"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "syncthing", "--section", "device-connections", "--print-url").stdout.strip().endswith("#/fr/syncthing/device-connections"))
         self.assertTrue(self.run_cli("help", "syncthing", "--section", "reference-daemon", "--print-url").stdout.strip().endswith("#/en/syncthing/reference-daemon"))
+        self.assertTrue(self.run_cli("--lang", "fr", "help", "syncthing", "--section", "folder-catalog", "--print-url").stdout.strip().endswith("#/fr/syncthing/folder-catalog"))
+        self.assertTrue(self.run_cli("help", "syncthing", "--section", "staged-download", "--print-url").stdout.strip().endswith("#/en/syncthing/staged-download"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "api-c-abi", "--section", "catalogs", "--print-url").stdout.strip().endswith("#/fr/api-c-abi/catalogs"))
         self.assertTrue(self.run_cli("help", "go-binding", "--section", "catalog-transactions", "--print-url").stdout.strip().endswith("#/en/go-binding/catalog-transactions"))
         self.assertTrue(self.run_cli("--lang", "fr", "help", "native", "checkout", "--section", "owned-recovery", "--print-url").stdout.strip().endswith("#/fr/native-checkout/owned-recovery"))

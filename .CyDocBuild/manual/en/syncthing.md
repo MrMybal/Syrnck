@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 3
+revision: 4
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -19,8 +19,9 @@ This module requires Go 1.26.2 or later; local validation used Go 1.27.3.
 The adapter supports regular file data and explicitly paired, authenticated
 device connections. It is not a resident synchronization daemon, a drop-in
 Syncthing executable or an implementation of its database, discovery, pairing UI,
-durable version-vector reconciliation, workspace deletions/renames or conflict
-policy. The embedding application still owns those folder decisions.
+workspace application, automatic folder scheduling or conflict-copy policy.
+Its catalog backend persists version vectors, index generations, tombstones and
+verified data. The embedding application still owns working-folder decisions.
 
 ## Native library and dependencies {#build-and-test}
 
@@ -81,6 +82,79 @@ for targeted whole-file validation, including chunks, sizes and `file_hash`.
 They write no destination or reference and stream through bounded native chunk
 buffers. This binding requires a rebuilt native library exporting that symbol.
 
+## Durable folder catalog {#folder-catalog}
+
+`OpenCatalog(ctx, store, CatalogOptions)` loads a folder's durable catalog or
+creates an unpublished empty draft. Bind the folder to the full local Device ID
+and the exact trusted peer list. Duplicate devices, local/sentinel peers and
+colliding 64-bit vector identities are refused. Membership changes require a
+separate management workflow; changing the options cannot silently replace it.
+
+A `Catalog` holds no Store or connection. `LocalIndex` and `PeerIndex` return
+independent snapshots. `RecordLocal` or `RecordLocalChanges` assigns local
+sequence numbers and advances the previous local version vector, with overflow
+checks. Caller-supplied causal fields must be unset. Batch recording validates
+all changes together and sorts names once. Deletions require explicit tombstones.
+Directories and symlink descriptors are preserved as metadata; this API does
+not create directories or follow symlink targets.
+
+`ReceiveIndex(CatalogIndex)` records a paired device's full Index or delta. The
+caller must bind `Device` to the authenticated connection, authorize the folder
+and take `IndexID` from its negotiated ClusterConfig. A new generation requires
+a full reset; subsequent batches must continue the persisted previous sequence.
+Names and sequence numbers are unique, vectors are sorted/bounded and duplicate
+counters, invalid flags, unsupported encrypted entries and malformed block
+layouts are refused. Equal vectors cannot describe different content metadata.
+Peer announcements do not automatically become local files or download data.
+
+`Attach(ctx, store, device, name, manifest)` verifies downloaded data against the
+currently recorded block descriptors. `Adopt(device, name)` promotes a verified,
+causally newer peer entry into the local advertised index. Concurrent versions
+return `ErrCatalogConflict`; older versions and equal-vector/content mismatches
+are refused. Both versions remain retained, without a silent winner. This changes
+the advertised catalog only; working-file application needs its own recovery
+transaction before a service announces that a workspace has caught up.
+
+`Commit(ctx, store)` verifies retained file data, then publishes state and data
+under one expected-value guarded `ffi/bep/…` native revision root. Previous
+catalog revisions are native parents, so an index reset, rename or deletion
+keeps earlier complete versions reachable by GC and backups. Payload paths use
+hashes of device/name identities; `.git/config`, case-distinct names and paths
+incompatible with a portable workspace can remain lossless in storage. They
+are not materialized by this API. No implicit `ffi/manifestID` pins are created.
+
+A stale draft returns `ErrCatalogStale`. Reload and replan; do not retarget an
+old operation. An IO error during publication has an unknown outcome: reload
+and establish the persisted result before retrying. Unchanged commits are
+no-ops. A fresh local IndexID becomes durable on the first successful commit.
+The catalog codec rejects duplicate/unknown fields and noncanonical state;
+limits are 256 paired devices, 256 counters/vector, 65536 entries across all
+indexes and 16 MiB of catalog metadata. Each commit currently verifies its
+retained files and native closure; large-project throughput is not established.
+History retirement and catalog sharding remain future work.
+
+## Download without holding the Store {#staged-download}
+
+`DownloadFile(ctx, folder, info, request, DownloadOptions)` verifies network
+blocks into private staging without opening a native Store. Optional `ReuseIndex`
+and `ReadReuse` reuse exact matching local blocks; that callback can open/close
+a Store briefly. Different block sizes disable reuse. Caller-owned resume data
+uses the same validated descriptor and range checks as Fetch.
+
+The returned `StagedFile` holds no open file or Store. Always `Close()` it.
+`Info()` returns an independent copy and `Stats()` reports transfer/reuse/staging.
+Call `Prepare(ctx, store)` while briefly owning the Store. It imports an unpinned
+manifest and rechecks stored bytes against the announced blocks. Attach that
+manifest to the exact current peer entry, optionally adopt it, then Commit
+before closing Store or permitting GC. This prevents network waits from holding
+the native exclusive lock. Revalidate the persisted peer entry after download:
+it may have advanced while the transfer was in flight.
+
+`PrepareFetch` is a convenience for a caller that already holds a Store; it has
+the same unpinned ownership rule. Legacy `Fetch` continues retaining its result
+independently. Keep these ownership choices explicit; do not remove a shared
+legacy pin owned by another consumer.
+
 ## Authenticate a device connection {#device-connections}
 
 `OpenDeviceConnection(ctx, stream, DeviceOptions, model)` takes ownership of an
@@ -120,8 +194,7 @@ has not been started. `Close(reason)` releases the stream; wait for the model's
 The connection metadata contains a stable establishment time and session ID.
 
 The application supplies certificate storage/rotation, the trusted Device ID,
-scheduling, persistent folder/index state, version vectors, tombstones and
-conflict handling. Transport encryption authenticates and protects this peer
+scheduling, catalog transactions, working-file recovery and conflict handling. Transport encryption authenticates and protects this peer
 connection; it does not make an ordinary receiving daemon an untrusted encrypted
 backup. The complete untrusted-device encryption workflow remains to be integrated.
 
@@ -157,7 +230,9 @@ upstream daemon: a 384 KiB asset with moved/reused blocks transferred one missin
 128 KiB block in each direction. Reconstruction into encrypted Syrnck storage
 verified the resulting complete file. Real daemon rename/tombstone announcements
 were also received. This proves transport and regular-file interoperability;
-it does not establish a durable, autonomous folder service. Without the explicit
+a further real-daemon test persists full/delta indexes and data, closes native
+Stores during network waits, then reconnects after an offline rename and
+preserves its tombstone. It still does not establish an autonomous folder service. Without the explicit
 binary, the real-daemon test reports a skip; ordinary adapter tests still run.
 
 ## Resume and cancellation {#resume-and-cancellation}
@@ -178,7 +253,9 @@ encrypted; choose an appropriately protected location. Completed staging
 directories remain caller-owned and require explicit retirement.
 
 Context cancellation is checked between native calls and network/block steps.
-The current synchronous ingest/verification ABI cannot be cancelled mid-call.
+Unpinned preparation propagates cancellation into the native ingestion
+operation. Legacy retained ingest and complete verification finish their current
+synchronous native call.
 A late cancellation or a detected change during ingestion can therefore leave
 a complete internally retained manifest; its ID is returned alongside the
 error. Callers must handle the error before publishing that result. No partial

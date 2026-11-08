@@ -5,14 +5,14 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
 
 Ce module Go optionnel relie le C++ au modèle de blocs BEP via la bibliothèque Syncthing non modifiée **v2.1.7**, commit `d6d0181f7d46`, pseudo-version figée dans go.mod/go.sum. Le binding cœur reste séparé, sans dépendances Go externes. Le module demande Go 1.26.2+.
 
-Il gère les fichiers ordinaires et les connexions authentifiées entre appareils explicitement associés. Daemon résident, remplacement de l’exécutable Syncthing, base de données, découverte, interface d’appairage, réconciliation persistante des vecteurs de versions, suppressions/renommages du workspace et politique de conflits restent à la charge de l’application intégratrice.
+Il gère les fichiers ordinaires et les connexions authentifiées entre appareils explicitement associés. Le catalogue conserve vecteurs de versions, générations d’index, tombstones et données vérifiées. Daemon résident, remplacement de l’exécutable Syncthing, découverte, interface d’appairage, application au workspace et orchestration automatique restent à la charge de l’application intégratrice.
 
 ## Bibliothèque native et dépendances {#build-and-test}
 
@@ -43,6 +43,81 @@ result, err := syncthing.Fetch(ctx, destination, "project", incomingInfo,
 // Check err before using result.Manifest or publishing a workspace revision.
 ```
 
+
+## Catalogue persistant de dossier {#folder-catalog}
+
+`OpenCatalog(ctx, store, CatalogOptions)` charge le catalogue persistant ou crée
+un brouillon vide non publié. Associer le dossier à l’ID complet de l’appareil
+local et à la liste exacte des pairs de confiance. Doublons, appareil local,
+sentinelles et collisions des identités 64 bits des vecteurs sont refusés.
+Changer la liste d’options ne modifie pas implicitement les autorisations.
+Une procédure distincte de gestion des membres reste à réaliser.
+
+`Catalog` ne garde ni Store ni connexion. `LocalIndex` et `PeerIndex` rendent des
+copies indépendantes. `RecordLocal` ou `RecordLocalChanges` attribue les séquences
+locales et avance le vecteur local antérieur avec contrôle de débordement ; les
+champs causaux fournis doivent être vides. Un lot est validé entièrement avec un
+seul tri des noms. Les suppressions doivent être des tombstones explicites.
+Dossiers et liens symboliques sont conservés comme métadonnées ; aucune création
+de dossier ni résolution de cible de lien n’est faite par cette API.
+
+`ReceiveIndex(CatalogIndex)` conserve un Index complet ou un delta d’un pair.
+L’appelant doit lier `Device` à la connexion authentifiée, autoriser le dossier
+et prendre `IndexID` dans son ClusterConfig négocié. Une nouvelle génération
+exige un index complet ; les lots suivants continuent la séquence persistée.
+Noms et séquences uniques, vecteurs triés et bornés : compteurs dupliqués,
+flags invalides, entrées chiffrées non prises en charge et blocs mal formés
+sont refusés. Un vecteur identique ne peut décrire d’autres métadonnées de
+contenu. Recevoir une annonce ne la transforme pas en fichier local et ne
+lance aucun téléchargement.
+
+`Attach(ctx, store, device, name, manifest)` vérifie les données contre les blocs
+de l’entrée actuellement enregistrée. `Adopt(device, name)` promeut une entrée
+vérifiée causalement plus récente dans l’index local annoncé. Une concurrence
+rend `ErrCatalogConflict` ; versions antérieures et contenu incohérent à vecteur
+identique sont refusés. Les deux contenus restent conservés sans gagnant
+implicite. Seul le catalogue annoncé change : l’application au workspace doit
+avoir sa transaction de reprise avant qu’un service annonce un dossier à jour.
+
+`Commit(ctx, store)` vérifie les données retenues puis publie état et données
+sous une racine unique `ffi/bep/…` de révision native protégée par valeur attendue.
+Les catalogues précédents sont parents natifs : reset d’index, renommage et
+suppression conservent donc les versions complètes au GC et en sauvegarde.
+Les chemins de payload sont les hashes des identités appareil/nom : noms
+`.git/config`, distincts par la casse et incompatibles avec un workspace portable
+restent stockables sans perte. Cette API ne les matérialise pas. Aucune racine
+implicite `ffi/manifestID` n’est ajoutée.
+
+Un brouillon périmé rend `ErrCatalogStale` : recharger et replanifier sans
+recibler l’opération ancienne. Une erreur d’IO de publication laisse un résultat
+inconnu ; recharger et établir le résultat persistant avant toute reprise.
+Un commit inchangé ne fait rien. Le nouvel IndexID local devient persistant au
+premier commit réussi. Le codec refuse champs dupliqués/inconnus et état non
+canonique. Limites : 256 pairs, 256 compteurs/vecteur, 65536 entrées au total et
+16 Mio de métadonnées. Chaque commit vérifie actuellement fichiers retenus et
+fermeture native ; débit sur grand projet non établi. Retrait de l’historique
+et partitionnement du catalogue restent à réaliser.
+
+## Télécharger sans garder le Store ouvert {#staged-download}
+
+`DownloadFile(ctx, folder, info, request, DownloadOptions)` vérifie les blocs
+réseau dans un staging privé sans ouvrir le Store natif. `ReuseIndex` et
+`ReadReuse` réutilisent les blocs locaux identiques ; le callback peut ouvrir
+et fermer brièvement un Store. Des tailles de blocs différentes désactivent
+le réemploi. La reprise utilise les mêmes descripteurs et contrôles que Fetch.
+
+Le `StagedFile` retourné ne garde ni fichier ouvert ni Store. Toujours appeler
+`Close()`. `Info()` copie indépendamment ; `Stats()` décrit transfert, réemploi
+et staging. Appeler `Prepare(ctx, store)` en possédant brièvement le Store :
+import sans racine implicite et recontrôle contre les blocs annoncés. Attacher
+le manifeste à la version courante exacte du pair, l’adopter si nécessaire et
+faire Commit avant de fermer le Store ou d’autoriser le GC. L’attente réseau ne
+garde ainsi pas le verrou exclusif natif. Revérifier l’entrée persistée après
+transfert, car elle peut avoir avancé pendant le téléchargement.
+
+`PrepareFetch` simplifie l’appel si un Store est déjà ouvert, avec la même règle
+de rétention explicite. `Fetch` garde sa rétention indépendante historique.
+Ne pas supprimer une racine partagée historique appartenant à un autre appelant.
 
 ## Authentifier une connexion d’appareil {#device-connections}
 
@@ -83,8 +158,8 @@ de fermer les handles natifs qu’utilisent ses callbacks. Les métadonnées de
 connexion gardent une date d’établissement et un ID de session stables.
 
 L’application fournit stockage/rotation des certificats, Device ID de confiance,
-planification, état persistant des dossiers/index, vecteurs de versions,
-tombstones et résolution des conflits. Le chiffrement du transport protège et
+planification, transactions du catalogue, reprise du workspace et résolution
+des conflits. Le chiffrement du transport protège et
 authentifie ce pair ; un daemon recevant des données ordinaires ne devient pas
 une sauvegarde chiffrée non fiable. Le parcours complet de chiffrement vers un
 appareil non fiable reste à intégrer.
@@ -120,7 +195,9 @@ non modifié : un asset de 384 Kio à blocs déplacés/réutilisés transfère u
 le bloc absent de 128 Kio dans chaque sens. La reconstruction dans un stockage
 Syrnck chiffré vérifie le fichier complet. Les annonces réelles de renommage et
 tombstone ont aussi été reçues. Cela prouve transport et interopérabilité des
-fichiers ordinaires ; le service autonome et persistant de dossiers reste à faire.
+fichiers ordinaires. Un autre test réel conserve index complets/deltas et données,
+ferme les Stores pendant l’attente réseau puis se reconnecte après un renommage
+hors ligne avec tombstone persistant. Le service autonome reste à réaliser.
 Sans binaire explicite, ce test annonce qu’il est ignoré ; les tests ordinaires
 de l’adaptateur continuent de s’exécuter.
 
@@ -130,4 +207,4 @@ Sans `ResumeDirectory`, Fetch utilise un fichier temporaire privé retiré au re
 
 Chaque plage de staging est rehashée au retry. Seules les plages complètes conformes sont réutilisées ; partielles/corrompues redemandées. Les trous remplis de zéro peuvent satisfaire un bloc zéro sans requête. Flush tous les 16 blocs et avant ingestion. Annulation préserve le staging fourni par l’appelant, qui reste **en clair même avec Store chiffré** ; protéger l’emplacement. Le retrait des dossiers terminés est explicite.
 
-Le contexte est vérifié entre appels natifs/étapes réseau/blocs ; ingestion/vérification synchrone actuelle ne s’annule pas au milieu. Une annulation tardive ou changement détecté peut laisser un manifeste complet retenu, dont l’ID accompagne l’erreur. Traiter l’erreur avant publication. Aucun fichier de travail partiel installé. Un kill peut laisser du privé ; durabilité après coupure et retrait automatique ne sont pas établis.
+Le contexte est vérifié entre appels natifs/étapes réseau/blocs. La préparation sans racine implicite propage l’annulation dans l’ingestion native ; l’ingestion retenue historique et la vérification complète terminent leur appel natif synchrone courant. Une annulation tardive ou changement détecté peut laisser un manifeste complet retenu, dont l’ID accompagne l’erreur. Traiter l’erreur avant publication. Aucun fichier de travail partiel installé. Un kill peut laisser du privé ; durabilité après coupure et retrait automatique ne sont pas établis.

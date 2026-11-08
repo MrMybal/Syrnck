@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 3
+revision: 4
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -128,7 +128,7 @@ Close Stores/sessions explicitly before removing their directories. The trusted 
 
 ## Syncthing {#syncthing}
 
-The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Durable folder reconciliation, discovery, a pairing UI and complete autonomous synchronization remain unfinished.
+The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Its native-backed catalog persists folder indexes, vectors, tombstones and verified data; staged downloads avoid holding Store across network waits. Workspace application, discovery, a pairing UI and complete autonomous scheduling remain unfinished.
 
 ## Registered workspaces {#registered-workspaces}
 

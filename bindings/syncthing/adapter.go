@@ -1,6 +1,7 @@
 // Package syncthing adapts Syrnck manifests to Syncthing's fixed-block BEP data
-// model. Device authentication, version vectors and workspace conflict handling
-// remain the embedding application's responsibility.
+// model, authenticates explicitly paired devices and persists folder indexes.
+// Network scheduling and working-file application remain the embedding
+// application's responsibility.
 package syncthing
 
 import (
@@ -10,7 +11,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"math"
@@ -59,8 +59,34 @@ func copyInfo(info protocol.FileInfo) protocol.FileInfo {
 	}
 	info.Blocks = blocks
 	info.BlocksHash = bytes.Clone(info.BlocksHash)
+	info.PreviousBlocksHash = bytes.Clone(info.PreviousBlocksHash)
+	info.SymlinkTarget = bytes.Clone(info.SymlinkTarget)
+	info.Encrypted = bytes.Clone(info.Encrypted)
 	info.Version.Counters = append([]protocol.Counter(nil), info.Version.Counters...)
+	if info.Platform.Unix != nil {
+		value := *info.Platform.Unix
+		info.Platform.Unix = &value
+	}
+	if info.Platform.Windows != nil {
+		// Copy data fields, not the generated protobuf's internal mutex/cache.
+		info.Platform.Windows = &protocol.WindowsData{OwnerName: info.Platform.Windows.OwnerName, OwnerIsGroup: info.Platform.Windows.OwnerIsGroup}
+	}
+	info.Platform.Linux = copyXattrs(info.Platform.Linux)
+	info.Platform.Darwin = copyXattrs(info.Platform.Darwin)
+	info.Platform.FreeBSD = copyXattrs(info.Platform.FreeBSD)
+	info.Platform.NetBSD = copyXattrs(info.Platform.NetBSD)
 	return info
+}
+
+func copyXattrs(input *protocol.XattrData) *protocol.XattrData {
+	if input == nil {
+		return nil
+	}
+	output := &protocol.XattrData{Xattrs: make([]protocol.Xattr, len(input.Xattrs))}
+	for i, attribute := range input.Xattrs {
+		output.Xattrs[i] = protocol.Xattr{Name: attribute.Name, Value: bytes.Clone(attribute.Value)}
+	}
+	return output
 }
 
 // NewFile hashes verified ranges into the exact SHA-256 block descriptors used
@@ -286,6 +312,19 @@ func identity(block protocol.BlockInfo) blockKey {
 // and retains it through the existing ffi/ root. No working file is replaced.
 func Fetch(ctx context.Context, store *syrnck.Store, folder string, incoming protocol.FileInfo,
 	request RequestFunc, options FetchOptions) (result FetchResult, err error) {
+	return fetch(ctx, store, folder, incoming, request, options, true)
+}
+
+// PrepareFetch reconstructs and verifies a file without creating an implicit
+// ffi/<manifest> root. Attach it to a Catalog and Commit before closing Store or
+// permitting GC. Legacy Fetch keeps its independently retained behavior.
+func PrepareFetch(ctx context.Context, store *syrnck.Store, folder string, incoming protocol.FileInfo,
+	request RequestFunc, options FetchOptions) (FetchResult, error) {
+	return fetch(ctx, store, folder, incoming, request, options, false)
+}
+
+func fetch(ctx context.Context, store *syrnck.Store, folder string, incoming protocol.FileInfo,
+	request RequestFunc, options FetchOptions, retained bool) (result FetchResult, err error) {
 	if store == nil {
 		return result, errors.New("syrnck BEP: nil destination store")
 	}
@@ -293,95 +332,20 @@ func Fetch(ctx context.Context, store *syrnck.Store, folder string, incoming pro
 	if err = validateIndex(folder, incoming); err != nil {
 		return result, err
 	}
-	info := copyInfo(incoming)
-	if err = ctx.Err(); err != nil {
-		return result, err
-	}
-	reusable := map[blockKey]int64{}
+	download := DownloadOptions{ResumeDirectory: options.ResumeDirectory}
 	if options.ReuseManifest != "" {
-		file, readErr := NewFile(ctx, store, options.ReuseManifest, folder, info.Name, info.BlockSize())
+		prior, readErr := NewFile(ctx, store, options.ReuseManifest, folder, incoming.Name, incoming.BlockSize())
 		if readErr != nil {
 			return result, readErr
 		}
-		for _, block := range file.info.Blocks {
-			reusable[identity(block)] = block.Offset
-		}
+		info := prior.Info()
+		download.ReuseIndex, download.ReadReuse = &info, prior.ReadRequest
 	}
-	file, cleanup, err := stage(folder, info, options.ResumeDirectory)
+	staged, stats, err := downloadFile(ctx, folder, incoming, request, download)
+	result.Stats = stats
 	if err != nil {
 		return result, err
 	}
-	defer func() { _ = file.Close(); cleanup() }()
-	if err = file.Truncate(info.Size); err != nil {
-		return result, err
-	}
-	for number, block := range info.Blocks {
-		if err = ctx.Err(); err != nil {
-			return result, err
-		}
-		data := make([]byte, block.Size)
-		_, readErr := file.ReadAt(data, block.Offset)
-		digest := sha256.Sum256(data)
-		if (readErr == nil || block.Size == 0) && bytes.Equal(digest[:], block.Hash) {
-			result.Stats.StagedBytes += uint64(block.Size)
-			continue
-		}
-		if offset, found := reusable[identity(block)]; found {
-			data, err = store.ReadRange(options.ReuseManifest, uint64(offset), uint64(block.Size))
-			if err != nil {
-				return result, err
-			}
-			result.Stats.ReusedBytes += uint64(block.Size)
-		} else {
-			if request == nil {
-				return result, errors.New("syrnck BEP: missing block requester")
-			}
-			data, err = request(ctx, &protocol.Request{Folder: folder, Name: info.Name, Offset: block.Offset,
-				Size: block.Size, Hash: bytes.Clone(block.Hash), BlockNo: number})
-			if err != nil {
-				return result, err
-			}
-			result.Stats.Requests++
-			result.Stats.TransferredBytes += uint64(len(data))
-		}
-		if err = ctx.Err(); err != nil {
-			return result, err
-		}
-		digest = sha256.Sum256(data)
-		if len(data) != block.Size || !bytes.Equal(digest[:], block.Hash) {
-			return result, errors.New("syrnck BEP: block hash or length mismatch")
-		}
-		if _, err = file.WriteAt(data, block.Offset); err != nil {
-			return result, err
-		}
-		if (number+1)%16 == 0 {
-			if err = file.Sync(); err != nil {
-				return result, err
-			}
-		}
-	}
-	if err = file.Sync(); err != nil {
-		return result, err
-	}
-	if err = file.Close(); err != nil {
-		return result, err
-	}
-	if err = ctx.Err(); err != nil {
-		return result, err
-	}
-	blockSize := uint32(info.BlockSize())
-	result.Manifest, err = store.Ingest(file.Name(), syrnck.Chunking{Fixed: true, Min: blockSize, Average: blockSize, Max: blockSize})
-	if err != nil {
-		return result, fmt.Errorf("syrnck BEP ingest: %w", err)
-	}
-	verified, checkErr := NewFile(ctx, store, result.Manifest, folder, info.Name, info.BlockSize())
-	if checkErr != nil {
-		return result, checkErr
-	}
-	if verified.info.Size != info.Size || !bytes.Equal(verified.info.BlocksHash, protocol.BlocksHash(info.Blocks)) {
-		return result, errors.New("syrnck BEP: staged content changed during ingestion")
-	}
-	// Ingest is one synchronous ABI call. A late cancellation may retain this
-	// complete manifest; return its ID alongside the cancellation error.
-	return result, ctx.Err()
+	defer staged.Close()
+	return staged.ingest(ctx, store, retained)
 }

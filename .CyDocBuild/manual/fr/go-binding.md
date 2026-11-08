@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -140,7 +140,7 @@ Fermer explicitement les Stores et sessions avant de retirer leurs répertoires.
 
 ## Syncthing {#syncthing}
 
-Le module optionnel [Syncthing](doc:syncthing) adapte les manifests aux blocs fixes SHA-256 BEP via la bibliothèque Syncthing v2.1.7 figée. Connexions d’appareils authentifiées et transferts différentiels sont vérifiés contre son daemon réel. Objets et CDC Syrnck gardent leur format. Réconciliation persistante de dossiers, découverte, interface d’appairage et synchronisation entièrement autonome restent à terminer.
+Le module optionnel [Syncthing](doc:syncthing) adapte les manifests aux blocs fixes SHA-256 BEP via la bibliothèque Syncthing v2.1.7 figée. Connexions d’appareils authentifiées et transferts différentiels sont vérifiés contre son daemon réel. Objets et CDC Syrnck gardent leur format. Le catalogue conserve index, vecteurs, tombstones et données vérifiées dans le moteur ; le téléchargement séparé ne garde pas le Store pendant l’attente réseau. Application au workspace, découverte, interface d’appairage et orchestration entièrement autonome restent à terminer.
 
 ## Workspaces enregistrés {#registered-workspaces}
 
