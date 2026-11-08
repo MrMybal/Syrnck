@@ -1,12 +1,16 @@
 """Exercise verified build downloads against a local transient-error server."""
 import hashlib
+import faulthandler
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 import threading
+from socketserver import TCPServer
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -28,14 +32,26 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class LoopbackServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer otherwise performs reverse DNS via socket.getfqdn even
+        # though this fixture only needs an ephemeral IPv4 loopback socket.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 class DependencyDownloads(unittest.TestCase):
     def setUp(self):
+        # Keep real loopback HTTP independent of user/system proxy discovery.
+        environment = patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="syrnck-dependency-download-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.payload = b"verified pinned archive bytes\x00" * 1024
         self.digest = hashlib.sha256(self.payload).hexdigest()
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = LoopbackServer(("127.0.0.1", 0), Handler)
         self.server.requests = 0
         self.server.statuses = [200]
         self.server.payload = self.payload
@@ -52,6 +68,15 @@ class DependencyDownloads(unittest.TestCase):
 
     def fetch(self):
         return fetch_archive(self.archive, self.cache, retries=2, delay=0, timeout=2)
+
+    def test_loopback_fixture_does_not_resolve_hostnames(self):
+        with patch("socket.getfqdn", side_effect=AssertionError("unexpected reverse DNS")):
+            server = LoopbackServer(("127.0.0.1", 0), Handler)
+            try:
+                self.assertEqual(server.server_name, "127.0.0.1")
+                self.assertGreater(server.server_port, 0)
+            finally:
+                server.server_close()
 
     def test_transient_504_then_success_verifies_and_publishes_once(self):
         self.server.statuses = [504, 504, 200]
@@ -185,4 +210,5 @@ class DependencyDownloads(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    faulthandler.dump_traceback_later(10, repeat=True)
     unittest.main()
