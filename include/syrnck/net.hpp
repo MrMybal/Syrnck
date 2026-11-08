@@ -46,11 +46,18 @@ public:
   Json locks(std::string_view action, const Json &request = Json::object(), OperationOptions = {}) const;
   Json push(const Store &, const ObjectKey &, std::string_view remote_ref, OperationOptions = {},
             TransferOptions = {}) const;
+  // Bind a new publication to an earlier observation. Null requires absence;
+  // a different current value fails before any session/object writes. Resume
+  // existing uncertain sessions explicitly, without recapturing an expectation.
+  Json push_expected(const Store &, const ObjectKey &, std::string_view remote_ref,
+                     const std::optional<ObjectKey> &expected, OperationOptions = {}, TransferOptions = {}) const;
   Json pull(const Store &, const ObjectKey &, std::string_view local_ref, OperationOptions = {},
             TransferOptions = {}) const;
   Json resume(const Store &, std::string_view session, OperationOptions = {}, TransferOptions = {}) const;
 
 private:
+  Json push_impl(const Store &, const ObjectKey &, std::string_view,
+                 const std::optional<std::optional<ObjectKey>> &, OperationOptions, TransferOptions) const;
   std::string base_, token_;
   std::optional<fs::path> ca_;
   bool negotiate_compression(std::optional<bool> &, OperationOptions, const TransferOptions &) const;

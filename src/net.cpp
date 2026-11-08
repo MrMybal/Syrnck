@@ -224,7 +224,20 @@ void ServeOptions::validate() const {
 }
 Json Remote::push(const Store &store, const ObjectKey &root, std::string_view name, OperationOptions options,
                   TransferOptions limits) const {
+  return push_impl(store, root, name, {}, std::move(options), std::move(limits));
+}
+Json Remote::push_expected(const Store &store, const ObjectKey &root, std::string_view name,
+    const std::optional<ObjectKey> &expected, OperationOptions options, TransferOptions limits) const {
+  return push_impl(store, root, name, std::optional<std::optional<ObjectKey>>{std::in_place, expected},
+      std::move(options), std::move(limits));
+}
+Json Remote::push_impl(const Store &store, const ObjectKey &root, std::string_view name,
+    const std::optional<std::optional<ObjectKey>> &expected, OperationOptions options, TransferOptions limits) const {
   limits.validate();
+  if (expected && *expected) {
+    validate_id((*expected)->id);
+    (void)kind_name((*expected)->kind);
+  }
   require(!limits.require_read_lease, "read lease requirement is only available for pull");
   if (!limits.asset_locks.empty()) {
     const auto caps = parse_json(request("GET", "v1/capabilities", {}, options, &limits));
@@ -236,9 +249,12 @@ Json Remote::push(const Store &store, const ObjectKey &root, std::string_view na
   require(name.find('/') == name.npos, "remote reference must be a single component");
   auto remote = refs(options, limits);
   auto actual = reference(remote, name);
+  require(!expected || actual == *expected, "remote reference differs from the expected value");
   require(!limits.immutable_reference || !actual || *actual == root,
           "immutable remote reference points to another object");
   auto [session, fresh] = session_for(store, "push", hash(bytes(base_)), root, name, actual);
+  require(!expected || session.expected == *expected,
+      "existing transfer has a different expected reference; resume or forget that session");
   detail::UploadProtection protection(
       store, session, options, limits,
       [&](std::string_view method, std::string_view path, std::span<const std::uint8_t> body,

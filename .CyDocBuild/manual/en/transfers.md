@@ -4,7 +4,7 @@ title: Transfer progress, cancellation and publication
 description: Transfer progress, cancellation and publication guide.
 section: Transfers
 order: 400
-revision: 1
+revision: 2
 ---
 
 # Transfer progress, cancellation and publication {#transfer-progress-cancellation-and-publication}
@@ -74,6 +74,39 @@ errors can precede authentication and keep their transport error status. A
 provisional `100 Continue` permits sending the body; it does not authorize access.
 The server closes connections after HTTP errors. Body reception still occupies
 a server worker; deployment quotas and admission controls remain future work.
+
+## Publish against an earlier observation {#expected-publication}
+
+```text
+syrnck agent push https://blocks.example.invalid heads/main main --expect absent
+syrnck agent push https://blocks.example.invalid heads/main main --expect revision:OLD_ID
+syrnck agent push https://blocks.example.invalid files/MANIFEST asset --expect manifest:OLD_ID
+```
+
+`--expect` requires the remote reference to be absent or exactly the supplied
+typed key (`chunk`, `manifest` or `revision`, colon and 64 lowercase hex digits).
+The examples need actual IDs. Use a previously fetched revision ID or the typed
+value returned by `Remote::refs` as the observation. A stale value is refused before session
+creation or object upload, including on a server branch that permits forced
+updates. A later change during transfer still fails the final expected-value
+publication. Uploaded reusable objects can remain after that later rejection.
+
+```cpp
+std::optional<syrnck::ObjectKey> observed = previous_remote_root; // null means absent
+auto result = remote.push_expected(store, local_root, "main", observed,
+                                    operation, transfer_options);
+```
+
+The session freezes this exact expectation. An existing unfinished session with
+a different expectation is refused before writes; resume it explicitly or inspect
+and forget it before planning a new transfer. A new explicit push also refuses
+when the remote already equals the desired result but differs from `--expect`.
+Use `agent resume URL SESSION_ID` to reconcile a lost acknowledgement against
+the original session. Reconciliation confirms that earlier publication; it does
+not prove the reference still points there. A completed session starts a fresh
+transfer with the newly checked expectation. Without `--expect`, `Remote::push` keeps its existing behavior
+of observing the current value at transfer startup. Object, HTTP and journal
+formats do not change; account, signature, branch and asset-lock rules still apply.
 
 ## Publication boundary {#publication-boundary}
 

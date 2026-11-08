@@ -491,7 +491,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
-  agent push URL RÉF_LOCALE RÉF_DISTANTE
+  agent push URL RÉF_LOCALE RÉF_DISTANTE [--expect absent|TYPE:ID]
              [--require-lease]      Exiger la protection du GC côté serveur
   agent pull URL RÉF_DISTANTE RÉF_LOCALE [--require-read-lease]
   agent resume URL SESSION           Reprendre une session interrompue
@@ -701,7 +701,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
-  agent push URL LOCAL_REF REMOTE_REF
+  agent push URL LOCAL_REF REMOTE_REF [--expect absent|KIND:ID]
              [--require-lease]      Require server GC protection
   agent pull URL REMOTE_REF LOCAL_REF [--require-read-lease]
   agent resume URL SESSION           Resume an interrupted session
@@ -2417,6 +2417,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       return 0;
     }
     auto limits = transfer_options(args);
+    const auto expectation = sub == "push" ? args.option("--expect") : std::optional<std::string>{};
     args.count(sub == "resume" ? 2 : 3);
     require(token.has_value(), "set SYRNCK_TOKEN");
     net::Remote remote(args.values[0], *token, ca_path);
@@ -2425,7 +2426,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "push") {
       auto refs = store.refs();
       require(refs.contains(args.values[1]), "unknown local reference");
-      print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
+      if (expectation) {
+        std::optional<ObjectKey> expected;
+        if (*expectation != "absent") {
+          const auto colon = expectation->find(':');
+          require(colon != std::string::npos && colon > 0, "expected remote reference must be absent or KIND:ID");
+          expected = ObjectKey{parse_kind(expectation->substr(0, colon)), expectation->substr(colon + 1)};
+          validate_id(expected->id);
+        }
+        print(remote.push_expected(store, refs.at(args.values[1]), args.values[2], expected,
+                                  {control->token(), observe}, limits));
+      } else print(remote.push(store, refs.at(args.values[1]), args.values[2], {control->token(), observe}, limits));
     } else if (sub == "pull") {
       auto refs = remote.refs({control->token(), observe}, limits);
       require(refs.contains(args.values[1]), "unknown remote reference");

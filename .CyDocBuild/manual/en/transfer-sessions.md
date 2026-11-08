@@ -5,7 +5,7 @@ description: Persistent transfer sessions guide.
 section: Transfers
 order: 590
 parent: transfers
-revision: 1
+revision: 2
 ---
 
 # Persistent transfer sessions {#persistent-transfer-sessions}
@@ -34,6 +34,11 @@ removed. If a remote reference changed roots, a new `agent pull URL REF LOCAL`
 addresses that new root; use the session ID to resume the original root.
 
 ## Format and writes {#format-and-writes}
+
+[Explicit publication expectations](doc:transfers#expected-publication) can bind
+a push to an earlier remote observation. A new expectation cannot replace an
+unfinished session's frozen `expected` value. Explicit resume keeps the original
+value, including after the remote has committed and its acknowledgement was lost.
 
 Records live in `STORE/transfers/ID.json`, with a strict version-3 schema and a
 16 KiB limit. Version-1 and version-2 records remain readable:

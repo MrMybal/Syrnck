@@ -44,6 +44,8 @@ class DocumentationHelp(unittest.TestCase):
         for language in ("en", "fr"):
             self.assertTrue(self.run_cli("--lang", language, "help", "server-signatures", "--print-url")
                             .stdout.strip().endswith(f"#/{language}/server-signatures"))
+            self.assertTrue(self.run_cli("--lang", language, "help", "agent", "push", "--section", "expected-publication", "--print-url")
+                            .stdout.strip().endswith(f"#/{language}/transfers/expected-publication"))
             for command, section in (("identity", "identity"), ("log", "rewrites")):
                 self.assertTrue(self.run_cli("--lang", language, "help", "native", command, "--print-url")
                                 .stdout.strip().endswith(f"#/{language}/native-authorship/{section}"))

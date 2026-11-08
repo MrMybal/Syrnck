@@ -4,7 +4,7 @@ title: Transferts et publication
 description: Guide : Transferts et publication.
 section: Transferts
 order: 400
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Transfert, progression et publication {#transfer-progress-cancellation-and-publication}
@@ -28,6 +28,40 @@ syrnck agent pull https://blocks.example.invalid asset received --progress-json
 Le serveur reçoit le corps avant contrôle d’identité, sous limite de 16 Mio et timeout de lecture de 30 secondes. Il exige ensuite exactement un en-tête `Authorization: Bearer <token>` avant parsing JSON applicatif, décompression, accès Store ou publication. Identifiants absents, faux ou dupliqués donnent 401 et `WWW-Authenticate: Bearer realm="Syrnck"`, même pour une route inconnue. Recevoir d’abord le corps évite un reset TCP Windows masquant le refus.
 
 Ce contrat concerne les corps bien formés complètement reçus avec Content-Length ou framing chunked. Erreurs de framing, codage transport non géré et dépassement de taille peuvent précéder l’authentification. `100 Continue` permet l’envoi, sans autoriser l’accès. Les connexions sont fermées après erreur HTTP. La réception occupe encore un worker ; quotas de déploiement et contrôle d’admission restent à développer.
+
+## Publier selon une observation antérieure {#expected-publication}
+
+```text
+syrnck agent push https://blocks.example.invalid heads/main main --expect absent
+syrnck agent push https://blocks.example.invalid heads/main main --expect revision:OLD_ID
+syrnck agent push https://blocks.example.invalid files/MANIFEST asset --expect manifest:OLD_ID
+```
+
+`--expect` exige une référence distante absente ou exactement égale à la clé
+typée indiquée (`chunk`, `manifest` ou `revision`, deux-points et 64 chiffres
+hexadécimaux minuscules). Remplacer les IDs par une révision précédemment
+téléchargée ou une valeur typée obtenue par `Remote::refs`. Une observation périmée
+est refusée avant création de session ou envoi d’objet, même si la branche serveur
+autorise les changements forcés. Un changement ultérieur pendant le transfert
+fait encore échouer la publication sous valeur attendue ; les objets réutilisables
+déjà envoyés peuvent subsister après ce refus plus tardif.
+
+```cpp
+std::optional<syrnck::ObjectKey> observed = previous_remote_root; // null means absent
+auto result = remote.push_expected(store, local_root, "main", observed,
+                                    operation, transfer_options);
+```
+
+La session fige cette valeur attendue. Une session inachevée existante avec une
+autre attente est refusée avant écriture ; la reprendre explicitement ou l’inspecter
+puis l’oublier avant de planifier un nouveau transfert. Un nouveau push explicite
+refuse aussi une cible déjà égale au résultat désiré si elle diffère de `--expect`.
+Utiliser `agent resume URL SESSION_ID` pour réconcilier un accusé perdu selon sa
+session d’origine. La réconciliation confirme cette publication passée, sans
+prouver que la référence y pointe encore. Une session terminée démarre un
+nouveau transfert avec la nouvelle attente vérifiée. Sans `--expect`, `Remote::push` garde son observation au démarrage du
+transfert. Formats d’objets, HTTP et journaux inchangés ; comptes, signatures,
+branches et verrous d’assets restent applicables.
 
 ## Frontière de publication {#publication-boundary}
 

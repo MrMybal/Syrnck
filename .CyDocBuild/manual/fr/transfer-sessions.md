@@ -5,7 +5,7 @@ description: Guide : Sessions de transfert persistantes.
 section: Transferts
 order: 590
 parent: transfers
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Sessions de transfert persistantes {#persistent-transfer-sessions}
@@ -26,6 +26,11 @@ syrnck agent prune --delete
 
 
 ## Format et écritures {#format-and-writes}
+
+Une [attente de publication explicite](doc:transfers#expected-publication) peut
+lier un push à une observation distante antérieure. Une nouvelle attente ne
+remplace pas le `expected` figé d’une session inachevée. La reprise explicite
+conserve l’original, même après commit distant dont l’accusé a été perdu.
 
 Les journaux `STORE/transfers/ID.json` utilisent un schéma v3 strict, limité à 16 Kio, avec lecture des versions 1 et 2. Champs : `version`, `id` BLAKE3 stable calculé sur direction/empreinte endpoint/racine/référence, `direction` push ou pull, `endpoint` hash de l’URL canonique, `root` clé exacte, `reference`, `expected` ou null, `state`, `upload_lease` nullable depuis v2 et `read_lease` nullable depuis v3.
 

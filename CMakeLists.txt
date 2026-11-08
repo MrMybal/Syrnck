@@ -841,6 +841,9 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME persistent_transfers COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/persistent_transfers.py
       $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
     set_tests_properties(persistent_transfers PROPERTIES TIMEOUT 90)
+    add_test(NAME expected_publications COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/expected_publications.py
+      $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
+    set_tests_properties(expected_publications PROPERTIES TIMEOUT 90)
     add_test(NAME server_upload_leases COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/server_upload_leases.py
       $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
     set_tests_properties(server_upload_leases PROPERTIES TIMEOUT 120)

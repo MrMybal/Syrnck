@@ -296,6 +296,37 @@ class ServerAccess(unittest.TestCase):
         self.cmd("native", "export", first, exported, store=self.server, key=True)
         self.assertEqual((exported / "Source/code.cpp").read_bytes(), b"first source")
 
+    def test_explicit_observation_fences_even_a_branch_allowing_forced_updates(self):
+        first = self.commit("Source/code.cpp", b"first\n")
+        self.cmd("pin", "first", "revision", first)
+        with self.serving(strict=True):
+            initial = json.loads(self.cmd("agent", "push", self.url, "first", "scratch", "--expect", "absent", actor="alice").stdout)
+            second = self.commit("Source/code.cpp", b"another writer\n")
+            self.cmd("pin", "second", "revision", second)
+            self.cmd("agent", "push", self.url, "second", "scratch", "--expect", "revision:" + first, actor="alice")
+            third = self.commit("Source/code.cpp", b"locally planned work\n")
+            self.cmd("pin", "third", "revision", third)
+            refs = self.cmd("refs").stdout
+            sessions = self.cmd("agent", "sessions").stdout
+            result = self.cmd("--lang", "fr", "agent", "push", self.url, "third", "scratch",
+                              "--expect", "revision:" + first, actor="alice", ok=False)
+            self.assertIn("valeur attendue", result.stderr.decode("utf-8"))
+            self.assertEqual(self.cmd("refs").stdout, refs)
+            self.assertEqual(self.cmd("agent", "sessions").stdout, sessions)
+            self.assertEqual(self.http("GET", "/v1/refs")["scratch"]["id"], second)
+            self.http("GET", "/v1/objects/revision/" + third, expected=404)
+            self.cmd("agent", "push", self.url, "third", "scratch", "--expect", "revision:" + second, actor="alice")
+            self.assertEqual(self.http("GET", "/v1/refs")["scratch"]["id"], third)
+            # A completed receipt for the same destination/root is a new
+            # publication when the caller supplies a new current expectation.
+            rewound = json.loads(self.cmd("agent", "push", self.url, "first", "scratch",
+                                         "--expect", "revision:" + third, actor="alice").stdout)
+            self.assertFalse(rewound["reconciled"])
+            self.assertNotEqual(rewound["upload_lease"], initial["upload_lease"])
+            self.assertEqual(self.http("GET", "/v1/refs")["scratch"]["id"], first)
+        self.cmd("gc", "--delete", store=self.server, key=True)
+        self.cmd("fsck", store=self.server, key=True)
+
 
 if __name__ == "__main__":
     unittest.main()
