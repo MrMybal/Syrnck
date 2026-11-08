@@ -10,6 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- Native macOS NFD callback filenames normalize to canonical NFC for Syncthing indexes, block requests and reconstruction.
 - Authenticated Syncthing BEP device connections and reproducible live upstream daemon qualification, including differential transfers into encrypted engine storage.
 - Explicit deterministic conflict copies for native merges and bidirectional agents, preserving asset contents and signed recoverable candidates.
 - C++20 block storage shared by Git assets and native revisions: complete manifests, reusable chunks, verified ranges, packs, backups and explicit retention.

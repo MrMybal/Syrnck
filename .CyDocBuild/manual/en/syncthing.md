@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 2
+revision: 3
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -38,8 +38,9 @@ Empty files use the reference implementation's single empty SHA-256 block.
 
 `File.Info()` returns an independent index copy. Set application-owned version
 vectors, sequence numbers and timestamps on that copy before announcing it.
-Names must be valid NFC UTF-8 relative paths. Native Windows separators from
-Syncthing's model callbacks are converted to the protocol's `/` separators.
+Names must be valid UTF-8 relative paths. The adapter normalizes native Darwin
+NFD names to NFC and converts native Windows separators to the protocol's `/`.
+Indexes, block requests and resume identity use the same canonical name.
 
 `File.ReadRequest(ctx, req)` serves an exact advertised block for the bound
 folder and file. A supplied SHA-256 hash must match; the protocol's optional

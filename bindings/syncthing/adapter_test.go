@@ -11,6 +11,7 @@ import (
 
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/scanner"
+	"golang.org/x/text/unicode/norm"
 	syrnck "syrnck.local/bindings/go"
 )
 
@@ -205,5 +206,41 @@ func TestEmptyFileReferenceCompatibility(t *testing.T) {
 	result, err := Fetch(context.Background(), destination, "project", incoming.Info(), nil, FetchOptions{})
 	if err != nil || result.Stats.Requests != 0 {
 		t.Fatal("empty file requested data", err)
+	}
+}
+
+func TestNativeUnicodeNamesKeepCanonicalBEPIdentity(t *testing.T) {
+	source, destination := openStore(t, true), openStore(t, true)
+	data := bytes.Join([][]byte{block(31), block(32)}, nil)
+	nfc := "Content/Édit.uasset"
+	native := norm.NFD.String(nfc)
+	view, err := NewFile(context.Background(), source, ingest(t, source, data, false), "project", native, protocol.MinBlockSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := view.Info()
+	if info.Name != nfc {
+		t.Fatal("native filename changed the immutable protocol identity")
+	}
+	first := info.Blocks[0]
+	got, err := view.ReadRequest(context.Background(), &protocol.Request{Folder: "project", Name: native,
+		Offset: first.Offset, Size: first.Size, Hash: first.Hash})
+	if err != nil || !bytes.Equal(got, data[:first.Size]) {
+		t.Fatalf("native NFD block request refused: %v", err)
+	}
+	info.Name = native
+	result, err := Fetch(context.Background(), destination, "project", info,
+		func(ctx context.Context, request *protocol.Request) ([]byte, error) {
+			if request.Name != nfc {
+				t.Error("outgoing request was not canonical NFC")
+			}
+			return view.ReadRequest(ctx, request)
+		}, FetchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual, err := destination.ReadRange(result.Manifest, 0, uint64(len(data)))
+	if err != nil || !bytes.Equal(actual, data) || info.Name != native {
+		t.Fatal("native normalization changed data or caller index")
 	}
 }

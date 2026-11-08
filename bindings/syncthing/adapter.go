@@ -38,6 +38,10 @@ func nameValid(name string) bool {
 		norm.NFC.IsNormalString(name) && strings.IndexFunc(name, unicode.IsControl) < 0
 }
 
+// The reference connection delivers native names: Windows separators and
+// Darwin NFD. The engine's immutable BEP identity always uses NFC and slashes.
+func protocolName(name string) string { return norm.NFC.String(filepath.ToSlash(name)) }
+
 func folderValid(folder string) bool {
 	return folder != "" && len(folder) <= 256 && utf8.ValidString(folder) &&
 		norm.NFC.IsNormalString(folder) && strings.IndexFunc(folder, unicode.IsControl) < 0
@@ -63,7 +67,7 @@ func copyInfo(info protocol.FileInfo) protocol.FileInfo {
 // by BEP. Syrnck chunk boundaries and IDs remain independent. Zero selects the
 // reference implementation's block-size policy.
 func NewFile(ctx context.Context, store *syrnck.Store, manifest, folder, name string, blockSize int) (*File, error) {
-	name = filepath.ToSlash(name)
+	name = protocolName(name)
 	if store == nil || !nameValid(name) || !folderValid(folder) {
 		return nil, errors.New("syrnck BEP: invalid file identity")
 	}
@@ -127,7 +131,7 @@ func (f *File) ReadRequest(ctx context.Context, req *protocol.Request) ([]byte, 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if req == nil || req.Folder != f.folder || filepath.ToSlash(req.Name) != f.info.Name || req.Offset < 0 ||
+	if req == nil || req.Folder != f.folder || protocolName(req.Name) != f.info.Name || req.Offset < 0 ||
 		req.Offset%int64(f.info.BlockSize()) != 0 {
 		return nil, protocol.ErrNoSuchFile
 	}
@@ -285,7 +289,7 @@ func Fetch(ctx context.Context, store *syrnck.Store, folder string, incoming pro
 	if store == nil {
 		return result, errors.New("syrnck BEP: nil destination store")
 	}
-	incoming.Name = filepath.ToSlash(incoming.Name)
+	incoming.Name = protocolName(incoming.Name)
 	if err = validateIndex(folder, incoming); err != nil {
 		return result, err
 	}

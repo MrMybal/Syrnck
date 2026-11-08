@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Noms natifs macOS NFD des callbacks normalisés en NFC canonique pour index, requêtes de blocs et reconstruction Syncthing.
 - Connexions d’appareils BEP Syncthing authentifiées et vérification reproductible contre le daemon amont réel, dont transferts différentiels vers le stockage moteur chiffré.
 - Copies de conflit déterministes explicites pour fusions natives et agents bidirectionnels, avec conservation des assets et candidats signés récupérables.
 - Stockage de blocs C++20 partagé entre assets Git et révisions natives : manifestes complets, blocs réutilisables, plages vérifiées, packs, sauvegardes et rétention explicite.
