@@ -13,15 +13,17 @@ import authorship_crashes as base
 class OwnedCheckoutCrashes(unittest.TestCase):
     command = base.AuthorshipCrashes.command
 
+    def scenarios(self):
+        return [(encrypted, scope, action, transition)
+                for encrypted in (False, True)
+                for scope in ("primary", "linked", "partial", "detached")
+                for action in ("checkout", "merge") for transition in (False, True)]
+
     def test_observed_owned_transaction_boundaries(self):
         with tempfile.TemporaryDirectory(prefix="syrnck-owned-checkout-crash-") as temporary:
             parent = Path(temporary)
             count = verified = resumed_without_key = 0
-            scenarios = [(encrypted, scope, action, transition)
-                         for encrypted in (False, True)
-                         for scope in ("primary", "linked", "partial", "detached")
-                         for action in ("checkout", "merge") for transition in (False, True)]
-            for encrypted, scope, action, transition in base.SHARD.select(scenarios):
+            for encrypted, scope, action, transition in base.SHARD.select(self.scenarios()):
                 label = f"{encrypted}-{scope}-{action}-{transition}"
                 seed = parent / ("seed-" + label)
                 self.command(base.READER, "prepare", seed, "encrypted" if encrypted else "plain",

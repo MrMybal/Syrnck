@@ -38,6 +38,7 @@ void prepare(const fs::path &root, bool encrypted, const std::string &scope, con
   source = f.store.put(Kind::revision, bytes(f.store.native_commit_metadata(std::move(signed_source)).dump())).first.id;
   std::string old = base;
   if (action == "merge") { files["Source/own"] = f.file("independent local work"); old = f.revision(files, Json::array({base})); }
+  if (action == "conflict-merge") { files["Source/item"] = f.file("own conflicting bytes"); old = f.revision(files, Json::array({base})); }
   f.install(old); f.store.set_ref("incoming", {Kind::revision, source});
   atomic_write(root / "fixture.json", bytes(Json{{"encrypted", encrypted}, {"scope", scope}, {"action", action},
       {"transition", transition}, {"old", old}, {"source", source}}.dump()), false);
@@ -80,6 +81,7 @@ bool perform(Store &store, const fs::path &root, const Json &info) {
   else {
     store.use_native_identity({"Bob", "bob@example.invalid", 60}, signing(96));
     NativeMergeOptions options; options.checkout_owner = service(store);
+    options.conflict_copies = info["action"] == "conflict-merge";
     store.merge_directory(directory, branch, info["old"].get<std::string>(), info["source"].get<std::string>(), "owned signed merge", options);
   }
   return false;
@@ -113,7 +115,22 @@ Json verify(Store &store, const fs::path &root, const Json &info, bool complete)
   if (complete) {
     require(!pending["pending"].get<bool>() && head != info["old"].get<std::string>(), "owned checkout did not finish");
     require(store.workspace_status(directory, store.native_target())["clean"] == true, "owned recovery left mismatched working files");
-    require(text(read_bytes(directory / (info["transition"].get<bool>() ? "Source/item/leaf" : "Source/item"))) == "after", "owned recovery restored wrong bytes");
+    if (info["action"] == "conflict-merge") {
+      const bool keep_current = info["old"].get<std::string>() < info["source"].get<std::string>();
+      require(text(read_bytes(directory / "Source/item")) == (keep_current ? "own conflicting bytes" : "after"),
+          "owned recovery changed the deterministic conflict winner");
+      std::size_t copies = 0;
+      const auto candidate = store.metadata(Kind::revision, head);
+      for (const auto &[path, entry] : candidate["files"].items()) {
+        (void)entry;
+        if (path.find(".syrnck-conflict-") != path.npos) {
+          ++copies;
+          require(text(read_bytes(directory / path_from_utf8(path))) == (keep_current ? "after" : "own conflicting bytes"),
+              "owned recovery discarded conflicting bytes");
+        }
+      }
+      require(copies == 1, "owned conflict merge duplicated or lost its sibling");
+    } else require(text(read_bytes(directory / (info["transition"].get<bool>() ? "Source/item/leaf" : "Source/item"))) == "after", "owned recovery restored wrong bytes");
     if (info["scope"] == "partial") require(!fs::exists(directory / "Content"), "owned recovery expanded a partial workspace");
     store.gc(true); store.fsck();
   }

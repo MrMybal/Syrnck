@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Fonctionnement continu {#run}
@@ -34,8 +34,7 @@ Dans le sens de publication par défaut, il publie uniquement les commits
 existants sans changer les fichiers. En mode bidirectionnel, les historiques
 existants peuvent encore produire une révision de fusion comme décrit ci-dessous.
 
-Synchronisation entièrement autonome de dossiers, copies conflictuelles
-automatiques, installation
+Synchronisation entièrement autonome de dossiers, installation
 comme service système et interopérabilité complète avec un daemon Syncthing
 restent à terminer. Voir les [limites actuelles](doc:limits).
 
@@ -59,12 +58,36 @@ Les conflits binaires, textuels chevauchants ou topologiques non résolus bloque
 l’agent avec le plan de fusion. Historiques local et distant récupéré restent
 conservés ; les octets de travail sont préservés. Résoudre avec le
 [parcours de fusion native](doc:native-resolutions) ; l’agent réessaie l’historique
-local résultant. Le nommage automatique de copies conflictuelles n’est pas réalisé.
+local résultant. La politique optionnelle ci-dessous peut conserver
+automatiquement les versions concurrentes des fichiers.
 
 Avec `--commits-only --bidirectional`, réception et fusion exigent toujours un
 workspace propre : les fichiers sales sont conservés et bloquent l’application.
 Une édition arrivant pendant le précontrôle peut aussi bloquer le checkout.
 Les indications du watcher n’autorisent jamais un remplacement sans vérification.
+
+## Conserver les assets conflictuels {#conflict-copies}
+
+```text
+syrnck agent run https://blocks.example.invalid --bidirectional --conflict-copies --require-lease
+```
+
+`--conflict-copies` exige `--bidirectional` et reste désactivé par défaut. Après
+les fusions compatibles/textuelles normales, les modifications binaires ou
+textuelles chevauchantes et les ajouts concurrents conservent les deux versions
+dans le snapshot de fusion. L’ordre stable des IDs de révisions sélectionne le
+chemin initial ; une copie voisine déterministe conserve l’autre version et les
+extensions d’assets courantes. Suppression/modification garde le fichier modifié.
+Consulter les [règles exactes de nommage et collision](doc:native-merge#conflict-copies).
+
+`merge.resolved` identifie chaque copie ou modification conservée. Les copies
+sont suivies et transférées par les mêmes manifests vérifiés, publication
+protégée et révision signée à deux parents. Inverser les pairs propose le même
+ensemble de fichiers ; un descendant résolu ne crée pas de nouvelles copies.
+Examiner les copies puis committer le choix final. Conflits de structure,
+noms générés occupés, obstacles non suivis, historiques sans lien/réécrits,
+index et récupération incomplète continuent de bloquer. Un candidat déjà préparé
+reprend à l’identique même si l’option est omise après redémarrage.
 
 ## Publication et récupération {#recovery}
 
@@ -170,8 +193,10 @@ workspace logique, cible HEAD et adresse distante. Appeler `invalidate()` après
 perte de continuité du watcher ; une nouvelle session commence par un audit
 complet. L’appelant gère planification et annulation. Cette API ne lance aucun
 thread de fond et ne charge pas implicitement le profil CLI. Les options sont
-branche distante, capture locale, réception et fusions compatibles ; réception
-et fusion valent false par défaut. La fusion exige la réception. Les noms
+branche distante, capture locale, réception, fusions compatibles et copies de
+conflit ; les trois dernières valent false par défaut. La fusion exige la
+réception et les copies exigent les deux. Par exemple,
+`NativeSyncOptions{"main", true, true, true, true}` active la conservation. Les noms
 `NativePushSync` / `NativePushSyncOptions` restent valides. Lier `syrnck_net` et
 fournir explicitement l’identité éventuelle. La CLI utilise
 `Store::take_native_identity()` pour déplacer la propriété exclusive de la clé

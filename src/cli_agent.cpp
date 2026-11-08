@@ -31,6 +31,7 @@ void AgentCommand::validate() const {
   require(remote_branch.find('/') == remote_branch.npos && remote_branch.size() <= 64,
       "native remote names must be single components of at most 64 bytes");
   if (branch) validate_native_target(*branch);
+  require(!conflict_copies || bidirectional, "agent conflict copies require --bidirectional");
 }
 int run_agent(const fs::path &directory, const fs::path &storage, const AgentCommand &command,
               const net::Remote &remote, const std::function<std::unique_ptr<Store>()> &open_store,
@@ -66,7 +67,7 @@ int run_agent(const fs::path &directory, const fs::path &storage, const AgentCom
   const auto working_directory = command.directory_from_workspace
       ? path_from_utf8(initial->native_head()["directory"].get<std::string>()) : directory;
   net::NativeSync sync(*initial, working_directory,
-      {command.remote_branch, !command.commits_only, command.bidirectional, command.bidirectional});
+      {command.remote_branch, !command.commits_only, command.bidirectional, command.bidirectional, command.conflict_copies});
   // Own only this agent's session lock, never the Store lock while waiting.
   auto ownership = lock_watch_journal(native_context_local_path(fs::canonical(storage), context, "agent-push.lock").parent_path(), "agent-push.lock");
   WorkspaceWatchOptions watch_options{command.polling, static_cast<std::size_t>(command.max_paths)};

@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 3
+revision: 4
 ---
 
 ## Run continuously {#run}
@@ -34,7 +34,7 @@ publication direction it only publishes existing commits and never changes
 working files. With bidirectional mode, existing histories may still produce
 a merge revision as described below.
 
-Complete unattended folder synchronization, automatic conflict copies,
+Complete unattended folder synchronization,
 OS service installation and complete
 Syncthing daemon interoperability remain unfinished. See [current limits](doc:limits).
 
@@ -57,12 +57,35 @@ Unresolved binary, overlapping-text and topology conflicts produce a blocked
 status with the merge plan. Both local and fetched histories remain retained;
 working bytes are preserved. Resolve the conflict with the normal
 [native merge workflow](doc:native-resolutions); the agent retries the resulting
-local history. Automatic conflict-copy naming is not implemented.
+local history. The optional preservation policy below can retain concurrent
+file versions automatically.
 
 With `--commits-only --bidirectional`, reception and merges still require the
 normal clean-workspace policy: dirty files are left intact and block application.
 An edit arriving during a preflight can also block the checkout. Watcher hints
 never authorize replacement without that fresh verification.
+
+## Retain conflicting assets {#conflict-copies}
+
+```text
+syrnck agent run https://blocks.example.invalid --bidirectional --conflict-copies --require-lease
+```
+
+`--conflict-copies` requires `--bidirectional` and is disabled by default. After
+normal compatible/text merging, concurrent binary or overlapping-text changes
+and add/add conflicts preserve both versions in the merge snapshot. A stable
+revision-ID ordering selects the original path; a deterministic sibling retains
+the other version and common asset extensions. Concurrent delete/modify keeps
+the modified file. See the exact [naming and collision rules](doc:native-merge#conflict-copies).
+
+The `merge.resolved` report identifies every copy or retained modification.
+Copies are tracked and transferred through the same verified manifests, guarded
+publication and signed two-parent revision. Opposite peer orientations propose
+the same file namespace; a resolved descendant does not create further copies.
+Inspect the copies and commit your eventual choice. Namespace conflicts,
+occupied generated names, untracked obstructions, unrelated/rewritten histories,
+staging and incomplete recovery retain their blocking behavior. Prepared owned
+targets resume unchanged even if this flag is omitted after restarting.
 
 ## Publication and recovery {#recovery}
 
@@ -164,8 +187,10 @@ workspace, HEAD target and endpoint. Call `invalidate()` when watcher continuity
 is lost; a new session starts with a full audit. The caller owns scheduling and
 cancellation. There is no background thread or implicit CLI profile loading in
 this C++ API. The options are remote branch, local capture, reception and
-compatible merges; reception and merges default to false. Merge mode requires
-reception. The earlier `NativePushSync` / `NativePushSyncOptions` names remain
+compatible merges and conflict copies; the last three default to false.
+Merge mode requires reception, and conflict copies require both. For example,
+`NativeSyncOptions{"main", true, true, true, true}` enables the preservation policy.
+The earlier `NativePushSync` / `NativePushSyncOptions` names remain
 valid. Link `syrnck_net` and provide any signing identity explicitly.
 The CLI uses `Store::take_native_identity()` to move exclusive key ownership
 between short-lived handles without exporting seed bytes.

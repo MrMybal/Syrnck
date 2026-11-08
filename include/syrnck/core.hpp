@@ -197,6 +197,9 @@ struct NativeMergeOptions {
   // An explicit process/session tag permits guarded checkout recovery. It is
   // not an identity credential and never changes the signed revision payload.
   std::optional<std::string> checkout_owner{};
+  // Preserve unresolved file content as deterministic sibling copies. Modified
+  // files survive a concurrent deletion; namespace/topology conflicts still block.
+  bool conflict_copies = false;
 };
 struct NativeRebaseResolutionSet {
   std::string head, base, onto;

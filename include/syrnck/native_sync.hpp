@@ -7,6 +7,7 @@ struct NativePushSyncOptions {
   bool capture_changes = true;
   bool receive_changes = false;
   bool merge_changes = false;
+  bool conflict_copies = false;
 };
 // Session-local observation and durable acknowledged history. Each tick uses
 // the caller's currently locked Store; waiting between ticks needs no Store.

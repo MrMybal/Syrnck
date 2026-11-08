@@ -40,6 +40,74 @@ void namespace_conflicts(const NativeSnapshot &files, Json &conflicts, ReportBud
                       Json{{"path", path}, {"reason", "file_directory_collision"}, {"other", found->second}});
   }
 }
+std::string conflict_path(const std::string &path, const std::string &revision) {
+  const auto slash = path.rfind('/');
+  const auto name = path.substr(slash == path.npos ? 0 : slash + 1);
+  const auto dot = name.rfind('.');
+  const bool extension = dot != name.npos && dot != 0 && name.size() - dot <= 16;
+  auto label = name.substr(0, extension ? dot : name.size());
+  if (label.size() > 64) {
+    std::size_t length = 64;
+    while ((static_cast<unsigned char>(label[length]) & 0xc0) == 0x80) --length;
+    label.resize(length);
+  }
+  return (slash == path.npos ? std::string{} : path.substr(0, slash + 1)) + label +
+      ".syrnck-conflict-" + revision + '-' + hash(bytes(path)).substr(0, 16) +
+      (extension ? name.substr(dot) : std::string{});
+}
+void preserve_conflicts(NativeFileMergeResult &result, Json &conflicts, std::set<std::string> &paths,
+                        const NativeSnapshot &original, const NativeSnapshot &current,
+                        const NativeSnapshot &incoming, const NativeConflictCopyContext &context,
+                        ReportBudget &budget, const OperationOptions &options) {
+  // Reserve every file and directory in all inputs, including paths that the
+  // merge would otherwise delete. Never claim an existing name as a new copy.
+  std::set<std::string> names, files;
+  for (const auto *snapshot : {&original, &current, &incoming})
+    for (const auto &[path, file] : *snapshot) {
+      (void)file; throw_if_cancelled(options.stop);
+      const auto fold = portable_fold(path);
+      files.insert(fold); names.insert(fold);
+      for (auto n = fold.find('/'); n != fold.npos; n = fold.find('/', n + 1)) names.insert(fold.substr(0, n));
+    }
+  Json remaining = Json::array();
+  for (const auto &row : conflicts) {
+    throw_if_cancelled(options.stop);
+    if (row.contains("other")) continue; // Recompute namespace blockers below.
+    const auto path = row["path"].get<std::string>();
+    const auto reason = row["reason"].get<std::string>();
+    if (reason != "content" && reason != "add_add" && reason != "modify_delete" && reason != "delete_modify") {
+      remaining.push_back(row); continue;
+    }
+    const auto *ours = lookup(current, path), *theirs = lookup(incoming, path);
+    if (!ours || !theirs) {
+      const auto *survivor = ours ? ours : theirs;
+      require(survivor, "invalid native conflict copy inputs");
+      result.files.insert_or_assign(path, *survivor);
+      budget.append(result.resolved, Json{{"path", path}, {"choice", "keep_modified"},
+          {"reason", reason}, {"winner", ours ? "current" : "incoming"}, {"target", summary(survivor)}});
+      continue;
+    }
+    const bool keep_current = context.current < context.incoming;
+    const auto &losing_revision = keep_current ? context.incoming : context.current;
+    const auto copy = conflict_path(path, losing_revision);
+    const auto fold = portable_fold(copy);
+    bool occupied = names.contains(fold);
+    for (auto n = fold.find('/'); n != fold.npos; n = fold.find('/', n + 1))
+      occupied |= files.contains(fold.substr(0, n));
+    if (occupied) {
+      auto blocked = row; blocked["reason"] = "conflict_copy_collision"; blocked["copy_path"] = copy;
+      budget.append(remaining, std::move(blocked)); continue;
+    }
+    const auto *winner = keep_current ? ours : theirs, *loser = keep_current ? theirs : ours;
+    result.files.insert_or_assign(path, *winner); result.files.emplace(copy, *loser);
+    paths.insert(copy); names.insert(fold); files.insert(fold);
+    budget.append(result.resolved, Json{{"path", path}, {"choice", "conflict_copy"}, {"reason", reason},
+        {"winner", keep_current ? "current" : "incoming"}, {"target", summary(winner)},
+        {"copy_path", copy}, {"copy_revision", losing_revision}, {"copy", summary(loser)}});
+  }
+  namespace_conflicts(result.files, remaining, budget, options);
+  conflicts = std::move(remaining);
+}
 } // namespace
 void require_native_resolution_context(const NativeResolutionSet &resolutions, std::string_view operation,
                                        std::string_view head, std::string_view source,
@@ -54,7 +122,8 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
                                          const NativeSnapshot &current, const NativeSnapshot &incoming,
                                          OperationOptions options, const NativeResolutionSet *resolutions,
                                          const TextDiffOptions *text_limits,
-                                         NativeTextMergeBatch *shared_batch) {
+                                         NativeTextMergeBatch *shared_batch,
+                                         const NativeConflictCopyContext *copies) {
   NativeFileMergeResult result;
   std::set<std::string> paths;
   for (const auto *files : std::array<const NativeSnapshot *, 3>{&original, &incoming, &current})
@@ -197,6 +266,8 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
     if (!shared_batch)
       result.generated = std::move(batch.generated);
   }
+  if (copies)
+    preserve_conflicts(result, final_conflicts, paths, original, current, incoming, *copies, final_budget, options);
   std::size_t snapshot_bytes = 2;
   for (const auto &[path, entry] : result.files) {
     throw_if_cancelled(options.stop);
@@ -218,7 +289,7 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
   }
   result.changes = std::move(changes);
   result.conflicts = std::move(final_conflicts);
-  result.processed = completed;
+  result.processed = paths.size();
   result.paths = paths.size();
   return result;
 }

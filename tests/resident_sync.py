@@ -108,6 +108,114 @@ class ResidentSync(unittest.TestCase):
         for revision in (initial, ours, theirs):
             self.metadata(revision, store)
 
+    def test_explicit_binary_conflict_copies_converge_and_retain_history(self):
+        name = "Content/Map.uasset"
+        initial = self.commit(name, b"\0base")
+        peer, store = self.peer()
+        with self.serving(strict=True):
+            self.publish(initial, name="scratch")
+            with self.agent("--bidirectional", "--max-updates", "1", directory=peer, store=store) as right:
+                right.state("pulled", local_revision=initial)
+                self.assertEqual(right.process.wait(timeout=10), 0)
+            ours = self.commit(name, b"\0remote")
+            theirs = self.peer_commit(peer, store, b"\0local", name)
+            self.publish(ours, name="scratch")
+            # Explicit CLI planning must remain read-only and exposes the same
+            # stable copy that the resident process subsequently publishes.
+            with self.agent("--bidirectional", "--commits-only", directory=peer, store=store) as blocked:
+                blocked.state("blocked", reason="merge_conflict")
+            head_before = json.loads(self.cmd("native", "head", store=store).stdout)
+            plan = json.loads(self.cmd("native", "merge-plan", ours, "--directory", peer,
+                "--conflict-copies", "--verify", store=store).stdout)
+            self.assertTrue(plan["ready"])
+            self.assertEqual(json.loads(self.cmd("native", "head", store=store).stdout), head_before)
+            sibling = plan["resolved"][0]["copy_path"]
+            self.assertTrue(sibling.endswith(".uasset"))
+            with self.agent("--bidirectional", "--conflict-copies", "--commits-only", directory=peer, store=store) as right:
+                frame = right.state("pushed", merged=True)
+                merged = frame["local_revision"]
+                self.assertEqual(frame["merge"]["resolved"][0]["copy_path"], sibling)
+                self.assertEqual(self.metadata(merged, store)["parents"], [theirs, ours])
+                self.assertIsNotNone(self.metadata(merged, store)["signature"])
+                right.state("synced", working_clean=True)
+                with self.agent("--bidirectional", "--commits-only") as left:
+                    left.state("pulled", local_revision=merged)
+                    left.state("synced", working_clean=True)
+                    for root in (peer, self.project):
+                        self.assertEqual({(root / name).read_bytes(), (root / sibling).read_bytes()},
+                            {b"\0remote", b"\0local"})
+            # Restarting on the resolved history creates no further copies.
+            with self.agent("--bidirectional", "--conflict-copies", "--max-updates", "1", directory=peer, store=store) as right:
+                right.state("synced", local_revision=merged)
+                self.assertEqual(right.process.wait(timeout=10), 0)
+        for target in (self.local, store):
+            self.cmd("gc", "--delete", store=target)
+            self.cmd("fsck", store=target)
+            for revision in (initial, ours, theirs):
+                self.metadata(revision, target)
+
+    def test_conflict_copies_require_explicit_bidirectional_mode(self):
+        failure = self.cmd("agent", "run", "http://127.0.0.1:9", "--conflict-copies", ok=False)
+        self.assertIn(b"agent conflict copies require --bidirectional", failure.stderr)
+
+    def test_partial_detached_agent_preserves_unmaterialized_conflict_copies(self):
+        name = "Content/Map.uasset"
+        self.write(name, b"\0base")
+        initial = self.commit("Source/code.cpp", b"source\n")
+        peer, store = self.peer()
+        with self.serving(strict=True):
+            self.publish(initial, name="scratch")
+            with self.agent("--bidirectional", "--max-updates", "1", directory=peer, store=store) as right:
+                right.state("pulled", local_revision=initial)
+                self.assertEqual(right.process.wait(timeout=10), 0)
+            ours = self.commit(name, b"\0remote")
+            theirs = self.peer_commit(peer, store, b"\0local", name)
+            partial = self.root / "partial"
+            self.cmd("native", "workspace-add", "partial", partial, "--revision", theirs,
+                "--include", "Source", "--directory", peer, store=store)
+            self.publish(ours, name="scratch")
+            with self.agent("--bidirectional", "--conflict-copies", "--commits-only", workspace="partial", store=store) as right:
+                frame = right.state("pushed", merged=True)
+                merged = frame["local_revision"]
+                right.state("synced", working_clean=True)
+                sibling = frame["merge"]["resolved"][0]["copy_path"]
+                self.assertFalse((partial / "Content").exists())
+                self.assertEqual((partial / "Source/code.cpp").read_bytes(), b"source\n")
+                self.assertEqual(json.loads(self.cmd("native", "head", store=store).stdout)["revision"], theirs)
+                selected = json.loads(self.cmd("--workspace", "partial", "native", "head", store=store).stdout)
+                self.assertIsNone(selected["branch"])
+                self.assertEqual(selected["revision"], merged)
+        self.cmd("gc", "--delete", store=store)
+        output = self.root / "full-conflicts"
+        self.cmd("native", "export", merged, output, store=store)
+        self.assertEqual({(output / name).read_bytes(), (output / sibling).read_bytes()}, {b"\0remote", b"\0local"})
+        self.cmd("fsck", store=store)
+
+    def test_conflict_copy_collision_preserves_untracked_bytes(self):
+        name = "Source/code.cpp"
+        initial = self.commit(name, b"base\n")
+        peer, store = self.peer()
+        with self.serving(strict=True):
+            self.publish(initial, name="scratch")
+            with self.agent("--bidirectional", "--max-updates", "1", directory=peer, store=store) as right:
+                right.state("pulled", local_revision=initial)
+                self.assertEqual(right.process.wait(timeout=10), 0)
+            ours = self.commit(name, b"remote\n")
+            theirs = self.peer_commit(peer, store, b"local\n")
+            self.publish(ours, name="scratch")
+            with self.agent("--bidirectional", "--commits-only", directory=peer, store=store) as right:
+                right.state("blocked", reason="merge_conflict")
+            plan = json.loads(self.cmd("native", "merge-plan", ours, "--directory", peer,
+                "--conflict-copies", store=store).stdout)
+            sibling = peer / plan["resolved"][0]["copy_path"]
+            sibling.write_bytes(b"untracked local data")
+            with self.agent("--bidirectional", "--conflict-copies", "--commits-only", directory=peer, store=store) as right:
+                right.state("blocked", reason="working_changes")
+                self.assertEqual(sibling.read_bytes(), b"untracked local data")
+                self.assertEqual((peer / name).read_bytes(), b"local\n")
+                self.assertEqual(json.loads(self.cmd("native", "head", store=store).stdout)["revision"], theirs)
+                self.assertEqual(self.http("GET", "/v1/refs")["scratch"]["id"], ours)
+
     def test_commits_only_reception_waits_for_dirty_working_file(self):
         initial = self.commit("Source/code.cpp", b"base\n")
         peer, store = self.peer()

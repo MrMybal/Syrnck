@@ -48,6 +48,10 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
   result["previous_revision"] = plan.head;
   result["merged_revision"] = source;
   result["base"] = plan.base ? Json(*plan.base) : Json{};
+  if (settings.conflict_copies) {
+    result["conflict_copies"] = true;
+    result["resolved"] = plan.report["resolved"];
+  }
   return result;
 }
 } // namespace syrnck

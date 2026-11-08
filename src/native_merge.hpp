@@ -11,6 +11,7 @@ struct NativeFileMergeResult {
   Json text_merge;
   std::size_t processed = 0, paths = 0;
 };
+struct NativeConflictCopyContext { std::string current, incoming; };
 void require_native_resolution_context(const NativeResolutionSet &, std::string_view operation,
                                        std::string_view head, std::string_view source,
                                        const std::optional<std::string> &base,
@@ -18,7 +19,8 @@ void require_native_resolution_context(const NativeResolutionSet &, std::string_
 NativeFileMergeResult merge_native_files(const Store &, const NativeSnapshot &base,
                                          const NativeSnapshot &current, const NativeSnapshot &incoming,
                                          OperationOptions, const NativeResolutionSet * = nullptr,
-                                         const TextDiffOptions * = nullptr, NativeTextMergeBatch * = nullptr);
+                                         const TextDiffOptions * = nullptr, NativeTextMergeBatch * = nullptr,
+                                         const NativeConflictCopyContext * = nullptr);
 struct NativeMergePlan {
   std::string head;
   std::optional<std::string> base;

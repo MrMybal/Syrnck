@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Copies de conflit déterministes explicites pour fusions natives et agents bidirectionnels, avec conservation des assets et candidats signés récupérables.
 - Stockage de blocs C++20 partagé entre assets Git et révisions natives : manifestes complets, blocs réutilisables, plages vérifiées, packs, sauvegardes et rétention explicite.
 - Historique natif et opérations récupérables du workspace, serveur de blocs authentifié et transferts ponctuels reprenables.
 - HEAD natif détaché avec index privé, changement récupérable et rétention des historiques détachés.

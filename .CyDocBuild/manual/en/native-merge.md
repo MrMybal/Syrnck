@@ -5,7 +5,7 @@ description: Native merge guide.
 section: Version control
 order: 300
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 # Native merge {#native-merge}
@@ -111,6 +111,46 @@ branch/workspace change; normal GC can collect them. Once a journal exists,
 resume/abort uses its retained candidate without needing to rerun text merge.
 Cancellation and observer exceptions preserve these boundaries.
 
+
+## Preserve concurrent file contents {#conflict-copies}
+
+```text
+syrnck native merge-plan feature --text-merge --conflict-copies --verify
+syrnck native merge feature --text-merge --conflict-copies --expect OLD_TIP_ID
+```
+
+`--conflict-copies` is an explicit file-level preservation policy. Explicit
+`--resolutions` choices apply first; optional bounded text composition runs next.
+Remaining content and add/add conflicts keep one version at the original path
+and the other in a sibling copy. The lexicographically smaller complete revision
+ID wins the original path, so reversing the two peers produces the same file
+namespace. This ordering is deterministic; it does not imply newer or better data.
+Concurrent delete/modify retains the modified file at its original path and
+records `choice: keep_modified`. Both parent histories preserve the deletion.
+Identical concurrent deletions still delete the file.
+
+A sibling name combines at most 64 UTF-8 bytes of the stem, `.syrnck-conflict-`,
+the losing revision's complete ID and 16 hex digits of the original path hash.
+Extensions of at most 16 UTF-8 bytes, including `.uasset` and `.umap`, are kept.
+No timestamp, hostname or random suffix influences the result. Reports include
+`conflict_copies`, `resolved` entries with `choice: conflict_copy`, `copy_path`,
+`copy_revision`, original conflict `reason` and both file descriptors.
+The generated names are ordinary tracked files; review and remove them in a
+later commit after choosing the desired asset version.
+
+Any occupied generated name or parent in an input snapshot blocks with
+`conflict_copy_collision`, including case aliases, directories and files that
+would otherwise be deleted. Untracked/ignored working obstructions still block
+checkout. Case and file/directory conflicts, ambiguous bases and unrelated
+histories retain their normal policies. This option does not infer an edited
+rename or compose binary data. Copies share the existing manifests and chunks;
+there is no extra binary payload in the Store for the preserved version.
+Apply verifies the complete input histories and uses the usual signed revision
+and recoverable checkout. The frozen candidate, including its copy paths,
+resumes without recomputing policy or requiring its signing key.
+
+In C++, set `NativeMergeOptions::conflict_copies = true`. The default remains
+false. Cherry-pick, revert and rebase keep their existing resolution policies.
 
 ## Reports and validation {#reports-and-validation}
 

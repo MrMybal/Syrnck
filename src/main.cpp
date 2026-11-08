@@ -426,7 +426,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
     Relations d'ascendance et tous les meilleurs ancêtres communs.
   native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCHE] [--directory .] [--verify]
-                    [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
+                    [--no-ff | --ff-only] [--conflict-copies] [--max-revisions 100000] [--max-links 1000000]
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
   native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
@@ -492,7 +492,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
-  agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only] [--bidirectional]
+  agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Surveiller, créer des snapshots et publier en continu
@@ -640,7 +640,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
     Ancestry relations and every best common ancestor.
   native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCH] [--directory .] [--verify]
-                    [--no-ff | --ff-only] [--max-revisions 100000] [--max-links 1000000]
+                    [--no-ff | --ff-only] [--conflict-copies] [--max-revisions 100000] [--max-links 1000000]
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
   native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
@@ -706,7 +706,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
-  agent run URL [--directory DIR] [--remote-branch main] [--commits-only] [--bidirectional]
+  agent run URL [--directory DIR] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Watch, snapshot and publish continuously
@@ -871,6 +871,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     request.branch = args.option("--branch");
     request.commits_only = args.flag("--commits-only"); request.polling = args.flag("--polling");
     request.bidirectional = args.flag("--bidirectional");
+    request.conflict_copies = args.flag("--conflict-copies");
     request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
     request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
     request.audit_ms = integer(args.option("--audit-ms").value_or("300000"));
@@ -2016,6 +2017,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
+      settings.conflict_copies = args.flag("--conflict-copies");
       settings.resolutions = resolutions_input();
       if (args.flag("--text-merge"))
         settings.text_merge = text_diff_options(args);

@@ -57,9 +57,11 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     } else {
       const auto incoming = read_native_snapshot(store, source, options);
       const auto original = plan.base ? read_native_snapshot(store, *plan.base, options) : NativeSnapshot{};
+      const NativeConflictCopyContext copies{plan.head, std::string(source)};
       combined = merge_native_files(store, original, current, incoming, options,
                                     settings.resolutions ? &*settings.resolutions : nullptr,
-                                    settings.text_merge ? &*settings.text_merge : nullptr);
+                                    settings.text_merge ? &*settings.text_merge : nullptr, nullptr,
+                                    settings.conflict_copies ? &copies : nullptr);
       // Fast-forward adopts the exact source revision, including its manifests.
       if (forward)
         combined.files = incoming;
@@ -91,6 +93,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"allow_unrelated_histories", settings.allow_unrelated_histories},
                      {"no_fast_forward", settings.no_fast_forward},
                      {"fast_forward_only", settings.fast_forward_only},
+                     {"conflict_copies", settings.conflict_copies},
                      {"ready", ready},
                      {"objects_verified", verify_objects},
                      {"result_files", blockers.empty() ? Json(plan.files.size()) : Json{}},

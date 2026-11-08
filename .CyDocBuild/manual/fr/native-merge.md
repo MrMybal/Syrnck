@@ -5,7 +5,7 @@ description: Guide : Fusion de branches.
 section: Versionnage
 order: 300
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Fusion native {#native-merge}
@@ -56,6 +56,47 @@ syrnck native merge feature --text-merge --expect OLD_TIP_ID
 syrnck native merge-plan feature --text-merge --max-file-bytes 2097152 --max-work 33554432
 ```
 
+
+## Conserver les contenus concurrents {#conflict-copies}
+
+```text
+syrnck native merge-plan feature --text-merge --conflict-copies --verify
+syrnck native merge feature --text-merge --conflict-copies --expect OLD_TIP_ID
+```
+
+`--conflict-copies` active explicitement une politique de conservation par fichier.
+Les choix `--resolutions` s’appliquent d’abord, puis la composition textuelle
+bornée si activée. Pour les conflits de contenu ou ajout/ajout restants, une
+version conserve le chemin initial et l’autre devient une copie voisine. Le
+plus petit ID complet de révision dans l’ordre lexicographique garde le chemin
+initial : inverser les deux pairs produit le même ensemble de fichiers. Cet
+ordre déterministe ne désigne pas la version la plus récente ou la meilleure.
+Une suppression concurrente à une modification conserve le fichier modifié au
+chemin initial et annonce `choice: keep_modified`. Les deux historiques parents
+conservent la suppression. Deux suppressions identiques suppriment le fichier.
+
+Le nom de copie combine au plus 64 octets UTF-8 du radical, `.syrnck-conflict-`,
+l’ID complet de la révision perdante et 16 chiffres hexadécimaux du hash du chemin
+initial. Les extensions d’au plus 16 octets UTF-8, dont `.uasset` et `.umap`, sont
+conservées. Date, machine et hasard n’influencent pas le résultat. Les rapports
+incluent `conflict_copies` et les lignes `resolved` avec `choice: conflict_copy`,
+`copy_path`, `copy_revision`, le `reason` initial et les deux descripteurs.
+Les copies sont des fichiers suivis ordinaires : les examiner puis les supprimer
+dans un commit ultérieur après avoir choisi la version souhaitée de l’asset.
+
+Un nom généré ou parent occupé dans les snapshots d’entrée bloque avec
+`conflict_copy_collision`, y compris alias de casse, dossier et fichier qui
+aurait autrement été supprimé. Les obstacles de travail ignorés ou non suivis
+bloquent toujours le checkout. Conflits de casse, fichier/dossier, bases ambiguës
+et historiques sans lien conservent leurs politiques habituelles. Cette option
+ne déduit pas un renommage édité et ne compose pas les données binaires.
+Les copies réutilisent manifests et blocs existants sans payload binaire
+supplémentaire dans le stockage. L’application vérifie les historiques complets
+et utilise signature et checkout récupérable habituels. Le candidat figé, noms
+de copies compris, reprend sans recalculer la politique ni exiger la clé de signature.
+
+En C++, définir `NativeMergeOptions::conflict_copies = true`, faux par défaut.
+Cherry-pick, revert et rebase gardent leurs politiques de résolution existantes.
 
 ## Rapports et vérification {#reports-and-validation}
 

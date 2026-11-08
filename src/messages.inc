@@ -1148,3 +1148,6 @@ SYRNCK_MESSAGE("invalid native remote observation", "Observation distante native
 SYRNCK_MESSAGE("native remote observation changed; retry synchronization", "L’observation distante native a changé ; recommencez la synchronisation")
 SYRNCK_MESSAGE("native observation archive reference is occupied", "La référence d’archive d’observation native est occupée")
 SYRNCK_MESSAGE("published native history conflicts with a retained observation", "L’historique natif publié est en conflit avec une observation conservée")
+SYRNCK_MESSAGE("native agent conflict copies require bidirectional merges", "Les copies de conflit de l’agent natif exigent les fusions bidirectionnelles")
+SYRNCK_MESSAGE("agent conflict copies require --bidirectional", "Les copies de conflit de l’agent exigent --bidirectional")
+SYRNCK_MESSAGE("invalid native conflict copy inputs", "Entrées de copie de conflit native invalides")
