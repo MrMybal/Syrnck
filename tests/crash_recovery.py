@@ -75,8 +75,7 @@ def cases():
         result.extend(("checkout-abort", phase, kind, 1) for phase in ("move.before", "move.published", "move.durable"))
     result.append(("checkout-abort", "checkout.cleaned", "checkout", 1))
     result.extend(("commit", phase, "chunk", 2) for phase in ("atomic.file_synced", "atomic.published"))
-    for occurrence in (1, 2):
-        atomic("detach", ("refs",), occurrence)
+    atomic("detach", ("refs",))
     result.extend(("detach", phase, "revision", 1) for phase in ("atomic.file_synced", "atomic.published"))
     for operation in ("append", "compact"):
         atomic(operation, ("pack", "index", "config"))
@@ -373,11 +372,11 @@ class CrashRecovery(unittest.TestCase):
             archive = "archive/" + info["old_revision"]["id"]
             archived = archive in checked["refs"]
             changed = checked["refs"]["heads/main"] != info["old_revision"]
-            self.assertEqual(changed, kind == "refs" and occurrence == 2 and published)
-            if kind == "refs":
-                self.assertEqual(archived, occurrence == 2 or published)
-            else:
-                self.assertTrue(archived)
+            # Archive and rewritten head now share one expected-value ref
+            # publication. Neither becomes visible before the revision exists;
+            # both appear together when that single ref transaction publishes.
+            self.assertEqual(changed, kind == "refs" and published)
+            self.assertEqual(archived, changed)
         else:
             self.assertEqual(checked["refs"], info["refs"])
         if operation == "gc" and kind == "config" and published:
