@@ -5,7 +5,7 @@ description: Native tags, revision selectors and retained archives guide.
 section: Version control
 order: 400
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native tags, revision selectors and retained archives {#native-tags-revision-selectors-and-retained-archives}
@@ -123,7 +123,7 @@ checkout preflight/execution and revision export accept these selectors:
 | Selector | Resolution |
 | --- | --- |
 | 64 lowercase hexadecimal characters | Exact revision ID, with priority over identically named labels |
-| `HEAD` | Current symbolic branch's committed revision; unborn HEAD is refused |
+| `HEAD` | Current named or detached committed revision; unborn HEAD is refused |
 | `heads/NAME` | Explicit native branch |
 | `tags/NAME` | Explicit native tag, with annotation consistency checks |
 | `NAME` | A branch or tag, provided only one namespace contains that name |
@@ -135,8 +135,8 @@ Resolution validates the selected revision metadata, without traversing its
 parents, manifests or file chunks. It is separate from full verification.
 
 `native switch NAME` still selects a literal branch. `native checkout TAG`
-restores that revision and moves the selected branch, archiving its old head;
-it does not create detached HEAD state. The explicit C++ snapshot methods retain
+restores that revision and moves the selected target, archiving its old head;
+use [`native switch --detach TAG`](doc:native-detached) to detach instead. The explicit C++ snapshot methods retain
 their revision-ID arguments; applications can call `resolve_native_revision()`.
 
 ## Storage, cancellation and API {#storage-cancellation-and-api}

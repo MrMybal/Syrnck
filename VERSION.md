@@ -12,6 +12,7 @@ Object format v1, physical store formats v1/v2/v3 and C ABI 1 are separate versi
 
 - C++20 block storage shared by Git assets and native revisions: complete manifests, reusable chunks, verified ranges, packs, backups and explicit retention.
 - Native history and recoverable workspace workflows, plus an authenticated block server and resumable one-shot transfers.
+- Detached native HEAD with a private index, recoverable switching and retained detached histories.
 - Native line attribution through merge parents and exact renames, with verified stored content and explicit input/work/output budgets.
 - A local CyDoc manual in English and French, contextual `syrnck help`, public-header API annotations and documentation packaging in build/install/CI.
 - English/French README editions with source installation, scoped dependency notices and these version notes.
@@ -20,7 +21,7 @@ These source features are not an announcement of a prebuilt release. Each operat
 
 ## Documented limitations
 
-- HEAD is symbolic. Multiple/partial native workspaces and detached HEAD remain unfinished.
+- Named and detached HEAD are available. Multiple/partial native workspaces remain unfinished.
 - Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Native revisions have no structured author or signature fields; merge-preserving rebase remains unfinished.
 - The agent transfers once per invocation. The watcher observes changes; neither provides a complete continuous synchronization service with causal versions, offline conflict reconciliation, deletions and rename propagation.
 - The optional Syncthing adapter covers regular-file BEP data. Device discovery, pairing, version vectors, conflicts and full daemon/folder synchronization are outside that adapter.

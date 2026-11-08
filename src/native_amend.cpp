@@ -13,11 +13,11 @@ struct Amendment {
   Amendment(const Store &store, std::string_view branch, std::string_view expected, bool staged,
             std::stop_token stop) {
     throw_if_cancelled(stop);
-    validate_ref(branch);
+    validate_native_target(branch);
     validate_id(expected);
     require_no_native_checkout(store);
-    head_name = "heads/" + std::string(branch);
-    stage_name = "staging/" + std::string(branch);
+    head_name = native_revision_reference(std::string(branch));
+    stage_name = native_staging_reference(std::string(branch));
     archive_name = "archive/amend/" + std::string(expected);
     validate_ref(head_name);
     validate_ref(stage_name);

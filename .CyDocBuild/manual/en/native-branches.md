@@ -5,12 +5,13 @@ description: Native branches and recoverable switching guide.
 section: Version control
 order: 220
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native branches and recoverable switching {#native-branches-and-recoverable-switching}
 
-The native CLI has a symbolic current branch. Existing Stores without a HEAD
+The native CLI normally selects a named branch and also supports
+[detached HEAD](doc:native-detached). Existing Stores without a HEAD
 descriptor implicitly select `main`, including when that branch is unborn.
 Reading HEAD never creates it. A successful switch records an explicit selection
 bound to the canonical workspace directory.
@@ -32,7 +33,8 @@ working files. `native switch NAME` restores that branch's exact head and select
 it. **Neither branch head moves during switch**. `native checkout REVISION`
 continues to restore an exact revision and move the selected branch, with an
 archive of its previous head. Both use the [recoverable checkout](doc:native-checkout)
-executor. There is no detached HEAD or automatic branch creation during switch.
+executor. [`native switch --detach REVISION`](doc:native-detached) selects a
+revision independently of named branches. Switch never creates a named branch.
 
 ## Branch inventory and verified creation {#branch-inventory-and-verified-creation}
 
@@ -204,23 +206,23 @@ auto restored = store.restore_native_branch(archive_id, "recovered", operation);
 
 ## CLI defaults and workspace identity {#cli-defaults-and-workspace-identity}
 
-When omitted, `--branch` resolves the current branch for native commit (ordinary
+When omitted, `--branch` resolves the current branch or detached target for native commit (ordinary
 or staged), add, staged, reset, status (ordinary or combined), checkout-plan,
 checkout, log and history detachment. Explicit `--branch` keeps its existing
 meaning: operate on that named branch, without changing HEAD. Explicit
 `status --revision` selects the requested snapshot.
 
 Snapshot arguments also accept [native tags and revision selectors](doc:native-tags).
-Branch switching still takes a literal branch name; a tag is restored with
+Ordinary branch switching takes a literal branch name; a tag is restored with
 `native checkout tags/NAME`, which moves the selected branch and archives its
-previous head. It does not create detached HEAD state.
+previous head. Use `native switch --detach tags/NAME` to detach instead.
 
 `native head` reports English JSON fields in both interface languages:
 
 | Field | Meaning |
 | --- | --- |
 | `version` | Report schema version, currently 1 |
-| `branch` | Current symbolic branch name |
+| `branch` | Current symbolic branch name, or null for detached HEAD |
 | `revision` | Its current revision ID, or null for an unborn branch |
 | `explicit` | Whether an explicit descriptor exists |
 | `directory` | Bound canonical workspace, or null for legacy implicit HEAD |
@@ -231,10 +233,11 @@ branch leaves an unborn symbolic selection; it does not select another branch.
 
 Once HEAD is explicit, CLI workspace commands require `--directory` (default
 `.`) to resolve to that same canonical root. A Store supports one selected
-workspace. Independent linked workspaces, relocation, detached revisions and
+workspace. Independent linked workspaces, relocation and
 unborn destination switching remain future work. Low-level C++ methods with an
 explicit branch argument keep their existing contract; they do not implicitly
-resolve HEAD. Applications can use `native_head()` to select a branch themselves.
+resolve HEAD. Applications can use `native_target()` to select a branch or the
+opaque detached target; see [detached HEAD](doc:native-detached).
 
 ## Preflight, publication and recovery {#preflight-publication-and-recovery}
 

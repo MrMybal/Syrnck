@@ -311,6 +311,8 @@ std::string Store::resolve_native_revision(std::string_view selector, OperationO
     const auto head = native_head();
     require(!head["revision"].is_null(), "native HEAD is unborn");
     target = ObjectKey{Kind::revision, head["revision"].get<std::string>()};
+  } else if (native_target_is_detached(selector)) {
+    target = lookup(refs(), native_revision_reference(selector));
   } else {
     validate_ref(selector);
     const auto all = refs();

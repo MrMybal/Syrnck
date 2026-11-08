@@ -5,14 +5,14 @@ description: Guide : Archives de l’historique natif.
 section: Versionnage
 order: 200
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Archives de l’historique natif {#native-history-archives}
 
 Les mutations d’historique conservent anciennes révisions et préparations comme racines ordinaires du GC. L’inventaire les consulte sans modifier références, objets ou fichiers de travail, y compris amend, checkout et détachement d’historique.
 
-`reset` conserve l’ancienne tête ; `reset-index` l’ancien index et sa base ; `rebase-index` l’index avant son rejeu ; `stage-index` l’index avant sélection de hunks/lignes ou patch externe ; `squash` toute la chaîne d’origine ; `amend` l’ancienne tête et ses parents ; `checkout` la source du checkout terminé ; `detached` la tête d’origine sous `archive/OLD_ID`. Pour les autres catégories actuellement reconnues, consulter l’inventaire et ses filtres.
+`reset` conserve l’ancienne tête ; `reset-index` l’ancien index et sa base ; `rebase-index` l’index avant son rejeu ; `stage-index` l’index avant sélection de hunks/lignes ou patch externe ; `squash` toute la chaîne d’origine ; `amend` l’ancienne tête et ses parents ; `checkout` la source du checkout terminé ; `detached` la tête d’origine sous `archive/OLD_ID`, après détachement d’historique ou remplacement d’une ligne HEAD détachée inactive. Pour les autres catégories actuellement reconnues, consulter l’inventaire et ses filtres.
 
 Les groupes de tags relèvent de `native tag-archives` / `tag-archive` / `tag-restore` ; ceux de branches de `native branch-archives` / `branch-archive`. Ils ne figurent pas dans cet inventaire simple. Les namespaces inconnus/personnalisés sont exclus ; `refs` reste l’inventaire générique complet. Les noms reconnus, types révision et correspondances d’ID sont contrôlés. Un nom de checkout désigne une transaction plutôt que sa révision cible. Une archive reconnue corrompue provoque une erreur.
 

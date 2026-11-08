@@ -50,7 +50,7 @@ RestorePlan prepare_restore(const Store &store, const Refs &refs, std::string_vi
                      {"index_rewritten", rewrite},
                      {"index_base", source.base ? Json(*source.base) : Json{}},
                      {"stale_index", source.index && source.base != source.target.id},
-                     {"current", head["branch"].get<std::string>() == plan.name},
+                     {"current", head["branch"] == plan.name},
                      {"ready", blockers.empty()},
                      {"objects_verified", verify},
                      {"blockers", std::move(blockers)}};

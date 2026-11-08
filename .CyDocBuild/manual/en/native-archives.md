@@ -5,7 +5,7 @@ description: Native history archives guide.
 section: Version control
 order: 200
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native history archives {#native-history-archives}
@@ -31,7 +31,7 @@ syrnck native archive-show archive/squash/OLD_ID --verify
 | `squash` | `archive/squash/OLD_ID` | Original chain, including intermediate file versions |
 | `amend` | `archive/amend/OLD_ID` | Former amended tip and its parents |
 | `checkout` | `archive/checkout/TRANSACTION_ID` | Source revision retained by completed checkout |
-| `detached` | `archive/OLD_ID` | Original tip retained by history detachment |
+| `detached` | `archive/OLD_ID` | Original tip retained by history detachment or replacement of an inactive detached HEAD line |
 
 Tag deletion records use the existing `native tag-archive` / `tag-restore`
 workflow and are excluded. Branch deletion records use

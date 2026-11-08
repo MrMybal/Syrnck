@@ -192,6 +192,27 @@ void coalesced_overflow(const fs::path &project) {
   require(result["workspace_files"] == 2 && result["observation"]["full_scan"] == true,
           "coalesced batches exceeded the hint budget without full recovery");
 }
+void detached_selection(const fs::path &project) {
+  std::string detached, main;
+  {
+    Fixture fixture(project);
+    detached = fixture.revision(Json{{"asset", fixture.file("detached")}});
+    main = fixture.revision(Json{{"asset", fixture.file("main")}}, Json::array({detached}));
+    fixture.install(main);
+    fixture.store.detach_checkout(project, detached);
+  }
+  Session session(project, true);
+  OpenStore store(project, {});
+  const auto selected = status(session, store);
+  require(selected["base"] == detached && selected["clean"] == true,
+          "workspace ABI default used main instead of detached HEAD");
+  const auto combined = status(session, store, nullptr, 2);
+  require(combined["branch"] == ":HEAD" && combined["unstaged"]["clean"] == true,
+          "workspace ABI combined status lost detached selection");
+  const auto explicit_main = status(session, store, "main");
+  require(explicit_main["base"] == main && explicit_main["clean"] == false,
+          "workspace ABI explicit branch override ignored");
+}
 } // namespace
 int main() {
   Temporary temporary;
@@ -200,6 +221,7 @@ int main() {
       for (bool polling : {false, true})
         scenario(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(polling)), encrypted, polling);
     coalesced_overflow(temporary.path / "overflow");
+    detached_selection(temporary.path / "detached");
     std::cout << "Workspace ABI retained hints, targeted/polling status, ownership and recovery passed\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

@@ -492,9 +492,12 @@ public:
                           OperationOptions = {}) const;
   Json checkout_status(const std::optional<std::string> &transaction = {}) const;
   Json recover_checkout(bool abort = false, OperationOptions = {}) const;
-  // Symbolic current branch; legacy stores implicitly select main. Switching
-  // journals workspace changes and publishes HEAD without moving either branch.
+  // Current symbolic branch or detached revision; legacy stores select main.
+  // Switching journals workspace changes without moving named branch tips.
   Json native_head() const;
+  // Opaque selector accepted by native workspace/staging/history operations.
+  // A detached selector is not a branch name and cannot be published as one.
+  std::string native_target() const;
   // Bounded pages of existing branch heads and their frozen staging state.
   Json native_branches(const std::optional<std::string> &after = {}, std::size_t limit = 100,
                        bool verify_objects = false, OperationOptions = {}) const;
@@ -502,6 +505,9 @@ public:
   Json plan_switch(const fs::path &, std::string_view branch, bool verify_objects = false,
                    OperationOptions = {}) const;
   Json switch_directory(const fs::path &, std::string_view branch, OperationOptions = {}) const;
+  Json plan_detached_checkout(const fs::path &, std::string_view revision, bool verify_objects = false,
+                              OperationOptions = {}) const;
+  Json detach_checkout(const fs::path &, std::string_view revision, OperationOptions = {}) const;
   // Branch deletion preserves its tip and optional index in a retained archive.
   // Selected branches and active checkouts cannot be deleted. A supplied index
   // ID both authorizes archiving it and guards that exact frozen snapshot.

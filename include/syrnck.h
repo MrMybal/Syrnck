@@ -202,7 +202,8 @@ SYRNCK_API int syrnck_workspace_wait_json_ex(SyrnckWorkspace *workspace, uint32_
 /* Uses a caller-opened Store only during this call; close it before idle waits
  * to release its exclusive lock. mode: 0 = branch working status, 1 = revision
  * working status, 2 = combined staging/working status. selector=NULL chooses
- * selected HEAD branch for modes 0/2; mode 1 requires a revision selector.
+ * selected HEAD target (named branch or detached revision) for modes 0/2;
+ * mode 1 requires a revision selector.
  * Drains one immediate native batch, then observes all retained hints. The
  * first query and recovery always read all working bytes. Failure invalidates
  * the inventory; the next successful query is full. Output <=128 MiB + NUL.

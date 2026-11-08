@@ -55,7 +55,7 @@ Json Store::create_native_branch(std::string_view name, std::string_view revisio
               {"state", "created"},
               {"name", name},
               {"revision", revision},
-              {"current", head["branch"].get<std::string>() == name},
+              {"current", head["branch"] == Json(name)},
               {"files", value["files"].size()}};
 }
 } // namespace syrnck

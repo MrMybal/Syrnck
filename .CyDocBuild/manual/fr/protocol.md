@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -85,6 +85,18 @@ Les sessions de reconstruction et d'audit réutilisent au plus 8 handles de pack
 Le lecteur conserve le format plat `SYRIDX01` et le même hash global. À l'ouverture, il le parcourt en flux, construit des bornes et empreintes de pages de 256 enregistrements ainsi qu'un filtre de clés absentes. Ces structures et le cache de pages sont uniquement en mémoire ; aucun en-tête, descripteur ou fichier auxiliaire n'est ajouté au store. La construction des nouveaux index écrit également les enregistrements en flux, avec le même encodage binaire.
 
 Les recherches consultent les pages candidates ; chaque page relue doit correspondre à l'empreinte du parcours validé avant utilisation de ses adresses. Les pages chaudes et la dernière adresse trouvée peuvent rester un snapshot du catalogue ouvert sous verrou, comme l'ancienne table en RAM. Les audits rechargent les index et recontrôlent leurs hashes complets, indépendamment de ce cache. La vérification des enveloppes réellement lues reste obligatoire avant de retourner un objet. Voir les [budgets, garanties et limites](doc:indexes).
+
+## Formats de sélection du workspace natif {#native-head-formats}
+
+Les descripteurs nommés `workspace/HEAD` utilisent le JSON canonique v1 ; les
+descripteurs détachés passent en v2 avec `branch: null`, `type: "native-head"`
+et le `directory` canonique. Racines privées : `workspace/detached` (révision)
+et `workspace/staging` (révision préparée optionnelle). Les reçus de checkout
+avec cible détachée utilisent v7 et `layout_version` de 1 à 6 ; les layouts entre
+branches gardent leurs anciennes versions. Les stash détachés utilisent v2 avec
+la cible `:HEAD`, les stash nommés restent en v1. Ces ajouts ne changent ni les
+révisions immuables v1 ni les versions packs/ABI. Les anciens exécuteurs doivent
+refuser les reçus inconnus. Voir [HEAD détaché](doc:native-detached).
 
 ## Pointeur Git {#pointeur-git}
 

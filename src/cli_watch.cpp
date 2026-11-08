@@ -87,7 +87,7 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
   require(command.max_paths >= 1 && command.max_paths <= 65536, "watch path limit must be in 1..65536");
   require(!(command.branch && command.revision), "choose either --branch or --revision");
   require(!(command.combined && command.revision), "combined native status cannot select an explicit revision");
-  if (command.branch) validate_ref("heads/" + *command.branch);
+  if (command.branch) validate_native_target(*command.branch);
   WorkspaceWatcher watcher(directory, storage, {command.polling, static_cast<std::size_t>(command.max_paths)}, operation.stop);
   const auto root = fs::canonical(directory);
   WorkspaceObservation observation(root, storage);
@@ -126,14 +126,14 @@ int watch_native(const fs::path &directory, const fs::path &storage, const Nativ
         require(head["directory"].is_null() || head["directory"].get<std::string>() == utf8(root),
                 "native HEAD belongs to another workspace");
         require_no_native_checkout(*store);
-        const auto branch = command.branch ? *command.branch : head["branch"].get<std::string>();
+        const auto branch = command.branch ? *command.branch : store->native_target();
         if (command.combined) status = observation.workspace_status(*store, branch, changes, operation);
         else {
           std::optional<std::string> revision;
           if (command.revision) revision = store->resolve_native_revision(*command.revision, operation);
           else {
             const auto refs = store->refs();
-            if (const auto found = refs.find("heads/" + branch); found != refs.end()) {
+            if (const auto found = refs.find(native_revision_reference(branch)); found != refs.end()) {
               require(found->second.kind == Kind::revision, "branch must point to a revision");
               revision = found->second.id;
             }

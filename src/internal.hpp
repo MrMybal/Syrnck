@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <syrnck/core.hpp>
+#include "native_target.hpp"
 namespace syrnck {
 Bytes read_bytes(const fs::path &, std::size_t limit = max_object_size + 1024 * 1024);
 inline void throw_if_cancelled(std::stop_token stop) {

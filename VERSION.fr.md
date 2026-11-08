@@ -12,6 +12,7 @@ Format d’objet v1, formats physiques v1/v2/v3 et ABI C 1 sont des numéros dis
 
 - Stockage de blocs C++20 partagé entre assets Git et révisions natives : manifestes complets, blocs réutilisables, plages vérifiées, packs, sauvegardes et rétention explicite.
 - Historique natif et opérations récupérables du workspace, serveur de blocs authentifié et transferts ponctuels reprenables.
+- HEAD natif détaché avec index privé, changement récupérable et rétention des historiques détachés.
 - Attribution native des lignes à travers les parents de merges et renommages exacts, contenu stocké vérifié et budgets explicites d’entrée/calcul/sortie.
 - Manuel CyDoc local anglais/français, aide contextuelle `syrnck help`, annotations API d’en-têtes publics et documentation intégrée au build, à l’installation et à la CI.
 - README anglais/français avec installation depuis les sources, périmètre des licences tierces et présentes notes de version.
@@ -20,7 +21,7 @@ Ces fonctions des sources n’annoncent pas de release précompilée. Le [manuel
 
 ## Limites documentées
 
-- HEAD est symbolique. Workspaces natifs multiples/partiels et HEAD détaché restent à terminer.
+- HEAD nommé et détaché sont disponibles. Workspaces natifs multiples/partiels à terminer.
 - Le suivi des renommages à contenu exact existe ; renommages modifiés/copies et intégration au merge/rebase restent incomplets. Les révisions natives n’ont ni auteurs structurés ni signatures ; le rebase préservant les merges reste à terminer.
 - L’agent effectue un transfert par invocation. Le watcher observe les changements ; ils ne constituent pas un service complet de synchronisation continue avec versions causales, réconciliation hors ligne, suppressions et propagation des renommages.
 - L’adaptateur Syncthing optionnel couvre les données BEP des fichiers ordinaires. Découverte, appairage, vecteurs de versions, conflits et synchronisation complète de daemons/dossiers sont hors de son périmètre.

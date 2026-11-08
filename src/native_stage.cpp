@@ -32,9 +32,9 @@ struct Stage {
   std::optional<ObjectKey> head, index, base;
   Files files, baseline;
   Stage(const Store &store, std::string_view branch) {
-    validate_ref(branch);
-    head_name = "heads/" + std::string(branch);
-    stage_name = "staging/" + std::string(branch);
+    validate_native_target(branch);
+    head_name = native_revision_reference(std::string(branch));
+    stage_name = native_staging_reference(std::string(branch));
     validate_ref(head_name);
     validate_ref(stage_name);
     marker = "Syrnck staging v1: " + std::string(branch);

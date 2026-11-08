@@ -20,7 +20,7 @@ struct DeletePlan {
 DeletePlan prepare_delete(const Store &store, const Refs &refs, const NativeBranchState &branch,
                           bool archive_index, bool verify, OperationOptions options) {
   const auto head = store.native_head();
-  const bool current = head["branch"].get<std::string>() == branch.name;
+  const bool current = head["branch"] == branch.name;
   auto archive = archive_for(branch);
   const auto state = archive.root_state(refs);
   Json blockers = Json::array();

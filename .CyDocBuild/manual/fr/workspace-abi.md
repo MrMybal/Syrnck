@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -34,7 +34,7 @@ Les deux sorties JSON sont des char* alloués et une longueur incluant NUL, à l
 
 Wait rend version 1, backend windows/inotify/polling, paths, full_scan, overflow, polling. Il décrit cette attente, tandis que d’anciens batches peuvent encore être retenus. Le statut garde le schéma ordinaire/combiné, compteurs d’index et d’observation compris ; observation.full_scan révèle les replis.
 
-Modes de sélection : 0 branche, NULL suit HEAD ; 1 sélecteur de révision requis et résolu ; 2 statut combiné, branche ou NULL. Chaîne explicite vide refusée. Branche inconnue = base vide. Le Store doit être celui de l’ouverture ; checkout actif et HEAD lié à un autre workspace refusés. Le statut peut écrire son cache jetable, sans ingestion, révision, index préparé ou référence publiés.
+Modes de sélection : 0 branche, NULL suit HEAD nommé ou détaché ; 1 sélecteur de révision requis et résolu ; 2 statut combiné, branche ou NULL. Chaîne explicite vide refusée. Branche inconnue = base vide. Le Store doit être celui de l’ouverture ; checkout actif et HEAD lié à un autre workspace refusés. Le statut peut écrire son cache jetable, sans ingestion, révision, index préparé ou référence publiés.
 
 ```c
 /* After opening a session and caller-owned Store: */

@@ -348,9 +348,9 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
 std::string Store::commit_directory(const fs::path &directory, std::string_view branch,
                                     std::string_view message, IngestOptions options) const {
   throw_if_cancelled(options.stop);
-  validate_ref(branch);
+  validate_native_target(branch);
   require_no_native_checkout(*this);
-  require(!refs().contains("staging/" + std::string(branch)),
+  require(!refs().contains(native_staging_reference(std::string(branch))),
           "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
   visit_native_files(directory, root(),
@@ -366,7 +366,7 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
   for (auto &[name, value] : files)
     object.emplace_back(name, std::move(value));
   Json parents = Json::array();
-  auto name = "heads/" + std::string(branch);
+  auto name = native_revision_reference(std::string(branch));
   auto all = refs();
   if (all.contains(name)) {
     require(all.at(name).kind == Kind::revision, "branch must point to a revision");
@@ -388,8 +388,8 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {
   require_no_native_checkout(*this);
-  validate_ref(branch);
-  auto name = "heads/" + std::string(branch);
+  validate_native_target(branch);
+  auto name = native_revision_reference(std::string(branch));
   auto all = refs();
   require(all.contains(name) && all.at(name).kind == Kind::revision, "unknown native branch");
   auto previous = all.at(name);

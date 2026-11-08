@@ -4,7 +4,7 @@ title: Architecture
 description: Guide : Architecture.
 section: Premiers pas
 order: 10
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Architecture de Syrnck {#architecture-de-syrnck}
@@ -64,7 +64,7 @@ L'[inspection du workspace](doc:native-workspace) combine base/index/dossier et 
 
 Le [checkout récupérable](doc:native-checkout) vérifie les fermetures source/cible, épingle un journal lié au chemin canonique et prépare des fichiers complets avant les déplacements exclusifs. Les originaux restent dans des slots privés jusqu'à publication atomique de la branche, de l'archive source et de la rétention cible. Une interruption se reprend ou s'annule explicitement ; une publication déjà engagée ne peut que terminer son nettoyage. Les déplacements du workspace sont séquentiels, sans verrou contre les éditeurs externes. Les fichiers privés restent en clair même dans un store chiffré. Le GC et les écritures natives du workspace sont bloqués tant que le journal est actif ; les archives/reçus restent conservés sans purge automatique.
 
-Le [HEAD natif symbolique](doc:native-branches) est un objet chunk canonique conservé sous `workspace/HEAD`, lié au workspace et à un nom de branche ; son absence sélectionne implicitement main. Le changement de branche réutilise le journal (v2, ou v4 pour transitions de namespace), avec les identifiants du HEAD attendu et du nouveau HEAD. La publication finale sélectionne le nouveau HEAD avec le journal terminé, tout en vérifiant et conservant les deux têtes de branches. Les commandes CLI natives résolvent cette sélection quand `--branch` est absent. Les journaux/reçus v1 restent lisibles ; la bibliothèque C++ garde ses arguments de branche explicites.
+Le [HEAD natif](doc:native-branches) est un chunk canonique sous `workspace/HEAD`, lié au workspace et à une sélection ; son absence sélectionne implicitement main. Les descripteurs nommés gardent v1 ; [HEAD détaché](doc:native-detached) utilise v2 et des racines privées de révision/index. Le changement de branche réutilise le journal v2 (v4 pour les transitions de namespace), ou v7 avec cible détachée, avec les HEAD attendu et nouveau. La publication finale sélectionne HEAD avec le journal terminé en vérifiant et conservant les deux têtes. Les commandes CLI par défaut et `Store::native_target()` résolvent la sélection. Les anciens reçus restent lisibles. Workspaces liés/partiels à compléter.
 
 Les fichiers source utilisent actuellement le même moteur de stockage en mode autonome. Leurs interfaces de [diff](doc:text-diff) et [merge](doc:text-merge) textuels sont explicites et bornées. L'utilisation de blocs pour les stocker n'oblige pas à présenter des différences de blocs à l'utilisateur.
 

@@ -362,9 +362,11 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native checkout-receipts [--after ID] [--limit 100] [--verify]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
-  native head                       Afficher la branche courante
+  native head                       Afficher HEAD natif
   native switch-plan BRANCHE [--directory .] [--verify]
   native switch BRANCHE [--directory .]
+  native switch-plan --detach RÉVISION [--directory .] [--verify]
+  native switch --detach RÉVISION [--directory .]
   native diff SOURCE CIBLE          Comparer deux révisions natives
   native merge-text BASE COURANT ENTRANT CHEMIN [--text]
                                    Fusion textuelle vérifiée en lecture seule
@@ -550,9 +552,11 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native checkout-receipts [--after ID] [--limit 100] [--verify]
   native checkout-status [--id TRANSACTION]
   native checkout-recover [--abort]
-  native head                       Show the current branch
+  native head                       Show native HEAD
   native switch-plan BRANCH [--directory .] [--verify]
   native switch BRANCH [--directory .]
+  native switch-plan --detach REVISION [--directory .] [--verify]
+  native switch --detach REVISION [--directory .]
   native diff SOURCE TARGET         Compare native revision snapshots
   native merge-text BASE CURRENT INCOMING PATH [--text]
                                    Preview a verified three-way text merge
@@ -710,6 +714,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     const auto directory = args.option("--directory");
     const auto section = args.option("--section");
     const bool print_url = args.flag("--print-url");
+    // --detach names a documentation topic here, never a workspace action.
+    if (args.values.size() == 3 && args.values[0] == "native" && args.values[2] == "--detach" &&
+        (args.values[1] == "switch" || args.values[1] == "switch-plan"))
+      args.values = {"native " + args.values[1] + " --detach"};
     args.paths();
     require(args.values.size() <= 2, "unexpected or missing arguments; use --help");
     std::string topic;
@@ -1111,7 +1119,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   } else if (command == "native") {
     auto selected_branch = [&] {
       const auto branch = args.option("--branch");
-      return branch ? *branch : store.native_head()["branch"].get<std::string>();
+      return branch ? *branch : store.native_target();
     };
     auto workspace = [&] {
       const auto directory = path_from_utf8(args.option("--directory").value_or("."));
@@ -1221,6 +1229,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       }
     } else if (sub == "push" || sub == "fetch") {
       const auto branch = selected_branch();
+      require(!native_target_is_detached(branch), "native publication requires a named branch");
       const auto remote_branch = args.option("--remote-branch").value_or(branch);
       const auto remote_name = args.option("--remote-name").value_or("origin");
       const auto limits = transfer_options(args);
@@ -1241,7 +1250,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto branch = selected_branch();
       auto message = args.option("--message", "-m");
       require(message.has_value(), "--message is required");
-      const auto tip = amend ? (expected ? *expected : resolve("heads/" + branch)) : std::string{};
+      const auto tip = amend ? (expected ? *expected : resolve(native_revision_selector(branch))) : std::string{};
       if (message_only) {
         args.count(0);
         std::cout << store.amend_message(branch, tip, *message, {control->token(), observe}) << '\n';
@@ -1364,9 +1373,9 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         return plan["ready"].get<bool>() ? 0 : 1;
       }
       const auto all = store.refs();
-      const auto index = all.find("staging/" + branch);
+      const auto index = all.find(native_staging_reference(branch));
       require(index != all.end() && index->second.kind == Kind::revision, "no native staging snapshot");
-      const auto head = expected ? *expected : resolve("heads/" + branch);
+      const auto head = expected ? *expected : resolve(native_revision_selector(branch));
       const auto snapshot = expected_index ? *expected_index : index->second.id;
       print(store.rebase_stage_with_options(branch, head, snapshot, settings, {control->token(), observe}));
     } else if (sub == "reset" || sub == "reset-plan") {
@@ -1388,7 +1397,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
           print(plan);
           return plan["ready"].get<bool>() ? 0 : 1;
         }
-        const auto tip = expected ? *expected : resolve("heads/" + branch);
+        const auto tip = expected ? *expected : resolve(native_revision_selector(branch));
         const auto plan_id = expected_plan ? *expected_plan
                                            : plan_native_hard_reset(store, directory, branch, target, false,
                                                                     {control->token(), observe})["plan"]
@@ -1407,7 +1416,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
           print(plan);
           return plan["ready"].get<bool>() ? 0 : 1;
         }
-        const auto tip = expected ? *expected : resolve("heads/" + branch);
+        const auto tip = expected ? *expected : resolve(native_revision_selector(branch));
         print(store.reset_branch(branch, tip, target, mode, {control->token(), observe}));
       } else {
         const auto snapshot = store.reset_stage(branch, args.paths(), {control->token(), observe});
@@ -1441,7 +1450,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
-      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      const auto tip = expected ? *expected : resolve(native_revision_selector(branch));
       print(store.squash_commits(branch, tip, static_cast<std::size_t>(count), *message,
                                  {control->token(), observe}));
     } else if (sub == "status") {
@@ -1456,13 +1465,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       if (revision)
         *revision = resolve(*revision);
       if (combined) {
-        const auto selected = branch ? *branch : store.native_head()["branch"].get<std::string>();
+        const auto selected = branch ? *branch : store.native_target();
         print(indexed ? indexed_native_workspace_status(store, directory, selected, {control->token(), observe})
                       : store.workspace_status(directory, selected, {control->token(), observe}));
         return 0;
       }
       if (!revision) {
-        const auto name = "heads/" + (branch ? *branch : store.native_head()["branch"].get<std::string>());
+        const auto name = native_revision_reference(branch ? *branch : store.native_target());
         validate_ref(name);
         const auto all = store.refs();
         if (const auto found = all.find(name); found != all.end()) {
@@ -1512,11 +1521,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "switch" || sub == "switch-plan") {
       const auto directory = workspace();
       const auto verify = sub == "switch-plan" && args.flag("--verify");
+      const auto detached = args.flag("--detach");
       args.count(1);
       if (sub == "switch")
-        print(store.switch_directory(directory, args.values[0], {control->token(), observe}));
+        print(detached ? store.detach_checkout(directory, resolve(args.values[0]), {control->token(), observe})
+                       : store.switch_directory(directory, args.values[0], {control->token(), observe}));
       else {
-        const auto plan = store.plan_switch(directory, args.values[0], verify, {control->token(), observe});
+        const auto plan = detached
+            ? store.plan_detached_checkout(directory, resolve(args.values[0]), verify, {control->token(), observe})
+            : store.plan_switch(directory, args.values[0], verify, {control->token(), observe});
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
@@ -1723,7 +1736,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return ready ? 0 : 1;
       }
-      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      const auto tip = expected ? *expected : resolve(native_revision_selector(branch));
       print(store.replay_directory_with_options(directory, branch, tip, source, kind, *message, settings,
                                                 {control->token(), observe}));
     } else if (sub == "merge-plan" || sub == "merge") {
@@ -1756,7 +1769,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
-      const auto tip = expected ? *expected : resolve("heads/" + branch);
+      const auto tip = expected ? *expected : resolve(native_revision_selector(branch));
       print(store.merge_directory(directory, branch, tip, source, message.value_or("Merge " + source),
                                   settings, {control->token(), observe}));
     } else if (sub == "rebase-plan" || sub == "rebase-todo" || sub == "rebase") {
@@ -1806,7 +1819,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(plan);
         return plan["ready"].get<bool>() ? 0 : 1;
       }
-      print(store.rebase_directory(directory, branch, expected ? *expected : resolve("heads/" + branch), base,
+      print(store.rebase_directory(directory, branch, expected ? *expected : resolve(native_revision_selector(branch)), base,
                                    target, settings, {control->token(), observe}));
     } else if (sub == "ancestry") {
       const auto revisions = integer(args.option("--max-revisions").value_or("100000"));
@@ -1822,7 +1835,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       auto limit = integer(args.option("--limit").value_or("50"));
       args.count(0);
       auto refs = store.refs();
-      auto name = "heads/" + branch;
+      auto name = native_revision_reference(branch);
       require(refs.contains(name), "unknown branch");
       auto current = refs.at(name);
       std::set<std::string> seen;

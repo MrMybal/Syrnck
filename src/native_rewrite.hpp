@@ -9,7 +9,7 @@ struct NativeRewriteState {
   Json revision, prepared;
   std::optional<std::string> index_base;
   NativeRewriteState(const Store &store, std::string_view name, OperationOptions options)
-      : refs(store.refs()), branch(name), head_name("heads/" + branch), index_name("staging/" + branch) {
+      : refs(store.refs()), branch(name), head_name(native_revision_reference(branch)), index_name(native_staging_reference(branch)) {
     throw_if_cancelled(options.stop);
     validate_ref(head_name);
     validate_ref(index_name);

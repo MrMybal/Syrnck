@@ -5,14 +5,14 @@ description: Guide : Branches et changement de branche.
 section: Versionnage
 order: 220
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Branches natives et changement récupérable {#native-branches-and-recoverable-switching}
 
-Le CLI possède une branche courante symbolique. Sans descripteur HEAD, un ancien Store sélectionne implicitement `main`, même non née. Lire HEAD ne le crée pas. Un switch réussi enregistre la sélection liée au répertoire canonique.
+Le CLI sélectionne normalement une branche nommée et prend aussi en charge [HEAD détaché](doc:native-detached). Sans descripteur HEAD, un ancien Store sélectionne implicitement `main`, même non née. Lire HEAD ne le crée pas. Un switch réussi enregistre la sélection liée au répertoire canonique.
 
-`native branch NAME REVISION` crée sans sélectionner ni modifier les fichiers. `native switch NAME` restaure la tête exacte et sélectionne la branche sans déplacer aucune tête. `native checkout REVISION` restaure une révision et déplace la branche sélectionnée en archivant son ancienne tête. Les deux utilisent le [checkout récupérable](doc:native-checkout). Aucun HEAD détaché ni création automatique lors du switch.
+`native branch NAME REVISION` crée sans sélectionner ni modifier les fichiers. `native switch NAME` restaure la tête exacte et sélectionne la branche sans déplacer aucune tête. `native checkout REVISION` restaure une révision et déplace la cible sélectionnée en archivant son ancienne tête. Les deux utilisent le [checkout récupérable](doc:native-checkout). [`native switch --detach REVISION`](doc:native-detached) sélectionne une révision indépendamment des branches. Switch ne crée jamais de branche nommée.
 
 ```text
 syrnck native head
@@ -103,13 +103,13 @@ auto restored = store.restore_native_branch(archive_id, "recovered", operation);
 
 ## Défauts CLI et identité du workspace {#cli-defaults-and-workspace-identity}
 
-Sans `--branch`, la branche courante est utilisée pour commit simple/figé, add, staged, reset, status simple/combiné, checkout-plan, checkout, log et détachement d’historique. Une branche explicite n’altère pas HEAD. `status --revision` sélectionne le snapshot demandé.
+Sans `--branch`, la branche courante ou cible détachée est utilisée pour commit simple/figé, add, staged, reset, status simple/combiné, checkout-plan, checkout, log et détachement d’historique. Une branche explicite n’altère pas HEAD. `status --revision` sélectionne le snapshot demandé.
 
-Les arguments snapshot acceptent [tags et sélecteurs](doc:native-tags). Switch prend un nom littéral de branche ; `native checkout tags/NAME` déplace la branche sélectionnée et archive sa tête sans HEAD détaché.
+Les arguments snapshot acceptent [tags et sélecteurs](doc:native-tags). Le switch ordinaire prend un nom littéral de branche ; `native checkout tags/NAME` déplace la cible sélectionnée et archive sa tête. Utiliser `native switch --detach tags/NAME` pour détacher HEAD.
 
 `native head` retourne des clés anglaises : `version` (1), `branch`, `revision` (null si non née), `explicit`, `directory` (racine canonique ou null pour HEAD implicite). Le descripteur résout la branche dynamiquement sans réécriture à chaque commit. Une suppression générique de sa tête laisse une sélection non née.
 
-Avec HEAD explicite, `--directory` (défaut `.`) doit résoudre la même racine canonique. Un Store ne sélectionne qu’un workspace. Workspaces liés indépendants, déplacement, HEAD détaché et switch vers destination non née restent à réaliser. Les méthodes C++ à branche explicite ne résolvent pas implicitement HEAD ; l’appelant peut utiliser `native_head()`.
+Avec HEAD explicite, `--directory` (défaut `.`) doit résoudre la même racine canonique. Un Store ne sélectionne qu’un workspace. Workspaces liés indépendants, déplacement et switch vers destination non née restent à réaliser. Les méthodes C++ à branche explicite ne résolvent pas implicitement HEAD ; l’appelant peut utiliser `native_target()` pour une branche ou la cible détachée opaque. Voir [HEAD détaché](doc:native-detached), dont `native head` indique `branch: null`.
 
 ## Préparation, publication et récupération {#preflight-publication-and-recovery}
 

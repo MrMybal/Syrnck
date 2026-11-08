@@ -31,6 +31,7 @@ crash by throwing an exception or unwinding the stack.
 | Native individual line selection | Partial add with/without an existing index and partial reset inside a hunk; selected-row chunk/manifest/index writes, atomic retention, untouched working files and exact independently computed result identities |
 | External native text patches | Strict single-file patch against frozen head/index, with/without an old index; chunk/manifest/index publication, atomic archive retention, exact independent result identity and unchanged working bytes |
 | Native branch switch and abort | HEAD descriptor/journal writes, the same file-move boundaries, HEAD/receipt publication and rollback; both branch heads remain unchanged and HEAD publishes with the committed journal |
+| Detached HEAD entry, exit, move and abort | Private candidate/archive roots, v2 HEAD and v7 journal writes, namespace evacuation/install/rollback, final selection and receipt publication; named tips stay unchanged, with all original histories retained through restart and GC |
 | Native tags | Annotation/deletion-record writes and atomic tag/annotation/archive reference creation, deletion and restoration; the old or complete new root set retains target bytes |
 | History detachment | Both reference writes and new revision publication; archive precedes branch replacement |
 | Incremental packing | Pack/index staging, second-pack construction, catalog replacement and loose cleanup; existing packs remain byte-identical |
@@ -203,3 +204,14 @@ Initialization interruption, network publication, interrupted multi-file export,
 large real-world corpora, stale-temporary reclamation and filesystem-specific
 power-loss testing remain further work. Checkpoints do not enumerate every
 instruction or concurrent mutation by a process that ignores the store lock.
+
+`native_detached_crashes_0..3` traced and killed every observed IO boundary for
+entry to detached HEAD, return to a named branch and movement of a detached
+revision. Resume/abort and plain/encrypted cases cover 768 process terminations
+in the local Windows x64 campaign. Each case is inspected without writing by a
+fresh production reader, then recovered and checked after GC. File/directory
+transitions and replacement of an inactive detached tip are included.
+The C++ detached suite separately cancels before final publication, closes the
+Store, and uses fresh handles to resume or abort hard reset, stash save and stash
+pop/index restoration. These cover receipt v7 layouts 5/6 with HEAD v2, namespace
+transitions, dirty/prepared bytes and completed receipt inspection after GC.

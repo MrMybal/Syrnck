@@ -389,7 +389,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
   validate_id(target);
   const NativeRewriteState state(store, branch, options);
   const auto head = store.native_head();
-  require(head["branch"].get<std::string>() == branch, "native hard reset requires the selected branch");
+  require(store.native_target() == branch, "native hard reset requires the selected branch");
   require(head["directory"].is_null() ||
               utf8(fs::canonical(directory)) == head["directory"].get<std::string>(),
           "native HEAD belongs to another workspace");

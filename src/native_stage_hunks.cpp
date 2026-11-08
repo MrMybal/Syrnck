@@ -16,14 +16,14 @@ struct HunkPlan {
 };
 HunkPlan state(const Store &store, std::string_view branch, std::string_view path, OperationOptions options) {
   throw_if_cancelled(options.stop);
-  native_branch_name(branch);
+  validate_native_target(branch);
   validate_path(path);
   HunkPlan plan;
   plan.refs = store.refs();
   plan.branch = branch;
   plan.path = path;
-  plan.head = native_branch_lookup(plan.refs, "heads/" + plan.branch);
-  plan.index = native_branch_lookup(plan.refs, "staging/" + plan.branch);
+  plan.head = native_branch_lookup(plan.refs, native_revision_reference(plan.branch));
+  plan.index = native_branch_lookup(plan.refs, native_staging_reference(plan.branch));
   require(!plan.head || plan.head->kind == Kind::revision, "branch must point to a revision");
   require(!plan.index || plan.index->kind == Kind::revision, "invalid native staging snapshot");
   plan.base = plan.head;
@@ -187,8 +187,8 @@ Json publish(const Store &store, HunkPlan &plan, std::string_view chosen, Operat
   if (verify_working)
     verify_native_working_diff(store, plan.working, options);
   const auto selection = native_branch_lookup(plan.refs, "workspace/HEAD");
-  std::vector<RefUpdate> updates{{"heads/" + plan.branch, plan.head, plan.head},
-                                 {"staging/" + plan.branch, plan.index, candidate},
+  std::vector<RefUpdate> updates{{native_revision_reference(plan.branch), plan.head, plan.head},
+                                 {native_staging_reference(plan.branch), plan.index, candidate},
                                  {"workspace/HEAD", selection, selection}};
   if (plan.index)
     updates.push_back({plan.archive, native_branch_lookup(plan.refs, plan.archive), plan.index});

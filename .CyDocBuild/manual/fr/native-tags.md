@@ -5,7 +5,7 @@ description: Guide : Tags et sélecteurs de révision.
 section: Versionnage
 order: 400
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Tags natifs, sélecteurs et archives {#native-tags-revision-selectors-and-retained-archives}
@@ -58,11 +58,11 @@ syrnck native tag-restore ARCHIVE_ID
 
 ## Sélecteurs de révisions {#native-revision-selectors}
 
-Création de tags/branches, `status --revision`, diff de snapshots, checkout et export acceptent : ID exact de 64 caractères hexadécimaux minuscules (prioritaire sur un nom identique) ; HEAD de la branche symbolique commitée ; `heads/NAME` ; `tags/NAME` avec contrôle de l’annotation ; ou NAME non ambigu entre branche et tag.
+Création de tags/branches, `status --revision`, diff de snapshots, checkout et export acceptent : ID exact de 64 caractères hexadécimaux minuscules (prioritaire sur un nom identique) ; HEAD nommé ou détaché committé ; `heads/NAME` ; `tags/NAME` avec contrôle de l’annotation ; ou NAME non ambigu entre branche et tag.
 
 Même si leurs cibles sont identiques, un nom partagé est ambigu : préciser le namespace. Un tag nommé HEAD ou comme un hash reste accessible par `tags/NAME`. La résolution vérifie les métadonnées de la révision seulement, pas ses parents, manifestes ou blocs ; la vérification complète reste distincte.
 
-`switch NAME` sélectionne toujours une branche littérale. `checkout TAG` restaure la révision et déplace la branche sélectionnée en archivant sa tête ; il ne crée pas un HEAD détaché. Les méthodes C++ gardent leurs IDs exacts ; appeler `resolve_native_revision()` pour les sélecteurs.
+`switch NAME` sélectionne toujours une branche littérale. `checkout TAG` restaure la révision et déplace la cible sélectionnée en archivant sa tête ; utiliser [`native switch --detach TAG`](doc:native-detached) pour détacher HEAD. Les méthodes C++ gardent leurs IDs exacts ; appeler `resolve_native_revision()` pour les sélecteurs.
 
 ## Stockage, annulation et API {#storage-cancellation-and-api}
 

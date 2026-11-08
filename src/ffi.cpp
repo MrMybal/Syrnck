@@ -411,13 +411,13 @@ int syrnck_workspace_status_json_ex(SyrnckWorkspace *workspace, SyrnckStore *p, 
       const auto revision = store.resolve_native_revision(checked(selector), options);
       report = session.observation.status(store, revision, session.pending, options);
     } else {
-      const auto branch = selector ? std::string(selector) : head["branch"].get<std::string>();
-      syrnck::validate_ref(branch);
+      const auto branch = selector ? std::string(selector) : store.native_target();
+      syrnck::validate_native_target(branch);
       if (mode == 2) report = session.observation.workspace_status(store, branch, session.pending, options);
       else {
         std::optional<std::string> revision;
         const auto refs = store.refs();
-        if (const auto found = refs.find("heads/" + branch); found != refs.end()) {
+        if (const auto found = refs.find(syrnck::native_revision_reference(branch)); found != refs.end()) {
           syrnck::require(found->second.kind == syrnck::Kind::revision, "branch must point to a revision");
           revision = found->second.id;
         }

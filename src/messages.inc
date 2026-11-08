@@ -998,3 +998,8 @@ SYRNCK_MESSAGE("native blame path is absent from revision", "Le chemin du blame 
 SYRNCK_MESSAGE("invalid native blame line mapping", "Correspondance de lignes du blame natif invalide")
 SYRNCK_MESSAGE("incomplete native blame attribution", "Attribution du blame natif incomplète")
 SYRNCK_MESSAGE("native blame query exceeds output budget", "La requête de blame natif dépasse le budget de sortie")
+SYRNCK_MESSAGE("detached native HEAD is missing its retained revision", "La révision conservée du HEAD natif détaché est absente")
+SYRNCK_MESSAGE("native detached checkout is blocked; inspect native switch-plan --detach", "Le checkout natif détaché est bloqué ; consultez native switch-plan --detach")
+SYRNCK_MESSAGE("native detached archive changed", "L’archive native détachée a changé")
+SYRNCK_MESSAGE("native detached references changed; retry operation", "Les références natives détachées ont changé ; recommencez l’opération")
+SYRNCK_MESSAGE("native publication requires a named branch", "La publication native demande une branche nommée")

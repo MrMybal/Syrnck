@@ -49,7 +49,7 @@ NativeStashApplyPlan prepare_native_stash_apply(const Store &store, const fs::pa
   plan.head = state.head.id;
   plan.selection = state.lookup("workspace/HEAD");
   const auto selection = store.native_head();
-  require(selection["branch"].get<std::string>() == branch,
+  require(store.native_target() == branch,
           "native stash apply requires the selected branch");
   require(selection["directory"].is_null() ||
               utf8(fs::canonical(directory)) == selection["directory"].get<std::string>(),

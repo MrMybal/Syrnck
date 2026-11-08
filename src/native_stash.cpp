@@ -56,7 +56,7 @@ void verify(const Store &store, const NativeStashEntry &entry, OperationOptions 
 }
 } // namespace
 Json NativeStashEntry::json() const {
-  return Json{{"version", 1},       {"type", "native-stash"},
+  return Json{{"version", native_target_is_detached(branch) ? 2 : 1}, {"type", "native-stash"},
               {"id", id},           {"generation", generation},
               {"branch", branch},   {"base", base},
               {"work", work},       {"index", index ? Json(*index) : Json{}},
@@ -74,7 +74,8 @@ static NativeStashEntry read_stash_from_refs(const Store &store, std::string_vie
   entry.record = *key;
   const auto data = store.get(*key);
   const auto value = parse_json(data);
-  require(value.is_object() && value.size() == 10 && value.value("version", 0) == 1 &&
+  require(value.is_object() && value.size() == 10 &&
+              (value.value("version", 0) == 1 || value.value("version", 0) == 2) &&
               value.value("type", "") == "native-stash" && value.at("id") == Json(id) &&
               value.at("generation").is_number_unsigned() && value.at("created_at").is_number_unsigned(),
           "invalid native stash record");
@@ -86,8 +87,8 @@ static NativeStashEntry read_stash_from_refs(const Store &store, std::string_vie
   entry.created_at = value.at("created_at").get<std::uint64_t>();
   if (!value.at("index").is_null())
     entry.index = value.at("index").get<std::string>();
-  validate_ref("heads/" + entry.branch);
-  validate_ref("staging/" + entry.branch);
+  validate_ref(native_revision_reference(entry.branch));
+  validate_ref(native_staging_reference(entry.branch));
   validate_id(entry.base);
   validate_id(entry.work);
   if (entry.index)

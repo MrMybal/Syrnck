@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 1
+revision: 2
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -70,6 +70,17 @@ Ordinary maintenance appends; compact may replace all, GC only some. All files a
 The flat `SYRIDX01` and complete hash remain. Opening streams 256-record pages to construct fences/digests and a negative-key filter. Those and the cache exist only in RAM; no store descriptor/header/auxiliary file changes. New indexes stream the same binary encoding.
 
 Candidate reread pages must match their validated digest before addresses are used. Hot pages/last address may remain an opened locked catalog snapshot, like the former RAM table. Audits reload and hash complete indexes independently. Actual envelope validation remains mandatory. See [budgets and guarantees](doc:indexes).
+
+## Native workspace selection formats {#native-head-formats}
+
+Named `workspace/HEAD` descriptors use canonical v1 JSON; detached descriptors
+use v2 with `branch: null`, `type: "native-head"` and the canonical `directory`.
+Private roots are `workspace/detached` (revision) and `workspace/staging`
+(optional prepared revision). Checkout records involving a detached target use
+v7 with `layout_version` 1..6; all named-only layouts keep their old versions.
+Detached stash records use v2 with target `:HEAD`; named stash records stay v1.
+These additions do not change immutable revision v1 or pack/ABI versions. Older
+executors must reject unsupported records. See [detached HEAD](doc:native-detached).
 
 ## Git pointer {#pointeur-git}
 

@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 1
+revision: 2
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -91,7 +91,7 @@ Status selection modes are:
 
 | Mode | Selector |
 | --- | --- |
-| `0` | Branch name; NULL follows the selected native HEAD branch |
+| `0` | Branch name; NULL follows selected named or detached native HEAD |
 | `1` | Required revision selector, resolved by the native revision resolver |
 | `2` | Combined staging/working status; branch name or NULL for selected HEAD |
 
