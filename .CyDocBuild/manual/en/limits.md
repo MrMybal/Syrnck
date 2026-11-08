@@ -4,12 +4,12 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 7
+revision: 8
 ---
 
 ## Workspace and versioning {#workspace}
 
-[Named and detached HEAD](doc:native-detached) are supported. [Linked native workspaces](doc:native-workspaces) retain separate HEADs/indexes and portable backup snapshots. Partial materialization, recoverable selection changes, hard reset and stash with matching selections are available. In-place relocation and archived unregistering remain work to complete. The persistent working index and observer avoid some repeated hashing but do not produce an atomic filesystem snapshot or a complete event history. Native OS events may overflow; conservative rescans and polling remain necessary.
+[Named and detached HEAD](doc:native-detached) are supported. [Linked native workspaces](doc:native-workspaces) retain separate HEADs/indexes and portable backup snapshots. Partial materialization, recoverable selection changes, hard reset and stash with matching selections are available. [Archived unregistration and restoration](doc:native-workspace-archives) preserve captured dirty work, complete HEAD/index trees and context roots. In-place relocation remains work to complete. The persistent working index and observer avoid some repeated hashing but do not produce an atomic filesystem snapshot or a complete event history. Native OS events may overflow; conservative rescans and polling remain necessary.
 
 Exact-content renames are recognized, while edited renames/copies, their merge/rebase integration and recursive synthesis of multiple merge bases remain incomplete. Native v1 revisions have no author or signature fields. Read each rebase/merge mode's constraints; available commands are not universal Git compatibility.
 

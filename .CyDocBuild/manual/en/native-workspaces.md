@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 7
+revision: 8
 ---
 
 ## Create and select a workspace {#usage}
@@ -264,7 +264,9 @@ use v10/layout 7 with different frozen definitions. A canonical v1
 materialization chunk is retained at `workspaces/NAME/workspace/materialization`.
 Object/revision, pack and C ABI versions are unchanged.
 
-In-place workspace relocation and archived unregistering remain work to complete. Every workspace still
+Linked contexts can be [archived, unregistered and restored](doc:native-workspace-archives),
+preserving dirty work separately from HEAD and the index. In-place workspace relocation
+remains work to complete. Every workspace still
 requires its complete retained objects locally.
 
 ## Reader compatibility {#compatibility}

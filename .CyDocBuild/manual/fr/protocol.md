@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 8
+sourceRevision: 9
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -178,6 +178,22 @@ Sans capacités requises, une sauvegarde de ces liaisons utilise le marqueur v2,
 contexte un descripteur portable native-workspace-snapshot et la révision
 `snapshot`, sans liaisons absolues registration/HEAD/reçus. Les sauvegardes v1
 restent lisibles. La restauration relie explicitement le snapshot à un nouveau dossier.
+
+## Enregistrements d’archives de workspace {#workspace-archive-formats}
+
+Un contexte lié désenregistré utilise un chunk canonique native-workspace-archive
+v1 à douze champs : `version`, `type`, `name`, `nonce`, `branch`, `revision`,
+`index`, `work`, `materialization`, `include_untracked`, `created_at`, `references`.
+`archive/workspaces/ID/record` conserve ce chunk ; `/head` et `/work` conservent
+HEAD logique complet et la révision physique de récupération. Chaque référence
+originale possède une racine typée `/roots/BLAKE3(nom-original-référence)`.
+La lecture exige le groupe exact complet et la recette canonique de liaisons.
+La révision physique garde HEAD et l’éventuel index comme parents, avec timestamp
+nul et message `Syrnck workspace archive work v1: NOM`. La restauration garde
+les parents de l’index, même périmés. Le nouveau contexte conserve aussi le travail
+physique sous `workspaces/NOUVEAU/restored/ARCHIVE_ID`. Ces racines sont typées
+ordinaires ; formats d’objets, packs et ABI C inchangés. Voir les
+[opérations d’archive](doc:native-workspace-archives).
 
 ## Capacités requises du Store {#required-store-features}
 

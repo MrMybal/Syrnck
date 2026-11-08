@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 7
+sourceRevision: 8
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -267,7 +267,9 @@ avec deux définitions figées différentes. Un chunk canonique v1 est conservé
 sous `workspaces/NOM/workspace/materialization`. Versions d’objets/révisions,
 packs et ABI C inchangées.
 
-Déplacement en place et désenregistrement archivé restent à compléter. Chaque workspace exige
+Les contextes liés peuvent être [archivés, désenregistrés et restaurés](doc:native-workspace-archives),
+avec travail modifié distinct de HEAD et de l’index. Le déplacement en place reste
+à compléter. Chaque workspace exige
 toujours ses objets retenus complets localement.
 
 ## Compatibilité des lecteurs {#compatibility}

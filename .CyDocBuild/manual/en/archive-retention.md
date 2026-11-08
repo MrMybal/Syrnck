@@ -5,7 +5,7 @@ description: Retire native archives with a verified backup guide.
 section: Storage
 order: 20
 parent: storage
-revision: 1
+revision: 2
 ---
 
 # Retire native archives with a verified backup {#retire-native-archives-with-a-verified-backup}
@@ -16,7 +16,7 @@ retain fetched history. GC keeps those versions until their roots are explicitly
 retired.
 
 The C++ API in `syrnck/retention.hpp` and the `backup retire-plan` / `backup retire`
-commands retire selected simple archive roots and complete branch/tag archive
+commands retire selected simple archive roots and complete branch/tag/workspace archive
 groups in one reference transaction.
 A separate verified [backup](doc:backups) must reconstruct every selected
 revision, including every parent revision and complete file payload.
@@ -46,8 +46,9 @@ and asset-lock roots are refused. Structured archives use whole-group selectors:
 | --- | --- |
 | `archive/branches/ID` | Descriptor, target revision and optional frozen index |
 | `archive/tags/ID` | Descriptor, target revision and optional annotation |
+| `archive/workspaces/ID` | Descriptor, HEAD, physical work and every original context root |
 
-Discover IDs with `native branch-archives` and `native tag-archives`; both accept
+Discover IDs with `native branch-archives`, `native tag-archives` and `native workspace-archives`; all accept
 `--after ID`, `--limit N` and `--verify`. Inspect a particular archive before
 retiring it. A member such as `archive/branches/ID/index` or
 `archive/tags/ID/target` cannot be retired independently. Incomplete groups,
@@ -65,7 +66,7 @@ syrnck backup retire archive/branches/BRANCH_ID archive/tags/TAG_ID --from /exis
 ```
 
 Group rows add `name` and a `roots` map to the preview's `references` array.
-`kind` is `branch-group` or `tag-group`; `revision` is the archived tip.
+`kind` is `branch-group`, `tag-group` or `workspace-group`; `revision` is the archived tip.
 `removed_references` counts the expanded roots, including descriptors and optional
 index/annotation roots. The limit of 1..1,024 applies to unique selectors. Reports
 are bounded below 16 MiB including JSON escaping. Simple roots and groups can be
@@ -84,7 +85,8 @@ the local version becomes unreachable and is later collected, its verified
 backup remains the recovery source. Keep that backup under an appropriate
 retention policy; this operation does not prevent a future administrator from
 deleting it. Restore that backup to a separate Store with `backup restore`, then
-use `native branch-restore ID` or `native tag-restore ID` there. Restoring directly
+use `native branch-restore ID`, `native tag-restore ID` or
+[workspace archive restoration](doc:native-workspace-archives#restore) there. Restoring directly
 inside a verified backup changes its references and invalidates its descriptor.
 Automatic age/release policies and distributed GC remain future work.
 

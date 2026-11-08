@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 8
+revision: 9
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -157,6 +157,22 @@ Feature-free backups with linked machine bindings use marker v2, retaining a por
 native-workspace-snapshot descriptor and `snapshot` revision per context instead
 of absolute registration/HEAD/receipt bindings. V1 backups remain readable.
 Restoration explicitly rebinds a portable snapshot in a new directory.
+
+## Workspace archive records {#workspace-archive-formats}
+
+An unregistered linked context uses a canonical native-workspace-archive v1
+chunk with twelve fields: `version`, `type`, `name`, `nonce`, `branch`, `revision`,
+`index`, `work`, `materialization`, `include_untracked`, `created_at`, `references`.
+`archive/workspaces/ID/record` pins that chunk; `/head` and `/work` pin complete
+logical HEAD and the physical recovery revision. Each original context reference
+has an explicit typed `/roots/BLAKE3(original-reference-name)` root. Parsing
+requires the exact complete group and canonical descriptor/binding recipe.
+The work revision retains HEAD and the optional index as parents, with timestamp
+zero and message `Syrnck workspace archive work v1: NAME`. Index parents remain
+unchanged on restoration, including stale baselines. A new context also pins
+the physical work under `workspaces/NEW/restored/ARCHIVE_ID`. These are ordinary
+typed roots; object, pack and C ABI formats do not change. See
+[archive operations](doc:native-workspace-archives).
 
 ## Required Store features {#required-store-features}
 

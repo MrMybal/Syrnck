@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "native_branch_archive.hpp"
 #include "native_tag_archive.hpp"
+#include "native_workspace_archive.hpp"
 #include <syrnck/backup.hpp>
 #include <syrnck/retention.hpp>
 namespace syrnck {
@@ -15,6 +16,12 @@ struct Group {
   Refs roots;
 };
 Group group(const Store &store, const Refs &refs, std::string_view selector, OperationOptions options) {
+  if (selector.starts_with(native_workspace_archive_prefix)) {
+    const auto id = selector.substr(native_workspace_archive_prefix.size());
+    validate_id(id);
+    const auto archive = read_native_workspace_archive(store, refs, id, options);
+    return {"workspace-group", archive.name, {Kind::revision, archive.head}, archive.roots()};
+  }
   constexpr std::string_view branch_prefix = "archive/branches/", tag_prefix = "archive/tags/";
   const bool branch = selector.starts_with(branch_prefix);
   const auto id = selector.substr(branch ? branch_prefix.size() : tag_prefix.size());
@@ -46,7 +53,7 @@ Prepared prepare(const Store &store, const Store &backup, const std::vector<std:
   std::size_t budget = 4096;
   for (const auto &name : sorted) {
     validate_ref(name);
-    if (name.starts_with("archive/branches/") || name.starts_with("archive/tags/")) {
+    if (name.starts_with("archive/branches/") || name.starts_with("archive/tags/") || name.starts_with(native_workspace_archive_prefix)) {
       const auto source = group(store, refs, name, options);
       const auto saved = group(backup, backup_refs, name, options);
       require(source.roots == saved.roots, "backup archive group does not match selected archive");

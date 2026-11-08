@@ -18,4 +18,21 @@ Json plan_native_materialization(const Store &, const fs::path &,
 Json set_native_materialization(const Store &, const fs::path &,
     const std::optional<std::vector<std::string>> &prefixes, std::string_view expected_head,
     std::string_view expected_plan, OperationOptions = {});
+// Archive the selected linked context and release its registration. Working
+// files stay on disk; selected dirty work, complete history/indexes and all
+// retained context references remain reconstructible through the archive.
+Json plan_native_workspace_unregistration(const Store &, bool include_untracked = false,
+    bool verify_objects = false, OperationOptions = {});
+Json unregister_native_workspace(Store &, std::string_view expected_plan,
+    bool include_untracked = false, OperationOptions = {});
+Json native_workspace_archive(const Store &, std::string_view id,
+    bool verify_objects = false, OperationOptions = {});
+Json native_workspace_archives(const Store &, const std::optional<std::string> &after = {},
+    std::size_t limit = 100, bool verify_objects = false, OperationOptions = {});
+Json plan_native_workspace_archive_restore(const Store &, const fs::path &primary,
+    std::string_view archive, std::string_view name, const fs::path &directory,
+    NativeWorkspaceRestoreOptions = {}, bool verify_objects = false, OperationOptions = {});
+Json restore_native_workspace_archive(const Store &, const fs::path &primary,
+    std::string_view archive, std::string_view name, const fs::path &directory,
+    std::string_view expected_plan, NativeWorkspaceRestoreOptions = {}, OperationOptions = {});
 } // namespace syrnck

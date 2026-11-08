@@ -1240,6 +1240,12 @@
   "native materialization-plan": "native-workspaces#materialization-transitions",
   "native materialization-set": "native-workspaces#materialization-transitions",
   "native workspace-restore": "native-workspaces#restore",
+  "native workspace-unregister-plan": "native-workspace-archives#unregister",
+  "native workspace-unregister": "native-workspace-archives#unregister",
+  "native workspace-archives": "native-workspace-archives#contents",
+  "native workspace-archive": "native-workspace-archives#contents",
+  "native workspace-archive-restore-plan": "native-workspace-archives#restore",
+  "native workspace-archive-restore": "native-workspace-archives#restore",
   "workspaces": "native-workspaces",
   "config required-features": "settings#reader-features",
   "config require-feature": "settings#reader-features"

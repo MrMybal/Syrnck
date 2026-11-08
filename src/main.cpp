@@ -371,6 +371,12 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native materialization-plan [--include CHEMIN ... | --no-files | --all-files] [--verify]
   native materialization-set [--include CHEMIN ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NOM DOSSIER [--branch BRANCHE | --detach]
+  native workspace-unregister-plan NOM [--include-untracked] [--verify]
+  native workspace-unregister NOM --expect-plan ID [--include-untracked]
+  native workspace-archives [--after ID] [--limit 100] [--verify]
+  native workspace-archive ID [--verify]
+  native workspace-archive-restore-plan ID NOM DOSSIER [--branch BRANCHE | --detach] [--verify]
+  native workspace-archive-restore ID NOM DOSSIER --expect-plan PLAN [--branch BRANCHE | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCHE | --revision RÉVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
@@ -569,6 +575,12 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native materialization-plan [--include PATH ... | --no-files | --all-files] [--verify]
   native materialization-set [--include PATH ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NAME DIRECTORY [--branch BRANCH | --detach]
+  native workspace-unregister-plan NAME [--include-untracked] [--verify]
+  native workspace-unregister NAME --expect-plan ID [--include-untracked]
+  native workspace-archives [--after ID] [--limit 100] [--verify]
+  native workspace-archive ID [--verify]
+  native workspace-archive-restore-plan ID NAME DIRECTORY [--branch BRANCH | --detach] [--verify]
+  native workspace-archive-restore ID NAME DIRECTORY --expect-plan PLAN [--branch BRANCH | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCH | --revision REVISION]
     [--directory .] [--polling] [--interval-ms 500] [--debounce-ms 75]
@@ -1002,7 +1014,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "config" && sub == "require-feature") ||
       (command == "native" &&
-       (sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+       (sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub.starts_with("workspace-") || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
         sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
         sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
@@ -1233,6 +1245,46 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(2);
       print(store.restore_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]), settings,
                                             {control->token(), observe}));
+    } else if (sub == "workspace-unregister-plan" || sub == "workspace-unregister") {
+      const bool planning = sub == "workspace-unregister-plan";
+      const bool untracked = args.flag("--include-untracked"), verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+      args.count(1);
+      store.use_native_workspace(args.values[0]);
+      if (planning) {
+        const auto plan = plan_native_workspace_unregistration(store, untracked, verify, {control->token(), observe});
+        print(plan); return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      require(expected.has_value(), "native workspace-unregister requires --expect-plan");
+      print(unregister_native_workspace(store, *expected, untracked, {control->token(), observe}));
+    } else if (sub == "workspace-archives" || sub == "workspace-archive") {
+      const bool verify = args.flag("--verify");
+      if (sub == "workspace-archive") {
+        args.count(1); print(native_workspace_archive(store, args.values[0], verify, {control->token(), observe}));
+      } else {
+        const auto after = args.option("--after");
+        const auto limit = integer(args.option("--limit").value_or("100"));
+        require(limit >= 1 && limit <= 1000, "native workspace archive page limit must be in 1..1000");
+        args.count(0);
+        print(native_workspace_archives(store, after, static_cast<std::size_t>(limit), verify, {control->token(), observe}));
+      }
+    } else if (sub == "workspace-archive-restore-plan" || sub == "workspace-archive-restore") {
+      const bool planning = sub == "workspace-archive-restore-plan";
+      const auto primary = workspace();
+      NativeWorkspaceRestoreOptions settings;
+      settings.branch = args.option("--branch"); settings.detached = args.flag("--detach");
+      const bool verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+      args.count(3);
+      const auto directory = path_from_utf8(args.values[2]);
+      if (planning) {
+        print(plan_native_workspace_archive_restore(store, primary, args.values[0], args.values[1], directory,
+            settings, verify, {control->token(), observe}));
+      } else {
+        require(expected.has_value(), "native workspace-archive-restore requires --expect-plan");
+        print(restore_native_workspace_archive(store, primary, args.values[0], args.values[1], directory,
+            *expected, settings, {control->token(), observe}));
+      }
     } else if (sub == "workspace-add") {
       const auto primary = workspace();
       const auto branch = args.option("--branch");

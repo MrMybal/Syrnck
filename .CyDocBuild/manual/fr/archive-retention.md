@@ -5,7 +5,7 @@ description: Guide : Retrait des archives.
 section: Stockage
 order: 20
 parent: storage
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Retirer des archives avec une sauvegarde vérifiée {#retire-native-archives-with-a-verified-backup}
@@ -25,6 +25,8 @@ Les lignes du plan ajoutent `name`, la table `roots`, `kind: branch-group` ou `t
 Le dépôt principal utilise `SYRNCK_KEY`, la sauvegarde secondaire `SYRNCK_BACKUP_KEY` ou aucune clé si cette variable est absente. Les clés peuvent différer. Les deux dépôts restent verrouillés ; toute récupération de checkout doit être terminée auparavant. D’autres racines peuvent encore conserver les versions : aucun gain disque immédiat n’est garanti.
 
 Après collecte locale, restaurer la sauvegarde dans un dépôt séparé avec `backup restore`, puis appeler `native branch-restore ID` ou `native tag-restore ID`. Modifier directement les références de la sauvegarde invalide son descripteur. Conserver la sauvegarde et sa clé selon la politique voulue ; leur suppression ultérieure reste administrable. Les politiques automatiques par âge/release et le GC distribué restent à développer.
+
+Les [archives de workspace](doc:native-workspace-archives) utilisent aussi un sélecteur de groupe entier : `archive/workspaces/ID`. Le retrait conserve la même exigence de sauvegarde exacte et retire ensemble descripteur, HEAD, révision physique et toutes les anciennes références du contexte. Aucun membre ne peut être retiré seul. `native workspace-archives` accepte les mêmes options de pagination/vérification ; les lignes du plan utilisent `kind: workspace-group`. Après restauration de la sauvegarde dans un Store séparé, utiliser `workspace-archive-restore-plan` puis `workspace-archive-restore`.
 
 Le dernier observateur de progression intervient avant la revérification finale. Cette dernière et le CAS n’appellent plus d’observateur, afin qu’un callback modifiant les références ou la sauvegarde n’autorise pas un retrait périmé. Voir aussi le [retrait des reçus de checkout](doc:checkout-retention).
 
