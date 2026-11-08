@@ -2,6 +2,7 @@
 #include "native_checkout_layout.hpp"
 #include "native_hard_reset.hpp"
 #include "native_rewrite.hpp"
+#include "native_materialization_transition.hpp"
 #include <tuple>
 #ifdef _WIN32
 #include <windows.h>
@@ -398,6 +399,70 @@ Json plan_native_checkout_files(const Store &store, const fs::path &directory, s
                                 const NativeSnapshot &destination, OperationOptions options, bool physical_target) {
   return plan_checkout_impl(store, directory, branch, &destination, {}, false, options, nullptr, {}, {}, nullptr,
                             physical_target);
+}
+Json plan_native_materialization_files(const Store &store, const fs::path &directory,
+    std::string_view branch, std::string_view revision, const NativeMaterialization &source_policy,
+    const NativeMaterialization &target_policy, OperationOptions options) {
+  auto destination = read_native_snapshot(store, revision, options);
+  auto source = destination;
+  project_native_materialization(source, source_policy);
+  project_native_materialization(destination, target_policy);
+  // Both maps are frozen projections of the same logical revision. Supplying
+  // them explicitly avoids the ordinary same-revision checkout shortcut.
+  return plan_checkout_impl(store, directory, branch, &destination, revision, false, options,
+      &source, std::string(revision), {}, nullptr, true);
+}
+NativeMaterializationPlan prepare_native_materialization(const Store &store, const fs::path &directory,
+    const std::optional<std::vector<std::string>> &prefixes, bool verify_objects, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  NativeMaterializationPlan plan;
+  plan.context = store.native_workspace_name();
+  plan.source = read_native_materialization(store);
+  plan.target = prefixes ? NativeMaterialization::from_prefixes(*prefixes) : NativeMaterialization{};
+  plan.branch = store.native_target();
+  const NativeRewriteState state(store, plan.branch, options);
+  plan.head = state.head.id;
+  plan.index = state.index;
+  plan.selection = state.lookup(store.native_workspace_reference("workspace/HEAD"));
+  const auto selected = store.native_head();
+  const auto workspace = fs::canonical(directory);
+  store.validate_native_workspace(workspace);
+  require(selected["directory"].is_null() || utf8(workspace) == selected["directory"].get<std::string>(),
+          "native HEAD belongs to another workspace");
+  require(workspace != store.root(), "native HEAD belongs to another workspace");
+  const bool changed = plan.source.policy.definition() != plan.target.definition();
+  Json physical = changed
+      ? plan_native_materialization_files(store, workspace, plan.branch, plan.head,
+          plan.source.policy, plan.target, options)
+      : Json{{"ready", true}, {"actions", Json::array()}};
+  Json blockers = Json::array();
+  if (changed && plan.index) blockers.push_back(Json{{"reason", "staging_exists"}});
+  const auto refs = store.refs();
+  if (std::any_of(refs.begin(), refs.end(), [](const auto &entry) {
+        return native_checkout_active_reference(entry.first);
+      })) blockers.push_back(Json{{"reason", "pending_checkout"}});
+  if (verify_objects) (void)store.closure({state.head}, true, options.stop, options.progress);
+  const Json context{{"version", 1}, {"type", "native-materialization-plan"},
+      {"store", utf8(store.root())}, {"directory", utf8(workspace)}, {"context", plan.context},
+      {"branch", plan.branch}, {"head", plan.head},
+      {"selection", plan.selection ? key_json(*plan.selection) : Json{}},
+      {"index", plan.index ? key_json(*plan.index) : Json{}},
+      {"source_materialization", plan.source.policy.definition()},
+      {"target_materialization", plan.target.definition()}};
+  plan.report = Json{{"version", 1}, {"operation", "materialization"}, {"context", plan.context},
+      {"branch", plan.branch}, {"head", plan.head}, {"changed", changed},
+      {"source_materialization", plan.source.policy.definition()},
+      {"target_materialization", plan.target.definition()},
+      {"plan", hash(bytes("Syrnck materialization plan v1:" + context.dump()))},
+      {"ready", blockers.empty() && physical["ready"].get<bool>()},
+      {"blockers", std::move(blockers)}, {"workspace", std::move(physical)},
+      {"objects_verified", verify_objects}};
+  require(plan.report.dump().size() <= max_object_size, "native materialization report exceeds 16 MiB");
+  return plan;
+}
+Json plan_native_materialization(const Store &store, const fs::path &directory,
+    const std::optional<std::vector<std::string>> &prefixes, bool verify_objects, OperationOptions options) {
+  return prepare_native_materialization(store, directory, prefixes, verify_objects, options).report;
 }
 namespace {
 bool beneath(const std::set<std::string> &prefixes, const std::string &path) {

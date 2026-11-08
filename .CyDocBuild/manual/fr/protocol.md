@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 7
+sourceRevision: 8
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -153,9 +153,8 @@ Un contexte partiel conserve un chunk canonique native-materialization v1 sous
 `workspace/materialization`, avec tableau de préfixes littéraux disjoints triés.
 Absence de chunk : tous les chemins ; tableau vide : aucun. Les reçus v9 figent
 les définitions source/cible, contexte et layout (1..6), sans déduire les actions
-de reprise depuis une sélection actuelle mutable. Les politiques statiques
-actuelles exigent deux définitions identiques et restent immuables tant que leur
-contexte est actif.
+de reprise depuis une sélection actuelle mutable. Les reçus statiques v9 exigent
+deux définitions identiques ; l’édition directe d’une référence active est refusée.
 Le layout 5 du reset hard garde l’arbre source physique capturé complet, y compris
 les ancêtres faisant obstacle hors masque ; seule la cible logique est projetée.
 Tête/index complets restent parents de cette récupération. Le plan de reset hard
@@ -166,6 +165,14 @@ champs de politique. Un descripteur stash partiel v3 ajoute `materialization`
 aux dix champs initiaux ; les descripteurs complets nommés/détachés restent
 v1/v2. Apply exige une politique sauvegardée/actuelle strictement identique ;
 la fusion d’index reste logique et complète, indépendante de la projection.
+Les transitions utilisent v10/layout 7 avec définitions figées différentes et
+les cinq champs tête/index/HEAD/profil de dossiers du layout 5. Source, cible et
+tête originale désignent la même révision logique complète ; index nul et profil
+de dossiers vide. Les deux chunks de politique restent protégés pendant la
+transaction. Seul un CAS de journal/références correspondant, de applying/installing
+vers committed, peut publier la nouvelle sélection active. Reprise/abort avant
+publication utilisent la source ; nettoyage engagé utilise la cible. HEAD et
+branche restent inchangés.
 
 Sans capacités requises, une sauvegarde de ces liaisons utilise le marqueur v2, conservant par
 contexte un descripteur portable native-workspace-snapshot et la révision
@@ -176,7 +183,7 @@ restent lisibles. La restauration relie explicitement le snapshot à un nouveau 
 
 Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
 trié de noms uniques pris en charge (au plus 32). Les noms acceptés sont
-`linked-workspaces-v1` et `sparse-workspaces-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+`linked-workspaces-v1`, `sparse-workspaces-v1` et `materialization-transitions-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
 l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
 aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
 packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne

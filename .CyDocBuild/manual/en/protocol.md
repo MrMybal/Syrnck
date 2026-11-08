@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 7
+revision: 8
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -133,8 +133,8 @@ Partial contexts retain a canonical native-materialization v1 chunk at
 `workspace/materialization`, containing sorted disjoint literal `prefixes`.
 An absent chunk means all paths; an empty array means none. Checkout receipts
 v9 freeze source/target prefix definitions, context and layout (1..6), so recovery
-does not infer actions from a mutable current selection. Current static policies
-require equal definitions and cannot change while their context remains active.
+does not infer actions from a mutable current selection. Static v9 records
+require equal definitions; raw live policy-reference edits are refused.
 Layout 5 hard-reset recovery contains its full captured physical source tree,
 including ancestor obstructions outside the mask; only the logical target is
 projected. Complete old head/index trees remain parents of that recovery revision.
@@ -145,6 +145,13 @@ same policy fields. Partial stash descriptors v3 add `materialization` to the
 ten original fields; legacy full named/detached descriptors remain v1/v2.
 Apply requires exact saved/current policy equality; index merging stays logical
 and complete, independently of the physical working projection.
+Selection transitions use v10/layout 7, with different frozen policy definitions
+and the five original-head/index/HEAD/directory-profile fields of layout 5. Source,
+target and original head are the same complete logical revision; index is null
+and the directory profile empty. Both policy chunks are pinned while pending.
+Only a matching applying/installing-to-committed journal/reference transaction
+may publish the new live policy. Resume/abort before publication uses the source
+policy; committed cleanup uses the target. HEAD and branch stay unchanged.
 
 Feature-free backups with linked machine bindings use marker v2, retaining a portable
 native-workspace-snapshot descriptor and `snapshot` revision per context instead
@@ -155,7 +162,7 @@ Restoration explicitly rebinds a portable snapshot in a new directory.
 
 Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
 array of unique supported strings (at most 32). Supported names are
-`linked-workspaces-v1` and `sparse-workspaces-v1`. Unknown, duplicate, empty or malformed requirements fail
+`linked-workspaces-v1`, `sparse-workspaces-v1` and `materialization-transitions-v1`. Unknown, duplicate, empty or malformed requirements fail
 Store open. The extra field deliberately makes historical strict readers reject
 the configuration before reading objects/references. Base pack/index/envelope
 encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.

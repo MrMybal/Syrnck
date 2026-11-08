@@ -1,4 +1,5 @@
 #include "native_materialization.hpp"
+#include "native_materialization_transition.hpp"
 #include <algorithm>
 namespace syrnck {
 bool NativeMaterialization::covers(std::string path) const {
@@ -150,7 +151,8 @@ bool validate_native_materialization_changes(const Store &store, const Refs &bef
     require(native_materialization_reference(name, &context), "invalid native materialization");
     const auto previous = lookup(before, name), next = lookup(after, name);
     const bool was_active = workspace_active(before, context), is_active = workspace_active(after, context);
-    require(previous == next || !was_active || !is_active,
+    require(previous == next || !was_active || !is_active ||
+                validate_native_materialization_transition(store, context, before, after),
             "live workspace materialization is immutable");
     if (next) {
       // Immutable object IDs already validated at publication need no payload

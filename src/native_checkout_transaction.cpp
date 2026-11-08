@@ -3,6 +3,7 @@
 #include "native_hard_reset.hpp"
 #include "native_stash.hpp"
 #include "native_context.hpp"
+#include "native_materialization_transition.hpp"
 #include "io_checkpoint.hpp"
 #include <algorithm>
 #include <charconv>
@@ -117,20 +118,21 @@ struct Record {
   std::optional<std::string> destination_branch;
   std::optional<ObjectKey> previous_head, next_head;
   bool namespace_transition = false, hard_reset = false, restore_worktree = false, pop_stash = false;
+  bool materialization_transition = false;
   std::optional<ObjectKey> target_index;
   std::string stash_id, stash_work, stash_record;
   std::optional<ObjectKey> original_head, original_index;
   std::set<std::string> source_directories;
   ObjectKey key{Kind::chunk, {}};
   Json identity() const {
-    const auto layout = restore_worktree       ? 6
+    const auto layout = materialization_transition ? 7 : restore_worktree       ? 6
                                    : hard_reset           ? 5
                                    : namespace_transition ? (destination_branch ? 4 : 3)
                                                           : (destination_branch ? 2 : 1);
     const bool detached = native_target_is_detached(branch) ||
         (destination_branch && native_target_is_detached(*destination_branch));
     const bool partial = !source_materialization.complete() || !target_materialization.complete();
-    auto result = Json{{"version", partial ? 9 : !context.empty() ? 8 : detached ? 7 : layout},
+    auto result = Json{{"version", materialization_transition ? 10 : partial ? 9 : !context.empty() ? 8 : detached ? 7 : layout},
                        {"type", "native-checkout"},
                        {"nonce", nonce},
                        {"directory", utf8(workspace)},
@@ -149,7 +151,7 @@ struct Record {
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
       result["next_head"] = next_head->id;
     }
-    if (hard_reset || restore_worktree) {
+    if (hard_reset || restore_worktree || materialization_transition) {
       result["original_head"] = original_head->id;
       result["original_index"] = original_index ? Json(original_index->id) : Json{};
       result["previous_head"] = previous_head ? Json(previous_head->id) : Json{};
@@ -209,13 +211,17 @@ struct Record {
   std::string active_reference() const { return native_context_reference(context, active_name); }
   std::string head_reference() const { return native_context_reference(context, head_name); }
   std::string materialization_reference() const { return native_context_reference(context, "workspace/materialization"); }
-  std::optional<ObjectKey> materialization_root() const {
-    return source_materialization.complete() ? std::optional<ObjectKey>{}
-        : std::optional{ObjectKey{Kind::chunk, source_materialization.identity()}};
+  std::optional<ObjectKey> policy_root(bool to_target) const {
+    const auto &policy = to_target ? target_materialization : source_materialization;
+    return policy.complete() ? std::optional<ObjectKey>{}
+        : std::optional{ObjectKey{Kind::chunk, policy.identity()}};
   }
-  RefUpdate materialization_guard() const {
+  std::optional<ObjectKey> materialization_root() const {
+    return policy_root(materialization_transition && state == "committed");
+  }
+  RefUpdate materialization_guard(bool publish = false) const {
     const auto root = materialization_root();
-    return {materialization_reference(), root, root};
+    return {materialization_reference(), root, materialization_transition && publish ? policy_root(true) : root};
   }
   void freeze_materialization(const NativeMaterialization &policy) {
     source_materialization = policy;
@@ -245,26 +251,35 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
   const auto data = store.get(key);
   const auto value = parse_json(data);
   const auto stored_version = value.value("version", 0);
-  const auto version = stored_version == 7 || stored_version == 8 || stored_version == 9
+  const auto version = stored_version == 7 || stored_version == 8 || stored_version == 9 || stored_version == 10
       ? value.value("layout_version", 0) : stored_version;
-  const auto extra = stored_version == 9 ? 4u : stored_version == 8 ? 2u : stored_version == 7 ? 1u : 0u;
+  const auto extra = stored_version == 9 || stored_version == 10 ? 4u : stored_version == 8 ? 2u : stored_version == 7 ? 1u : 0u;
   require(value.is_object() &&
               ((version == 1 && value.size() == 9 + extra) || (version == 2 && value.size() == 12 + extra) ||
                (version == 3 && value.size() == 10 + extra) || (version == 4 && value.size() == 13 + extra) ||
-               (version == 5 && value.size() == 14 + extra) || (version == 6 && value.size() == 19 + extra)) &&
+               (version == 5 && value.size() == 14 + extra) || (version == 6 && value.size() == 19 + extra) ||
+               (stored_version == 10 && version == 7 && value.size() == 14 + extra)) &&
               value.value("type", "") == "native-checkout",
           "invalid native checkout record");
   Record record;
-  if (stored_version == 8 || stored_version == 9) {
+  if (stored_version == 8 || stored_version == 9 || stored_version == 10) {
     record.context = value.at("context").get<std::string>();
     if (stored_version == 8 || !record.context.empty()) validate_native_workspace_name(record.context);
   }
-  if (stored_version == 9) {
+  if (stored_version == 9 || stored_version == 10) {
     record.source_materialization = NativeMaterialization::from_definition(value.at("source_materialization"));
     record.target_materialization = NativeMaterialization::from_definition(value.at("target_materialization"));
-    require(version >= 1 && version <= 6 && !record.source_materialization.complete() &&
-                record.source_materialization.definition() == record.target_materialization.definition(),
+    require(stored_version == 10
+                ? version == 7 && record.source_materialization.definition() != record.target_materialization.definition()
+                : version >= 1 && version <= 6 && !record.source_materialization.complete() &&
+                    record.source_materialization.definition() == record.target_materialization.definition(),
             "invalid native checkout record");
+    if (stored_version == 10) {
+      const auto features = store.required_features();
+      require(std::binary_search(features.begin(), features.end(), "materialization-transitions-v1"),
+              "native materialization transition requires a supported reader feature");
+      record.materialization_transition = true;
+    }
   }
   record.key = key;
   record.id = value.at("id").get<std::string>();
@@ -290,7 +305,7 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
     }
   }
   record.namespace_transition = version == 3 || version == 4;
-  if (record.hard_reset || record.restore_worktree) {
+  if (record.hard_reset || record.restore_worktree || record.materialization_transition) {
     require(value.at("namespace_transition").is_boolean(), "invalid native checkout record");
     record.namespace_transition = value.at("namespace_transition").get<bool>();
     const auto head = value.at("original_head").get<std::string>();
@@ -359,8 +374,17 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
       require(read_native_workspace_context(store, record.context).directory == record.workspace,
               "invalid native checkout record");
   }
-  if (record.hard_reset || record.restore_worktree)
+  if (record.hard_reset || record.restore_worktree || record.materialization_transition)
     require(record.source.has_value(), "invalid native checkout record");
+  if (record.materialization_transition) {
+    require(record.origin() == record.original_head && record.destination() == record.original_head &&
+                !record.original_index && record.source_directories.empty(), "invalid native checkout record");
+    if (for_recovery) {
+      const auto selection = read_head(store, record.previous_head);
+      require(selection.branch == record.branch && (!selection.key || selection.workspace == record.workspace),
+              "invalid native checkout record");
+    }
+  }
   if (record.restore_worktree)
     require(record.origin() == record.original_head && !record.original_index &&
                 record.source_directories.empty(),
@@ -406,6 +430,10 @@ std::optional<Record> active(const Store &store) {
   require(lookup(refs, record.pin("target")) == record.destination() &&
               lookup(refs, record.pin("source")) == record.origin(),
           "native checkout retention changed");
+  if (record.materialization_transition)
+    require(lookup(refs, record.pin("source-policy")) == record.policy_root(false) &&
+                lookup(refs, record.pin("target-policy")) == record.policy_root(true),
+            "native checkout retention changed");
   if (record.restore_worktree) {
     const auto entry = record.stash();
     const bool archived = record.state == "committed" && record.pop_stash;
@@ -568,7 +596,7 @@ public:
     require(lookup(refs, record.branch_reference()) == record.branch_origin() &&
                 lookup(refs, record.index_reference()) == record.index_origin(),
             "native checkout branch or staging changed");
-    if (record.hard_reset || record.restore_worktree)
+    if (record.hard_reset || record.restore_worktree || record.materialization_transition)
       require(lookup(refs, record.head_reference()) == record.previous_head, "native checkout branch or staging changed");
     if (record.destination_branch)
       require(lookup(refs, record.head_reference()) == record.previous_head &&
@@ -614,7 +642,10 @@ void Transaction::prepare(OperationOptions options) {
   }
   expected_head();
   const auto plan =
-      record.hard_reset
+      record.materialization_transition
+          ? plan_native_materialization_files(store_, record.workspace, record.branch, record.target,
+              record.source_materialization, record.target_materialization, options)
+          : record.hard_reset
           ? plan_native_checkout_source(store_, record.workspace, record.branch, *record.source,
                                         record.target, record.source_directories, options)
           : record.restore_worktree && !record.target_materialization.complete()
@@ -692,14 +723,14 @@ void Transaction::apply(OperationOptions options) {
       {record.branch_reference(), record.branch_origin(), record.branch_destination()},
       {record.active_reference(), record.key, key},
       {record.receipt(), {}, key},
-      {record.retained(), {}, record.destination()}, record.materialization_guard()};
+      {record.retained(), {}, record.destination()}, record.materialization_guard(true)};
   if (record.destination_branch) {
     updates[0].value = record.origin();
     updates.push_back({record.destination_reference(), record.destination(), record.destination()});
     updates.push_back({record.head_reference(), record.previous_head, record.next_head});
     updates.push_back({record.destination_index_reference(), {}, {}});
   }
-  if (record.hard_reset || record.restore_worktree) {
+  if (record.hard_reset || record.restore_worktree || record.materialization_transition) {
     updates.push_back({record.index_reference(), record.original_index, record.target_index});
     updates.push_back({record.head_reference(), record.previous_head, record.previous_head});
   }
@@ -983,10 +1014,16 @@ void Transaction::cleanup(OperationOptions options) {
               "native switch HEAD, destination branch or staging changed");
   } else
     expected_head();
-  require(store_.compare_update_refs({{record.active_reference(), record.key, {}},
-                                      {record.pin("target"), record.destination(), {}},
-                                      {record.pin("source"), record.origin(), {}}},
-                                     {options.stop}),
+  std::vector<RefUpdate> updates{{record.active_reference(), record.key, {}},
+      {record.pin("target"), record.destination(), {}}, {record.pin("source"), record.origin(), {}}};
+  if (record.materialization_transition) {
+    require(lookup(refs, record.materialization_reference()) == record.materialization_root(),
+            "native checkout references changed");
+    updates.push_back({record.pin("source-policy"), record.policy_root(false), {}});
+    updates.push_back({record.pin("target-policy"), record.policy_root(true), {}});
+    updates.push_back(record.materialization_guard());
+  }
+  require(store_.compare_update_refs(updates, {options.stop}),
           "native checkout references changed");
 }
 Json Transaction::run(bool abort, OperationOptions options) {
@@ -1031,6 +1068,32 @@ Json Transaction::run(bool abort, OperationOptions options) {
   return result;
 }
 } // namespace
+bool validate_native_materialization_transition(const Store &store, std::string_view context,
+    const Refs &before, const Refs &after) {
+  if (context != store.native_workspace_name()) return false;
+  const auto active_ref = native_context_reference(context, active_name);
+  const auto old = lookup(before, active_ref), next = lookup(after, active_ref);
+  if (!old || !next || old == next) return false;
+  const auto source = parse_record(store, *old, false), target = parse_record(store, *next, false);
+  if (!source.materialization_transition || !target.materialization_transition ||
+      source.context != context || target.identity().dump() != source.identity().dump() ||
+      source.state != (source.namespace_transition ? "installing" : "applying") || target.state != "committed")
+    return false;
+  for (const auto *refs : {&before, &after}) {
+    if (lookup(*refs, source.branch_reference()) != source.origin() ||
+        lookup(*refs, source.head_reference()) != source.previous_head ||
+        lookup(*refs, source.index_reference()) ||
+        lookup(*refs, source.pin("source")) != source.origin() ||
+        lookup(*refs, source.pin("target")) != source.destination() ||
+        lookup(*refs, source.pin("source-policy")) != source.policy_root(false) ||
+        lookup(*refs, source.pin("target-policy")) != source.policy_root(true)) return false;
+  }
+  return lookup(before, source.materialization_reference()) == source.policy_root(false) &&
+      lookup(after, source.materialization_reference()) == source.policy_root(true) &&
+      !lookup(before, source.receipt()) && !lookup(before, source.retained()) &&
+      lookup(after, source.receipt()) == next && lookup(after, source.retained()) == source.destination() &&
+      lookup(after, source.archive()) == source.origin();
+}
 Json read_native_checkout_receipt(const Store &store, const ObjectKey &key, std::string_view id) {
   const auto record = parse_record(store, key, false);
   require(record.id == id && record.state == "committed", "invalid native checkout record");
@@ -1426,6 +1489,66 @@ Json checkout_native_stash(const Store &store, const fs::path &workspace, std::s
   updates.insert(updates.end(), guard.begin(), guard.end());
   require(store.compare_update_refs(updates, options), "native checkout references changed");
   return Transaction(store, std::move(record), options).run(false, options);
+}
+
+Json set_native_materialization(const Store &store, const fs::path &workspace,
+    const std::optional<std::vector<std::string>> &prefixes, std::string_view expected_head,
+    std::string_view expected_plan, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  validate_id(expected_head);
+  validate_id(expected_plan);
+  require_no_native_checkout(store);
+  const auto plan = prepare_native_materialization(store, workspace, prefixes, true, options);
+  require(plan.head == expected_head && plan.report["plan"].get<std::string>() == expected_plan,
+          "native materialization plan changed; inspect the plan and retry");
+  require(plan.report["ready"].get<bool>(), "native materialization is blocked; inspect the plan");
+  const auto refs = store.refs();
+  require(store.native_workspace_name() == plan.context &&
+              lookup(refs, plan.source.reference) == plan.source.root &&
+              lookup(refs, native_revision_reference(store, plan.branch)) == ObjectKey{Kind::revision, plan.head} &&
+              lookup(refs, native_staging_reference(store, plan.branch)) == plan.index &&
+              lookup(refs, store.native_workspace_reference(head_name)) == plan.selection,
+          "native checkout references changed");
+  if (!plan.report["changed"].get<bool>()) {
+    auto result = plan.report;
+    result["state"] = "unchanged";
+    result["pending"] = false;
+    return result;
+  }
+  store.require_features({"materialization-transitions-v1", "sparse-workspaces-v1"}, options);
+  Record record;
+  record.materialization_transition = true;
+  record.context = plan.context;
+  record.branch = plan.branch;
+  record.source = plan.head;
+  record.target = plan.head;
+  record.original_head = ObjectKey{Kind::revision, plan.head};
+  record.previous_head = plan.selection;
+  record.source_materialization = plan.source.policy;
+  record.target_materialization = plan.target;
+  record.namespace_transition = plan.report["workspace"].value("namespace_transition", false);
+  record.workspace = fs::canonical(workspace);
+  record.nonce = hex(random_bytes(32));
+  record.id = hash(bytes(record.identity().dump()));
+  for (const auto *policy : {&record.source_materialization, &record.target_materialization})
+    if (!policy->complete())
+      require(store.put(Kind::chunk, bytes(policy->encode())).first.id == policy->identity(),
+              "invalid native materialization");
+  if (present(store.root() / "checkouts")) directory(store.root() / "checkouts", false);
+  require(!present(record.data(store)), "native checkout transaction directory already exists");
+  record.key = record.save(store);
+  const std::vector<RefUpdate> updates{
+      {record.active_reference(), {}, record.key},
+      {record.branch_reference(), record.origin(), record.origin()},
+      {record.index_reference(), {}, {}}, {record.head_reference(), record.previous_head, record.previous_head},
+      {record.pin("source"), {}, record.origin()}, {record.pin("target"), {}, record.destination()},
+      {record.pin("source-policy"), {}, record.policy_root(false)},
+      {record.pin("target-policy"), {}, record.policy_root(true)}, record.materialization_guard()};
+  require(store.compare_update_refs(updates, options), "native checkout references changed");
+  auto result = Transaction(store, std::move(record), options).run(false, options);
+  result["operation"] = "materialization";
+  result["plan"] = expected_plan;
+  return result;
 }
 
 } // namespace syrnck

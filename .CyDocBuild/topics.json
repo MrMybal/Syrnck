@@ -1237,6 +1237,8 @@
   "native workspaces": "native-workspaces",
   "native workspace-add": "native-workspaces",
   "native materialization": "native-workspaces#partial",
+  "native materialization-plan": "native-workspaces#materialization-transitions",
+  "native materialization-set": "native-workspaces#materialization-transitions",
   "native workspace-restore": "native-workspaces#restore",
   "workspaces": "native-workspaces",
   "config required-features": "settings#reader-features",

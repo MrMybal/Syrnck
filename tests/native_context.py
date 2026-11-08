@@ -218,6 +218,45 @@ class NativeContext(unittest.TestCase):
         refs = json.loads(self.cmd("refs"))
         self.assertEqual((refs["heads/main"]["id"], refs["heads/partial"]["id"]), (head, head))
 
+    def test_change_materialization_primary_linked_and_detached(self):
+        for name, value in {"Source/code": b"code", "Content/B": b"asset",
+                            ".syrnckignore": b"*.tmp\n"}.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(value)
+        head = self.commit("complete")
+        (self.root / "local.tmp").write_bytes(b"unrelated local")
+        before = self.snapshot()
+        plan = json.loads(self.cmd("native", "materialization-plan", "--include", "Source", "--verify"))
+        self.assertTrue(plan["ready"])
+        self.assertEqual(self.snapshot(), before)
+        refused = self.call("--lang", "fr", "native", "materialization-set", "--include", "Source",
+                            "--expect-plan", "0" * 64, ok=False)
+        self.assertIn("a changé", refused.stderr.decode("utf-8"))
+        self.assertEqual(self.snapshot(), before)
+        applied = json.loads(self.cmd("native", "materialization-set", "--include", "Source",
+                                      "--expect", head, "--expect-plan", plan["plan"]))
+        self.assertEqual((applied["version"], applied["layout_version"]), (10, 7))
+        self.assertFalse((self.root / "Content/B").exists())
+        self.assertEqual((self.root / "local.tmp").read_bytes(), b"unrelated local")
+        self.assertEqual(json.loads(self.cmd("native", "head"))["revision"], head)
+        self.call("native", "materialization-set", "--all-files", ok=False)
+        self.cmd("native", "branch", "feature", head)
+        self.cmd("native", "workspace-add", "edit", self.edit, "--branch", "feature", "--include", "Source")
+        grow = json.loads(self.scoped("edit", "materialization-plan", "--all-files").stdout)
+        self.scoped("edit", "materialization-set", "--all-files", "--expect-plan", grow["plan"])
+        self.assertEqual((self.edit / "Content/B").read_bytes(), b"asset")
+        self.assertFalse((self.root / "Content/B").exists())
+        self.scoped("edit", "switch", "--detach", head)
+        empty = json.loads(self.scoped("edit", "materialization-plan", "--no-files").stdout)
+        self.scoped("edit", "materialization-set", "--no-files", "--expect-plan", empty["plan"])
+        self.assertFalse((self.edit / "Source/code").exists())
+        self.assertFalse((self.edit / "Content/B").exists())
+        self.assertIsNone(json.loads(self.scoped("edit", "head").stdout)["branch"])
+        self.assertTrue(json.loads(self.scoped("edit", "status", "--combined").stdout)["clean"])
+        self.cmd("gc", "--delete")
+        self.cmd("fsck")
+
     def test_portable_backup_restore_and_preserved_frozen_index(self):
         first, main = self.fixture()
         self.cmd("native", "workspace-add", "edit", self.edit, "--branch", "feature")

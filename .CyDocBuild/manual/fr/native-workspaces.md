@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -76,12 +76,50 @@ refusée. Les sauvegardes conservent sélection et index complet. La restauratio
 matérialise les fichiers sélectionnés de l’index et vérifie exactement cet
 arbre projeté avant de lier le workspace.
 
-La sélection reste immuable tant que le workspace est enregistré. Créer un
-autre workspace pour une autre sélection. Reset hard et opérations de stash
-sur disque exigent actuellement un workspace complet et échouent avant toute
-modification des fichiers partiels. En C++ : `register_partial_native_workspace(
+La modification directe de la référence de sélection est refusée tant que le
+workspace est actif. Utiliser la transition récupérable ci-dessous pour la changer.
+[Reset hard](doc:native-hard-reset#partial-workspaces) et [stash](doc:native-stash#partial-workspaces)
+acceptent les fichiers partiels. En C++ : `register_partial_native_workspace(
 primary, name, directory, prefixes, operation)` et `native_materialization()`.
 C/Go peuvent sélectionner et observer un contexte partiel créé par CLI/C++.
+
+## Changer la sélection courante {#materialization-transitions}
+
+```text
+syrnck --workspace code native materialization-plan --include Source --include Config --verify
+syrnck --workspace code native materialization-set --include Source --include Config --expect-plan PLAN_ID
+syrnck --workspace code native materialization-plan --all-files
+syrnck --workspace code native materialization-set --all-files --expect-plan PLAN_ID
+```
+
+Choisir exactement une forme : `--include CHEMIN` répété, `--no-files` ou
+`--all-files`. Le plan en lecture seule doit être prêt ; l’application exige son
+ID exact. `--expect ID` peut aussi verrouiller explicitement le HEAD complet.
+Les API C++ de `syrnck/workspace.hpp` sont `plan_native_materialization` et
+`set_native_materialization` : vecteur de préfixes optionnel nul pour tous les
+fichiers, vecteur explicitement vide pour aucun.
+
+Cela fonctionne pour les dossiers principaux et liés, en HEAD nommé ou détaché.
+Un changement exige des fichiers suivis propres et un index figé vide. Conserver
+d’abord les modifications par stash ou commit. L’extension refuse les obstacles
+non suivis ou ignorés ; la réduction retire seulement les suivis vérifiés. Les
+données locales sans rapport restent sur place. Les dossiers vides, non versionnés,
+peuvent rester. Une sélection identique rend `unchanged`, sans écriture et en
+gardant travail sale et index.
+
+La transition garde historique logique complet et HEAD inchangés. Le journal
+v10, layout 7, fige les deux projections. Le CAS final publie nouvelle sélection
+et reçu engagé ensemble. Avant cette publication, une interruption garde l’ancienne
+politique active : `native checkout-recover` reprend ; l’option `--abort` restaure
+fichiers et politique antérieurs. Après publication, seul le nettoyage reste.
+Observateur et index de travail adoptent la projection à l’observation suivante.
+
+`materialization-transitions-v1` et `sparse-workspaces-v1` sont établies avant le
+journal, pour faire refuser le Store aux anciens lecteurs. Une interruption peut
+laisser ces exigences additives actives ; la relance est sûre. Les sauvegardes
+conservent exigences et métadonnées de sélection ; les dossiers de travail
+demandent toujours une restauration explicite. Tous les objets retenus restent
+locaux ; aucun téléchargement différé d’assets n’est fourni.
 
 ## Isolation et réservations de branches {#isolation}
 
@@ -224,12 +262,12 @@ utilisent v9 avec définitions figées `source_materialization` et
 `target_materialization`, contexte et layout de 1 à 6. Le layout 5 accepte le
 [reset hard partiel récupérable](doc:native-hard-reset#partial-workspaces) ; le
 layout 6 restaure les [stashes partiels](doc:native-stash#partial-workspaces). La sélection statique
-actuelle exige deux définitions identiques. Un chunk canonique v1 est conservé
+v9 exige deux définitions identiques. Les changements utilisent v10/layout 7
+avec deux définitions figées différentes. Un chunk canonique v1 est conservé
 sous `workspaces/NOM/workspace/materialization`. Versions d’objets/révisions,
 packs et ABI C inchangées.
 
-Changement d’une sélection active, déplacement en
-place et désenregistrement archivé restent à compléter. Chaque workspace exige
+Déplacement en place et désenregistrement archivé restent à compléter. Chaque workspace exige
 toujours ses objets retenus complets localement.
 
 ## Compatibilité des lecteurs {#compatibility}

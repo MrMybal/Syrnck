@@ -55,7 +55,8 @@ static std::string key_check(const Key &key) {
   return hex(out);
 }
 static void supported_feature(std::string_view feature) {
-  require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1", "unsupported required store feature");
+  require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1" ||
+              feature == "materialization-transitions-v1", "unsupported required store feature");
 }
 Json Store::Impl::load_config() {
   packs.invalidate();

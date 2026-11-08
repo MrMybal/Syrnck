@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 6
+revision: 7
 ---
 
 ## Create and select a workspace {#usage}
@@ -73,12 +73,51 @@ are preserved; a namespace obstruction is refused. Backups retain the selection
 and the complete index. Restoration materializes the selected index files and
 verifies exactly that projected tree before binding the workspace.
 
-The selection is immutable while the workspace remains registered. Create a
-separate workspace for another selection. Hard reset and stash disk operations
-currently require a complete workspace and fail before changing partial working
-files. C++ creation uses `register_partial_native_workspace(primary, name,
+Direct policy-reference edits are refused while the workspace is active. Use the
+recoverable transition below to change its selection. [Hard reset](doc:native-hard-reset#partial-workspaces)
+and [stash](doc:native-stash#partial-workspaces) support partial working files.
+C++ creation uses `register_partial_native_workspace(primary, name,
 directory, prefixes, operation)`; `native_materialization()` reports the policy.
 C/Go can select and observe a partial context created by CLI/C++.
+
+## Change the current selection {#materialization-transitions}
+
+```text
+syrnck --workspace code native materialization-plan --include Source --include Config --verify
+syrnck --workspace code native materialization-set --include Source --include Config --expect-plan PLAN_ID
+syrnck --workspace code native materialization-plan --all-files
+syrnck --workspace code native materialization-set --all-files --expect-plan PLAN_ID
+```
+
+Choose exactly one of repeated `--include PATH`, `--no-files` or `--all-files`.
+The read-only plan must be ready; apply requires its exact ID. `--expect ID`
+optionally fences the current complete HEAD explicitly. The C++ APIs in
+`syrnck/workspace.hpp` are `plan_native_materialization` and
+`set_native_materialization`: a null optional prefix vector selects all files;
+an explicit empty vector selects none.
+
+This works for primary and linked directories with named or detached HEAD.
+A changed selection requires clean tracked files and an empty frozen index.
+Use stash or commit to retain local edits first. Growing a selection refuses
+untracked or ignored obstructions; shrinking removes only verified tracked
+files. Unrelated local data stays in place. Empty directories are not versioned
+and may remain. An identical selection returns `unchanged`, preserving dirty
+work and its index without writes.
+
+The transition keeps complete logical history and HEAD unchanged. Journal v10,
+layout 7, freezes both projections. Its final reference transaction publishes
+the new policy together with the committed receipt. Interruption before that
+publication leaves the old policy active: `native checkout-recover` resumes;
+`native checkout-recover --abort` restores the old files and policy. After
+publication only cleanup remains. The observer and working index adopt the
+new projection on their next observation.
+
+`materialization-transitions-v1` and `sparse-workspaces-v1` are established before
+journaling, so older readers refuse the Store. An interruption may leave those
+additive requirements enabled; retry is safe. Backups retain requirements and
+policy metadata, while working directories still need explicit restoration.
+All retained file objects remain local; the operation does not implement lazy
+asset fetching.
 
 ## Isolation and branch reservations {#isolation}
 
@@ -220,12 +259,12 @@ Partial checkout records use v9 with frozen `source_materialization` and
 `target_materialization` definitions, context and layout (1..6). Layout 5 supports
 [recoverable partial hard reset](doc:native-hard-reset#partial-workspaces), and
 layout 6 restores [partial stashes](doc:native-stash#partial-workspaces). The current
-static selection requires equal source/target definitions. A canonical v1
+static v9 selection requires equal source/target definitions. Selection changes
+use v10/layout 7 with different frozen definitions. A canonical v1
 materialization chunk is retained at `workspaces/NAME/workspace/materialization`.
 Object/revision, pack and C ABI versions are unchanged.
 
-Changing a live selection, in-place workspace relocation
-and archived unregistering remain work to complete. Every workspace still
+In-place workspace relocation and archived unregistering remain work to complete. Every workspace still
 requires its complete retained objects locally.
 
 ## Reader compatibility {#compatibility}

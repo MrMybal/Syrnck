@@ -368,6 +368,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native workspaces
   native workspace-add NOM DOSSIER [--branch BRANCHE | --revision RÉVISION] [--include CHEMIN ... | --no-files]
   native materialization
+  native materialization-plan [--include CHEMIN ... | --no-files | --all-files] [--verify]
+  native materialization-set [--include CHEMIN ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NOM DOSSIER [--branch BRANCHE | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCHE | --revision RÉVISION]
@@ -564,6 +566,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native workspaces
   native workspace-add NAME DIRECTORY [--branch BRANCH | --revision REVISION] [--include PATH ... | --no-files]
   native materialization
+  native materialization-plan [--include PATH ... | --no-files | --all-files] [--verify]
+  native materialization-set [--include PATH ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NAME DIRECTORY [--branch BRANCH | --detach]
   native index-clear
   native watch [--combined] [--journal] [--branch BRANCH | --revision REVISION]
@@ -998,7 +1002,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
       (command == "config" && sub == "require-feature") ||
       (command == "native" &&
-       (sub == "workspaces" || sub == "materialization" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
+       (sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub == "workspace-add" || sub == "workspace-restore" || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
         sub == "merge-text" || sub == "add" || sub == "add-patch-plan" || sub == "add-patch" ||
         sub == "add-hunks-plan" || sub == "add-hunks" || sub == "reset-hunks-plan" || sub == "reset-hunks" ||
         sub == "add-lines-plan" || sub == "add-lines" || sub == "reset-lines-plan" || sub == "reset-lines" ||
@@ -1195,6 +1199,32 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     } else if (sub == "materialization") {
       args.count(0);
       print(store.native_materialization());
+    } else if (sub == "materialization-plan" || sub == "materialization-set") {
+      const bool planning = sub == "materialization-plan";
+      const auto directory = workspace();
+      auto includes = args.multi_option("--include");
+      const bool no_files = args.flag("--no-files"), all_files = args.flag("--all-files");
+      require(static_cast<unsigned>(!includes.empty()) + no_files + all_files == 1,
+              "choose exactly one of --include, --no-files or --all-files");
+      for (auto &include : includes) {
+        auto path = path_from_utf8(include).lexically_normal();
+        if (!path.empty() && path.filename().empty()) path = path.parent_path();
+        include = utf8(path);
+      }
+      const std::optional<std::vector<std::string>> prefixes = all_files
+          ? std::nullopt : std::optional{includes};
+      const bool verify = planning && args.flag("--verify");
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
+      const auto expected_plan = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+      args.count(0);
+      if (planning) {
+        const auto plan = plan_native_materialization(store, directory, prefixes, verify, {control->token(), observe});
+        print(plan);
+        return plan["ready"].get<bool>() ? 0 : 1;
+      }
+      require(expected_plan.has_value(), "native materialization-set requires --expect-plan");
+      const auto head = expected ? *expected : resolve("HEAD");
+      print(set_native_materialization(store, directory, prefixes, head, *expected_plan, {control->token(), observe}));
     } else if (sub == "workspace-restore") {
       const auto primary = workspace();
       NativeWorkspaceRestoreOptions settings;
