@@ -175,6 +175,39 @@ void encrypted_donor(const fs::path &root) {
   Store output(root / "protected", secret);
   require(output.encrypted() && output.fsck() > 0, "encrypted donor did not produce a valid protected copy");
 }
+void excluded_primary_binding(const fs::path &root, std::optional<Key> key, bool missing, bool linked) {
+  Fixture f(root / "source", key);
+  const auto file = f.file("retained data survives a lost machine binding");
+  const auto revision = f.revision(Json{{"asset", file}});
+  f.install(revision);
+  f.store.create_native_branch("working", revision);
+  f.store.switch_directory(f.project, "working");
+  if (linked) {
+    f.store.register_native_workspace(f.project, "edit", root / "edit");
+    f.store.use_native_workspace("edit");
+    f.store.detach_checkout(root / "edit", revision);
+  }
+  create_backup(f.store, root / "backup", key);
+  Store backup(root / "backup", key);
+  const auto binding = f.store.refs().at("workspace/HEAD");
+  if (missing) fs::remove(loose(f.store, binding));
+  else atomic_write(loose(f.store, binding), bytes("damaged excluded machine binding"), true);
+  fs::remove(loose(f.store, {Kind::manifest, file["manifest"].get<std::string>()}));
+  f.store.clear_cache();
+  const auto before = stored(f.store.root());
+  require(plan_repaired_copy(f.store, backup)["ready"] == true,
+          "excluded primary machine binding blocked logical repair planning");
+  create_repaired_copy(f.store, backup, root / "output", key);
+  require(stored(f.store.root()) == before, "salvaging data changed excluded binding evidence");
+  Store output(root / "output", key);
+  require(!output.refs().contains("workspace/HEAD") && output.fsck() > 0,
+          "logical repair copied an invalid machine binding");
+  require(output.refs().contains("workspaces/edit/portable") == linked,
+          "excluded primary failure changed linked snapshot retention");
+  output.export_revision(revision, root / "export");
+  require(text(read_bytes(root / "export/asset")) == "retained data survives a lost machine binding",
+          "logical repair lost retained bytes after a machine binding failure");
+}
 } // namespace
 int main() {
   Temporary temp;
@@ -190,6 +223,12 @@ int main() {
       }
     insufficient_and_cancellation(temp.path / "failure");
     encrypted_donor(temp.path / "encrypted-donor");
+    for (bool encrypted : {false, true})
+      for (bool missing : {false, true}) for (bool linked : {false, true}) {
+        std::optional<Key> key;
+        if (encrypted) { key.emplace(); key->fill(72); }
+        excluded_primary_binding(temp.path / ("binding-" + std::to_string(encrypted) + '-' + std::to_string(missing) + '-' + std::to_string(linked)), key, missing, linked);
+      }
     std::cout << "Verified repair copies recover corrupt loose/packed objects while preserving newer roots\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

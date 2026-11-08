@@ -15,6 +15,7 @@ def main():
     parser.add_argument("--cli", type=Path, required=True)
     parser.add_argument("--asset-mib", type=int, default=64)
     parser.add_argument("--iterations", type=int, default=5)
+    parser.add_argument("--linked", action="store_true", help="Measure a registered external workspace")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not 1 <= args.asset_mib <= 4096 or not 1 <= args.iterations <= 100:
@@ -23,10 +24,12 @@ def main():
     env = {k: v for k, v in os.environ.items() if k.upper() not in
            ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG", "SYRNCK_SKIP_SMUDGE")}
     with tempfile.TemporaryDirectory(prefix="syrnck-working-index-bench-") as temporary:
-        project = Path(temporary)
+        project = Path(temporary) / "primary"
+        project.mkdir()
+        workspace, context = project, []
         def command(*words):
-            result = subprocess.run([cli, "--store", str(project / ".syrnck"), *words],
-                                    cwd=project, env=env, capture_output=True, check=True, timeout=300)
+            result = subprocess.run([cli, "--store", str(project / ".syrnck"), *context, *words],
+                                    cwd=workspace, env=env, capture_output=True, check=True, timeout=300)
             return result.stdout
         command("init")
         path = project / "asset.bin"
@@ -34,7 +37,12 @@ def main():
         with path.open("wb") as output:
             for _ in range(args.asset_mib):
                 output.write(block)
-        command("native", "commit", "-m", "Synthetic asset")
+        revision = command("native", "commit", "-m", "Synthetic asset").decode().strip()
+        if args.linked:
+            linked = Path(temporary) / "linked"
+            command("native", "workspace-add", "benchmark", str(linked), "--revision", revision)
+            workspace, context = linked, ["--workspace", "benchmark"]
+            path = workspace / "asset.bin"
         command("native", "status", "--indexed")
         time.sleep(3.1)  # Recent-file guard, including second-resolution clocks.
         records = {}
@@ -61,6 +69,7 @@ def main():
         changed = json.loads(command("native", "status", "--indexed"))
         assert not changed["clean"] and changed["hashed_bytes"] >= before.st_size
         result = {"version": 1, "platform": platform.system(), "architecture": platform.machine(),
+                  "workspace": "linked" if args.linked else "primary",
                   "asset_bytes": before.st_size, "iterations": args.iterations, "results": records,
                   "same_size_same_mtime_edit_detected": True}
         text = json.dumps(result, indent=2) + "\n"

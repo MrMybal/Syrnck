@@ -215,3 +215,17 @@ The C++ detached suite separately cancels before final publication, closes the
 Store, and uses fresh handles to resume or abort hard reset, stash save and stash
 pop/index restoration. These cover receipt v7 layouts 5/6 with HEAD v2, namespace
 transitions, dirty/prepared bytes and completed receipt inspection after GC.
+
+`native_context_crashes_0..3` additionally verified 798/798 observed IO process
+termination boundaries on local Windows x64 (201 + 198 + 201 + 198). Fourteen
+plain/encrypted scenarios cover atomic linked registration and context-bound
+entry/exit/movement, resume and abort. Every case starts from a freshly rebound
+canonical test workspace, is inspected without writes by an independent
+production reader, and is recovered and verified after GC. Shared primary files
+and branch tips remain unchanged; namespace transitions and receipt v8 identities
+are included. These results do not establish power-loss durability.
+
+The complete linked-workspace milestone regression ran 185 CTest suites with
+zero failures in 1366.91 seconds using four worker slots. The six real Git
+filter-process cases ran separately and passed; their initial concurrent run
+hit a 20-second fallback `git add` timeout, whose cause was not established.

@@ -261,14 +261,17 @@ Json Store::restore_native_workspace(const fs::path &primary, std::string_view n
   const auto next_index_name = native_staging_reference(name, target);
   const auto original_index = lookup(refs, original_index_name);
   auto next_index = original_index;
+  Json index;
+  if (original_index) {
+    require(original_index->kind == Kind::revision, "invalid native staging snapshot");
+    index = metadata(Kind::revision, original_index->id);
+    require(index["message"] == "Syrnck staging v1: " + original_target && index["timestamp"] == 0 &&
+                index["parents"].size() <= 1, "invalid native staging snapshot");
+  }
   std::vector<RefUpdate> updates{{portable_name, descriptor, descriptor}, {snapshot_name, snapshot, snapshot}};
   if (original_index_name != next_index_name) {
     require(!lookup(refs, next_index_name), "portable workspace destination index is occupied");
     if (original_index) {
-      require(original_index->kind == Kind::revision, "invalid native staging snapshot");
-      auto index = metadata(Kind::revision, original_index->id);
-      require(index["message"] == "Syrnck staging v1: " + original_target && index["timestamp"] == 0 &&
-                  index["parents"].size() <= 1, "invalid native staging snapshot");
       index["message"] = "Syrnck staging v1: " + target;
       next_index = put(Kind::revision, bytes(index.dump())).first;
       const auto archive = "archive/reset-index/" + original_index->id;
@@ -323,21 +326,27 @@ Json Store::native_workspaces(OperationOptions options) const {
   rows.push_back(Json{{"name", "primary"}, {"directory", primary["directory"]}, {"branch", primary["branch"]},
       {"revision", primary_revision ? Json(primary_revision->id) : Json{}}, {"selected", native_workspace_name().empty()},
       {"pending_checkout", refs.contains("checkouts/active")}});
+  auto linked = native_linked_workspace_rows(*this, refs, options);
+  for (auto &row : linked) rows.push_back(std::move(row));
+  return Json{{"version", 1}, {"workspaces", rows},
+      {"selected", native_workspace_name().empty() ? "primary" : std::string(native_workspace_name())}};
+}
+Json native_linked_workspace_rows(const Store &store, const Refs &refs, OperationOptions options) {
+  Json rows = Json::array();
   for (const auto &name : names(refs)) {
     throw_if_cancelled(options.stop);
-    const auto entry = context(*this, refs, name);
+    const auto entry = context(store, refs, name);
     const auto key = lookup(refs, native_context_reference(name, "workspace/HEAD"));
     require(key.has_value(), "invalid native workspace registration");
-    const auto head = head_value(*this, *key);
+    const auto head = head_value(store, *key);
     const auto target = head["branch"].is_null() ? native_context_reference(name, "workspace/detached")
         : "heads/" + head["branch"].get<std::string>();
     const auto revision = lookup(refs, target);
     rows.push_back(Json{{"name", name}, {"directory", utf8(entry.directory)}, {"branch", head["branch"]},
-        {"revision", revision ? Json(revision->id) : Json{}}, {"selected", name == native_workspace_name()},
+        {"revision", revision ? Json(revision->id) : Json{}}, {"selected", name == store.native_workspace_name()},
         {"pending_checkout", refs.contains(native_context_reference(name, "checkouts/active"))}});
   }
-  return Json{{"version", 1}, {"workspaces", rows},
-      {"selected", native_workspace_name().empty() ? "primary" : std::string(native_workspace_name())}};
+  return rows;
 }
 fs::path native_context_local_path(const fs::path &storage, std::string_view context, std::string_view leaf) {
   validate_ref(leaf);

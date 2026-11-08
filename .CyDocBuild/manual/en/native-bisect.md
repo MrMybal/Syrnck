@@ -5,7 +5,7 @@ description: Persistent native bisection without checkout guide.
 section: Version control
 order: 210
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Persistent native bisection without checkout {#persistent-native-bisection-without-checkout}
@@ -51,7 +51,7 @@ test criteria cannot establish a reliable first introduction.
 
 ## State, retention and recovery {#state-retention-and-recovery}
 
-One active search is supported per Store. `bisect/active` points to a strict
+One active search is supported per workspace context. Primary `bisect/active` points to a strict
 canonical version-1 chunk descriptor; `bisect/pin` retains the initial bad
 revision and all its ancestor/file dependencies. Starting publishes state and
 pin together, after complete file verification. Removing or moving a visible
@@ -80,6 +80,9 @@ range with a later known good revision. There is no persistent commit-graph
 index yet, so repeated status calls can reread revision metadata.
 
 
-Interactive checkout, automatic command execution, multiple simultaneous
-workspace searches, blame, rename following and commit signatures remain
-separate features.
+Linked contexts retain their own scoped active state, history pin and receipts;
+select them with `--workspace NAME`. Searches in different workspaces can remain
+active independently while Store mutations still serialize through its lock.
+[Blame and exact rename history](doc:native-file-history) are separate queries.
+Interactive bisect checkout, automatic command execution, rename-aware predicate
+selection and commit signatures remain work to complete.

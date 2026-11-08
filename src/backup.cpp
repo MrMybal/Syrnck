@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_context.hpp"
 #include <syrnck/backup.hpp>
 #include <limits>
 #include <blake3.h>
@@ -37,10 +38,9 @@ void add_portable_workspaces(const Store &source, Refs &refs, std::map<ObjectKey
                              OperationOptions options) {
   // Preserve portable selection intent and an exact revision root, never an
   // active machine binding. Source bytes/references remain read-only.
-  const auto workspaces = source.native_workspaces(options);
-  for (const auto &workspace : workspaces["workspaces"]) {
+  const auto workspaces = native_linked_workspace_rows(source, source.refs(), options);
+  for (const auto &workspace : workspaces) {
     const auto name = workspace["name"].get<std::string>();
-    if (name == "primary") continue;
     require(workspace["revision"].is_string(), "native workspace has no retained revision");
     const auto revision = workspace["revision"].get<std::string>();
     const auto encoded = Json{{"version", 1}, {"type", "native-workspace-snapshot"},

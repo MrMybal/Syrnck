@@ -1,6 +1,7 @@
 #include "native_history_fixture.hpp"
 #include "native_context.hpp"
 #include <syrnck/backup.hpp>
+#include <syrnck/bisect.hpp>
 #include <syrnck/working_index.hpp>
 #include <syrnck/stash.hpp>
 #include <syrnck/workspace.hpp>
@@ -97,6 +98,18 @@ void scenario(const fs::path &base, std::optional<Key> key, unsigned physical) {
   const auto main = f.store.commit_staged("main", "primary child");
   const auto listing = f.store.native_workspaces();
   require(listing["workspaces"].size() == 3 && listing["selected"] == "primary", "workspace inventory differs");
+  const auto primary_search = NativeBisect(f.store).start(a, main);
+  f.store.use_native_workspace("edit");
+  require(NativeBisect(f.store).status()["active"] == false, "linked bisect inherited a primary search");
+  const auto edit_search = NativeBisect(f.store).start(a, edited);
+  f.store.use_native_workspace("view");
+  const auto view_search = NativeBisect(f.store).start(a, viewed);
+  NativeBisect(f.store).reset(view_search["state"].get<std::string>());
+  require(NativeBisect(f.store).status()["active"] == false, "linked bisect did not reset its own state");
+  f.store.use_native_workspace("edit");
+  require(NativeBisect(f.store).status()["state"] == edit_search["state"], "another context reset a linked bisect");
+  f.store.use_native_workspace("");
+  require(NativeBisect(f.store).status()["state"] == primary_search["state"], "linked searches changed primary bisect state");
   fails([&] { f.store.register_native_workspace(primary, "nested", primary / "nested"); });
   fails([&] { f.store.register_native_workspace(primary, "nested", edit / "nested"); });
   fails([&] { f.store.register_native_workspace(primary, "edit", base / "duplicate"); });
@@ -182,6 +195,29 @@ void recovery(const fs::path &base, bool abort) {
   store.gc(true);
   store.fsck();
 }
+void restore_invalid_index(const fs::path &base) {
+  Fixture f(base / "primary");
+  const auto revision = f.revision(Json{{"asset", f.file("committed")}});
+  f.install(revision);
+  f.store.register_native_workspace(f.project, "edit", base / "edit");
+  f.store.use_native_workspace("edit");
+  f.store.detach_checkout(base / "edit", revision);
+  atomic_write(base / "edit/asset", bytes("frozen"), true);
+  f.store.stage_directory(base / "edit", f.store.native_target(), {"asset"});
+  create_backup(f.store, base / "backup");
+  Store backup(base / "backup");
+  fs::create_directory(base / "recovered");
+  restore_backup(backup, base / "recovered/.syrnck");
+  Store restored(base / "recovered/.syrnck");
+  const auto chunk = restored.refs().at("workspaces/edit/portable");
+  for (const auto &invalid : {ObjectKey{Kind::revision, revision}, chunk}) {
+    restored.set_ref("workspaces/edit/workspace/staging", invalid);
+    const auto before = restored.refs();
+    fails([&] { restored.restore_native_workspace(base / "recovered", "edit", base / "destination"); });
+    require(restored.refs() == before && !fs::exists(base / "destination"),
+            "restoration bound or exported an invalid unchanged-target index");
+  }
+}
 void restore_retry(const fs::path &base) {
   const auto primary = base / "primary", edit = base / "edit", recovered = base / "recovered", destination = base / "restored";
   std::string revision;
@@ -241,6 +277,7 @@ int main() {
       }
     for (bool abort : {false, true}) recovery(temporary.path / (abort ? "abort" : "resume"), abort);
     restore_retry(temporary.path / "restore-retry");
+    restore_invalid_index(temporary.path / "restore-invalid-index");
     std::cout << "Linked workspace selection/indexes, branch reservations, recovery, GC and portable backups\n";
   } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }

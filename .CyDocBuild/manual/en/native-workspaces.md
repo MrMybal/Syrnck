@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 1
+revision: 2
 ---
 
 ## Create and select a workspace {#usage}
@@ -71,6 +71,21 @@ Unsupported stamps or notification failures use polling. Periodic complete
 audits remain necessary; notifications are advisory. Each context has separate
 working-cache and journal files.
 
+## Working-index benchmark {#performance}
+
+```text
+python scripts/benchmark_working_index.py --cli build/Release/syrnck.exe --linked --asset-mib 64 --iterations 5 --output linked-index.json
+```
+
+Omit `--linked` to measure primary; Unix builds use `build/syrnck`. The fixture
+uses a synthetic 64 MiB file and verifies equivalent full/indexed status and a
+same-size edit whose modification time is restored. On local Windows x64,
+8 November 2026, five warm linked observations each reused one file and hashed
+zero bytes; full observations each hashed 64 MiB. Median CLI times were 68 ms
+full and 24 ms indexed (primary: 75 ms and 20 ms). The file was cached by the OS;
+other regression tests were running. These measurements demonstrate avoided
+reads on this fixture, not Unreal-project throughput or cross-platform latency.
+
 ## Backup and restoration {#restore}
 
 ```text
@@ -115,6 +130,12 @@ Registration does not move the primary HEAD or discard its prepared changes.
 Checkout records bind their context and exact canonical directory; another
 context cannot execute their recovery. Completed receipts remain local to their
 context and are inspectable after later selections and GC.
+
+The Windows x64 campaign verified all 798 observed IO process-termination
+boundaries for linked registration and checkout entry/exit/movement, with plain
+and encrypted Stores, resume/abort, namespace transitions, independent production
+inspection and post-recovery GC. This tests process interruption with the OS and
+filesystem running; power-loss behavior is a separate validation.
 
 ## C++, C and Go {#api}
 

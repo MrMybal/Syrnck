@@ -261,7 +261,7 @@ Json plan_checkout_impl(const Store &store, const fs::path &directory, std::stri
   Conflicts conflicts;
   const auto owner = native_branch_workspace_owner(store, branch);
   if (owner && *owner != store.native_workspace_name())
-    conflicts.emplace("", "branch_in_other_workspace", *owner);
+    conflicts.emplace("", "branch_in_other_workspace", owner->empty() ? "primary" : *owner);
   const auto refs = store.refs();
   if (std::any_of(refs.begin(), refs.end(), [](const auto &entry) { return native_checkout_active_reference(entry.first); }))
     conflicts.emplace("", "checkout_pending", "");

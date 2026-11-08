@@ -5,7 +5,7 @@ description: Guide : Recherche par bissection.
 section: Versionnage
 order: 210
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Bissection persistante sans checkout {#persistent-native-bisection-without-checkout}
@@ -31,7 +31,7 @@ syrnck native bisect-reset --expect-state STATE_ID
 
 ## État, rétention et récupération {#state-retention-and-recovery}
 
-Une recherche active par Store. `bisect/active` pointe un descripteur chunk canonique strict v1 ; `bisect/pin` conserve la mauvaise initiale, ses ancêtres et fichiers. Le démarrage vérifie les fichiers et publie état/pin ensemble. Déplacer ou retirer une branche ne rend donc pas ces versions collectables.
+Une recherche active par contexte de workspace. Le `bisect/active` principal pointe un descripteur chunk canonique strict v1 ; `bisect/pin` conserve la mauvaise initiale, ses ancêtres et fichiers. Le démarrage vérifie les fichiers et publie état/pin ensemble. Déplacer ou retirer une branche ne rend donc pas ces versions collectables.
 
 Chaque marquage publie un nouvel état immuable par transaction attendue ; les anciens états sans référence sont collectables, sans archive croissante à chaque étape. Annulation/coupure avant publication gardent l’ancien état et peuvent laisser des métadonnées orphelines complètes. Un nouveau processus retrouve la même recherche par bisect-status, sans cache nécessaire. Descripteur corrompu, pin absent/incohérent, résultat hors historique et métadonnées contradictoires sont refusés.
 
@@ -39,4 +39,9 @@ Reset termine une recherche, achevée ou non, et publie ensemble la protection `
 
 Bornes : 100000 révisions, 1000000 liens de parents, budget estimé de métadonnées de graphe 64 Mio, au plus 4096 candidats non résolus. Les bitsets denses utilisent au plus 2 Mio ; conteneurs/caches/allocateur s’ajoutent. Réduire la plage avec une bonne borne plus récente si nécessaire. Aucun index persistant de graphe n’évite encore les relectures de statut.
 
-Checkout interactif, exécution automatique de commande, plusieurs recherches simultanées de workspace, blame, suivi des renommages dans bisect et signatures restent des fonctions distinctes.
+Les contextes liés gardent leurs propres état actif, pin et reçus, sélectionnés
+avec `--workspace NOM`. Plusieurs workspaces peuvent garder des recherches
+indépendantes ; les mutations du Store restent sérialisées par son verrou.
+Le [blame et l’historique des renommages exacts](doc:native-file-history) sont des
+requêtes distinctes. Checkout bisect interactif, exécution automatique de commande,
+sélection de prédicat tenant compte des renommages et signatures restent à réaliser.

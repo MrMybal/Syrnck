@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -72,6 +72,22 @@ au workspace. Stamps non pris en charge et échecs de notifications replient ver
 le polling. Les audits complets périodiques restent nécessaires. Cache et journal
 de chaque contexte sont séparés.
 
+## Mesure de l’index de travail {#performance}
+
+```text
+python scripts/benchmark_working_index.py --cli build/Release/syrnck.exe --linked --asset-mib 64 --iterations 5 --output linked-index.json
+```
+
+Omettre `--linked` pour le principal ; sous Unix utiliser `build/syrnck`.
+Le jeu de données synthétique de 64 Mio vérifie l’équivalence des statuts complet/avec
+index et détecte une modification de même taille avec date de modification
+restaurée. Sous Windows x64 local, le 8 novembre 2026, les cinq observations
+liées à chaud réutilisent chacune un fichier et hashent zéro octet ; les
+observations complètes hashent chacune 64 Mio. Médianes CLI : 68 ms complètes,
+24 ms avec index (principal : 75 ms et 20 ms). Le cache OS était chaud et d’autres
+tests tournaient. Ces mesures montrent les lectures évitées sur ce cas ; elles
+ne prédisent ni le débit d’un projet Unreal ni les latences multiplateformes.
+
 ## Sauvegarde et restauration {#restore}
 
 ```text
@@ -117,6 +133,12 @@ y effectuer switch, checkout ou récupération. HEAD et préparations du princip
 ne sont pas déplacés. Les reçus lient contexte et répertoire canonique exact ;
 un autre contexte ne peut les exécuter. Les reçus terminés restent locaux et
 consultables après changement de sélection et GC.
+
+La campagne Windows x64 a vérifié les 798 points IO observés d’arrêt forcé pour
+l’enregistrement et l’entrée/sortie/déplacement du checkout lié : Stores en clair
+et chiffrés, reprise/annulation, transitions de namespace, inspection indépendante
+de production et GC après récupération. Ces essais gardent OS et système de
+fichiers actifs ; les coupures de courant demandent une validation distincte.
 
 ## C++, C et Go {#api}
 
