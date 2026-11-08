@@ -102,6 +102,68 @@ class DependencyDownloads(unittest.TestCase):
         self.assertEqual(self.fetch(), (path, False))
         self.assertEqual(self.server.requests, 0)
 
+    def fallback_archive(self, payload):
+        return Archive("source", self.archive.url.replace("archive.tar.gz", "source.tar.gz"),
+                       hashlib.sha256(payload).hexdigest(), "source.tar.gz")
+
+    def test_exhausted_primary_uses_independently_verified_source_archive(self):
+        payload = b"alternate archive representation"
+        fallback = self.fallback_archive(payload)
+        primary = Archive(self.archive.name, self.archive.url, self.archive.sha256, fallback=fallback)
+        self.server.statuses = [504, 504, 504, 200]
+        self.server.payload = payload
+        path, downloaded = fetch_archive(primary, self.cache, retries=2, delay=0, timeout=2)
+        self.assertTrue(downloaded)
+        self.assertEqual(path.name, "source.tar.gz")
+        self.assertEqual(path.read_bytes(), payload)
+        self.assertEqual(self.server.requests, 4)
+        self.assertFalse((self.cache / self.archive.filename).exists())
+        self.assertEqual(fetch_archive(primary, self.cache), (path, False))
+        self.assertEqual(self.server.requests, 4)
+
+    def test_wrong_fallback_checksum_never_publishes(self):
+        fallback = self.fallback_archive(b"expected alternative")
+        primary = Archive(self.archive.name, self.archive.url, self.archive.sha256, fallback=fallback)
+        self.server.statuses = [504, 504, 504, 200]
+        with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+            fetch_archive(primary, self.cache, retries=2, delay=0, timeout=2)
+        self.assertEqual(self.server.requests, 4)
+        self.assertEqual(list(self.cache.iterdir()), [])
+
+    def test_permanent_or_integrity_errors_do_not_switch_to_fallback(self):
+        fallback = self.fallback_archive(self.payload)
+        primary = Archive(self.archive.name, self.archive.url, self.archive.sha256, fallback=fallback)
+        for status, payload, error in [(404, self.payload, HTTPError), (200, b"bad content", ValueError)]:
+            with self.subTest(status=status):
+                self.server.requests = 0
+                self.server.statuses = [status]
+                self.server.payload = payload
+                with self.assertRaises(error):
+                    fetch_archive(primary, self.cache, retries=2, delay=0, timeout=2)
+                self.assertEqual(self.server.requests, 1)
+                self.assertEqual(list(self.cache.iterdir()), [])
+
+    def test_verified_fallback_cache_does_not_contact_primary(self):
+        fallback = self.fallback_archive(self.payload)
+        primary = Archive(self.archive.name, self.archive.url, self.archive.sha256, fallback=fallback)
+        self.cache.mkdir()
+        path = self.cache / fallback.filename
+        path.write_bytes(self.payload)
+        self.server.statuses = [504]
+        self.assertEqual(fetch_archive(primary, self.cache), (path, False))
+        self.assertEqual(self.server.requests, 0)
+
+    def test_invalid_fallback_cache_is_preserved_without_network(self):
+        fallback = self.fallback_archive(self.payload)
+        primary = Archive(self.archive.name, self.archive.url, self.archive.sha256, fallback=fallback)
+        self.cache.mkdir()
+        path = self.cache / fallback.filename
+        path.write_bytes(b"preserve invalid alternative")
+        with self.assertRaisesRegex(ValueError, "cached dependency checksum mismatch"):
+            fetch_archive(primary, self.cache)
+        self.assertEqual(path.read_bytes(), b"preserve invalid alternative")
+        self.assertEqual(self.server.requests, 0)
+
     def test_manifest_requires_versioned_https_pins_without_credentials(self):
         current = read_manifest()
         self.assertEqual({item.name for item in current}, {"zstd", "curl"})

@@ -108,6 +108,8 @@ erreurs de téléchargement transitoires et vérifie les empreintes SHA-256 part
 avec CMake dans `cmake/dependencies.json`. Les archives vérifiées sous
 `.tools/downloads` sont réutilisées sans réseau ; une archive en cache invalide
 est refusée. Utiliser `--core-only` pour préparer seulement la bibliothèque de stockage.
+Si GitHub Releases est indisponible, Zstd dispose d’une archive épinglée du même
+tag source officiel ; chaque archive garde son empreinte et son nom de cache propres.
 
 ```text
 python scripts/build.py configure

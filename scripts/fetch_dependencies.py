@@ -13,6 +13,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 TRANSIENT_HTTP = {408, 429, 500, 502, 503, 504}
@@ -24,13 +25,40 @@ class Archive:
     name: str
     url: str
     sha256: str
+    cache_name: str = ""
+    fallback: Optional["Archive"] = None
 
     @property
     def filename(self):
-        name = urlsplit(self.url).path.rsplit("/", 1)[-1]
+        name = self.cache_name or urlsplit(self.url).path.rsplit("/", 1)[-1]
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", name) or name.endswith("."):
             raise ValueError("invalid dependency archive filename")
         return name
+
+
+def parse_archive(name, entry, allow_fallback=True):
+    required = {"url", "sha256"} if allow_fallback else {"url", "sha256", "filename"}
+    allowed = required | {"fallback"} if allow_fallback else required
+    if not isinstance(entry, dict) or not required.issubset(entry) or not set(entry).issubset(allowed):
+        raise ValueError("invalid dependency manifest entry")
+    url, sha, filename = entry["url"], entry["sha256"], entry.get("filename", "")
+    if not isinstance(url, str) or not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{64}", sha) or not isinstance(filename, str):
+        raise ValueError("invalid pinned dependency")
+    if not allow_fallback and not filename:
+        raise ValueError("dependency fallback requires an archive filename")
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        raise ValueError("dependency URL must use HTTPS without credentials or query parameters")
+    fallback = None
+    if entry.get("fallback") is not None:
+        if not allow_fallback:
+            raise ValueError("nested dependency fallbacks are not supported")
+        fallback = parse_archive(name + "-fallback", entry["fallback"], False)
+    archive = Archive(name, url, sha, filename, fallback)
+    archive.filename
+    if fallback and fallback.filename == archive.filename:
+        raise ValueError("dependency variants must use distinct cache filenames")
+    return archive
 
 
 def read_manifest(path=ROOT / "cmake/dependencies.json"):
@@ -41,17 +69,9 @@ def read_manifest(path=ROOT / "cmake/dependencies.json"):
     for name, entry in data.items():
         if name == "version":
             continue
-        if not re.fullmatch(r"[a-z][a-z0-9_-]*", name) or not isinstance(entry, dict) or set(entry) != {"url", "sha256"}:
+        if not re.fullmatch(r"[a-z][a-z0-9_-]*", name):
             raise ValueError("invalid dependency manifest entry")
-        url, sha = entry["url"], entry["sha256"]
-        if not isinstance(url, str) or not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{64}", sha):
-            raise ValueError("invalid pinned dependency")
-        parsed = urlsplit(url)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
-            raise ValueError("dependency URL must use HTTPS without credentials or query parameters")
-        archive = Archive(name, url, sha)
-        archive.filename
-        result.append(archive)
+        result.append(parse_archive(name, entry))
     if not {"curl", "zstd"}.issubset({item.name for item in result}):
         raise ValueError("missing required dependency")
     return result
@@ -65,16 +85,36 @@ def file_hash(path):
     return digest.hexdigest()
 
 
-def fetch_archive(archive, directory, retries=4, delay=2, timeout=15):
-    directory = directory.resolve()
-    directory.mkdir(parents=True, exist_ok=True)
+def cached_archive(archive, directory):
     target = directory / archive.filename
     if target.is_symlink() or target.resolve().parent != directory:
         raise ValueError("dependency cache path escapes its directory")
     if target.exists():
         if not target.is_file() or file_hash(target) != archive.sha256:
             raise ValueError("cached dependency checksum mismatch: " + archive.name)
-        return target, False
+        return target
+    return None
+
+
+def fetch_archive(archive, directory, retries=4, delay=2, timeout=15):
+    directory = directory.resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    for candidate in (archive, archive.fallback):
+        if candidate is not None:
+            path = cached_archive(candidate, directory)
+            if path is not None:
+                return path, False
+    try:
+        return download_archive(archive, directory, retries, delay, timeout), True
+    except (HTTPError, URLError, TimeoutError, ConnectionError, HTTPException) as error:
+        if archive.fallback is None or (isinstance(error, HTTPError) and error.code not in TRANSIENT_HTTP):
+            raise
+        print("Using verified source fallback for " + archive.name, file=sys.stderr, flush=True)
+        return fetch_archive(archive.fallback, directory, retries, delay, timeout)
+
+
+def download_archive(archive, directory, retries, delay, timeout):
+    target = directory / archive.filename
     for attempt in range(retries + 1):
         temporary = None
         try:
@@ -102,7 +142,7 @@ def fetch_archive(archive, directory, retries=4, delay=2, timeout=15):
             if digest.hexdigest() != archive.sha256:
                 raise ValueError("downloaded dependency checksum mismatch: " + archive.name)
             os.replace(temporary, target)
-            return target, True
+            return target
         except HTTPError as error:
             error.close()
             if error.code not in TRANSIENT_HTTP or attempt == retries:

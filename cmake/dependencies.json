@@ -2,10 +2,16 @@
   "version": 1,
   "zstd": {
     "url": "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz",
-    "sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
+    "sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
+    "fallback": {
+      "url": "https://codeload.github.com/facebook/zstd/tar.gz/refs/tags/v1.5.7",
+      "filename": "zstd-1.5.7-source.tar.gz",
+      "sha256": "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3"
+    }
   },
   "curl": {
     "url": "https://curl.se/download/curl-8.16.0.tar.xz",
-    "sha256": "40c8cddbcb6cc6251c03dea423a472a6cea4037be654ba5cf5dec6eb2d22ff1d"
+    "sha256": "40c8cddbcb6cc6251c03dea423a472a6cea4037be654ba5cf5dec6eb2d22ff1d",
+    "fallback": null
   }
 }

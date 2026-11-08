@@ -108,6 +108,8 @@ download failures and verifies the SHA-256 pins shared with CMake in
 `cmake/dependencies.json`. Verified archives in `.tools/downloads` are reused
 without network access; an invalid cached archive is refused. Use `--core-only`
 when preparing only the storage library.
+If GitHub Releases is unavailable, Zstd has an independently pinned archive of
+the same official source tag; each archive keeps its own checksum and cache name.
 
 ```text
 python scripts/build.py configure
