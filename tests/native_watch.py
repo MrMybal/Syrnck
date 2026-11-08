@@ -293,7 +293,12 @@ class NativeWatch(unittest.TestCase):
             for number in range(128):
                 (self.root / f"burst-{number}").write_bytes(b"x")
             overflow = run.until(lambda f: f["type"] == "status" and f["overflow"])
-            self.assertEqual(overflow["reason"], "overflow")
+            # Creating files concurrently can invalidate a byte scan. The CLI
+            # reports the subsequent successful retry as recovered; its overflow
+            # flag and full scan still carry the original lost-hints contract.
+            self.assertIn(overflow["reason"], ("overflow", "recovered"))
+            if overflow["reason"] == "recovered":
+                self.assertTrue(any(f["type"] == "error" for f in run.frames))
             self.assertTrue(overflow["full_scan"])
             self.assertEqual(overflow["paths"], [])
             self.assertEqual(overflow["status"]["working_index"]["reused_files"], 0)
