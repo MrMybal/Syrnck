@@ -492,7 +492,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
-  agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only]
+  agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only] [--bidirectional]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Surveiller, créer des snapshots et publier en continu
@@ -706,7 +706,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
-  agent run URL [--directory DIR] [--remote-branch main] [--commits-only]
+  agent run URL [--directory DIR] [--remote-branch main] [--commits-only] [--bidirectional]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Watch, snapshot and publish continuously
@@ -870,6 +870,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     request.remote_branch = args.option("--remote-branch").value_or("main");
     request.branch = args.option("--branch");
     request.commits_only = args.flag("--commits-only"); request.polling = args.flag("--polling");
+    request.bidirectional = args.flag("--bidirectional");
     request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
     request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
     request.audit_ms = integer(args.option("--audit-ms").value_or("300000"));

@@ -5,10 +5,13 @@ namespace syrnck::net {
 struct NativePushSyncOptions {
   std::string remote_branch = "main";
   bool capture_changes = true;
+  bool receive_changes = false;
+  bool merge_changes = false;
 };
 // Session-local observation and durable acknowledged history. Each tick uses
 // the caller's currently locked Store; waiting between ticks needs no Store.
-// This direction publishes native snapshots and never replaces working files.
+// The default direction only publishes. Explicit reception uses the existing
+// clean-workspace checkout transaction and preserves both sides of merges.
 class NativePushSync {
 public:
   NativePushSync(const Store &, const fs::path &directory, NativePushSyncOptions = {});
@@ -23,4 +26,7 @@ private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+// General session names; the original publication-only spelling remains valid.
+using NativeSyncOptions = NativePushSyncOptions;
+using NativeSync = NativePushSync;
 } // namespace syrnck::net

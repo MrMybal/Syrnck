@@ -1,11 +1,11 @@
 ---
 id: resident-agent
-title: Agent résident de publication native
-description: Surveiller un workspace natif, capturer les changements et reprendre les publications protégées.
+title: Agent résident de synchronisation native
+description: Surveiller les workspaces, échanger les révisions protégées et fusionner les historiques compatibles.
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Fonctionnement continu {#run}
@@ -14,6 +14,7 @@ sourceRevision: 1
 syrnck agent run https://blocks.example.invalid --directory PROJECT --remote-branch main --require-lease
 syrnck --workspace edit agent run https://blocks.example.invalid --remote-branch feature --require-lease
 syrnck agent run https://blocks.example.invalid --commits-only --polling
+syrnck agent run https://blocks.example.invalid --bidirectional --require-lease --require-read-lease
 ```
 
 Ces exemples nécessitent un stockage initialisé, un vrai serveur et `SYRNCK_TOKEN`.
@@ -28,16 +29,42 @@ quand leur contenu change, y compris suppressions et renommages exacts. Un
 workspace partiel conserve les fichiers non matérialisés de sa révision parente
 complète. Plusieurs fichiers ne constituent pas un snapshot atomique du système
 de fichiers : stabiliser les écrivains externes pour capturer un état applicatif
-cohérent. `--commits-only` publie les commits locaux existants sans créer de
-révision ni modifier les fichiers de travail sales. L’agent ne remplace jamais
-ces fichiers par du contenu distant.
+cohérent. `--commits-only` désactive les snapshots automatiques des fichiers.
+Dans le sens de publication par défaut, il publie uniquement les commits
+existants sans changer les fichiers. En mode bidirectionnel, les historiques
+existants peuvent encore produire une révision de fusion comme décrit ci-dessous.
 
-Il s’agit du sens résident de **publication**, pas encore d’un service complet
-de synchronisation bidirectionnelle de dossiers. Un descendant distant ou des
-historiques concurrents demandent une intervention ; aucune copie conflictuelle
-ou fusion n’est choisie silencieusement. Réconciliation causale complète,
-installation comme service système et interopérabilité complète avec un daemon
-Syncthing restent à terminer. Voir les [limites actuelles](doc:limits).
+Synchronisation entièrement autonome de dossiers, copies conflictuelles
+automatiques, récupération automatique d’un checkout interrompu, installation
+comme service système et interopérabilité complète avec un daemon Syncthing
+restent à terminer. Voir les [limites actuelles](doc:limits).
+
+## Échanger les révisions dans les deux sens {#bidirectional}
+
+`--bidirectional` autorise explicitement les changements entrants des fichiers.
+Un workspace vide et propre peut recevoir sa première révision distante. Les
+descendants distants s’appliquent par la transaction de checkout récupérable,
+qui conserve l’ancien état et respecte matérialisation partielle et HEAD détaché.
+
+Des descendants concurrents d’un historique partagé utilisent une fusion à trois
+voies. Les changements de fichiers compatibles et éditions textuelles sans
+chevauchement peuvent produire une révision signée à deux parents, publiée
+contre la racine distante exactement observée. La composition textuelle utilise
+le moteur borné existant, avec au plus 64 essais et 16 Mio d’entrées/résultats par
+lot. Historiques sans lien et bases de fusion ambiguës ne sont pas choisis
+automatiquement. Une réécriture distante hors de l’historique reconnu est bloquée
+même si une fusion pourrait autrement la combiner.
+
+Les conflits binaires, textuels chevauchants ou topologiques non résolus bloquent
+l’agent avec le plan de fusion. Historiques local et distant récupéré restent
+conservés ; les octets de travail sont préservés. Résoudre avec le
+[parcours de fusion native](doc:native-resolutions) ; l’agent réessaie l’historique
+local résultant. Le nommage automatique de copies conflictuelles n’est pas réalisé.
+
+Avec `--commits-only --bidirectional`, réception et fusion exigent toujours un
+workspace propre : les fichiers sales sont conservés et bloquent l’application.
+Une édition arrivant pendant le précontrôle peut aussi bloquer le checkout.
+Les indications du watcher n’autorisent jamais un remplacement sans vérification.
 
 ## Publication et récupération {#recovery}
 
@@ -62,8 +89,9 @@ Une suppression ou un recul distant après publication reconnue est bloqué au
 lieu d’être annulé. Une réécriture locale est également bloquée. Une révision
 distante inconnue est récupérée dans une référence distincte
 `remotes/agent-…/BRANCH`, sans changer HEAD ni les fichiers. Un ancêtre distant
-de HEAD peut être avancé ; descendants distants et historiques divergents sont
-bloqués.
+de HEAD peut être avancé. Le sens de publication par défaut bloque descendants
+distants et historiques divergents ; `--bidirectional` permet la réception et
+les fusions compatibles décrites ci-dessus.
 
 Si une publication précédente a une issue inconnue, sa session persistante
 d’origine doit d’abord se réconcilier, même si HEAD local a progressé. Un reçu
@@ -100,10 +128,12 @@ commandes CLI peuvent passer entre les cycles. Scans et transferts réseau
 gardent son verrou exclusif ; un transfert volumineux peut retarder les commandes.
 
 La sortie standard produit des lignes NDJSON lorsque l’état sémantique change.
-`state` vaut `empty`, `pushed`, `synced`, `uncommitted`, `blocked` ou `unavailable`.
+`state` vaut `empty`, `pushed`, `pulled`, `synced`, `uncommitted`, `blocked` ou `unavailable`.
 Les codes de raison distinguent index, checkout, réécritures, références
 supprimées, historiques concurrents et publications incertaines. Les lignes
 incluent les révisions locales/distantes et la référence reconnue si connues.
+`merged: true` signale une fusion locale automatique ; les rapports checkout/merge
+décrivent l’application entrante ou ses blocages lorsque nécessaire.
 `working_clean: null` demande un nouvel audit, notamment juste après un snapshot
 automatique. Les messages suivent `--lang en|fr` ; IDs et clés JSON restent
 identiques. `--progress` ou `--progress-json` écrit la progression sur stderr.
@@ -118,7 +148,7 @@ La durée limite la planification, sans interrompre immédiatement les IO en cou
 ```cpp
 #include <syrnck/native_sync.hpp>
 
-syrnck::net::NativePushSync sync(store, project, {"main", true});
+syrnck::net::NativeSync sync(store, project, {"main", true, true, true});
 auto status = sync.tick(store, remote, watcher_changes, operation, transfer);
 ```
 
@@ -127,7 +157,10 @@ cycle utilise un stockage actuellement verrouillé, avec mêmes stockage physiqu
 workspace logique, cible HEAD et adresse distante. Appeler `invalidate()` après
 perte de continuité du watcher ; une nouvelle session commence par un audit
 complet. L’appelant gère planification et annulation. Cette API ne lance aucun
-thread de fond et ne charge pas implicitement le profil CLI. Lier `syrnck_net` et
+thread de fond et ne charge pas implicitement le profil CLI. Les options sont
+branche distante, capture locale, réception et fusions compatibles ; réception
+et fusion valent false par défaut. La fusion exige la réception. Les noms
+`NativePushSync` / `NativePushSyncOptions` restent valides. Lier `syrnck_net` et
 fournir explicitement l’identité éventuelle. La CLI utilise
 `Store::take_native_identity()` pour déplacer la propriété exclusive de la clé
 entre handles courts sans exporter les octets de la graine.

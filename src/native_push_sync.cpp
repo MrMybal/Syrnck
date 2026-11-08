@@ -58,6 +58,7 @@ struct NativePushSync::Impl {
     require(settings.remote_branch.find('/') == settings.remote_branch.npos && settings.remote_branch.size() <= 64,
         "native remote names must be single components of at most 64 bytes");
     store.validate_native_workspace(directory);
+    require(!settings.merge_changes || settings.receive_changes, "native agent merge requires reception");
   }
 };
 NativePushSync::NativePushSync(const Store &store, const fs::path &directory, NativePushSyncOptions settings)
@@ -95,6 +96,19 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
       {"committed", false}, {"transfer", Json{}}};
   const auto blocked = [&](std::string_view reason) {
     result["state"] = "blocked"; result["reason"] = reason; return result;
+  };
+  const auto receive = [&](const ObjectKey &incoming) {
+    auto plan = store.plan_checkout(state.directory, state.target, incoming.id, true, options);
+    if (!plan["ready"].get<bool>()) {
+      result["checkout"] = std::move(plan);
+      return blocked("working_changes");
+    }
+    result["checkout"] = store.checkout_directory(state.directory, state.target, incoming.id, options);
+    acknowledge(store, saved, state_ref, base_ref, binding, incoming, head_ref, service, options);
+    state.observation.invalidate(); state.rescan = true; state.clean.reset(); state.observed_head = incoming;
+    result["state"] = "pulled"; result["local_revision"] = incoming.id; result["baseline"] = incoming.id;
+    result["working_clean"] = Json{};
+    return result;
   };
   if (store.checkout_status()["pending"].get<bool>()) return blocked("checkout_pending");
   require_no_native_checkout(store);
@@ -134,9 +148,10 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
     result["state"] = state.clean && !*state.clean ? "uncommitted" : "synced";
     return result;
   }
-  if (!head) { result["state"] = observed ? "blocked" : "empty"; result["reason"] = observed ? Json("remote_ahead") : Json{}; return result; }
+  if (!head && !observed) { result["state"] = "empty"; return result; }
+  if (!head && !state.settings.receive_changes) return blocked("remote_ahead");
   if (saved.baseline && !observed) return blocked("remote_deleted");
-  if (saved.baseline && !store.native_ancestry(saved.baseline->id, head->id, {}, options)["source_is_ancestor"].get<bool>())
+  if (saved.baseline && (!head || !store.native_ancestry(saved.baseline->id, head->id, {}, options)["source_is_ancestor"].get<bool>()))
     return blocked("local_history_rewritten");
   if (observed) {
     const auto tracking_name = "agent-" + service.substr(0, 32);
@@ -146,6 +161,7 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
       const auto fetched = fetch_native_branch(store, remote, state.settings.remote_branch, tracking_name, options, pull_limits);
       observed = ObjectKey{Kind::revision, fetched["revision"].get<std::string>()};
       result["remote_revision"] = observed->id;
+      result["transfer"] = fetched["transfer"];
     }
     if (observed == head) {
       acknowledge(store, saved, state_ref, base_ref, binding, *head, head_ref, service, options);
@@ -153,9 +169,29 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
       result["baseline"] = head->id;
       return result;
     }
+    if (!head) return receive(*observed);
     const auto graph = store.native_ancestry(observed->id, head->id, {}, options);
-    if (!graph["source_is_ancestor"].get<bool>())
-      return blocked(graph["target_is_ancestor"].get<bool>() ? "remote_ahead" : "diverged");
+    if (state.settings.receive_changes && saved.baseline &&
+        !store.native_ancestry(saved.baseline->id, observed->id, {}, options)["source_is_ancestor"].get<bool>())
+      return blocked("remote_history_rewritten");
+    if (!graph["source_is_ancestor"].get<bool>()) {
+      if (graph["target_is_ancestor"].get<bool>())
+        return state.settings.receive_changes ? receive(*observed) : blocked("remote_ahead");
+      if (!state.settings.merge_changes) return blocked("diverged");
+      NativeMergeOptions merge_options; merge_options.text_merge = TextDiffOptions{};
+      auto plan = store.plan_merge(state.directory, state.target, observed->id, merge_options, true, options);
+      if (!plan["ready"].get<bool>()) {
+        const auto reason = !plan["conflicts"].empty() ? "merge_conflict"
+            : !plan["blockers"].empty() ? "history_conflict" : "working_changes";
+        result["merge"] = std::move(plan);
+        return blocked(reason);
+      }
+      result["merge"] = store.merge_directory(state.directory, state.target, head->id, observed->id,
+          "Syrnck automatic remote merge", merge_options, options);
+      head = ObjectKey{Kind::revision, store.native_head()["revision"].get<std::string>()};
+      state.observation.invalidate(); state.rescan = true; state.clean.reset(); state.observed_head = head;
+      result["merged"] = true; result["local_revision"] = head->id; result["working_clean"] = Json{};
+    }
     if (saved.baseline && observed != saved.baseline &&
         store.native_ancestry(observed->id, saved.baseline->id, {}, options)["source_is_ancestor"].get<bool>())
       return blocked("remote_history_rewritten");

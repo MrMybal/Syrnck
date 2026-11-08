@@ -1140,3 +1140,4 @@ SYRNCK_MESSAGE("agent remote poll must be in 100..3600000 milliseconds", "L’in
 SYRNCK_MESSAGE("agent branch must match the selected HEAD", "La branche de l’agent doit correspondre à HEAD")
 SYRNCK_MESSAGE("Native synchronization requires attention", "La synchronisation native nécessite une intervention")
 SYRNCK_MESSAGE("workspace selection is only available for native commands and agent run", "La sélection d’un workspace est réservée aux commandes natives et à agent run")
+SYRNCK_MESSAGE("native agent merge requires reception", "La fusion par l’agent natif exige la réception")

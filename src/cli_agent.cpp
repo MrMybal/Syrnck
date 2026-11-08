@@ -65,7 +65,8 @@ int run_agent(const fs::path &directory, const fs::path &storage, const AgentCom
   const auto context = std::string(initial->native_workspace_name());
   const auto working_directory = command.directory_from_workspace
       ? path_from_utf8(initial->native_head()["directory"].get<std::string>()) : directory;
-  net::NativePushSync sync(*initial, working_directory, {command.remote_branch, !command.commits_only});
+  net::NativeSync sync(*initial, working_directory,
+      {command.remote_branch, !command.commits_only, command.bidirectional, command.bidirectional});
   // Own only this agent's session lock, never the Store lock while waiting.
   auto ownership = lock_watch_journal(native_context_local_path(fs::canonical(storage), context, "agent-push.lock").parent_path(), "agent-push.lock");
   WorkspaceWatchOptions watch_options{command.polling, static_cast<std::size_t>(command.max_paths)};

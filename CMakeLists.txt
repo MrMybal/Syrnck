@@ -855,6 +855,8 @@ if(SYRNCK_BUILD_TESTS)
     set_tests_properties(server_signatures PROPERTIES TIMEOUT 120)
     add_test(NAME resident_agent COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_agent.py $<TARGET_FILE:syrnck>)
     set_tests_properties(resident_agent PROPERTIES TIMEOUT 240)
+    add_test(NAME resident_sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_sync.py $<TARGET_FILE:syrnck>)
+    set_tests_properties(resident_sync PROPERTIES TIMEOUT 180)
     add_test(NAME resident_publications COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_publications.py
       $<TARGET_FILE:syrnck> $<TARGET_FILE:syrnck_network_probe> ${SYRNCK_CONSOLE_RUNNER})
     set_tests_properties(resident_publications PROPERTIES TIMEOUT 90)

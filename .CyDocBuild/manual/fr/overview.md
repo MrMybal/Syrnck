@@ -4,7 +4,7 @@ title: Syrnck
 description: Syrnck
 section: Syrnck
 order: 0
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Choisir son parcours {#getting-started}
@@ -17,7 +17,7 @@ Commencer par le [parcours de démarrage](doc:usage), puis choisir les [assets G
 
 Git conserve l’historique ordinaire du code, les branches, revues, fusions et autres fonctions Git ; les filtres Syrnck représentent les assets choisis par des pointeurs. Héberger ces pointeurs sur GitHub/GitLab ne fournit pas un serveur de blocs Syrnck : les données partagées demandent un stockage/serveur séparé.
 
-Le moteur autonome propose commits, index figé, branches, tags, checkout récupérable, merge, rebase linéaire/interactif, cherry-pick, revert, squash, reset, stash, historique des renommages exacts et bisect. Chaque guide précise les règles de conflit et de publication. Les [transferts](doc:transfers) ne publient que des fermetures complètes vérifiées. L’[agent résident de publication](doc:resident-agent) surveille les changements locaux et reprend les publications natives, y compris après des modifications hors ligne. Les [permissions et baux d’assets](doc:server-access) contrôlent les serveurs configurés.
+Le moteur autonome propose commits, index figé, branches, tags, checkout récupérable, merge, rebase linéaire/interactif, cherry-pick, revert, squash, reset, stash, historique des renommages exacts et bisect. Chaque guide précise les règles de conflit et de publication. Les [transferts](doc:transfers) ne publient que des fermetures complètes vérifiées. L’[agent résident de publication](doc:resident-agent) surveille les changements locaux et reprend les publications natives, y compris après des modifications hors ligne. Son mode bidirectionnel facultatif reçoit les révisions et fusionne les historiques concurrents compatibles. Les [permissions et baux d’assets](doc:server-access) contrôlent les serveurs configurés.
 
 Les [intégrations C++/C/Go](doc:integrations) incluent un [adaptateur BEP Syncthing](doc:syncthing) pour fichiers ordinaires, sans constituer un daemon Syncthing résident. Aucun plugin Unreal n’est fourni ; le moteur stocke des octets d’assets sans interpréter leurs objets Unreal.
 
