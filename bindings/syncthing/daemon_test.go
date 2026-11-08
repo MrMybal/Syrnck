@@ -291,7 +291,9 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.CommandContext(ctx, binary, "serve", "--home", home, "--no-browser", "--no-restart", "--no-upgrade", "--no-console", "--log-file=-")
+	// Console visibility is configured by hideReferenceProcess on Windows.
+	// Upstream's --no-console flag does not exist on Linux or macOS.
+	command := exec.CommandContext(ctx, binary, "serve", "--home", home, "--no-browser", "--no-restart", "--no-upgrade", "--log-file=-")
 	command.Env = referenceEnvironment()
 	command.Stdout = log
 	command.Stderr = log
@@ -300,9 +302,12 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 		_ = log.Close()
 		t.Fatal(err)
 	}
+	exited := make(chan struct{})
+	var exitError error
+	go func() { exitError = command.Wait(); close(exited) }()
 	t.Cleanup(func() {
 		_ = command.Process.Kill()
-		_ = command.Wait()
+		<-exited
 		_ = log.Close()
 		if t.Failed() {
 			text, _ := os.ReadFile(logPath)
@@ -320,6 +325,8 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 			}
 		}
 		select {
+		case <-exited:
+			t.Fatal("reference daemon exited during API startup: ", exitError)
 		case <-ctx.Done():
 			t.Fatal("reference API startup: ", ctx.Err())
 		case <-time.After(30 * time.Millisecond):
