@@ -5,7 +5,7 @@ description: Auteur d’origine, committer actuel et signatures Ed25519 facultat
 section: Versionnage
 order: 305
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Configurer une identité {#identity}
@@ -108,9 +108,10 @@ préservent l’exigence. Révisions v1 et v2 peuvent coexister dans le même gr
 ## Confiance et limites restantes {#trust}
 
 Une signature valide prouve la possession de sa clé pour ces octets. Nom,
-adresse et date restent des déclarations du signataire. Le serveur par défaut
-utilise toujours principal authentifié, ACL de branches/chemins et verrous
-d’assets ; il ne lie pas la clé de révision au compte et n’impose pas d’histoire
-signée. Autorisation des clés serveur, révocation et coffre système pour les
-clés de signature restent à développer. L’API d’auteur natif est actuellement
+adresse et date restent des déclarations du signataire. L’accès serveur v1
+utilise principal authentifié, ACL de branches/chemins et verrous d’assets ;
+[l’accès v2](doc:server-signatures) peut aussi imposer des signatures approuvées
+et lier clés/identités de committer aux comptes. Il vérifie la politique actuelle
+pour l’histoire nouvellement admise tout en préservant la base déjà publiée.
+Coffre système de signature et révocation distribuée restent à développer. L’API d’auteur natif est actuellement
 C++/CLI ; import et reconstruction C/Go lisent les objets v2 validés sans graine.

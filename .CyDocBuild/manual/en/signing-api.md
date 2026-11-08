@@ -5,7 +5,7 @@ description: Move-only in-memory signing keys, standard signatures and strict ve
 section: API
 order: 650
 parent: integrations
-revision: 2
+revision: 3
 ---
 
 ## Sign and verify bytes {#usage}
@@ -51,8 +51,8 @@ Upstream verification checks the signature scalar and curve equation.
 This verifies bytes supplied by the caller; applications must define their
 signed payload and domain. The API does not establish identity trust, a trusted
 timestamp, signature uniqueness or certificate validity. [Native authorship and commit signing](doc:native-authorship) use the versioned
-revision payload. Server key authorization and OS key-vault integration remain
-separate work. Legacy revision encodings remain unchanged.
+revision payload. [Configured servers](doc:server-signatures) can authorize keys
+and committer profiles. OS key-vault integration remains separate work. Legacy revision encodings remain unchanged.
 
 ## Build and verification {#validation}
 

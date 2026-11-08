@@ -5,7 +5,7 @@ description: Guide : Identités et permissions serveur.
 section: Transferts
 order: 510
 parent: transfers
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Identités, verrous et historique serveur {#server-identities-asset-locks-and-native-history-transfer}
@@ -13,6 +13,10 @@ sourceRevision: 2
 Un serveur par dépôt. Le mode configuré authentifie chaque requête comme un principal, vérifie chemins/branches en écriture et impose les baux d’assets lors d’une publication. La lecture brute des objets reste globale au dépôt : ces règles ne fournissent pas de confidentialité par chemin. Séparer les dépôts si les utilisateurs ne doivent pas lire les mêmes objets.
 
 ## Configurer les identités {#configure-identities}
+
+Le [schéma d’accès v2](doc:server-signatures) ajoute clés publiques de committers
+et exigence facultative d’histoire signée par branche. La v1 présentée ici
+conserve son comportement, permissions séparées du publieur et baux d’assets.
 
 Générer un bearer aléatoire distinct par personne/appareil avec keygen et le garder dans un gestionnaire ou environnement protégé. Avec SYRNCK_TOKEN, token-hash rend son digest BLAKE3 sans ouvrir de Store. Aucun secret brut dans config, historique, logs ou Git ; au moins 32 caractères aléatoires. Remplacer les placeholders JSON par 64 caractères hexadécimaux minuscules de token-hash.
 
@@ -112,4 +116,4 @@ PUT /v1/refs/NAME accepte root, expected, upload facultatif et locks facultatif.
 
 401 identité invalide ; 403 droits/politique/claim refusés ; 409 concurrence ; 412 bail d’envoi invalide ; 428 bail requis absent ; 400 requête/lock invalide ; 404 objet/reçu absent. Un plan réussi peut contenir des conflits sans mutation. Pas de reprise automatique des requêtes mutantes.
 
-Cette extension n’implique ni synchronisation complète Syncthing, ni service résident, autorisation des clés de signature, GC distribué, lecture isolée par chemin ou journal d’audit distant. Les [révisions signées](doc:native-authorship) peuvent être transférées et vérifiées ; cette configuration n’autorise pas leurs clés publiques et n’impose pas d’histoire signée. L’adaptateur BEP séparé couvre uniquement le sous-ensemble décrit dans son [guide](doc:syncthing).
+Cette extension n’implique ni synchronisation complète Syncthing, ni service résident, GC distribué, lecture isolée par chemin ou journal d’audit distant. Les [révisions signées](doc:native-authorship) sont vérifiées pendant le transfert ; [l’accès v2](doc:server-signatures) peut aussi autoriser leurs clés et exiger une histoire nouvellement admise signée. L’adaptateur BEP séparé couvre uniquement le sous-ensemble décrit dans son [guide](doc:syncthing).

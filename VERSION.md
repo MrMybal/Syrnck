@@ -23,7 +23,7 @@ These source features are not an announcement of a prebuilt release. Each operat
 ## Documented limitations
 
 - Named/detached HEAD, independent linked workspaces, recoverable live selection changes, partial hard reset/stash and archived unregister/restore are available. Linked relocation stays on the same filesystem; primary/cross-filesystem relocation remains unfinished.
-- Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Authored revisions are opt-in; server signing-key authorization, OS signing-key vaults and merge-preserving rebase remain unfinished.
+- Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Authored revisions are opt-in; server access v2 can require approved signing keys. Registration is manual and policy changes require restart. OS signing-key vaults, distributed revocation and merge-preserving rebase remain unfinished.
 - The agent transfers once per invocation. The watcher observes changes; neither provides a complete continuous synchronization service with causal versions, offline conflict reconciliation, deletions and rename propagation.
 - The optional Syncthing adapter covers regular-file BEP data. Device discovery, pairing, version vectors, conflicts and full daemon/folder synchronization are outside that adapter.
 - XChaCha20-Poly1305 protects objects at rest. The trusted server receives decoded objects. End-to-end encryption, key recovery and distributed rotation/revocation remain unfinished. Checkout/staging files can contain plaintext.

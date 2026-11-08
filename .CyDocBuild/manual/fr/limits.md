@@ -4,14 +4,14 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 ## Workspace et versionnage {#workspace}
 
 [HEAD nommé et détaché](doc:native-detached) sont pris en charge. Les [workspaces natifs liés](doc:native-workspaces) conservent des HEAD/index séparés et des snapshots portables pour les sauvegardes. Matérialisation partielle, changements de sélection récupérables, reset hard et stash à sélection identique sont disponibles. Le [désenregistrement archivé et la restauration](doc:native-workspace-archives) gardent travail modifié capturé, arbres HEAD/index complets et racines du contexte. Le [déplacement lié](doc:native-workspace-relocation) conserve le dossier entier sur un même système de fichiers, avec reprise/abort et changements de casse ; déplacements entre systèmes et du principal/Store restent à compléter. L’index de travail persistant et l’observateur évitent certains recalculs de hash, sans produire un snapshot atomique du système de fichiers ni un historique complet d’événements. Les notifications OS peuvent déborder ; réanalyses prudentes et polling restent nécessaires.
 
-Les renommages de contenu exact sont reconnus, mais renommages avec édition/copies, intégration aux merges/rebases et synthèse récursive des bases multiples restent incomplets. Les révisions anciennes v1 n’ont ni auteur ni signature. Les [auteurs v2 facultatifs](doc:native-authorship) enregistrent auteurs/committers et signatures Ed25519 ; autorisation des clés par compte serveur et coffres système restent incomplets. Respecter les limites de chaque mode de fusion/rebase : la présence d’une commande ne promet pas toute la compatibilité Git.
+Les renommages de contenu exact sont reconnus, mais renommages avec édition/copies, intégration aux merges/rebases et synthèse récursive des bases multiples restent incomplets. Les révisions anciennes v1 n’ont ni auteur ni signature. Les [auteurs v2 facultatifs](doc:native-authorship) enregistrent auteurs/committers et signatures Ed25519 ; les [politiques serveur](doc:server-signatures) peuvent autoriser clés et identités. Enregistrement manuel et redémarrage après changement de politique ; coffres système et révocation distribuée restent incomplets. Respecter les limites de chaque mode de fusion/rebase : la présence d’une commande ne promet pas toute la compatibilité Git.
 
 ## Équipe et synchronisation continue {#sync}
 

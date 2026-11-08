@@ -5,7 +5,7 @@ description: Server identities, asset locks and native history transfer guide.
 section: Transfers
 order: 510
 parent: transfers
-revision: 2
+revision: 3
 ---
 
 # Server identities, asset locks and native history transfer {#server-identities-asset-locks-and-native-history-transfer}
@@ -81,6 +81,11 @@ are capped at 1024 entries; individual path prefixes at 4096 UTF-8 bytes.
 Treat the configuration as an administrator-controlled file.
 
 ## Use remote asset leases {#use-remote-asset-leases}
+
+[Access schema v2](doc:server-signatures) adds registered committer public keys
+and an optional signed-history requirement per branch. V1 above retains its
+original behavior. Both modes keep the same independent publisher permissions
+and asset leases below.
 
 ```text
 syrnck locks acquire-plan --remote https://blocks.example.test/ Content/Map.uasset Content/Map.ubulk
@@ -199,8 +204,8 @@ required upload lease. Malformed requests and failed lock operations return
 400; missing objects/receipts return 404. Successful plans can contain conflicts
 without changing the Store. Mutating requests are not automatically retried.
 
-No complete Syncthing interoperability, service-resident watcher, signing-key authorization,
+No complete Syncthing interoperability, service-resident watcher,
 distributed GC, per-path read isolation or remote audit log is implied by this
 extension. Those remain separate development work. [Signed revision objects](doc:native-authorship)
-can be transferred and verified; this access configuration does not authorize
-their public keys or enforce a signed-history requirement.
+are verified during transfer; [access v2](doc:server-signatures) can additionally
+authorize their keys and require signed newly admitted history.

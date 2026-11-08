@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include <syrnck/signing.hpp>
+#include "signing_validation.hpp"
 #include <monocypher.h>
 #include <monocypher-ed25519.h>
 #include <algorithm>
@@ -27,6 +28,18 @@ bool canonical_point(std::span<const std::uint8_t> point) noexcept {
   }
   return true;
 }
+bool small_order(std::span<const std::uint8_t> key) noexcept {
+  std::array<std::uint8_t, 64> identity{}; identity[0] = 1;
+  std::array<std::uint8_t, 32> one{}; one[0] = 1;
+  return crypto_eddsa_check_equation(identity.data(), key.data(), one.data()) == 0;
+}
+}
+bool valid_ed25519_public_key(std::span<const std::uint8_t> key) noexcept {
+  if (key.size() != 32 || !canonical_point(key)) return false;
+  std::array<std::uint8_t, 64> identity{}; identity[0] = 1;
+  const std::array<std::uint8_t, 32> zero{};
+  // With S=h=0 the upstream equation succeeds for any decodable curve point.
+  return crypto_eddsa_check_equation(identity.data(), key.data(), zero.data()) == 0 && !small_order(key);
 }
 SigningKey SigningKey::from_seed(std::span<const std::uint8_t> input) {
   require(input.size() == 32, "signing seed must contain exactly 32 bytes");
@@ -69,9 +82,7 @@ bool verify_ed25519(std::span<const std::uint8_t> key, std::span<const std::uint
   // Upstream checks the cofactored equation. R=identity, S=0 and h=1 make
   // that equation succeed exactly for small-order A. Such public keys
   // cannot establish possession and are refused for authentication.
-  std::array<std::uint8_t, 64> identity{}; identity[0] = 1;
-  std::array<std::uint8_t, 32> one{}; one[0] = 1;
-  if (crypto_eddsa_check_equation(identity.data(), key.data(), one.data()) == 0) return false;
+  if (small_order(key)) return false;
   return crypto_ed25519_check(signature.data(), key.data(), message.data(), message.size()) == 0;
 }
 std::string signing_key_id(std::span<const std::uint8_t> public_key) {

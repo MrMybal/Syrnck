@@ -1,4 +1,5 @@
 #include "server_access.hpp"
+#include "signing_validation.hpp"
 #include <algorithm>
 #include <monocypher.h>
 namespace syrnck::net::detail {
@@ -62,16 +63,18 @@ std::set<std::string> ancestors(const Store &store, const std::optional<ObjectKe
 } // namespace
 ServerAccess::ServerAccess(const Json &value) {
   require(value.dump().size() <= 1024 * 1024 && value.is_object() && value.size() == 3 &&
-              value.contains("version") && value["version"].is_number_integer() && value["version"] == 1 &&
+              value.contains("version") && value["version"].is_number_integer() && (value["version"] == 1 || value["version"] == 2) &&
               value.contains("principals") && value["principals"].is_array() &&
               !value["principals"].empty() && value["principals"].size() <= 256 &&
               value.contains("branches") && value["branches"].is_array() && value["branches"].size() <= 1024,
           "invalid server access configuration");
+  const bool signing = value["version"] == 2;
   std::set<std::string> identities, digests;
   for (const auto &entry : value["principals"]) {
-    require(entry.is_object() && entry.size() == 5 && entry.contains("id") && entry["id"].is_string() &&
+    require(entry.is_object() && entry.size() == (signing ? 6U : 5U) && entry.contains("id") && entry["id"].is_string() &&
                 entry.contains("token_hash") && entry["token_hash"].is_string() && entry.contains("role") &&
-                entry["role"].is_string() && entry.contains("write_paths") && entry.contains("branches"),
+                entry["role"].is_string() && entry.contains("write_paths") && entry.contains("branches") &&
+                (!signing || entry.contains("signing_keys")),
             "invalid server principal");
     Principal principal{entry["id"].get<std::string>(), entry["token_hash"].get<std::string>(),
                         entry["role"].get<std::string>(), strings(entry["write_paths"], true),
@@ -84,18 +87,34 @@ ServerAccess::ServerAccess(const Json &value) {
             "invalid server principal role");
     require(principal.role != "reader" || (principal.paths.empty() && principal.branches.empty()),
             "reader cannot have server write permissions");
+    if (signing) {
+      const auto &keys = entry["signing_keys"];
+      require(keys.is_array() && keys.size() <= 32 && (principal.role != "reader" || keys.empty()), "invalid server signing keys");
+      for (const auto &key : keys) {
+        require(key.is_object() && key.size() == 3 && key.contains("public_key") && key["public_key"].is_string() &&
+            key.contains("name") && key["name"].is_string() && key.contains("email") && key["email"].is_string(), "invalid server signing key");
+        const auto public_key = key["public_key"].get<std::string>();
+        validate_id(public_key);
+        const auto decoded = unhex(public_key);
+        require(valid_ed25519_public_key(decoded), "invalid server signing public key");
+        NativeIdentity identity{key["name"].get<std::string>(), key["email"].get<std::string>(), 0};
+        identity.validate();
+        require(signers_.emplace(signing_key_id(decoded), Signer{principals_.size(), public_key, std::move(identity.name), std::move(identity.email)}).second,
+            "duplicate server signing public key");
+      }
+    }
     principals_.push_back(std::move(principal));
   }
   for (const auto &entry : value["branches"]) {
-    require(entry.is_object() && entry.size() == 3 && entry.contains("name") && entry["name"].is_string() &&
+    require(entry.is_object() && entry.size() == (signing ? 4U : 3U) && entry.contains("name") && entry["name"].is_string() &&
                 entry.contains("fast_forward") && entry["fast_forward"].is_boolean() &&
-                entry.contains("lock_paths"),
+                entry.contains("lock_paths") && (!signing || (entry.contains("require_signatures") && entry["require_signatures"].is_boolean())),
             "invalid server branch policy");
     const auto name = entry["name"].get<std::string>();
     component(name);
     require(branches_
                 .emplace(name,
-                         BranchPolicy{entry["fast_forward"].get<bool>(), strings(entry["lock_paths"], true)})
+                         BranchPolicy{entry["fast_forward"].get<bool>(), strings(entry["lock_paths"], true), signing && entry["require_signatures"].get<bool>()})
                 .second,
             "duplicate server branch policy");
   }
@@ -121,6 +140,17 @@ void ServerAccess::write_branch(const Principal &principal, std::string_view nam
   allow(principal.role != "reader" && visible(name) &&
         std::find(principal.branches.begin(), principal.branches.end(), name) != principal.branches.end());
 }
+const Principal &ServerAccess::revision_signer(const Json &revision, std::string_view branch) const {
+  allow(revision["version"] == 2 && !revision["signature"].is_null());
+  const auto &signature = revision["signature"], &committer = revision["committer"];
+  const auto found = signers_.find(signature["key_id"].get<std::string>());
+  allow(found != signers_.end());
+  const auto &binding = found->second;
+  allow(signature["public_key"] == binding.public_key && committer["name"] == binding.name && committer["email"] == binding.email);
+  const auto &principal = principals_.at(binding.principal);
+  write_branch(principal, branch);
+  return principal;
+}
 std::vector<AssetLockClaim> decode_lock_claims(const Json &value) {
   require(value.is_array() && value.size() <= 1024, "invalid server asset lock claims");
   std::vector<AssetLockClaim> result;
@@ -144,6 +174,11 @@ ServerAccess::publication(const Store &store, const Principal &principal, std::s
   write_branch(principal, name);
   allow(root.kind == Kind::revision && (!previous || previous->kind == Kind::revision));
   const auto &policy = branches_.at(std::string(name));
+  // The baseline is only this branch's admitted ancestry. A real rewind must
+  // still target a currently authorized signed tip, even when it was admitted
+  // before signing became required. Exact no-op retries preserve that baseline.
+  if (policy.require_signatures && (!previous || root != *previous))
+    (void)revision_signer(store.metadata(Kind::revision, root.id), name);
   if (previous && policy.fast_forward)
     allow(store.native_ancestry(previous->id, root.id)["source_is_ancestor"].get<bool>());
   const auto known = ancestors(store, previous);
@@ -167,13 +202,18 @@ ServerAccess::publication(const Store &store, const Principal &principal, std::s
       continue;
     require(seen.size() <= max_revisions, "server publication history limit exceeded");
     const auto revision = store.metadata(Kind::revision, id);
+    const auto signer = policy.require_signatures ? &revision_signer(revision, name) : nullptr;
+    const auto revision_change = [&](const std::string &path) {
+      if (signer) write_path(*signer, path);
+      change(path);
+    };
     const auto &files = revision["files"], &parents = revision["parents"];
     require(parents.size() <= max_links - links, "server publication history limit exceeded");
     links += parents.size();
     if (parents.empty())
       for (const auto &[path, file] : files.items()) {
         (void)file;
-        change(path);
+        revision_change(path);
       }
     for (const auto &parent : parents) {
       const auto base_id = parent.get<std::string>();
@@ -181,11 +221,11 @@ ServerAccess::publication(const Store &store, const Principal &principal, std::s
       const auto &before = base["files"];
       for (const auto &[path, file] : files.items())
         if (!before.contains(path) || before[path] != file)
-          change(path);
+          revision_change(path);
       for (const auto &[path, file] : before.items()) {
         (void)file;
         if (!files.contains(path))
-          change(path);
+          revision_change(path);
       }
       pending.push_back(base_id);
     }

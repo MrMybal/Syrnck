@@ -5,7 +5,7 @@ description: Original authors, current committers and optional Ed25519 signature
 section: Version control
 order: 305
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 ## Configure an identity {#identity}
@@ -106,9 +106,10 @@ v2 revisions can coexist in the same graph.
 ## Trust and remaining limits {#trust}
 
 A valid signature proves possession of its signing key for those bytes. A name,
-email and timestamp remain claims by the signer. The default server still uses
-its authenticated principal, branch/path ACLs and asset locks for publication;
-it does not bind a revision key to an account or require signed history.
-Server key authorization, revocation rules and an OS signing-key vault remain
-separate work. Native history authorship APIs are currently C++/CLI; C/Go object
+email and timestamp remain claims by the signer. Server access v1 uses authenticated
+principals, branch/path ACLs and asset locks; [access v2](doc:server-signatures)
+can also require approved signatures and bind committer keys/identities to
+accounts. It checks current policy for newly admitted history, preserving the
+existing branch baseline. An OS signing-key vault and distributed revocation
+remain separate work. Native history authorship APIs are currently C++/CLI; C/Go object
 import and reconstruction can read validated v2 objects without a signing seed.

@@ -1256,5 +1256,7 @@
   "config required-features": "settings#reader-features",
   "config require-feature": "settings#reader-features",
   "native identity": "native-authorship#identity",
-  "native-authorship": "native-authorship"
+  "native-authorship": "native-authorship",
+  "server-signatures": "server-signatures",
+  "serve signing": "server-signatures#configuration"
 }
