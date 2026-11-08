@@ -1,5 +1,6 @@
 #include "native_history_fixture.hpp"
 #include "native_directory_identity.hpp"
+#include "fixture_cleanup.hpp"
 #include <syrnck/workspace.hpp>
 #include <syrnck/backup.hpp>
 #include <iostream>
@@ -119,7 +120,7 @@ void refusals(const fs::path &base) {
   fs::create_directory(destination); atomic_write(destination / "foreign", bytes("keep"), false);
   fails([&] { plan_native_workspace_relocation(f.store, "edit", destination); });
   require(text(read_bytes(destination / "foreign")) == "keep", "occupied relocation destination was changed");
-  fs::remove(destination / "foreign"); fs::remove(destination);
+  fs::remove(destination / "foreign"); fixture_test::remove_empty_directory(destination);
   const auto plan = plan_native_workspace_relocation(f.store, "edit", destination);
   bool changed = false;
   fails([&] { relocate_native_workspace(f.store, "edit", destination, plan["plan"].get<std::string>(),
@@ -131,7 +132,7 @@ void refusals(const fs::path &base) {
   require(changed && native_workspace_relocation_status(f.store)["pending"] == false &&
       fs::exists(source / "code") && text(read_bytes(destination / "foreign")) == "callback",
       "relocation ignored a destination created by its publishing observer");
-  fs::remove(destination / "foreign"); fs::remove(destination);
+  fs::remove(destination / "foreign"); fixture_test::remove_empty_directory(destination);
   const auto parent = base / "new-parent";
   fs::create_directory(parent);
   const auto parent_plan = plan_native_workspace_relocation(f.store, "edit", parent / "moved");

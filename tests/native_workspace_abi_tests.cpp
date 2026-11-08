@@ -49,7 +49,9 @@ void scenario(const fs::path &root, const std::optional<Key> &key, unsigned layo
         {"Source/item", fixture.file("before")}, {"Hidden/data", fixture.file("hidden before")}};
     old = fixture.revision(files); fixture.install(old);
     auto next = files; next.erase("Source/item");
-    next["Source/item/leaf"] = fixture.file(incoming);
+    // Exercise streamed/cancellable reconstruction without thousands of
+    // repeated 1 KiB descriptors in every platform/configuration scenario.
+    next["Source/item/leaf"] = fixture.file(incoming, false, 64 * 1024);
     next["Hidden/data"] = fixture.file("hidden after");
     target = fixture.revision(next, Json::array({old}));
     Key seed; seed.fill(75);

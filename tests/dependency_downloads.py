@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 from socketserver import TCPServer
 import unittest
 from unittest.mock import patch
@@ -47,7 +48,7 @@ class DependencyDownloads(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="syrnck-dependency-download-")
-        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(self.cleanup_directory)
         self.root = Path(self.temp.name).resolve()
         self.payload = b"verified pinned archive bytes\x00" * 1024
         self.digest = hashlib.sha256(self.payload).hexdigest()
@@ -60,6 +61,41 @@ class DependencyDownloads(unittest.TestCase):
         self.addCleanup(self.close_server)
         self.archive = Archive("fixture", f"http://127.0.0.1:{self.server.server_port}/archive.tar.gz", self.digest)
         self.cache = self.root / "cache"
+
+    def cleanup_directory(self):
+        # Retry only Windows' delayed empty-directory removal in this owned
+        # TemporaryDirectory. Test assertions/download operations are not retried.
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                self.temp.cleanup()
+                return
+            except OSError as error:
+                if os.name != "nt" or getattr(error, "winerror", None) != 145 or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+
+    @unittest.skipUnless(os.name == "nt", "Windows delayed directory deletion")
+    def test_cleanup_retries_only_bounded_directory_not_empty(self):
+        delayed = OSError("fixture directory not empty")
+        delayed.winerror = 145
+        with patch.object(self.temp, "cleanup", side_effect=[delayed, None]) as cleanup, patch.object(time, "sleep") as sleep:
+            self.cleanup_directory()
+            self.assertEqual(cleanup.call_count, 2)
+            sleep.assert_called_once_with(0.01)
+        with patch.object(self.temp, "cleanup", side_effect=delayed) as cleanup, \
+                patch.object(time, "monotonic", side_effect=[100, 100, 103]), patch.object(time, "sleep") as sleep:
+            with self.assertRaises(OSError):
+                self.cleanup_directory()
+            self.assertEqual(cleanup.call_count, 2)
+            sleep.assert_called_once_with(0.01)
+        denied = PermissionError("fixture access denied")
+        denied.winerror = 5
+        with patch.object(self.temp, "cleanup", side_effect=denied) as cleanup, patch.object(time, "sleep") as sleep:
+            with self.assertRaises(PermissionError):
+                self.cleanup_directory()
+            self.assertEqual(cleanup.call_count, 1)
+            sleep.assert_not_called()
 
     def close_server(self):
         self.server.shutdown()

@@ -1,6 +1,7 @@
 #include <syrnck/watcher.hpp>
 #include "internal.hpp"
 #include "native_workspace.hpp"
+#include "fixture_cleanup.hpp"
 #include "native_inventory.hpp"
 #include <iostream>
 using namespace syrnck;
@@ -152,7 +153,7 @@ void scoped_changes(const fs::path &root, bool encrypted) {
   fs::remove(project / "moved/first");
   fs::remove(project / "moved/second");
   fs::remove(project / "moved/cache.tmp");
-  fs::remove(project / "moved");
+  fixture_test::remove_empty_directory(project / "moved");
   write(project / "moved", "plain");
   const auto file = query({"moved/first"}, 5);
   require(file["observation"]["scanned_scopes"] == Json::array({"moved"}),
@@ -169,7 +170,7 @@ void scoped_changes(const fs::path &root, bool encrypted) {
   query({"moved/.syrnckignore"}, 6);
   fs::remove(project / "moved/first");
   fs::remove(project / "moved/second");
-  fs::remove(project / "moved");
+  fixture_test::remove_empty_directory(project / "moved");
   const auto deleted = query({"moved/first"}, 0);
   require(deleted["workspace_files"] == 3, "missing directory left stale sibling entries or removed prefix neighbor");
   // A special/unsafe namespace is never accepted by merely validating the

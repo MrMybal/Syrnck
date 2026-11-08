@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "fixture_cleanup.hpp"
 #include <fstream>
 #include <iostream>
 #include <source_location>
@@ -161,7 +162,7 @@ void planning(const fs::path &project, std::optional<Key> key, unsigned storage)
   require(conflict(store.plan_checkout(project, "main", target), "new/path.txt", "untracked_collision"),
           "identical untracked bytes were silently adopted");
   fs::remove(project / "new/path.txt");
-  fs::remove(project / "new");
+  fixture_test::remove_empty_directory(project / "new");
   write(project / "new", "untracked ancestor");
   require(conflict(store.plan_checkout(project, "main", target), "new", "file_directory_transition"),
           "untracked ancestor was not protected");
@@ -169,8 +170,8 @@ void planning(const fs::path &project, std::optional<Key> key, unsigned storage)
   fs::create_directories(project / "new/path.txt");
   require(conflict(store.plan_checkout(project, "main", target), "new/path.txt", "file_directory_transition"),
           "empty untracked directory was not protected");
-  fs::remove(project / "new/path.txt");
-  fs::remove(project / "new");
+  fixture_test::remove_empty_directory(project / "new/path.txt");
+  fixture_test::remove_empty_directory(project / "new");
 
   auto ignored = description;
   ignored["files"]["Ignored/cache.tmp"] =
