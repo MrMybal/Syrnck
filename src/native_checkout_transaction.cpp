@@ -262,7 +262,7 @@ Record parse_record(const Store &store, const ObjectKey &key, bool for_recovery 
   if (stored_version == 9) {
     record.source_materialization = NativeMaterialization::from_definition(value.at("source_materialization"));
     record.target_materialization = NativeMaterialization::from_definition(value.at("target_materialization"));
-    require(version >= 1 && version <= 4 && !record.source_materialization.complete() &&
+    require(version >= 1 && version <= 5 && !record.source_materialization.complete() &&
                 record.source_materialization.definition() == record.target_materialization.definition(),
             "invalid native checkout record");
   }
@@ -421,12 +421,18 @@ std::optional<Record> active(const Store &store) {
   }
   return record;
 }
+NativeSnapshot source_files(const Store &store, const Record &record, OperationOptions options) {
+  if (!record.source) return {};
+  // Hard-reset recovery is a physical tree, which can include an unselected
+  // ancestor obstructing selected descendants. Its full logical HEAD/index
+  // remain parent pins rather than entries in this namespace.
+  return record.hard_reset ? read_native_snapshot(store, *record.source, options)
+      : read_native_materialized_snapshot(store, *record.source, record.source_materialization, options);
+}
 Json actions(const Store &store, const Record &record, OperationOptions options) {
   const auto difference = record.source_materialization.complete() && record.target_materialization.complete()
       ? compare_native_snapshots(store, record.source, record.target, options)
-      : compare_native_file_maps(record.source
-            ? read_native_materialized_snapshot(store, *record.source, record.source_materialization, options)
-            : NativeSnapshot{},
+      : compare_native_file_maps(source_files(store, record, options),
           read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options);
   Json result = Json::array();
   for (const auto &row : difference["changes"]) {
@@ -492,8 +498,7 @@ public:
   Transaction(const Store &store, Record value, OperationOptions options)
       : store_(store), record(std::move(value)), entries(actions(store, record, options)) {
     if (record.namespace_transition) {
-      const auto source =
-          record.source ? read_native_materialized_snapshot(store, *record.source, record.source_materialization, options) : NativeSnapshot{};
+      const auto source = source_files(store, record, options);
       layout.emplace(source, read_native_materialized_snapshot(store, record.target, record.target_materialization, options), options,
                      record.source_directories);
       require(layout->transition, "invalid native checkout record");
@@ -1276,6 +1281,12 @@ Json capture_native_hard_reset(const Store &store, const fs::path &workspace, st
   require(plan.report["plan"].get<std::string>() == expected_plan,
           "native hard reset plan changed; inspect the plan and retry");
   require(plan.report["ready"].get<bool>(), "native hard reset is blocked; inspect native reset-plan --hard");
+  const auto refs = store.refs();
+  require(lookup(refs, native_revision_reference(store, std::string(branch))) == std::optional{ObjectKey{Kind::revision, plan.head}} &&
+              lookup(refs, native_staging_reference(store, std::string(branch))) == plan.index &&
+              lookup(refs, store.native_workspace_reference(head_name)) == plan.selection &&
+              lookup(refs, plan.materialization.reference) == plan.materialization.root,
+          "native checkout references changed");
   if (!plan.report["changed"].get<bool>()) {
     auto result = plan.report;
     result["state"] = "unchanged";
@@ -1317,6 +1328,7 @@ Json capture_native_hard_reset(const Store &store, const fs::path &workspace, st
   Record record;
   record.context = store.native_workspace_name();
   record.hard_reset = true;
+  record.freeze_materialization(plan.materialization.policy);
   record.namespace_transition = plan.report["workspace"].value("namespace_transition", false);
   record.source_directories = std::move(plan.directories);
   record.workspace = fs::canonical(workspace);
@@ -1337,7 +1349,7 @@ Json capture_native_hard_reset(const Store &store, const fs::path &workspace, st
                                  {record.branch_reference(), record.original_head, record.original_head},
                                  {record.index_reference(), record.original_index, record.original_index},
                                  {record.pin("target"), {}, record.destination()},
-                                 {record.pin("source"), {}, source}};
+                                 {record.pin("source"), {}, source}, record.materialization_guard()};
   if (publisher) {
     const auto extra = publisher(source.id, plan);
     updates.insert(updates.end(), extra.begin(), extra.end());

@@ -5,7 +5,7 @@ description: Recoverable native hard reset guide.
 section: Version control
 order: 260
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Recoverable native hard reset {#recoverable-native-hard-reset}
@@ -20,8 +20,9 @@ syrnck native reset TARGET --hard --expect OLD_HEAD --expect-plan PLAN_ID
 syrnck native reset HEAD --hard
 ```
 
-`--directory` selects the workspace. The Store must be below that workspace,
-and `--branch` must identify its currently selected branch. Existing workspace
+`--directory` selects the workspace. The primary Store must be below its workspace;
+linked workspaces use their registered directory and shared Store. `--branch`
+must identify the currently selected branch. Existing workspace
 binding checks apply. A pending checkout/switch/reset must first be recovered
 or aborted. Soft/mixed reset and staging-only reset retain their existing APIs.
 
@@ -103,6 +104,29 @@ A clean same-head reset with no index returns `state: unchanged` without writes.
 Preparation failures can leave valid unreferenced CAS objects; a published
 journal must be recovered before GC. Checkout prepared files/backups remain
 plaintext, as in [ordinary checkout](doc:native-checkout).
+
+## Partial workspaces {#partial-workspaces}
+
+Hard reset supports static [partial workspaces](doc:native-workspaces). It resets
+the selected physical paths while advancing the complete logical branch and
+clearing its complete frozen index. Unselected logical entries do not become
+physical deletions or extra recovery files. An explicit empty selection permits
+a metadata-only reset and leaves unrelated local files in place.
+
+The plan uses version 2 and binds both the canonical `materialization` prefix
+array and its retained `materialization_object`. The v9 journal uses layout 5
+with equal frozen source/target definitions. Reference publication checks the
+policy root together with HEAD, branch and index; a changed selection invalidates
+the operation. Full-view plans and journals keep their original formats.
+
+Recovery stores the actual captured physical tree without applying the mask
+again. For example, a regular file `Content` can obstruct a selected
+`Content/A/leaf` while the complete head also contains excluded `Content/B`.
+Reset archives the physical file, installs the selected leaf and leaves `B`
+unmaterialized. The recovery revision retains the complete old head/index as
+parents, so their hidden blocks survive GC and portable backup. Abort restores
+the original regular file. Excluded local paths that obstruct a selected target
+are listed explicitly and archived; unrelated excluded files stay in place.
 
 ## API, bounds and validation {#api-bounds-and-validation}
 

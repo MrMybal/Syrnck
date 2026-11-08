@@ -477,6 +477,9 @@ if(SYRNCK_BUILD_TESTS)
     add_test(NAME native_hard_reset_crashes_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hard_reset_crashes.py
       $<TARGET_FILE:syrnck_hard_reset_crash_probe> $<TARGET_FILE:syrnck_hard_reset_reader> --shard ${shard}/4)
     set_tests_properties(native_hard_reset_crashes_${shard} PROPERTIES TIMEOUT 120 PROCESSORS 2)
+    add_test(NAME native_partial_hard_reset_crashes_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hard_reset_crashes.py
+      $<TARGET_FILE:syrnck_hard_reset_crash_probe> $<TARGET_FILE:syrnck_hard_reset_reader> --sparse --shard ${shard}/4)
+    set_tests_properties(native_partial_hard_reset_crashes_${shard} PROPERTIES TIMEOUT 300 PROCESSORS 2)
   endforeach()
   add_executable(syrnck_asset_lock_tests tests/asset_lock_tests.cpp)
   target_include_directories(syrnck_asset_lock_tests PRIVATE src tests)

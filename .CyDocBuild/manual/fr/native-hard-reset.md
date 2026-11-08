@@ -5,14 +5,14 @@ description: Guide : Reset hard récupérable.
 section: Versionnage
 order: 260
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Reset hard natif récupérable {#recoverable-native-hard-reset}
 
 Le reset hard remplace les fichiers suivis du workspace de la branche sélectionnée et vide son index figé. Avant remplacement, il capture les octets locaux complets et conserve ancienne tête et index dans un snapshot de récupération.
 
---directory choisit le workspace avec Store strictement intérieur ; --branch doit être sa branche sélectionnée. Les contrôles de liaison restent appliqués. Toute récupération checkout/switch/reset doit être terminée/annulée d’abord. Soft/mixed et reset d’index gardent leurs contrats distincts.
+--directory choisit le workspace. Le Store principal reste strictement intérieur à son workspace ; un workspace lié utilise son dossier enregistré et le Store partagé. --branch doit être la branche sélectionnée. Les contrôles de liaison restent appliqués. Toute récupération checkout/switch/reset doit être terminée/annulée d’abord. Soft/mixed et reset d’index gardent leurs contrats distincts.
 
 ```text
 syrnck native reset-plan TARGET --hard --verify
@@ -56,6 +56,31 @@ syrnck native export PREVIOUS_INDEX saved-staged-files
 syrnck native archives --kind checkout --verify
 ```
 
+
+## Workspaces partiels {#partial-workspaces}
+
+Le reset hard accepte les [workspaces partiels](doc:native-workspaces) statiques.
+Il remplace les chemins physiques sélectionnés, déplace la branche logique
+complète et vide l’index figé complet. Les entrées logiques exclues ne deviennent
+ni suppressions physiques ni fichiers de récupération supplémentaires. Une
+sélection explicitement vide permet un reset des seules métadonnées, en gardant
+les fichiers locaux sans rapport.
+
+Le plan v2 lie le tableau canonique `materialization` et sa racine conservée
+`materialization_object`. Le journal v9 utilise le layout 5 avec deux définitions
+figées identiques. La publication vérifie la racine de sélection avec HEAD,
+branche et index : un changement de politique invalide l’opération. Les plans
+et journaux des vues complètes conservent leurs formats.
+
+La récupération conserve l’arbre physique capturé sans lui réappliquer le masque.
+Exemple : un fichier ordinaire `Content` peut bloquer le chemin sélectionné
+`Content/A/leaf`, tandis que la tête complète contient aussi `Content/B`, exclu.
+Le reset archive le fichier physique, installe la feuille sélectionnée et garde
+`B` absent du disque. Les parents de la récupération conservent tête/index
+complets, donc leurs blocs cachés survivent au GC et à la sauvegarde portable.
+Abort rétablit le fichier ordinaire initial. Les chemins locaux exclus qui
+font obstacle à la cible sont explicitement listés et archivés ; les autres
+restent sur place.
 
 ## API et bornes {#api-bounds-and-validation}
 

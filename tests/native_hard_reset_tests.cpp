@@ -1,5 +1,7 @@
 #include "native_history_fixture.hpp"
+#include "native_target.hpp"
 #include <syrnck/workspace.hpp>
+#include <syrnck/backup.hpp>
 #include <iostream>
 using namespace native_test;
 namespace {
@@ -160,6 +162,143 @@ void flat(const fs::path &path, std::optional<Key> key, unsigned layout) {
   require(text(read_bytes(path / "file")) == "committed",
           "hard reset did not restore a missing tracked file");
 }
+void partial(const fs::path &base, std::optional<Key> key, unsigned physical,
+             std::string_view pause = {}) {
+  const auto path = base / "primary", edit = base / "edit";
+  Fixture f(path, key);
+  const auto target = f.revision(Json{{"Source/Code", f.file("target code")},
+      {"Source/shape", f.file("target flat")}, {"Content/A/leaf", f.file("target leaf")},
+      {"Content/B", f.file("target hidden")}});
+  const auto head = f.revision(Json{{"Source/code", f.file("head code")},
+      {"Source/shape/child", f.file("head child")}, {"Content/A/leaf", f.file("head leaf")},
+      {"Content/B", f.file("head hidden")}}, Json::array({target}));
+  f.install(head);
+  f.store.create_native_branch("partial", head);
+  f.store.register_partial_native_workspace(path, "edit", edit, {"Source", "Content/A/leaf"});
+  f.store.use_native_workspace("edit");
+  f.store.switch_directory(edit, "partial");
+  const auto write = [&](std::string_view name, std::string_view value) {
+    const auto file = edit / path_from_utf8(name);
+    fs::create_directories(file.parent_path());
+    atomic_write(file, bytes(value), true);
+  };
+  write("Source/code", "staged code");
+  const auto index = f.store.stage_directory(edit, "partial", {"Source"});
+  write("Source/code", "dirty code");
+  write("Source/shape/local", "obstructing descendant");
+  fs::create_directories(edit / "Source/shape/empty/deeper");
+  fs::remove_all(edit / "Content");
+  write("Content", "physical ancestor obstruction");
+  write("outside/local", "unrelated excluded bytes");
+  f.pack(physical);
+  const auto before = f.physical();
+  const auto plan = plan_native_hard_reset(f.store, edit, "partial", target, true);
+  require(plan["version"] == 2 && plan["ready"] == true &&
+              plan["materialization"] == Json::array({"Content/A/leaf", "Source"}) &&
+              plan["working"].contains("Content") && !plan["working"].contains("Content/B") &&
+              !plan["working"].contains("outside/local") && f.physical() == before,
+          "partial reset mixed hidden logical children into physical ancestor recovery");
+  require(plan_native_hard_reset(f.store, edit, "partial", target)["plan"] == plan["plan"],
+          "partial reset audit changed the content fence");
+  Json result;
+  if (!pause.empty()) {
+    bool paused = false;
+    hook = [&](std::string_view event, const fs::path &) {
+      if (!paused && event == pause) { paused = true; throw Error("partial reset pause"); }
+    };
+    fails([&] { native_hard_reset(f.store, edit, "partial", head, target, plan["plan"].get<std::string>()); });
+    hook = {};
+    require(paused && f.store.checkout_status()["pending"] == true,
+            "partial reset did not reach the recovery checkpoint");
+    if (pause != "checkout.committed") {
+      f.store.recover_checkout(true);
+      require(text(read_bytes(edit / "Content")) == "physical ancestor obstruction" &&
+                  !fs::exists(edit / "Content/B") && text(read_bytes(edit / "Source/code")) == "dirty code" &&
+                  text(read_bytes(edit / "Source/shape/local")) == "obstructing descendant" &&
+                  fs::is_directory(edit / "Source/shape/empty/deeper") &&
+                  f.store.refs().at("heads/partial").id == head &&
+                  f.store.refs().at(native_staging_reference(f.store, "partial")).id == index &&
+                  text(read_bytes(edit / "outside/local")) == "unrelated excluded bytes",
+              "partial reset abort did not restore the physical obstruction and complete index");
+      f.store.gc(true);
+      f.store.fsck();
+      return;
+    }
+    fails([&] { f.store.recover_checkout(true); });
+    result = f.store.recover_checkout();
+  } else {
+    result = native_hard_reset(f.store, edit, "partial", head, target, plan["plan"].get<std::string>());
+  }
+  require(result["version"] == 9 && result["layout_version"] == 5 &&
+              result["source_materialization"] == plan["materialization"] &&
+              text(read_bytes(edit / "Content/A/leaf")) == "target leaf" && !fs::exists(edit / "Content/B") &&
+              text(read_bytes(edit / "Source/Code")) == "target code" &&
+              text(read_bytes(edit / "Source/shape")) == "target flat" &&
+              text(read_bytes(edit / "outside/local")) == "unrelated excluded bytes" &&
+              f.store.refs().at("heads/partial").id == target &&
+              !f.store.refs().contains(native_staging_reference(f.store, "partial")),
+          "partial hard reset did not atomically publish the projected target and full branch");
+  f.store.gc(true);
+  const auto recovery = result["source"].get<std::string>();
+  const auto recovered = f.store.metadata(Kind::revision, recovery);
+  require(recovered["parents"] == Json::array({head, index}) && recovered["files"].contains("Content") &&
+              !recovered["files"].contains("Content/B"),
+          "partial reset lost logical parents or corrupted the physical recovery namespace");
+  f.store.export_revision(recovery, base / "working");
+  f.store.export_revision(index, base / "index");
+  f.store.export_revision(head, base / "head");
+  require(text(read_bytes(base / "working/Content")) == "physical ancestor obstruction" &&
+              text(read_bytes(base / "index/Content/B")) == "head hidden" &&
+              text(read_bytes(base / "index/Source/code")) == "staged code" &&
+              text(read_bytes(base / "head/Content/B")) == "head hidden",
+          "partial hard reset lost recoverable physical, staged or hidden committed bytes after GC");
+  create_backup(f.store, base / "backup", key);
+  Store backup(base / "backup", key);
+  verify_backup(backup);
+  backup.export_revision(recovery, base / "backup-working");
+  require(text(read_bytes(base / "backup-working/Content")) == "physical ancestor obstruction",
+          "portable backup could not reconstruct partial hard reset recovery");
+  f.store.fsck();
+  f.store.detach_checkout(edit, head);
+  write("Source/code", "detached dirty code");
+  const auto detached_plan = plan_native_hard_reset(f.store, edit, detached_native_target, target, true);
+  const auto detached_reset = native_hard_reset(f.store, edit, detached_native_target, head, target,
+                                                detached_plan["plan"].get<std::string>());
+  require(detached_reset["version"] == 9 && detached_reset["layout_version"] == 5 &&
+              f.store.native_head()["branch"].is_null() && f.store.native_head()["revision"] == target &&
+              f.store.refs().at("heads/partial").id == target &&
+              text(read_bytes(edit / "Source/Code")) == "target code" &&
+              text(read_bytes(edit / "outside/local")) == "unrelated excluded bytes" &&
+              !fs::exists(edit / "Content/B"),
+          "partial detached reset changed a named branch or materialized excluded files");
+  f.store.gc(true);
+  f.store.export_revision(detached_reset["source"].get<std::string>(), base / "detached-recovery");
+  require(text(read_bytes(base / "detached-recovery/Source/code")) == "detached dirty code",
+          "partial detached reset discarded local bytes");
+}
+void empty_partial(const fs::path &base) {
+  Fixture f(base / "primary");
+  const auto a = f.revision(Json{{"hidden", f.file("first hidden")}});
+  const auto b = f.revision(Json{{"hidden", f.file("second hidden")}}, Json::array({a}));
+  f.install(a);
+  f.store.create_native_branch("empty", a);
+  const auto edit = base / "empty";
+  f.store.register_partial_native_workspace(f.project, "empty", edit, {});
+  f.store.use_native_workspace("empty");
+  f.store.switch_directory(edit, "empty");
+  atomic_write(edit / "local", bytes("keep empty view data"), false);
+  const auto plan = plan_native_hard_reset(f.store, edit, "empty", b);
+  require(plan["version"] == 2 && plan["working"].empty() && plan["ready"] == true,
+          "empty partial reset captured files outside its policy");
+  const auto result = native_hard_reset(f.store, edit, "empty", a, b, plan["plan"].get<std::string>());
+  require(result["version"] == 9 && result["namespace_transition"] == false &&
+              !fs::exists(edit / "hidden") && text(read_bytes(edit / "local")) == "keep empty view data" &&
+              f.store.refs().at("heads/empty").id == b,
+          "empty partial hard reset materialized hidden files or modified unrelated data");
+  f.store.gc(true);
+  f.store.export_revision(a, base / "old");
+  require(text(read_bytes(base / "old/hidden")) == "first hidden", "empty reset lost complete history");
+}
 } // namespace
 namespace syrnck::testing {
 void io_checkpoint(std::string_view phase, const fs::path &target) {
@@ -181,9 +320,14 @@ int main() {
                  physical);
         flat(temporary.path / ("flat-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
              physical);
+        partial(temporary.path / ("partial-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
+                physical);
       }
     for (const auto phase : {"checkout.evacuated", "checkout.applied", "checkout.committed"})
       recovery(temporary.path / phase, phase);
+    for (const auto phase : {"checkout.evacuated", "checkout.applied", "checkout.committed"})
+      partial(temporary.path / ("partial-" + std::string(phase)), {}, 0, phase);
+    empty_partial(temporary.path / "empty-partial");
     protected_obstruction(temporary.path / "protected");
     std::cout << "Hard reset captures dirty/staged/obstructing bytes and restores namespace on abort\n";
   } catch (const std::exception &error) {

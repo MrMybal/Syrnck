@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 5
+revision: 6
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -132,9 +132,13 @@ still record the complete name. Receipts v8 add `context` and `layout_version`
 Partial contexts retain a canonical native-materialization v1 chunk at
 `workspace/materialization`, containing sorted disjoint literal `prefixes`.
 An absent chunk means all paths; an empty array means none. Checkout receipts
-v9 freeze source/target prefix definitions, context and layout (1..4), so recovery
+v9 freeze source/target prefix definitions, context and layout (1..5), so recovery
 does not infer actions from a mutable current selection. Current static policies
 require equal definitions and cannot change while their context remains active.
+Layout 5 hard-reset recovery contains its full captured physical source tree,
+including ancestor obstructions outside the mask; only the logical target is
+projected. Complete old head/index trees remain parents of that recovery revision.
+Partial hard-reset plan v2 binds the prefix array and its policy object key.
 
 Feature-free backups with linked machine bindings use marker v2, retaining a portable
 native-workspace-snapshot descriptor and `snapshot` revision per context instead

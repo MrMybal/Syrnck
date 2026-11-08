@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -221,12 +221,13 @@ utilise le digest BLAKE3 du nom de branche, pour préserver la longueur maximale
 existante ; le snapshot garde le nom complet. Les reçus liés passent en v8 avec
 `context` et `layout_version` de 1 à 6 pour les vues complètes. Les reçus partiels
 utilisent v9 avec définitions figées `source_materialization` et
-`target_materialization`, contexte et layout de 1 à 4. La sélection statique
+`target_materialization`, contexte et layout de 1 à 5. Le layout 5 accepte le
+[reset hard partiel récupérable](doc:native-hard-reset#partial-workspaces). La sélection statique
 actuelle exige deux définitions identiques. Un chunk canonique v1 est conservé
 sous `workspaces/NOM/workspace/materialization`. Versions d’objets/révisions,
 packs et ABI C inchangées.
 
-Changement d’une sélection active, reset hard/stash partiels, déplacement en
+Changement d’une sélection active, stash partiel, déplacement en
 place et désenregistrement archivé restent à compléter. Chaque workspace exige
 toujours ses objets retenus complets localement.
 

@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "native_target.hpp"
 #include <syrnck/workspace.hpp>
 #include <iostream>
 using namespace native_test;
@@ -43,17 +44,29 @@ std::map<std::string, std::string> working(const fs::path &directory) {
   }
   return files;
 }
-void prepare(const fs::path &root, bool encrypted, bool abort) {
+void prepare(const fs::path &root, bool encrypted, bool abort, bool sparse) {
   const Json info_key{{"encrypted", encrypted}};
   Fixture f(root / "source", key(info_key));
-  const auto target = f.revision(
-      Json{{"a", f.file("target a")}, {"missing", f.file("restored")}, {"shape", f.file("target flat")}});
-  const auto head = f.revision(Json{{"a", f.file("head a")},
+  auto target_files = Json{{"a", f.file("target a")}, {"missing", f.file("restored")}, {"shape", f.file("target flat")}};
+  auto head_files = Json{{"a", f.file("head a")},
                                     {"missing", f.file("head missing")},
-                                    {"shape/child", f.file("head child")}},
-                               Json::array({target}));
+                                    {"shape/child", f.file("head child")}};
+  if (sparse) {
+    target_files["Content/A/leaf"] = f.file("target leaf");
+    target_files["Content/B"] = f.file("target hidden");
+    head_files["Content/A/leaf"] = f.file("head leaf");
+    head_files["Content/B"] = f.file("head hidden");
+  }
+  const auto target = f.revision(target_files);
+  const auto head = f.revision(head_files, Json::array({target}));
   f.install(head);
   f.store.set_ref("pins/target", {Kind::revision, target});
+  if (sparse) {
+    f.store.create_native_branch("feature", head);
+    atomic_write(root / "fixture.json", bytes(Json{{"encrypted", encrypted}, {"abort", abort},
+        {"sparse", true}, {"head", head}, {"target", target}}.dump()), false);
+    return;
+  }
   f.write("a", "staged a");
   f.write("new", "staged new");
   const auto index = f.store.stage_directory(f.project, "main", {"a", "new"});
@@ -79,15 +92,50 @@ void prepare(const fs::path &root, bool encrypted, bool abort) {
                                         {"outside", "unrelated work"}}}};
   atomic_write(root / "fixture.json", bytes(info.dump()), false);
 }
+void bind_partial(const fs::path &root, Json info) {
+  Store store(root / "source/.syrnck", key(info));
+  store.register_partial_native_workspace(root / "source", "linked", workspace,
+      {"a", "new", "missing", "shape", "Content/A/leaf"});
+  store.use_native_workspace("linked");
+  store.switch_directory(workspace, "feature");
+  const auto write = [&](std::string_view name, std::string_view value) {
+    const auto path = workspace / path_from_utf8(name);
+    fs::create_directories(path.parent_path());
+    atomic_write(path, bytes(value), true);
+  };
+  write("a", "staged a");
+  write("new", "staged new");
+  info["index"] = store.stage_directory(workspace, "feature", {"a", "new"});
+  write("a", "dirty a");
+  write("new", "dirty new");
+  write("shape/untracked", "obstructing untracked work");
+  write("outside", "unrelated work");
+  fs::create_directories(workspace / "shape/empty/deeper");
+  fs::remove(workspace / "missing");
+  fs::remove_all(workspace / "Content");
+  write("Content", "physical ancestor obstruction");
+  store.pack();
+  const auto plan = plan_native_hard_reset(store, workspace, "feature", info["target"].get<std::string>());
+  require(plan["ready"] == true && plan["version"] == 2, "partial hard reset crash fixture is blocked");
+  info["working"] = working(workspace);
+  info["target_files"] = Json{{"a", "target a"}, {"missing", "restored"},
+      {"shape", "target flat"}, {"Content/A/leaf", "target leaf"}, {"outside", "unrelated work"}};
+  atomic_write(root / "fixture.json", bytes(info.dump()), true);
+}
+std::string branch(const Json &info) { return info.value("sparse", false) ? "feature" : "main"; }
+void select_context(Store &store, const Json &info) {
+  if (info.value("sparse", false)) store.use_native_workspace("linked");
+}
 void start(Store &store, const Json &info, OperationOptions options = {}) {
-  const auto plan = plan_native_hard_reset(store, workspace, "main", info["target"].get<std::string>());
-  native_hard_reset(store, workspace, "main", info["head"].get<std::string>(),
+  const auto plan = plan_native_hard_reset(store, workspace, branch(info), info["target"].get<std::string>());
+  native_hard_reset(store, workspace, branch(info), info["head"].get<std::string>(),
                     info["target"].get<std::string>(), plan["plan"].get<std::string>(), options);
 }
 void prime_abort(const fs::path &root, const Json &info) {
   if (!info["abort"].get<bool>())
     return;
   Store store(root / "source/.syrnck", key(info));
+  select_context(store, info);
   std::stop_source stop;
   bool cancelled = false;
   try {
@@ -99,27 +147,29 @@ void prime_abort(const fs::path &root, const Json &info) {
     cancelled = true;
   }
   require(cancelled && store.checkout_status()["pending"] == true &&
-              store.refs().at("heads/main").id == info["head"].get<std::string>(),
+              store.refs().at("heads/" + branch(info)).id == info["head"].get<std::string>(),
           "hard reset abort fixture did not stop before publication");
 }
 void perform(const fs::path &root, const Json &info) {
   Store store(root / "source/.syrnck", key(info));
+  select_context(store, info);
   if (store.checkout_status()["pending"].get<bool>())
     store.recover_checkout(info["abort"].get<bool>());
-  else if (!info["abort"].get<bool>() && store.refs().at("heads/main").id == info["head"].get<std::string>())
+  else if (!info["abort"].get<bool>() && store.refs().at("heads/" + branch(info)).id == info["head"].get<std::string>())
     start(store, info);
 }
 Json verify(const fs::path &root, const Json &info, bool resumed) {
   Store store(root / "source/.syrnck", key(info));
+  select_context(store, info);
   if (resumed)
     store.gc(true);
   store.fsck();
   const auto refs = store.refs();
   const auto status = store.checkout_status();
-  const auto head = refs.at("heads/main").id;
+  const auto head = refs.at("heads/" + branch(info)).id;
   const bool published = head == info["target"].get<std::string>();
   require(published || head == info["head"].get<std::string>(), "hard reset crash published an unknown head");
-  const auto index = refs.find("staging/main");
+  const auto index = refs.find(native_staging_reference(store, branch(info)));
   require(published ? index == refs.end()
                     : index != refs.end() && index->second.id == info["index"].get<std::string>(),
           "hard reset crash split head and index publication");
@@ -142,7 +192,9 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
   if (published) {
     bool archived = false;
     for (const auto &[name, object] : refs)
-      if (name.starts_with("archive/checkout/")) {
+      if (name.starts_with("archive/checkout/") &&
+          store.metadata(Kind::revision, object.id)["message"] ==
+              "Syrnck hard reset recovery v1: " + branch(info)) {
         validate_recovery(object.id);
         archived = true;
       }
@@ -152,6 +204,16 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       {{Kind::revision, info["head"].get<std::string>()}, {Kind::revision, info["index"].get<std::string>()}},
       true);
   require(text(read_bytes(workspace / "outside")) == "unrelated work", "hard reset modified unrelated work");
+  if (info.value("sparse", false)) {
+    require(refs.at("heads/main").id == info["head"].get<std::string>() &&
+                text(read_bytes(root / "source/Content/B")) == "head hidden",
+            "partial hard reset changed another workspace");
+    const auto old = store.metadata(Kind::revision, info["index"].get<std::string>());
+    require(old["files"].contains("Content/B"), "partial hard reset lost hidden staged entries");
+    if (status["pending"].get<bool>())
+      require(status["version"] == 9 && status["layout_version"] == 5,
+              "partial hard reset did not persist the frozen projection");
+  }
   if (!status["pending"].get<bool>()) {
     const auto expected = published ? info["target_files"] : info["working"];
     require(working(workspace) == expected.get<std::map<std::string, std::string>>(),
@@ -188,12 +250,15 @@ int main(int argc, char **argv) {
     workspace = root / "source";
     const std::string mode = argv[1];
     if (mode == "prepare") {
-      require(argc == 5, "hard reset probe expects encryption and action");
-      prepare(root, std::string_view(argv[3]) == "encrypted", std::string_view(argv[4]) == "abort");
+      require(argc == 5 || argc == 6, "hard reset probe expects encryption and action");
+      prepare(root, std::string_view(argv[3]) == "encrypted", std::string_view(argv[4]) == "abort", argc == 6);
     } else {
-      workspace = fs::canonical(workspace);
       const auto info = parse_json(read_bytes(root / "fixture.json"));
-      if (mode == "run" || mode == "trace") {
+      if (info.value("sparse", false)) workspace = root / "linked";
+      if (mode == "bind") {
+        if (info.value("sparse", false)) bind_partial(root, info);
+      } else if (mode == "run" || mode == "trace") {
+        workspace = fs::canonical(workspace);
         prime_abort(root, info);
         if (mode == "trace")
           tracing = true;

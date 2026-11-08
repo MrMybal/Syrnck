@@ -421,16 +421,16 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
                                               const std::set<std::string> &additional_files) {
   throw_if_cancelled(options.stop);
   validate_id(target);
-  require_complete_native_materialization(store);
+  const auto materialization = read_native_materialization(store);
   const NativeRewriteState state(store, branch, options);
   const auto head = store.native_head();
   require(store.native_target() == branch, "native hard reset requires the selected branch");
   require(head["directory"].is_null() ||
               utf8(fs::canonical(directory)) == head["directory"].get<std::string>(),
           "native HEAD belongs to another workspace");
-  const auto original = read_native_snapshot(store, state.head.id, options);
-  const auto staged = state.index ? read_native_snapshot(store, state.index->id, options) : NativeSnapshot{};
-  const auto destination = read_native_snapshot(store, target, options);
+  const auto original = read_native_materialized_snapshot(store, state.head.id, materialization.policy, options);
+  const auto staged = state.index ? read_native_materialized_snapshot(store, state.index->id, materialization.policy, options) : NativeSnapshot{};
+  const auto destination = read_native_materialized_snapshot(store, target, materialization.policy, options);
   std::set<std::string> tracked, targets, displaced;
   std::map<std::string, std::pair<std::string, bool>> target_names;
   std::size_t budget = 0;
@@ -466,6 +466,7 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
     }
   NativeHardResetPlan plan{state.head.id, state.index, {}, {}, {}, {}};
   plan.selection = state.lookup(store.native_workspace_reference("workspace/HEAD"));
+  plan.materialization = materialization;
   Bytes buffer(1024 * 1024);
   std::map<std::string, std::vector<const NativeSnapshotFile *>> existing;
   for (const auto *snapshot : {&original, &staged, &destination})
@@ -516,8 +517,10 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
       roots.push_back(*state.index);
     (void)store.closure(roots, true, options.stop, options.progress);
   }
-  const Json context{
-      {"version", 1},
+  const bool partial = !materialization.policy.complete();
+  const auto version = partial ? 2 : 1;
+  Json context{
+      {"version", version},
       {"type", "native-hard-reset-plan"},
       {"directory", utf8(inventory.base)},
       {"store", utf8(store.root())},
@@ -528,15 +531,19 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
       {"selection", state.lookup(store.native_workspace_reference("workspace/HEAD")) ? key_json(*state.lookup(store.native_workspace_reference("workspace/HEAD"))) : Json{}},
       {"working", std::move(working)},
       {"directories", plan.directories}};
+  if (partial) {
+    context["materialization"] = materialization.policy.definition();
+    context["materialization_object"] = key_json(*materialization.root);
+  }
   plan.report =
-      Json{{"version", 1},
+      Json{{"version", version},
            {"operation", "reset"},
            {"mode", "hard"},
            {"branch", branch},
            {"head", state.head.id},
            {"target", target},
            {"index", context["index"]},
-           {"plan", hash(bytes("Syrnck hard reset plan v1:" + context.dump()))},
+           {"plan", hash(bytes(std::string(partial ? "Syrnck hard reset plan v2:" : "Syrnck hard reset plan v1:") + context.dump()))},
            {"working", context["working"]},
            {"source_directories", plan.directories},
            {"obstructing_untracked", std::move(untracked)},
@@ -544,6 +551,10 @@ NativeHardResetPlan prepare_native_hard_reset(const Store &store, const fs::path
            {"ready", workspace["ready"]},
            {"objects_verified", verify_objects},
            {"workspace", workspace}};
+  if (partial) {
+    plan.report["materialization"] = context["materialization"];
+    plan.report["materialization_object"] = context["materialization_object"];
+  }
   require(plan.report.dump().size() <= max_object_size, "native hard reset report exceeds 16 MiB");
   return plan;
 }

@@ -10,6 +10,7 @@ struct NativeHardResetPlan {
   std::set<std::string> directories;
   Json report;
   std::optional<ObjectKey> selection{};
+  NativeMaterializationState materialization{};
 };
 NativeHardResetPlan prepare_native_hard_reset(const Store &, const fs::path &, std::string_view branch,
                                               std::string_view target, bool verify_objects, OperationOptions,

@@ -9,16 +9,17 @@
 #include <iostream>
 using namespace native_test;
 namespace {
-void changed_policy_during_plan(const fs::path &root) {
+void changed_policy_during_plan(const fs::path &root, bool reset = false) {
   Fixture f(root);
   const auto code = f.file("code\n");
   const auto a = f.revision(Json{{"Content", f.file("flat asset")}, {"Source/code", code}});
   const auto b = f.revision(Json{{"Content/asset", f.file("nested asset")}, {"Source/code", code}}, Json::array({a}));
   f.install(a);
   const auto policy = f.store.put(Kind::chunk, bytes(NativeMaterialization::from_prefixes({"Source"}).encode())).first;
+  const auto reset_plan = reset ? plan_native_hard_reset(f.store, root, "main", b)["plan"].get<std::string>() : "";
   bool changed = false;
   fails([&] {
-    f.store.checkout_directory(root, "main", b, {{}, [&](const ProgressEvent &event) {
+    const OperationOptions options{{}, [&](const ProgressEvent &event) {
       if (!changed && event.phase == ProgressPhase::planning && event.path == b) {
         changed = true;
         // Low-level callers may temporarily release an unbound primary line.
@@ -27,7 +28,9 @@ void changed_policy_during_plan(const fs::path &root) {
         f.store.set_ref("workspace/materialization", policy);
         f.store.set_ref("heads/main", {Kind::revision, a});
       }
-    }});
+    }};
+    if (reset) native_hard_reset(f.store, root, "main", a, b, reset_plan, options);
+    else f.store.checkout_directory(root, "main", b, options);
   });
   require(changed && f.store.refs().at("heads/main").id == a &&
               f.store.checkout_status()["pending"] == false &&
@@ -106,7 +109,11 @@ void scenario(const fs::path &base, std::optional<Key> key, unsigned physical) {
   require(f.store.metadata(Kind::revision, direct)["files"]["Content/asset"] == asset &&
               f.store.metadata(Kind::revision, direct)["parents"] == Json::array({amended}),
           "directory commit changed hidden entries or parent selection");
-  fails([&] { plan_native_hard_reset(f.store, edit, "partial", b); });
+  const auto reset_plan = plan_native_hard_reset(f.store, edit, "partial", b, true);
+  require(reset_plan["version"] == 2 && reset_plan["ready"] == true &&
+              reset_plan["materialization"] == Json::array({"Source"}) &&
+              !reset_plan["working"].contains("Content/local"),
+          "partial hard reset did not plan the selected physical tree");
   NativeStash stash(f.store);
   fails([&] { stash.save(edit, "partial", "unsupported partial stash"); });
   const auto transitioned = f.store.checkout_directory(edit, "partial", b);
@@ -186,6 +193,7 @@ int main() {
   try {
     Temporary temporary;
     changed_policy_during_plan(temporary.path / "changed-policy");
+    changed_policy_during_plan(temporary.path / "reset-changed-policy", true);
     for (unsigned physical = 0; physical < 3; ++physical)
       for (bool encrypted : {false, true}) {
         const auto root = temporary.path / (std::to_string(physical) + (encrypted ? "-encrypted" : "-plain"));
