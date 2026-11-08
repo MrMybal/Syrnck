@@ -4,6 +4,7 @@
 #include "native_stash.hpp"
 #include "native_context.hpp"
 #include "native_materialization_transition.hpp"
+#include "native_workspace_relocation.hpp"
 #include "io_checkpoint.hpp"
 #include <algorithm>
 #include <charconv>
@@ -1264,6 +1265,8 @@ Json Store::detach_checkout(const fs::path &workspace, std::string_view revision
 }
 void require_no_native_checkout(const Store &store) {
   const auto refs = store.refs();
+  require(!refs.contains(std::string(native_relocation_active)),
+      "native workspace relocation is pending; run native workspace-relocation-recover");
   require(std::none_of(refs.begin(), refs.end(), [](const auto &entry) {
             return native_checkout_active_reference(entry.first);
           }), "native checkout is pending; run native checkout-recover");

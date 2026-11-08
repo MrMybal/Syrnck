@@ -5,7 +5,7 @@ description: Unregister linked workspaces while retaining dirty files, prepared 
 section: Version control
 order: 223
 parent: native-workspaces
-revision: 1
+revision: 2
 ---
 
 ## Unregister a linked workspace {#unregister}
@@ -126,6 +126,6 @@ accept cancellation and progress callbacks. Files and refs are rechecked after
 the last publishing callback, without calling observers during final publication.
 External writers still require coordination; this is not an atomic filesystem
 snapshot. Process-interruption tests do not establish power-loss durability.
-In-place relocation and automatic archive age/release policies remain separate
-work. Encrypted Stores protect archived objects at rest; working exports and
+[Linked relocation on one filesystem](doc:native-workspace-relocation) is available;
+cross-filesystem moves and automatic archive age/release policies remain separate work. Encrypted Stores protect archived objects at rest; working exports and
 their temporary files have the usual plaintext workspace semantics.

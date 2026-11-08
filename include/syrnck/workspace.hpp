@@ -35,4 +35,13 @@ Json plan_native_workspace_archive_restore(const Store &, const fs::path &primar
 Json restore_native_workspace_archive(const Store &, const fs::path &primary,
     std::string_view archive, std::string_view name, const fs::path &directory,
     std::string_view expected_plan, NativeWorkspaceRestoreOptions = {}, OperationOptions = {});
+// Move an entire linked working directory within one filesystem, including
+// ignored/untracked data. Run from primary; a pending move must be recovered
+// before other mutations. Resume/abort never recursively delete a directory.
+Json plan_native_workspace_relocation(const Store &, std::string_view name,
+    const fs::path &destination, OperationOptions = {});
+Json relocate_native_workspace(const Store &, std::string_view name,
+    const fs::path &destination, std::string_view expected_plan, OperationOptions = {});
+Json native_workspace_relocation_status(const Store &, OperationOptions = {});
+Json recover_native_workspace_relocation(const Store &, bool abort = false, OperationOptions = {});
 } // namespace syrnck

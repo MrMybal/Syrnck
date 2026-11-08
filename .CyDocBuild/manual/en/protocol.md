@@ -5,7 +5,7 @@ description: Formats and protocol guide.
 section: Storage
 order: 10
 parent: storage
-revision: 9
+revision: 10
 ---
 
 # Experimental formats and protocol {#formats-et-protocole-experimentaux}
@@ -174,11 +174,23 @@ the physical work under `workspaces/NEW/restored/ARCHIVE_ID`. These are ordinary
 typed roots; object, pack and C ABI formats do not change. See
 [archive operations](doc:native-workspace-archives).
 
+## Workspace relocation records {#workspace-relocation-formats}
+
+The [relocation journal](doc:native-workspace-relocation#format) is an immutable
+native-workspace-relocation v1 chunk at `workspace-relocations/active`. It freezes
+source/destination/bridge paths, directory/parent identities, complete old binding
+values, the reference-table digest and plan. A new reader requirement precedes
+publication. The central validator accepts only exact start and final reference
+transactions; other changes are blocked while pending. Physical phase is inferred
+from the one directory identity at an exact source/bridge/destination leaf name.
+Final roots `archive/workspace-relocations/ID/completed` or `/aborted` retain
+the record inline, without hidden object dependencies.
+
 ## Required Store features {#required-store-features}
 
 Configurations v1/v2/v3 may add one `required_features` field, a nonempty sorted
 array of unique supported strings (at most 32). Supported names are
-`linked-workspaces-v1`, `sparse-workspaces-v1` and `materialization-transitions-v1`. Unknown, duplicate, empty or malformed requirements fail
+`linked-workspaces-v1`, `sparse-workspaces-v1`, `materialization-transitions-v1` and `workspace-relocation-v1`. Unknown, duplicate, empty or malformed requirements fail
 Store open. The extra field deliberately makes historical strict readers reject
 the configuration before reading objects/references. Base pack/index/envelope
 encodings and C ABI 1 are unchanged; no field is added to ordinary legacy Stores.

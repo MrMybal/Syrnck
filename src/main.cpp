@@ -372,6 +372,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native materialization-set [--include CHEMIN ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NOM DOSSIER [--branch BRANCHE | --detach]
   native workspace-unregister-plan NOM [--include-untracked] [--verify]
+  native workspace-relocate-plan NOM DOSSIER
+  native workspace-relocate NOM DOSSIER --expect-plan ID
+  native workspace-relocation-status
+  native workspace-relocation-recover [--abort]
   native workspace-unregister NOM --expect-plan ID [--include-untracked]
   native workspace-archives [--after ID] [--limit 100] [--verify]
   native workspace-archive ID [--verify]
@@ -576,6 +580,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native materialization-set [--include PATH ... | --no-files | --all-files] --expect-plan ID [--expect HEAD]
   native workspace-restore NAME DIRECTORY [--branch BRANCH | --detach]
   native workspace-unregister-plan NAME [--include-untracked] [--verify]
+  native workspace-relocate-plan NAME DIRECTORY
+  native workspace-relocate NAME DIRECTORY --expect-plan ID
+  native workspace-relocation-status
+  native workspace-relocation-recover [--abort]
   native workspace-unregister NAME --expect-plan ID [--include-untracked]
   native workspace-archives [--after ID] [--limit 100] [--verify]
   native workspace-archive ID [--verify]
@@ -1245,6 +1253,21 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       args.count(2);
       print(store.restore_native_workspace(primary, args.values[0], path_from_utf8(args.values[1]), settings,
                                             {control->token(), observe}));
+    } else if (sub == "workspace-relocate-plan" || sub == "workspace-relocate") {
+      const bool planning = sub == "workspace-relocate-plan";
+      const auto expected = planning ? std::optional<std::string>{} : args.option("--expect-plan");
+      args.count(2);
+      const auto destination = path_from_utf8(args.values[1]);
+      if (planning) print(plan_native_workspace_relocation(store, args.values[0], destination, {control->token(), observe}));
+      else {
+        require(expected.has_value(), "native workspace-relocate requires --expect-plan");
+        print(relocate_native_workspace(store, args.values[0], destination, *expected, {control->token(), observe}));
+      }
+    } else if (sub == "workspace-relocation-status") {
+      args.count(0); print(native_workspace_relocation_status(store, {control->token(), observe}));
+    } else if (sub == "workspace-relocation-recover") {
+      const bool abort = args.flag("--abort"); args.count(0);
+      print(recover_native_workspace_relocation(store, abort, {control->token(), observe}));
     } else if (sub == "workspace-unregister-plan" || sub == "workspace-unregister") {
       const bool planning = sub == "workspace-unregister-plan";
       const bool untracked = args.flag("--include-untracked"), verify = planning && args.flag("--verify");

@@ -5,7 +5,7 @@ description: Désenregistrer un workspace lié en conservant les fichiers modifi
 section: Gestion de versions
 order: 223
 parent: native-workspaces
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Désenregistrer un workspace lié {#unregister}
@@ -132,7 +132,7 @@ après le dernier callback de publication, sans nouvel observateur pendant la
 publication finale. Les écritures externes exigent toujours une coordination ;
 il ne s’agit pas d’un snapshot atomique du système de fichiers. Les tests
 d’interruption de processus ne démontrent pas la résistance aux coupures
-d’alimentation. Le déplacement sur place et les politiques automatiques par
-âge/release restent à développer. Les Stores chiffrés protègent les objets
+d’alimentation. Le [déplacement lié sur un même système de fichiers](doc:native-workspace-relocation)
+est disponible ; déplacements entre systèmes et politiques automatiques par âge/release restent à développer. Les Stores chiffrés protègent les objets
 archivés au repos ; les exports et leurs fichiers temporaires ont la sémantique
 habituelle d’un workspace en clair.

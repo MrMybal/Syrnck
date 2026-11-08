@@ -49,6 +49,10 @@ class DocumentationHelp(unittest.TestCase):
                                      ("workspace-archive-restore-plan", "restore"), ("workspace-archive-restore", "restore")):
                 self.assertTrue(self.run_cli("--lang", language, "help", "native", command, "--print-url")
                                 .stdout.strip().endswith(f"#/{language}/native-workspace-archives/{section}"))
+            for command, section in (("workspace-relocate-plan", "usage"), ("workspace-relocate", "usage"),
+                                     ("workspace-relocation-status", "recovery"), ("workspace-relocation-recover", "recovery")):
+                self.assertTrue(self.run_cli("--lang", language, "help", "native", command, "--print-url")
+                                .stdout.strip().endswith(f"#/{language}/native-workspace-relocation/{section}"))
         for command in ("required-features", "require-feature"):
             self.assertTrue(self.run_cli("help", "config", command, "--print-url").stdout.strip().endswith("#/en/settings/reader-features"))
         for topic in ["docs/PACKS.md#mémoire-du-gc", "docs\\PACKS.md#m%C3%A9moire-du-gc"]:

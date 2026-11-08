@@ -5,7 +5,7 @@ description: Independent working directories, HEADs and indexes over one shared 
 section: Version control
 order: 222
 parent: native-branches
-revision: 8
+revision: 9
 ---
 
 ## Create and select a workspace {#usage}
@@ -265,8 +265,9 @@ materialization chunk is retained at `workspaces/NAME/workspace/materialization`
 Object/revision, pack and C ABI versions are unchanged.
 
 Linked contexts can be [archived, unregistered and restored](doc:native-workspace-archives),
-preserving dirty work separately from HEAD and the index. In-place workspace relocation
-remains work to complete. Every workspace still
+preserving dirty work separately from HEAD and the index. [Whole-directory relocation](doc:native-workspace-relocation)
+supports linked contexts on one filesystem, including changes of case. Cross-filesystem
+and primary/Store relocation remain work to complete. Every workspace still
 requires its complete retained objects locally.
 
 ## Reader compatibility {#compatibility}

@@ -5,7 +5,7 @@ description: Repository settings guide.
 section: Storage
 order: 540
 parent: storage
-revision: 4
+revision: 5
 ---
 
 # Repository settings {#repository-settings}
@@ -76,6 +76,11 @@ requires `sparse-workspaces-v1` before publication of its selection.
 Changing an active selection also requires `materialization-transitions-v1`
 before its recoverable journal is published. Returning to a complete view does
 not remove these additive reader requirements.
+
+[Whole-directory relocation](doc:native-workspace-relocation) requires
+`workspace-relocation-v1` before its journal is published. This remains enabled
+after completion or abort, so an older reader cannot open a Store during the
+temporary absence of its old linked directory.
 
 Only supported names are accepted. Enabling is idempotent, preserves physical
 format and objects, and survives pack/GC, backup, restore and repaired copies.

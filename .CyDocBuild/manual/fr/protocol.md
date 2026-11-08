@@ -5,7 +5,7 @@ description: Guide : Formats et protocole.
 section: Stockage
 order: 10
 parent: storage
-sourceRevision: 9
+sourceRevision: 10
 ---
 
 # Formats et protocole expérimentaux {#formats-et-protocole-experimentaux}
@@ -195,11 +195,24 @@ physique sous `workspaces/NOUVEAU/restored/ARCHIVE_ID`. Ces racines sont typées
 ordinaires ; formats d’objets, packs et ABI C inchangés. Voir les
 [opérations d’archive](doc:native-workspace-archives).
 
+## Enregistrements de déplacement de workspace {#workspace-relocation-formats}
+
+Le [journal de déplacement](doc:native-workspace-relocation#format) est un chunk
+immuable native-workspace-relocation v1 sous `workspace-relocations/active`.
+Il fige chemins source/cible/intermédiaire, identités du dossier et des parents,
+valeurs complètes des anciennes liaisons, hash des références et plan.
+Une nouvelle exigence de lecteur précède la publication. Le validateur central
+n’accepte que les transactions exactes de début et de fin ; les autres mutations
+sont bloquées pendant l’attente. La phase physique dépend de l’identité unique
+au nom exact source/intermédiaire/cible. Les racines finales
+`archive/workspace-relocations/ID/completed` ou `/aborted` gardent le reçu inclus,
+sans dépendances d’objets cachées.
+
 ## Capacités requises du Store {#required-store-features}
 
 Les configurations v1/v2/v3 peuvent ajouter `required_features`, tableau non vide
 trié de noms uniques pris en charge (au plus 32). Les noms acceptés sont
-`linked-workspaces-v1`, `sparse-workspaces-v1` et `materialization-transitions-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
+`linked-workspaces-v1`, `sparse-workspaces-v1`, `materialization-transitions-v1` et `workspace-relocation-v1`. Nom inconnu, doublon, liste vide ou type invalide bloquent
 l’ouverture. Le champ supplémentaire fait volontairement refuser la configuration
 aux anciens lecteurs stricts avant lecture des objets/références. Les encodages
 packs/index/enveloppes et l’ABI C 1 ne changent pas ; les Stores classiques ne

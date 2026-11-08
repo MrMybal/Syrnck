@@ -8,6 +8,7 @@
 #include "native_workspace.hpp"
 #include "native_context.hpp"
 #include "native_materialization.hpp"
+#include "native_workspace_relocation.hpp"
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -56,7 +57,7 @@ static std::string key_check(const Key &key) {
 }
 static void supported_feature(std::string_view feature) {
   require(feature == "linked-workspaces-v1" || feature == "sparse-workspaces-v1" ||
-              feature == "materialization-transitions-v1", "unsupported required store feature");
+              feature == "materialization-transitions-v1" || feature == "workspace-relocation-v1", "unsupported required store feature");
 }
 Json Store::Impl::load_config() {
   packs.invalidate();
@@ -611,6 +612,7 @@ std::string Store::native_workspace_reference(std::string_view local) const {
 }
 void Store::write_refs(const Refs &refs, std::stop_token stop) const {
   const auto before = this->refs();
+  validate_native_workspace_relocation(*this, before, refs);
   validate_native_branch_reservations(*this, before, refs);
   const bool sparse = validate_native_materialization_changes(*this, before, refs);
   // Reference names cannot contain JSON escapes. Reject provably oversized

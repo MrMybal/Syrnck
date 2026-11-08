@@ -5,7 +5,7 @@ description: Guide : Préférences du dépôt.
 section: Stockage
 order: 540
 parent: storage
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Préférences du dépôt {#repository-settings}
@@ -46,6 +46,11 @@ aussi `sparse-workspaces-v1` avant publication de sa sélection.
 Changer une sélection active exige aussi `materialization-transitions-v1` avant
 publication de son journal récupérable. Revenir à une vue complète ne retire
 pas ces exigences de lecteur additives.
+
+Le [déplacement du dossier entier](doc:native-workspace-relocation) exige
+`workspace-relocation-v1` avant publication de son journal. L’exigence reste
+active après réussite ou annulation, pour empêcher un ancien lecteur d’ouvrir
+le Store lorsque l’ancien dossier lié est temporairement absent.
 
 Seuls les noms pris en charge sont acceptés. Activation idempotente, format
 physique et objets préservés ; les exigences survivent aux packs/GC, sauvegarde,

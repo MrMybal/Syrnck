@@ -5,7 +5,7 @@ description: Dossiers de travail, HEAD et index indépendants sur un Store parta
 section: Versionnage
 order: 222
 parent: native-branches
-sourceRevision: 8
+sourceRevision: 9
 ---
 
 ## Créer et sélectionner un workspace {#usage}
@@ -268,8 +268,9 @@ sous `workspaces/NOM/workspace/materialization`. Versions d’objets/révisions,
 packs et ABI C inchangées.
 
 Les contextes liés peuvent être [archivés, désenregistrés et restaurés](doc:native-workspace-archives),
-avec travail modifié distinct de HEAD et de l’index. Le déplacement en place reste
-à compléter. Chaque workspace exige
+avec travail modifié distinct de HEAD et de l’index. Le [déplacement du dossier entier](doc:native-workspace-relocation)
+prend en charge les contextes liés sur un même système de fichiers, changements de casse
+compris. Déplacements entre systèmes et du principal/Store restent à compléter. Chaque workspace exige
 toujours ses objets retenus complets localement.
 
 ## Compatibilité des lecteurs {#compatibility}
