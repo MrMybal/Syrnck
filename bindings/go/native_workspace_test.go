@@ -138,6 +138,9 @@ func TestNativeWorkspaceCapturePlanAndOwnedCheckout(t *testing.T) {
 			if _, err := workspace.RecoverOwned(store, current.Target, candidate.ID, strings.Repeat("a", 64)); err == nil {
 				t.Fatal("nonexistent journal recovered")
 			}
+			if _, err := workspace.RecoverOwnedPreserving(store, current.Target, candidate.ID, strings.Repeat("a", 64)); err == nil {
+				t.Fatal("preserving recovery accepted absent journal")
+			}
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			if _, err := workspace.CaptureContext(ctx, store, final.Expected(), "cancelled"); !errors.Is(err, context.Canceled) {

@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 5
+revision: 6
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -302,3 +302,15 @@ prove past application, not current working cleanliness. Go exposes this as
 `CheckoutStatusContext`. Use a unique durable owner per pending application,
 retain its causal inputs before checkout and capture later local edits after
 acknowledging that completed base.
+
+## Explicit active-edit preservation {#active-checkout-edits}
+
+`syrnck_workspace_recover_owned_preserving_json_ex` has the same exact
+Store/workspace/context/target/candidate/owner contract as ordinary owned
+recovery. It explicitly archives regular-file edits, makes exclusive conflict
+copies and resumes the original strict journal. Default recovery stays strict.
+Go exposes `RecoverOwnedPreserving` and `RecoverOwnedPreservingContext`; C++
+uses `Store::recover_checkout_owned_preserving_files`. The JSON report adds
+`preserved_edits` with source path, copy path and archived revision ID. Publication
+errors still require reloading native state and retained descriptors. See the
+[policy and remaining limits](doc:syncthing#active-checkout-edits).

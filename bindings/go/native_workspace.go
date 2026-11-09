@@ -59,7 +59,7 @@ func (w *Workspace) nativeCall(ctx context.Context, store *Store, mode uint32, e
 		}
 		arguments[i] = data
 	}
-	if mode >= 1 && mode <= 4 && expected.Target == "" {
+	if (mode >= 1 && mode <= 4 || mode == 6) && expected.Target == "" {
 		return nil, errors.New("syrnck: native target expectation required")
 	}
 	if len(message) > 65536 {
@@ -167,4 +167,14 @@ func (w *Workspace) CheckoutStatusContext(ctx context.Context, store *Store, tra
 		return nil, errors.New("syrnck: checkout transaction required")
 	}
 	return w.nativeCall(ctx, store, 5, NativeExpectation{}, transaction, "", "")
+}
+
+// RecoverOwnedPreservingContext explicitly preserves regular-file edits through
+// retained native archives and exclusive conflict-copy moves before resuming
+// the exact owned checkout. It never weakens ordinary checkout verification.
+func (w *Workspace) RecoverOwnedPreservingContext(ctx context.Context, store *Store, target, candidate, owner string) (json.RawMessage, error) {
+	return w.nativeCall(ctx, store, 6, NativeExpectation{Target: target}, candidate, owner, "")
+}
+func (w *Workspace) RecoverOwnedPreserving(store *Store, target, candidate, owner string) (json.RawMessage, error) {
+	return w.RecoverOwnedPreservingContext(context.Background(), store, target, candidate, owner)
 }

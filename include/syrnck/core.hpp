@@ -515,6 +515,11 @@ public:
   // workspace and HEAD target. Manual and other-session transactions refuse.
   Json recover_checkout_owned(const fs::path &, std::string_view branch, std::string_view owner,
                               OperationOptions = {}) const;
+  // Explicit conflict-copy recovery for regular-file edits during an owned
+  // checkout. Retain native archives before moving any changed working file;
+  // never replace a conflicting copy or relax ordinary checkout verification.
+  Json recover_checkout_owned_preserving_files(const fs::path &, std::string_view branch,
+                                               std::string_view owner, OperationOptions = {}) const;
   // Current symbolic branch or detached revision; legacy stores select main.
   // Switching journals workspace changes without moving named branch tips.
   Json native_head() const;

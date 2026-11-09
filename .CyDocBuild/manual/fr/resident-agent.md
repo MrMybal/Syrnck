@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Fonctionnement continu {#run}
@@ -201,3 +201,15 @@ réception et les copies exigent les deux. Par exemple,
 fournir explicitement l’identité éventuelle. La CLI utilise
 `Store::take_native_identity()` pour déplacer la propriété exclusive de la clé
 entre handles courts sans exporter les octets de la graine.
+
+## Éditions pendant une application à propriétaire {#active-checkout-edits}
+
+La politique existante explicite `--conflict-copies` conserve aussi les éditions
+de fichiers ordinaires survenues pendant l’application. L’agent retient des
+archives natives avant les déplacements exclusifs vers des copies de conflit,
+restaure les octets intermédiaires attendus et termine le candidat entrant/fusionné
+inchangé. Cette reprise fonctionne hors ligne sans clé privée pour une cible
+signée préparée. La capture locale suivante enregistre les fichiers ajoutés.
+Sans cette politique, la reprise reste stricte. Fichiers manquants, obstructions
+de dossiers/liens et structures ambiguës demandent encore une résolution. Voir le
+[contrat partagé d’archive et de reprise](doc:syncthing#active-checkout-edits).

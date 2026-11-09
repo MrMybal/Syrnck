@@ -55,6 +55,8 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * journal and refuses dirty work. recover_owned requires the exact persisted owner and candidate.
  * checkout_status_json_ex reads an exact core journal/receipt without applying it. Completed receipts
  * prove past application with owner/source/target evidence; subsequent local edits remain separate.
+ * recover_owned_preserving_json_ex explicitly archives regular-file edits and creates exclusive
+ * conflict copies before ordinary strict recovery. Default recover_owned stays strict.
  * A session is bound to one Store path, registered context and working directory. Mutations
  * invalidate observation continuity. On error reload state: publication may already have completed.
  * See [native actions](doc:workspace-abi#native-workspace-actions) for recovery and locking contracts.
@@ -105,6 +107,8 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * natif et refuse le travail modifié. recover_owned exige propriétaire et candidat persistés exacts.
  * checkout_status_json_ex lit journal/reçu exact par le cœur sans application. Un reçu terminé prouve
  * l’application passée par propriétaire/source/cible ; une édition ultérieure reste du travail séparé.
+ * recover_owned_preserving_json_ex archive explicitement les éditions ordinaires et crée des copies
+ * exclusives avant reprise stricte ; recover_owned par défaut garde ses contrôles stricts.
  * Une session est liée à un chemin de Store, contexte enregistré et dossier de travail. Les mutations
  * invalident la continuité d’observation. En erreur, recharger : la publication peut être terminée.
  * Voir les [actions natives](doc:workspace-abi#native-workspace-actions) pour reprise et verrouillage.
@@ -351,6 +355,14 @@ SYRNCK_API int syrnck_workspace_checkout_owned_json_ex(SyrnckWorkspace *, Syrnck
  * A foreign/manual journal stays explicit. Candidate/owner must be established
  * from durable service state, never inferred from untrusted network fields. */
 SYRNCK_API int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *, SyrnckStore *,
+    const char *target, const char *revision, const char *owner, const SyrnckOperation *,
+    char **out, size_t *length);
+/* Explicit regular-file conflict-copy policy for the same exact owned journal.
+ * Archives precede exclusive moves; interrupted preservation is replayed before
+ * the ordinary strict checkout resumes. No private signing key is required.
+ * Missing files and namespace obstructions remain explicit. Foreign file
+ * copies are never replaced; later original edits get a fresh copy identity. */
+SYRNCK_API int syrnck_workspace_recover_owned_preserving_json_ex(SyrnckWorkspace *, SyrnckStore *,
     const char *target, const char *revision, const char *owner, const SyrnckOperation *,
     char **out, size_t *length);
 /* Serialize these calls with wait/status/Close and all Store calls. Mutations

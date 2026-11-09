@@ -22,6 +22,9 @@ env["GOPATH"] = str(root / ".tools/go-path")
 test_cli = library.parent / ("syrnck.exe" if os.name == "nt" else "syrnck")
 if test_cli.is_file():
     env["SYRNCK_TEST_CLI"] = str(test_cli)
+test_edit_helper = library.parent / ("syrnck_checkout_edit_tests.exe" if os.name == "nt" else "syrnck_checkout_edit_tests")
+if test_edit_helper.is_file():
+    env["SYRNCK_TEST_CHECKOUT_EDIT_HELPER"] = str(test_edit_helper)
 if os.name == "nt":
     env["SYRNCK_LIBRARY"] = str(library)
     env["CGO_ENABLED"] = "0"

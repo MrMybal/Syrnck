@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 18
+revision: 19
 ---
 
 ## Workspace and versioning {#workspace}
@@ -17,10 +17,16 @@ Exact-content renames are recognized, while edited renames/copies, their merge/r
 
 Configured servers provide users/roles, branch checks and expiring asset leases. Native history transfer and Git catalog publication remain separate from a distributed multi-server transaction. The [resident publication agent](doc:resident-agent) captures local edits, deletions and exact renames, retains offline snapshots and retries guarded native pushes. The optional bidirectional mode applies incoming descendants through recoverable checkout and merges compatible concurrent histories. Unresolved conflicts, acknowledged remote deletions/rewinds and rewritten local history are blocked. The agent resumes only its own guarded checkout/merge transactions, including offline recovery of prepared signed targets without a private signing key. Manual or unrelated recovery stays explicit. The explicit [conflict-copy policy](doc:resident-agent#conflict-copies) preserves concurrent file contents; namespace collisions still block. OS service installation remains unfinished.
 
-The Syncthing adapter handles regular-file block indexes/requests/responses and [pinned device connections](doc:syncthing#device-connections). A real upstream daemon is tested for differential transfers in both directions. A native-backed [folder catalog](doc:syncthing#folder-catalog) persists device index generations, version vectors, tombstones and verified files; conflicts remain explicit and historical data stays retained. Real-daemon reconnection after an offline rename is tested. The [continuous controller](doc:syncthing#folder-controller) now applies regular files/tombstones to actual native workspaces, with owned recovery and live-daemon reconnection tests. Directory/symlink metadata, conflict copies, standalone service orchestration, discovery, a pairing UI, catalog membership management and automatic history retirement remain unfinished.
+The Syncthing adapter handles regular-file block indexes/requests/responses and [pinned device connections](doc:syncthing#device-connections). A real upstream daemon is tested for differential transfers in both directions. A native-backed [folder catalog](doc:syncthing#folder-catalog) persists device index generations, version vectors, tombstones and verified files; conflicts remain explicit and historical data stays retained. Real-daemon reconnection after an offline rename is tested. The [continuous controller](doc:syncthing#folder-controller) now applies regular files/tombstones to actual native workspaces, with owned recovery and live-daemon reconnection tests. Directory/symlink metadata, conflicts between concurrent BEP versions, standalone service orchestration, discovery, a pairing UI, catalog membership management and automatic history retirement remain unfinished.
 
 ## Security, retention and recovery {#security}
 
 Objects can be encrypted at rest, with separately keyed backups/restores. Trusted servers receive plaintext objects over the secured transport. End-to-end encryption, password-based keys, system key vaults, distributed rotation/revocation, automatic replica repair and distributed GC remain separate work.
 
 Retention is explicit. Archives preserve versions until their protecting roots are retired; a verified backup can protect manual retirement, but automatic age/release policies are not implemented. Process interruption and power-loss durability are different guarantees. No operation establishes universal power-loss, network-filesystem or hostile external-writer safety.
+
+Explicit [active-checkout edit preservation](doc:syncthing#active-checkout-edits)
+archives regular-file contents before conflict-copy moves and resumes the strict
+owned journal. Missing-file/deletion intent and ambiguous namespace changes still
+need resolution. The retained edit archive groups currently require manual
+retention management; automatic age/backup-based retirement remains unfinished.

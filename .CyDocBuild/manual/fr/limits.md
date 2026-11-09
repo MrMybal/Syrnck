@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 18
+sourceRevision: 19
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -17,10 +17,16 @@ Les renommages de contenu exact sont reconnus, mais renommages avec édition/cop
 
 Les serveurs configurés fournissent utilisateurs/rôles, contrôles de branches et baux d’assets expirables. Transfert de l’historique natif et publication des catalogues Git restent distincts d’une transaction distribuée multi-serveur. L’[agent résident de publication](doc:resident-agent) capture changements, suppressions et renommages exacts locaux, garde des snapshots hors ligne et reprend les publications natives protégées. Le mode bidirectionnel facultatif applique les descendants entrants par checkout récupérable et fusionne les historiques concurrents compatibles. Conflits non résolus, suppressions/reculs distants reconnus et réécritures locales sont bloqués. L’agent reprend uniquement ses transactions de checkout/fusion contrôlées, y compris hors ligne pour une cible signée préparée sans clé privée. La reprise manuelle ou étrangère reste explicite. La [politique explicite de copies de conflit](doc:resident-agent#conflict-copies) conserve les contenus concurrents ; les collisions de structure bloquent toujours. L’installation comme service système reste à terminer.
 
-L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers ordinaires et [connexions à appareils épinglés](doc:syncthing#device-connections). Un daemon amont réel vérifie les transferts différentiels dans les deux sens. Le [catalogue natif de dossier](doc:syncthing#folder-catalog) conserve générations d’index, vecteurs, tombstones et fichiers vérifiés ; les conflits restent explicites et l’historique retenu. La reconnexion après renommage hors ligne est testée contre le daemon réel. Le [contrôleur continu](doc:syncthing#folder-controller) applique maintenant fichiers ordinaires/tombstones aux workspaces natifs, avec reprise à propriétaire et tests de reconnexion au daemon réel. Métadonnées de dossiers/liens, copies de conflit, orchestration du service autonome, découverte, interface d’appairage, gestion des membres du catalogue et retrait automatique d’historique restent à réaliser.
+L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers ordinaires et [connexions à appareils épinglés](doc:syncthing#device-connections). Un daemon amont réel vérifie les transferts différentiels dans les deux sens. Le [catalogue natif de dossier](doc:syncthing#folder-catalog) conserve générations d’index, vecteurs, tombstones et fichiers vérifiés ; les conflits restent explicites et l’historique retenu. La reconnexion après renommage hors ligne est testée contre le daemon réel. Le [contrôleur continu](doc:syncthing#folder-controller) applique maintenant fichiers ordinaires/tombstones aux workspaces natifs, avec reprise à propriétaire et tests de reconnexion au daemon réel. Métadonnées de dossiers/liens, conflits entre versions BEP concurrentes, orchestration du service autonome, découverte, interface d’appairage, gestion des membres du catalogue et retrait automatique d’historique restent à réaliser.
 
 ## Sécurité, rétention et récupération {#security}
 
 Les objets peuvent être chiffrés au repos, avec clés indépendantes pour sauvegardes/restaurations. Les serveurs de confiance reçoivent les objets en clair dans le transport sécurisé. Chiffrement de bout en bout, dérivation de mot de passe, coffres système, rotation/révocation distribuée, réparation automatique de répliques et GC distribué restent à développer.
 
 La rétention est explicite. Les archives conservent les versions tant que leurs racines restent présentes ; une sauvegarde vérifiée peut protéger le retrait manuel, sans politique automatique par âge/release. Arrêt de processus et panne d’alimentation sont des garanties différentes. Aucune opération n’établit une sûreté universelle après coupure électrique, sur stockage réseau ou face à un écrivain externe hostile.
+
+La [préservation explicite des éditions actives](doc:syncthing#active-checkout-edits)
+archive les contenus ordinaires avant copie de conflit et reprend le journal
+strict à propriétaire. Intentions de suppression/fichiers manquants et structures
+ambiguës restent à résoudre. Les groupes d’archives d’édition demandent encore
+une gestion manuelle ; leur retrait automatique selon âge/sauvegarde reste à finir.

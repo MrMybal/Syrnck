@@ -35,6 +35,8 @@ func nativeWorkspaceNative(h nativeWorkspaceHandle, store nativeHandle, mode uin
 		code = C.syrnck_workspace_checkout_owned_json_ex(h, store, &expected, pointers[2], pointers[3], &operation, &ptr, &length)
 	case 4:
 		code = C.syrnck_workspace_recover_owned_json_ex(h, store, pointers[0], pointers[2], pointers[3], &operation, &ptr, &length)
+	case 6:
+		code = C.syrnck_workspace_recover_owned_preserving_json_ex(h, store, pointers[0], pointers[2], pointers[3], &operation, &ptr, &length)
 	case 5:
 		code = C.syrnck_workspace_checkout_status_json_ex(h, store, pointers[2], &operation, &ptr, &length)
 	}

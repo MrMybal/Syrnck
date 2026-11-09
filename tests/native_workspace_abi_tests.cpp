@@ -173,7 +173,7 @@ void preserves_edit_during_application(const fs::path &root) {
     bool changed = false, failed = false;
     static void progress(const SyrnckProgress *event, void *user) {
       auto &edit = *static_cast<Edit *>(user);
-      if (event->phase == SYRNCK_PHASE_PUBLISHING && !edit.changed) {
+      if (event->phase == SYRNCK_PHASE_PUBLISHING && std::string_view(event->path, event->path_length) == "checkout" && !edit.changed) {
         edit.changed = true;
         try { atomic_write(edit.path, bytes("user edit during application"), true); }
         catch (...) { edit.failed = true; }
@@ -191,6 +191,29 @@ void preserves_edit_during_application(const fs::path &root) {
       handles.workspace, handles.store, target.c_str(), candidate.c_str(), owner.c_str(), nullptr, out, n); }, false);
   require(text(read_bytes(root / "asset")) == "user edit during application" && handles.state()["checkout"]["pending"].get<bool>(),
       "owned retry overwrote concurrent local work");
+  const auto before_preservation = read_bytes(root / ".syrnck/refs.json");
+  const std::string foreign(64, 'd');
+  result([&](char **out, std::size_t *n) { return syrnck_workspace_recover_owned_preserving_json_ex(
+      handles.workspace, handles.store, target.c_str(), candidate.c_str(), foreign.c_str(), nullptr, out, n); }, false);
+  require(read_bytes(root / ".syrnck/refs.json") == before_preservation, "foreign preserving ABI changed refs");
+  const auto recovered = result([&](char **out, std::size_t *n) { return syrnck_workspace_recover_owned_preserving_json_ex(
+      handles.workspace, handles.store, target.c_str(), candidate.c_str(), owner.c_str(), nullptr, out, n); });
+  success(syrnck_workspace_close(handles.workspace)); handles.workspace = nullptr;
+  success(syrnck_store_close(handles.store)); handles.store = nullptr;
+  Store store(root / ".syrnck");
+  require(recovered["state"] == "committed" && recovered["preserved_edits"].size() == 1 &&
+      store.refs().at("heads/main").id == candidate && text(read_bytes(root / "asset")) == "incoming",
+      "explicit owned edit preservation did not finish original candidate");
+  const auto copy = recovered["preserved_edits"][0]["copy_path"].get<std::string>();
+  require(text(read_bytes(root / path_from_utf8(copy))) == "user edit during application",
+      "explicit owned edit preservation lost local bytes");
+  const auto archive = recovered["preserved_edits"][0]["revision"].get<std::string>();
+  const auto snapshot = store.metadata(Kind::revision, archive);
+  const auto manifest = snapshot["files"][copy]["manifest"].get<std::string>();
+  (void)store.gc(true); (void)store.fsck();
+  const auto restored = root / "saved-version";
+  store.restore_file(manifest, restored);
+  require(text(read_bytes(restored)) == "user edit during application", "GC collected retained owned edit");
 }
 
 }

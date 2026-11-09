@@ -1163,3 +1163,23 @@ SYRNCK_MESSAGE("native workspace revision changed; reload and replan", "la révi
 SYRNCK_MESSAGE("native capture message exceeds 64 KiB", "le message de capture native dépasse 64 Kio")
 SYRNCK_MESSAGE("native owned recovery target or owner does not match", "la cible ou le propriétaire de la reprise native contrôlée ne correspond pas")
 SYRNCK_MESSAGE("native workspace materialization changed; reload and replan", "la matérialisation du workspace natif a changé ; recharger et replanifier")
+
+SYRNCK_MESSAGE("owned checkout edit preservation requires an active application", "la préservation des éditions de checkout exige une application active à propriétaire")
+
+SYRNCK_MESSAGE("file changed during owned checkout preservation; retry recovery", "le fichier a changé pendant la préservation du checkout ; réessayer la reprise")
+
+SYRNCK_MESSAGE("owned checkout preservation references changed", "les références de préservation du checkout ont changé")
+
+SYRNCK_MESSAGE("invalid owned checkout edit record", "enregistrement d’édition de checkout à propriétaire invalide")
+
+SYRNCK_MESSAGE("owned checkout edit disappeared; inspect preserved archive", "l’édition de checkout a disparu ; inspecter l’archive conservée")
+
+SYRNCK_MESSAGE("owned checkout conflict copy changed before acknowledgement", "la copie de conflit du checkout a changé avant son accusé")
+
+SYRNCK_MESSAGE("owned checkout conflict copy path is reserved", "le chemin de copie de conflit du checkout est réservé")
+
+SYRNCK_MESSAGE("owned checkout edit recurred; inspect retained conflict copy", "l’édition de checkout est réapparue ; inspecter la copie conservée")
+
+SYRNCK_MESSAGE("owned checkout conflict copy path already exists", "le chemin de copie de conflit du checkout existe déjà")
+
+SYRNCK_MESSAGE("owned checkout edits keep changing; retry recovery", "les éditions de checkout continuent à changer ; réessayer la reprise")

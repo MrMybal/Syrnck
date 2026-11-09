@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -268,7 +268,7 @@ distribution CMake du moteur. Le contrôleur applique les fichiers ordinaires et
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
 vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
-Copies de conflit, reprise persistante de téléchargement, gestion automatique
+Copies pour versions protocolaires concurrentes, reprise persistante de téléchargement, gestion automatique
 des membres/retrait d’historique et politique d’auteur/signature des nouveaux
 candidats natifs entrants restent à réaliser. Performances à grande échelle et
 durabilité face à une coupure électrique ne sont pas qualifiées. L’agent natif
@@ -280,15 +280,53 @@ garde ses blocs fixes BEP. `Catalog.CommitWithRefs` publie atomiquement catalogu
 et gardes de références typées additionnelles ; recharger après un résultat de
 publication inconnu, selon les règles du CAS natif.
 
-Une édition externe pendant installation/vérification d’un journal natif actif
-bloque la reprise pour ne pas écraser ce travail. Conserver les données modifiées
-et résoudre explicitement le journal ; préservation/réconciliation automatique
-pendant l’application active reste à terminer. La visibilité du fichier seule ne
-signale pas la fin : utiliser le checkpoint/statut du contrôleur. C’est distinct
-de l’édition prise en charge après le reçu natif committed, y compris avant son
-accusé de réception protocolaire.
+Une édition externe pendant installation native reste bloquée par la reprise
+standard. Activer `FolderOptions.PreserveCheckoutEdits = true` pour conserver
+les éditions de fichiers ordinaires selon la politique ci-dessous. La visibilité
+du fichier seule ne signale pas la fin : utiliser checkpoint/statut. Une édition
+après le reçu natif committed reste prise en charge indépendamment de cette option.
 
 Le contrôleur associe l’orthographe native aux noms NFC du protocole, conserve
 l’orthographe décomposée existante lors des éditions et refuse deux noms natifs
 qui se normalisent vers le même chemin. Écho et nouveau scan ne transforment
 pas cette différence d’orthographe en suppression.
+
+## Conserver les éditions pendant le checkout actif {#active-checkout-edits}
+
+L’option explicite `PreserveCheckoutEdits` est figée dans chaque application
+préparée ; une nouvelle configuration ne peut pas recibler l’opération interrompue.
+La reprise vérifie propriétaire, cible, contexte, dossier et fichiers privés de
+staging/sauvegarde exacts. Elle ingère les fichiers ordinaires modifiés dans des
+révisions d’archive avant tout déplacement. Déplacement exclusif vers une copie
+de conflit et restauration exclusive des octets intermédiaires attendus sont
+rejouables depuis leurs descripteurs retenus. Le checkout strict original
+revérifie ensuite tous les fichiers cibles et publie son candidat/reçu inchangés.
+
+Les racines `archive/checkout-edits/TRANSACTION/EDIT/state` (descripteur) et
+`/work` (révision) conservent les versions ; les parents natifs gardent la révision
+entrante et ses fichiers complets. Les racines `archive/checkout-edit-versions/TRANSACTION/REVISION` retiennent les éditions
+supplémentaires d’une copie pendant la reprise. Chaque nom est déterminé par
+l’identité persistée de l’édition, conserve les extensions courtes et n’est jamais
+écrasé. Un fichier apparu au nom réservé est conservé ; les éditions restantes de
+l’original reçoivent une nouvelle identité. `preserved_edits` rend chemins source,
+copie et IDs de révisions archivées ; les octets actuels de la copie peuvent être
+plus récents que cette révision.
+
+Après l’accusé, la capture locale ordinaire annonce les fichiers conservés.
+Cela protège les éditions de contenu avant sauvegarde, pendant staging et après
+installation, y compris sur un fichier suivi normalement inchangé. La cible signée
+préparée reste identique ; aucune clé privée de signature n’est requise pour la
+reprise. Les archives restent des racines de GC après les changements du workspace.
+Le retrait automatique de ces groupes demande encore une politique administrative ;
+ne pas retirer leurs racines indépendamment.
+
+Un éditeur qui continue à écrire peut différer la fin : chaque tentative bornée
+garde ses observations pour la suivante. Intentions de suppression/fichiers
+manquants, obstructions de dossiers/liens et structures ambiguës bloquent encore
+plutôt que d’inventer une résolution. Cette option ne résout pas les vecteurs BEP
+concurrents, ne fournit pas un service de dossiers complet et ne prouve pas la
+durabilité face à une coupure électrique.
+
+Si le checkout doit retirer ou renommer un dossier parent, la copie est placée
+hors de ce dossier en gardant le nom de base et l’extension courte. Cela couvre
+aussi dossier vers fichier et changement de casse d’un dossier.

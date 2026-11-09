@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "native_conflict_copy.hpp"
 #include "native_checkout_layout.hpp"
 #include "native_hard_reset.hpp"
 #include "native_stash.hpp"
@@ -620,6 +621,7 @@ public:
                   !refs.contains(record.destination_index_reference()),
               "native switch HEAD, destination branch or staging changed");
   }
+  Json preserve_edits(OperationOptions options);
   void prepare(OperationOptions options);
   void apply(OperationOptions options);
   void apply_namespace(OperationOptions options);
@@ -630,6 +632,230 @@ public:
   void cleanup(OperationOptions options);
   Json run(bool abort, OperationOptions options);
 };
+// Preservation is an additional owned operation, not a weaker checkout. Its
+// immutable archives and replayable descriptors are ordinary typed GC roots.
+// Working files are moved exclusively; original checkout verification still
+// runs after all edits are retained and the expected bytes are restored.
+Json Transaction::preserve_edits(OperationOptions options) {
+  require(record.owner && (record.state == "preparing" || record.state == "applying" ||
+      record.state == "evacuating" || record.state == "installing"),
+      "owned checkout edit preservation requires an active application");
+  expected_head(); private_directories(false);
+  const auto source = source_files(store_, record, options), target = target_files(store_, record, options);
+  std::map<std::string, Json> expected;
+  for (const auto &[path, value] : source) { (void)value; expected[path] = Json{}; }
+  for (const auto &[path, value] : target) expected[path] = value.json();
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const auto &row = entries[i]; const auto path = row["path"].get<std::string>();
+    const auto old = file("old", i), next = file("new", i);
+    if (present(old)) require(!row["source"].is_null() && matches(old, row["source"], path, options),
+        "native checkout backup changed; abort to restore it");
+    if (present(next)) require(!row["target"].is_null() && matches(next, row["target"], path, options),
+        "native checkout prepared file changed");
+    if (record.state == "preparing" || ((record.state == "applying" || record.state == "evacuating") &&
+        !row["source"].is_null() && !present(old))) expected[path] = row["source"];
+    else if (record.state == "evacuating" || present(next)) expected[path] = Json{};
+    else expected[path] = row["target"];
+  }
+  const auto prefix = "archive/checkout-edits/" + record.id + '/';
+  const auto check = [&] {
+    expected_head();
+    require(store_.native_target() == record.branch && lookup(store_.refs(), record.active_reference()) == record.key,
+        "native checkout references changed");
+  };
+  const auto copy_path = [&](const std::string &path, const std::string &id) {
+    auto projected = path;
+    for (auto slash = path.find('/'); slash != path.npos; slash = path.find('/', slash + 1)) {
+      const auto ancestor = path.substr(0, slash);
+      if (target.contains(ancestor) || (layout && layout->remove_directories.contains(ancestor))) {
+        // Keep the source basename/extension but move outside the outermost
+        // directory which the original checkout must remove or case-rename.
+        const auto parent = ancestor.rfind('/');
+        projected = (parent == ancestor.npos ? std::string{} : ancestor.substr(0, parent + 1)) +
+            path.substr(path.rfind('/') + 1);
+        break;
+      }
+    }
+    return native_conflict_copy_path(projected, id);
+  };
+  const auto capture = [&](const fs::path &physical, const std::string &path) {
+    const auto status = fs::symlink_status(physical);
+    require(fs::is_regular_file(status) && !native_link_like(physical, status), "invalid native checkout file");
+    bool executable = false;
+#ifndef _WIN32
+    executable = (status.permissions() & (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) != fs::perms::none;
+#endif
+    auto ingest = store_.settings().ingest_options(); ingest.stop = options.stop; ingest.progress = options.progress;
+    const auto entry = ingest_native_file(store_, {physical, path, fs::file_size(physical), fs::last_write_time(physical), executable},
+        ingest, "file changed during owned checkout preservation; retry recovery");
+    const auto manifest = entry["manifest"].get<std::string>();
+    const auto metadata = store_.metadata(Kind::manifest, manifest);
+    return Json{{"manifest", manifest}, {"size", metadata["size"]},
+                {"file_hash", metadata["file_hash"]}, {"executable", executable}};
+  };
+  const auto snapshot = [&](const std::string &copy, const Json &observed, const std::string &parent) {
+    const auto value = Json{{"version", 1}, {"parents", Json::array({parent})},
+        {"message", "Syrnck owned checkout edit v1: " + record.id}, {"timestamp", 0},
+        {"files", Json{{copy, Json{{"manifest", observed["manifest"]}, {"executable", observed["executable"]}}}}}};
+    return store_.put(Kind::revision, bytes(value.dump())).first;
+  };
+  const auto publish = [&](const std::vector<RefUpdate> &extra, bool fact = false) {
+    auto updates = extra;
+    updates.push_back({record.active_reference(), record.key, record.key});
+    updates.push_back(record.materialization_guard());
+    // Store is exclusively held. Check the head immediately before CAS; its
+    // own final refs-byte comparison rejects callback mutations. A descriptor
+    // update need not reverify the entire unchanged source history as a no-op
+    // replacement. Every actual new archive root still gets full verification.
+    check();
+    require(store_.compare_update_refs(updates, fact ? OperationOptions{} : options), "owned checkout preservation references changed");
+  };
+  Json preserved = Json::array();
+  // A continuously writing editor can defer completion. Each bounded attempt
+  // keeps all observed versions; the caller can retry with fresh cancellation.
+  for (unsigned round = 0; round != 32; ++round) {
+    throw_if_cancelled(options.stop); expected_head();
+    preserved = Json::array();
+    const auto refs = store_.refs();
+    std::vector<std::pair<std::string, ObjectKey>> records;
+    for (auto at = refs.lower_bound(prefix); at != refs.end() && at->first.starts_with(prefix); ++at)
+      if (at->first.ends_with("/state")) records.emplace_back(at->first, at->second);
+    bool unfinished = false;
+    for (const auto &[name, key] : records) {
+      require(key.kind == Kind::chunk, "invalid owned checkout edit record");
+      const auto encoded = store_.get(key);
+      auto edit = parse_json(encoded);
+      require(edit.dump() == text(encoded) && edit.is_object() && edit.size() == 14 && edit["version"] == 1 &&
+          edit["type"] == "native-owned-checkout-edit" && edit["transaction"] == record.id &&
+          edit["owner"] == *record.owner && edit["context"] == record.context && edit["directory"] == utf8(record.workspace) &&
+          edit["branch"] == record.branch, "invalid owned checkout edit record");
+      validate_id(edit["nonce"].get<std::string>());
+      const auto path = edit["path"].get<std::string>(), copy = edit["copy"].get<std::string>();
+      auto identity = edit; identity.erase("copy"); identity.erase("work"); identity.erase("state");
+      const auto id = hash(bytes(identity.dump()));
+      const auto state_value = edit["state"].get<std::string>();
+      require(name == prefix + id + "/state" && copy == copy_path(path, id) && expected.contains(path) &&
+          (state_value == "restored" || edit["expected"] == expected.at(path)), "invalid owned checkout edit record");
+      const auto before = source.find(path), after = target.find(path);
+      require(edit["expected"].is_null() || (before != source.end() && edit["expected"] == before->second.json()) ||
+          (after != target.end() && edit["expected"] == after->second.json()), "invalid owned checkout edit record");
+      const ObjectKey work{Kind::revision, edit["work"].get<std::string>()};
+      validate_id(work.id);
+      require(lookup(refs, prefix + id + "/work") == work &&
+          store_.metadata(Kind::revision, work.id)["files"] ==
+              Json{{copy, Json{{"manifest", edit["observed"]["manifest"]}, {"executable", edit["observed"]["executable"]}}}},
+          "invalid owned checkout edit record");
+      const auto archived = store_.metadata(Kind::revision, work.id);
+      require(archived["version"] == 1 && archived["parents"] == Json::array({record.target}) &&
+          archived["timestamp"] == 0 && archived["message"] == "Syrnck owned checkout edit v1: " + record.id,
+          "invalid owned checkout edit record");
+      const auto retained = read_native_snapshot(store_, work.id, options);
+      require(retained.size() == 1 && retained.at(copy).json() == edit["observed"], "invalid owned checkout edit record");
+      auto state = edit["state"].get<std::string>();
+      require(state == "prepared" || state == "protected" || state == "restored", "invalid owned checkout edit record");
+      if (state == "restored") {
+        preserved.push_back(Json{{"path", path}, {"copy_path", copy}, {"revision", work.id}}); continue;
+      }
+      auto current_key = key;
+      const auto advance = [&](const std::string &to) {
+        edit["state"] = to;
+        const auto next = store_.put(Kind::chunk, bytes(edit.dump())).first;
+        publish({{name, current_key, next}}, true); current_key = next; state = to;
+      };
+      auto original = exact_path(path, false), destination = exact_path(copy, false);
+      if (state == "prepared") {
+        if (!destination || !present(*destination)) {
+          require(original && present(*original), "owned checkout edit disappeared; inspect preserved archive");
+          destination = exact_path(copy, true);
+          if (matches(*original, edit["observed"], path, options)) {
+            // No replacement is possible. A later edit to the original name
+            // becomes a separate retained preservation on the next round.
+            check(); move_exclusive(*original, *destination);
+            SYRNCK_IO_CHECKPOINT("checkout-edit.moved", *destination);
+          } else {
+            check();
+            store_.restore_file(edit["observed"]["manifest"].get<std::string>(), *destination, {options.stop});
+            if (edit["observed"]["executable"].get<bool>()) make_executable(*destination);
+          }
+        }
+        // A copy may have been edited (or a foreign file may have appeared)
+        // after preparation. Never replace it. Archive its current version,
+        // then preserve any remaining dirty original under a fresh identity.
+        // The original observed version already has its independent work root.
+        advance("protected");
+      }
+      destination = exact_path(copy, false);
+      if (destination && present(*destination)) {
+        const auto latest = capture(*destination, copy);
+        if (latest != edit["observed"]) {
+          const auto version = snapshot(copy, latest, work.id);
+          // Full content IDs remain intact while the complete reference stays
+          // below the native 200-byte limit (transaction + edit + manifest
+          // in one path would exceed it).
+          const auto version_name = "archive/checkout-edit-versions/" + record.id + '/' + version.id;
+          const auto prior = lookup(store_.refs(), version_name);
+          require(!prior || prior == version, "owned checkout preservation references changed");
+          publish({{version_name, prior, version}});
+        }
+      }
+      original = exact_path(path, false);
+      const auto &desired = edit["expected"];
+      if (original && present(*original)) {
+        if (desired.is_null() || !matches(*original, desired, path, options)) { unfinished = true; continue; }
+      } else if (!desired.is_null()) {
+        original = exact_path(path, true);
+        check();
+        store_.restore_file(desired["manifest"].get<std::string>(), *original, {options.stop});
+        if (desired["executable"].get<bool>()) make_executable(*original);
+        SYRNCK_IO_CHECKPOINT("checkout-edit.restored", *original);
+      }
+      advance("restored");
+      preserved.push_back(Json{{"path", path}, {"copy_path", copy}, {"revision", work.id}});
+    }
+    bool prepared = false;
+    for (const auto &[path, desired] : expected) {
+      throw_if_cancelled(options.stop);
+      const auto working = exact_path(path, false);
+      if (!working || !present(*working)) continue; // Missing-file policy stays strict.
+      const auto status = fs::symlink_status(*working);
+      if (desired.is_null() && record.namespace_transition && fs::is_directory(status)) continue;
+      require(fs::is_regular_file(status) && !native_link_like(*working, status), "native checkout path became obstructed");
+      if (!desired.is_null() && matches(*working, desired, path, options)) continue;
+      const auto observed = capture(*working, path);
+      Json edit{{"version", 1}, {"type", "native-owned-checkout-edit"}, {"transaction", record.id},
+          {"owner", *record.owner}, {"context", record.context}, {"directory", utf8(record.workspace)},
+          {"branch", record.branch}, {"path", path}, {"observed", observed}, {"expected", desired},
+          {"nonce", hex(random_bytes(32))}};
+      const auto id = hash(bytes(edit.dump())), copy = copy_path(path, id);
+      validate_path(copy);
+      const auto folded = portable_fold(copy);
+      for (const auto &[reserved, value] : target) {
+        (void)value; const auto other = portable_fold(reserved);
+        require(other != folded && !other.starts_with(folded + '/') && !folded.starts_with(other + '/'),
+            "owned checkout conflict copy path is reserved");
+      }
+      for (const auto &[reserved, value] : source) {
+        (void)value; const auto other = portable_fold(reserved);
+        require(other != folded && !other.starts_with(folded + '/'), "owned checkout conflict copy path is reserved");
+      }
+      const auto state_name = prefix + id + "/state";
+      const auto prior = lookup(store_.refs(), state_name);
+      // An identical already-retained observation can recur. Its deterministic
+      // copy must never be overwritten; leave this explicit rather than lose it.
+      require(!prior, "owned checkout edit recurred; inspect retained conflict copy");
+      const auto destination = exact_path(copy, false);
+      require(!destination || !present(*destination), "owned checkout conflict copy path already exists");
+      const auto work = snapshot(copy, observed, record.target);
+      edit["copy"] = copy; edit["work"] = work.id; edit["state"] = "prepared";
+      const auto descriptor = store_.put(Kind::chunk, bytes(edit.dump())).first;
+      publish({{state_name, {}, descriptor}, {prefix + id + "/work", {}, work}});
+      SYRNCK_IO_CHECKPOINT("checkout-edit.prepared", record.data(store_));
+      prepared = true;
+    }
+    if (!prepared && !unfinished) return preserved;
+  }
+  throw Error("owned checkout edits keep changing; retry recovery");
+}
 void Transaction::prepare(OperationOptions options) {
   private_directories(true);
   require(fs::is_empty(record.data(store_) / "old"), "invalid native checkout backup state");
@@ -1348,6 +1574,22 @@ Json Store::recover_checkout_owned(const fs::path &workspace, std::string_view b
   require(record->owner == owner && record->branch == branch && record->workspace == fs::canonical(workspace),
           "native checkout ownership or workspace does not match");
   return Transaction(*this, std::move(*record), options).run(false, options);
+}
+Json Store::recover_checkout_owned_preserving_files(const fs::path &workspace, std::string_view branch,
+    std::string_view owner, OperationOptions options) const {
+  throw_if_cancelled(options.stop); validate_id(owner);
+  validate_ref(native_revision_reference(*this, std::string(branch))); validate_native_workspace(workspace);
+  auto value = active(*this);
+  require(value && value->owner == owner && value->branch == branch && value->workspace == fs::canonical(workspace),
+      "native checkout ownership or workspace does not match");
+  require(native_target() == branch, "native workspace HEAD selection changed");
+  Transaction transaction(*this, std::move(*value), options);
+  Json preserved;
+  try { preserved = transaction.record.state == "committed" ? Json::array() : transaction.preserve_edits(options); }
+  catch (const Json::exception &) { throw Error("invalid owned checkout edit record"); }
+  auto result = transaction.run(false, options);
+  result["preserved_edits"] = std::move(preserved);
+  return result;
 }
 Json Store::checkout_status(const std::optional<std::string> &transaction) const {
   auto record = active(*this);

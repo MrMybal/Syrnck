@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 4
+revision: 5
 ---
 
 ## Run continuously {#run}
@@ -194,3 +194,15 @@ The earlier `NativePushSync` / `NativePushSyncOptions` names remain
 valid. Link `syrnck_net` and provide any signing identity explicitly.
 The CLI uses `Store::take_native_identity()` to move exclusive key ownership
 between short-lived handles without exporting seed bytes.
+
+## Edits during an owned application {#active-checkout-edits}
+
+With the existing explicit `--conflict-copies` policy, owned checkout recovery
+also preserves regular-file edits made during application. The agent retains
+native archives before exclusive conflict-copy moves, restores the expected
+intermediate bytes and finishes the unchanged incoming/merged candidate. This
+recovery works offline and requires no signing private key for a prepared signed
+target. Normal later capture records the additional working files. Without that
+policy, recovery remains strict. Missing files, directory/symlink obstructions
+and ambiguous namespace changes still require resolution. See the shared
+[archive and replay contract](doc:syncthing#active-checkout-edits).

@@ -649,9 +649,9 @@ int syrnck_workspace_checkout_owned_json_ex(SyrnckWorkspace *workspace, SyrnckSt
     json_output(report, out, length, {});
   });
 }
-int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+static int workspace_recover_owned_impl(SyrnckWorkspace *workspace, SyrnckStore *handle,
     const char *target, const char *revision, const char *owner, const SyrnckOperation *operation,
-    char **out, std::size_t *length) {
+    char **out, std::size_t *length, bool preserve) {
   return workspace_boundary(workspace, out, length, [&](SyrnckWorkspace &session) {
     const auto options = operation_options(operation);
     syrnck::throw_if_cancelled(options.stop);
@@ -663,8 +663,20 @@ int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *workspace, SyrnckSto
     syrnck::require(pending["pending"].get<bool>() && pending.value("owner", "") == identity &&
         pending["target"] == id, "native owned recovery target or owner does not match");
     session.invalidate();
-    const auto report = store.recover_checkout_owned(session.directory, selected, identity, options);
+    const auto report = preserve ? store.recover_checkout_owned_preserving_files(session.directory, selected, identity, options)
+                                : store.recover_checkout_owned(session.directory, selected, identity, options);
     json_output(report, out, length, {});
   });
 }
+int syrnck_workspace_recover_owned_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const char *target, const char *revision, const char *owner, const SyrnckOperation *operation,
+    char **out, std::size_t *length) {
+  return workspace_recover_owned_impl(workspace, handle, target, revision, owner, operation, out, length, false);
+}
+int syrnck_workspace_recover_owned_preserving_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,
+    const char *target, const char *revision, const char *owner, const SyrnckOperation *operation,
+    char **out, std::size_t *length) {
+  return workspace_recover_owned_impl(workspace, handle, target, revision, owner, operation, out, length, true);
+}
+
 }

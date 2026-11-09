@@ -459,3 +459,80 @@ func TestFolderControllerPreservesDecomposedNativeNames(t *testing.T) {
 		t.Fatal("native aliases silently coalesced")
 	}
 }
+
+func TestFolderPreservesEditsDuringNativeApplication(t *testing.T) {
+	helper := os.Getenv("SYRNCK_TEST_CHECKOUT_EDIT_HELPER")
+	if helper == "" {
+		t.Skip("build syrnck_checkout_edit_tests to qualify native callback edit recovery")
+	}
+	for _, encrypted := range []bool{false, true} {
+		t.Run(fmt.Sprint(encrypted), func(t *testing.T) {
+			ctx := context.Background()
+			root := tempDirectory(t)
+			leftID, rightID := protocol.NewDeviceID([]byte("active edit left")), protocol.NewDeviceID([]byte("active edit right"))
+			suffix := "plain"
+			if encrypted {
+				suffix = "encrypted"
+			}
+			left := createTestFolder(t, folderTestOptions(filepath.Join(root, "left-"+suffix), leftID, rightID, encrypted), map[string][]byte{"asset": []byte("incoming")})
+			options := folderTestOptions(filepath.Join(root, "right-"+suffix), rightID, leftID, encrypted)
+			options.PreserveCheckoutEdits = true
+			right := createTestFolder(t, options, nil)
+			prepareFolderApplication(t, left, right, "asset")
+			var pending folderPending
+			if err := right.withStore(ctx, func(store *syrnck.Store) error {
+				loaded, err := right.load(ctx, store)
+				if err == nil {
+					pending = *loaded.pending
+				}
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command(helper, "interrupt-folder", options.Directory, options.Storage, pending.Expected.Target, pending.Candidate, pending.Owner, "asset", suffix)
+			if output, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("native callback helper: %v %s", err, output)
+			}
+			if err := right.Close(); err != nil {
+				t.Fatal(err)
+			}
+			// The in-flight policy is durable: a new process must resume that same
+			// operation rather than silently adopting a changed future configuration.
+			options.PreserveCheckoutEdits = false
+			reopened, err := NewFolder(ctx, options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			if _, err = reopened.Refresh(ctx); err != nil {
+				t.Fatal("automatic native edit preservation", err)
+			}
+			snapshot := folderSnapshot(t, reopened)
+			if len(snapshot.Files) != 2 {
+				t.Fatal("missing preserved local conflict file", snapshot.Files)
+			}
+			var copyName string
+			for _, entry := range snapshot.Files {
+				if entry.Info.Name != "asset" {
+					copyName = entry.Info.Name
+				}
+			}
+			if !strings.Contains(copyName, ".syrnck-conflict-") {
+				t.Fatal("invalid preserved file name", copyName)
+			}
+			expected := []byte("edited during live native application")
+			actual, err := os.ReadFile(filepath.Join(options.Directory, filepath.FromSlash(copyName)))
+			if err != nil || !bytes.Equal(actual, expected) {
+				t.Fatal("live edit bytes lost", err)
+			}
+			exchangeFolderIndex(t, reopened, left, true, 0)
+			if _, err = left.Step(ctx, func(protocol.DeviceID) RequestFunc { return snapshotRequester(t, reopened, snapshot, nil) }); err != nil {
+				t.Fatal(err)
+			}
+			actual, err = os.ReadFile(filepath.Join(left.options.Directory, filepath.FromSlash(copyName)))
+			if err != nil || !bytes.Equal(actual, expected) {
+				t.Fatal("preserved file was not synchronized", err)
+			}
+		})
+	}
+}

@@ -34,6 +34,7 @@ type FolderOptions struct {
 	Directory, Storage, Workspace string
 	OpenStore                     func(context.Context) (*syrnck.Store, error)
 	UsePermissions                bool
+	PreserveCheckoutEdits         bool
 	AuditInterval                 time.Duration
 }
 
@@ -80,14 +81,15 @@ func (e folderExpected) native() syrnck.NativeExpectation {
 }
 
 type folderPending struct {
-	Version       int            `json:"version"`
-	Owner         string         `json:"owner"`
-	Binding       string         `json:"binding"`
-	SourceCatalog string         `json:"source_catalog"`
-	Catalog       string         `json:"catalog"`
-	Expected      folderExpected `json:"expected"`
-	Candidate     string         `json:"candidate"`
-	Applied       string         `json:"applied"`
+	Version               int            `json:"version"`
+	Owner                 string         `json:"owner"`
+	Binding               string         `json:"binding"`
+	SourceCatalog         string         `json:"source_catalog"`
+	Catalog               string         `json:"catalog"`
+	Expected              folderExpected `json:"expected"`
+	Candidate             string         `json:"candidate"`
+	Applied               string         `json:"applied"`
+	PreserveCheckoutEdits bool           `json:"preserve_checkout_edits,omitempty"`
 }
 
 type folderLoaded struct {
@@ -713,7 +715,11 @@ func (f *Folder) recoverPending(ctx context.Context, store *syrnck.Store, loaded
 		if journal.Owner != p.Owner || journal.Target != p.Candidate {
 			return ErrFolderChanged
 		}
-		if _, err := f.workspace.RecoverOwnedContext(ctx, store, p.Expected.Target, p.Candidate, p.Owner); err != nil {
+		recover := f.workspace.RecoverOwnedContext
+		if p.PreserveCheckoutEdits {
+			recover = f.workspace.RecoverOwnedPreservingContext
+		}
+		if _, err := recover(ctx, store, p.Expected.Target, p.Candidate, p.Owner); err != nil {
 			return err
 		}
 		var err error
@@ -894,7 +900,7 @@ func (f *Folder) prepareApplication(ctx context.Context, store *syrnck.Store, lo
 		return err
 	}
 	pending := folderPending{Version: 1, Owner: hex.EncodeToString(nonce[:]), Binding: folderOwner(f.binding(loaded.native)), SourceCatalog: loaded.catalog.tip.ID, Catalog: prepared.ID,
-		Expected: freezeNative(loaded.native.Expected()), Candidate: candidate.ID, Applied: loaded.applied.ID}
+		Expected: freezeNative(loaded.native.Expected()), Candidate: candidate.ID, Applied: loaded.applied.ID, PreserveCheckoutEdits: f.options.PreserveCheckoutEdits}
 	encoded, _ = json.Marshal(pending)
 	descriptor, err := store.PutContext(ctx, "chunk", encoded)
 	if err != nil {

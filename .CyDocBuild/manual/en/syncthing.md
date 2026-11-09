@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 5
+revision: 6
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -321,7 +321,7 @@ the CMake engine distribution. The controller currently applies regular files
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
 platform ownership/xattrs or receive-encrypted folders. It retains incoming
 metadata but does not claim these paths have been applied. It also lacks
-conflict-copy reconciliation, persistent download resume, automatic membership
+reconciliation of concurrent protocol versions, persistent download resume, automatic membership
 changes/history retirement and authored/signature policy for newly synthesized
 incoming native candidates. Large-project performance and power-loss durability
 are not qualified. The native resident publication agent is a separate feature.
@@ -332,15 +332,50 @@ keeps its fixed-BEP chunking. `Catalog.CommitWithRefs` atomically publishes its
 catalog with additional typed reference guards; callers must reload after an
 unknown publication outcome, as with the native CAS.
 
-An external writer can change a file while a native journal is still actively
-installing/verifying it. Native recovery then blocks rather than overwriting
-that work. Preserve the changed data and resolve that journal explicitly;
-automatic preservation/reconciliation during active application remains work
-to complete. File visibility alone is not a completion notification: use the
-controller checkpoint/status. This differs from the supported edit after the
-native receipt has committed, including before its protocol acknowledgement.
+An external writer can change a file during active native installation. Default
+recovery stays strict. Set `FolderOptions.PreserveCheckoutEdits = true` to retain
+regular-file edits as described below. File visibility alone is not a completion
+notification: use the controller checkpoint/status. An edit after the native
+receipt has committed is supported independently of this option.
 
 The controller maps native filename spelling to canonical NFC protocol names.
 It preserves an existing decomposed native spelling when applying edits and
 rejects two native names that normalize to the same protocol path. An echo or
 rescan cannot turn that spelling difference into a deletion.
+
+## Preserve edits during active checkout {#active-checkout-edits}
+
+The explicit `PreserveCheckoutEdits` option is frozen in each prepared
+application; changing future configuration cannot retarget an interrupted
+operation. Recovery checks the exact owner, native target, context, directory
+and private staged/backup files. It ingests changed regular files into native
+archive revisions before moving any working bytes. Exclusive conflict-copy
+moves and exclusive restoration of the expected intermediate bytes are replayed
+from retained descriptors. The original strict checkout then rechecks all target
+files and publishes its unchanged candidate and receipt.
+
+Archive roots use `archive/checkout-edits/TRANSACTION/EDIT/state` (descriptor)
+and `/work` (revision). Their native parents retain the incoming revision and
+its complete file closure. Additional `archive/checkout-edit-versions/TRANSACTION/REVISION` roots retain changes
+to a conflict copy during recovery. Copies are deterministic from each retained
+edit identity, preserve short extensions and are never overwritten. A file that
+appears at a copy name is kept; remaining original edits get a fresh identity.
+The report's `preserved_edits` lists source paths, copy paths and archived
+revision IDs; a copy's current bytes may be newer than that archived revision.
+
+After acknowledgement, normal local capture advertises the preserved files.
+This protects file-content edits before backup, during staging and after file
+installation, including an otherwise unchanged tracked file. Prepared signed
+candidates remain unchanged; recovery needs no signing private key. Archives
+remain GC roots after workspace changes. Automatic retirement of these groups
+still needs an administrative policy; do not remove their roots independently.
+
+An actively changing editor can defer completion: each bounded attempt keeps
+its observations for the next retry. Missing-file/deletion intent, directory or
+symlink obstructions and ambiguous namespace changes still block rather than
+inventing a resolution. This option does not resolve concurrent BEP version
+vectors, implement a complete folder service or establish power-loss safety.
+
+If the original checkout must remove or rename a parent directory, preservation
+places the copy outside that directory while keeping the source basename and
+short extension. This also covers directory-to-file and directory case changes.

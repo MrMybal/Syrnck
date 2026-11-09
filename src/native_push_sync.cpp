@@ -157,7 +157,9 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
     if (!last_observed) return blocked("checkout_observation_missing");
     if (!store.native_ancestry(last_observed->id, pending["target"].get<std::string>(), {}, options)["source_is_ancestor"].get<bool>())
       return blocked("checkout_observation_mismatch");
-    result["checkout"] = store.recover_checkout_owned(state.directory, state.target, service, options);
+    result["checkout"] = state.settings.conflict_copies
+        ? store.recover_checkout_owned_preserving_files(state.directory, state.target, service, options)
+        : store.recover_checkout_owned(state.directory, state.target, service, options);
     state.observation.invalidate(); state.rescan = true; state.clean.reset();
     state.observed_head = lookup(store.refs(), head_ref);
     result["state"] = "recovered"; result["local_revision"] = identifier(state.observed_head);

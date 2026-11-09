@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -186,3 +186,16 @@ prouvent une application passée, pas la propreté actuelle. Go l’expose par
 `CheckoutStatusContext`. Utiliser un propriétaire durable unique par application,
 conserver les entrées causales avant checkout et capturer les éditions locales
 ultérieures après reconnaissance de la base terminée.
+
+## Préservation explicite des éditions actives {#active-checkout-edits}
+
+`syrnck_workspace_recover_owned_preserving_json_ex` garde le contrat exact
+Store/workspace/contexte/cible/candidat/propriétaire de la reprise ordinaire.
+Il archive explicitement les éditions de fichiers ordinaires, crée des copies de
+conflit exclusives et reprend le journal strict original. La reprise par défaut
+reste stricte. Go expose `RecoverOwnedPreserving` et
+`RecoverOwnedPreservingContext` ; C++ fournit
+`Store::recover_checkout_owned_preserving_files`. Le rapport JSON ajoute
+`preserved_edits` : chemin source, chemin de copie et ID de révision archivée.
+En erreur de publication, relire état natif et descripteurs conservés. Voir la
+[politique et ses limites](doc:syncthing#active-checkout-edits).
