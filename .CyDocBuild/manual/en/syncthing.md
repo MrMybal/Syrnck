@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 6
+revision: 7
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -315,8 +315,9 @@ being processed and never blocks the BEP reader waiting for native disk work.
 `Reports`, `Errors` and `Done` expose progress, blocked operations and shutdown.
 `Close` stops workers and waits for the transport/model shutdown.
 
-The embedding application still owns listening/dialing, reconnect backoff,
-certificate/key storage and OS service lifecycle. This module is separate from
+The embedding application supplies listening/dialing, certificate/key storage
+and OS lifecycle. The [resident service](doc:syncthing#folder-service) provides
+reconnect backoff and independent offline capture. This module is separate from
 the CMake engine distribution. The controller currently applies regular files
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
 platform ownership/xattrs or receive-encrypted folders. It retains incoming
@@ -379,3 +380,43 @@ vectors, implement a complete folder service or establish power-loss safety.
 If the original checkout must remove or rename a parent directory, preservation
 places the copy outside that directory while keeping the source basename and
 short extension. This also covers directory-to-file and directory case changes.
+
+## Resident reconnection service {#folder-service}
+
+`OpenFolderService(ctx, folder, options)` runs one explicitly paired peer across
+connection loss. Supply `FolderServiceOptions.Session` with the device certificate,
+paired remote ID and session budgets, plus `Connect(ctx)` returning a connected
+`net.Conn`. The factory can dial or accept, must honor cancellation, and transfers
+ownership of any returned connection, including alongside an error. TLS/BEP peer
+authentication always runs after the factory; it cannot authorize a device.
+
+The service observes/captures local changes independently of connection progress,
+including offline edits, deletion/rename and an authenticated peer that never
+sends its folder configuration. `OfflineInterval` defaults to 250 ms (50 ms
+through one minute). It also runs during downloads: the native folder controller
+serializes state and rejects stale candidates without holding Store during
+network waits. Ordinary full audit scheduling remains enabled.
+
+`RetryMin` defaults to 500 ms and `RetryMax` to 30 seconds. Failed connections use
+exponential backoff within configured bounds (50 ms through one minute); a
+successful authenticated connection resets it. Each reconnect sends a fresh
+Hello timestamp by default and resumes durable native/catalog state. No discovery
+or implicit pairing is introduced.
+
+`Events` reports connecting, connected and retrying; connected means certificate
+authentication, not completed folder application. `Reports` and `Errors` expose
+folder progress and failures. All three bounded streams are advisory and may drop
+messages under consumer backpressure; reload durable state for receipts. `Close`
+cancels/joins dialing, TLS and session workers, including a transport completing
+after cancellation, then closes streams and `Done`. Stop the service before
+closing its caller-owned Folder. It keeps no idle Store. Storage-key lifetime
+belongs to the Folder’s application-supplied Store provider; keep the device
+signing key immutable until shutdown. Close returns any session teardown error.
+
+Tests cover plain/encrypted two-workspace offline capture, TCP reconnection,
+offline rename/tombstone convergence, failed factory transport cleanup, stalled
+TLS cancellation and local capture while an authenticated peer withholds folder
+configuration. Existing session tests separately qualify the pinned upstream
+daemon. The application still supplies network listening/dialing, certificates,
+key storage and OS lifecycle. A standalone executable, OS service packaging and
+complete folder/concurrent-version semantics remain unfinished.

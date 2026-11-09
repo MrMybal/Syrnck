@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -262,8 +262,9 @@ puis négocie générations et index complets/deltas du dossier. `PollInterval` 
 sur le travail disque natif. `Reports`, `Errors` et `Done` exposent progression,
 blocages et fin. `Close` arrête les workers et attend transport/callback de fin.
 
-L’application intégratrice gère écoute/connexion, délai de reconnexion,
-certificats/clés et cycle de vie de service OS. Ce module est séparé de la
+L’application fournit écoute/connexion, certificats/clés et cycle de vie OS.
+Le [service résident](doc:syncthing#folder-service) gère attente de reconnexion
+et capture hors ligne indépendante. Ce module est séparé de la
 distribution CMake du moteur. Le contrôleur applique les fichiers ordinaires et
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
 vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
@@ -330,3 +331,44 @@ durabilité face à une coupure électrique.
 Si le checkout doit retirer ou renommer un dossier parent, la copie est placée
 hors de ce dossier en gardant le nom de base et l’extension courte. Cela couvre
 aussi dossier vers fichier et changement de casse d’un dossier.
+
+## Service résident de reconnexion {#folder-service}
+
+`OpenFolderService(ctx, folder, options)` maintient un pair explicitement appairé
+malgré les coupures. Fournir `FolderServiceOptions.Session` avec certificat,
+Device ID distant et budgets, puis `Connect(ctx)` retournant un `net.Conn`
+connecté. Cette fabrique peut connecter ou accepter, doit respecter l’annulation
+et transfère tout transport retourné, même accompagné d’une erreur. TLS/BEP
+vérifie ensuite le pair ; la fabrique ne peut pas autoriser un appareil.
+
+Le service observe/capture les modifications locales indépendamment du réseau :
+éditions hors ligne, suppression/renommage et pair authentifié qui n’envoie
+jamais sa configuration de dossier. `OfflineInterval` vaut 250 ms par défaut
+(50 ms à une minute). Il fonctionne aussi pendant les téléchargements : le
+contrôleur natif sérialise l’état et refuse les candidats périmés sans conserver
+le Store pendant les attentes réseau. Les audits complets restent programmés.
+
+`RetryMin` vaut 500 ms et `RetryMax` 30 secondes par défaut. L’attente exponentielle
+reste entre les bornes configurées (50 ms à une minute) ; une connexion
+authentifiée la réinitialise. Chaque reconnexion utilise un nouveau timestamp
+Hello par défaut et reprend l’état natif/catalogue durable. Aucune découverte
+ni appairage implicite ne sont ajoutés.
+
+`Events` expose connecting, connected et retrying ; connected signifie certificat
+authentifié, pas application du dossier terminée. `Reports` et `Errors` rendent
+progression et échecs. Ces trois flux bornés sont consultatifs et peuvent perdre
+des messages si le consommateur ralentit ; relire l’état durable pour les reçus.
+`Close` annule et attend connexion, TLS et sessions, y compris un transport
+terminant après annulation, puis ferme flux et `Done`. Arrêter le service avant
+son Folder, qui appartient à l’appelant. Aucun Store n’est gardé au repos. Le
+fournisseur du Folder contrôle la durée de vie des clés de stockage ; garder la
+clé de signature d’appareil immuable jusqu’à l’arrêt. Close rend les erreurs de
+fermeture des sessions.
+
+Les tests couvrent deux workspaces clairs/chiffrés : capture hors ligne,
+reconnexion TCP, renommage/tombstone, fermeture des transports échoués,
+annulation TLS bloquée et capture locale sans configuration distante. Les tests
+de session qualifient séparément le daemon amont figé. L’application fournit
+encore écoute/connexion réseau, certificats, stockage des clés et cycle de vie OS.
+Exécutable autonome, installation de service et sémantique complète des dossiers
+et versions concurrentes restent à terminer.

@@ -41,3 +41,7 @@ Build the pinned test daemon with `python scripts/build_syncthing_reference.py -
 [Controller and recovery](../../Documentation/Documentation.html#/en/syncthing/folder-controller) · [Contrôleur et reprise](../../Documentation/Documentation.html#/fr/syncthing/folder-controller)
 
 [Authenticated sessions](../../Documentation/Documentation.html#/en/syncthing/folder-sessions) · [Sessions authentifiées](../../Documentation/Documentation.html#/fr/syncthing/folder-sessions)
+
+## Resident service
+
+[Reconnection and offline capture](../../Documentation/Documentation.html#/en/syncthing/folder-service) · [Reconnexion et capture hors ligne](../../Documentation/Documentation.html#/fr/syncthing/folder-service)

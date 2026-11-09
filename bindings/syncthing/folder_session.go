@@ -51,6 +51,39 @@ type FolderSession struct {
 	errors               chan error
 }
 
+func prepareFolderSessionOptions(folder *Folder, options *FolderSessionOptions) error {
+	if folder == nil {
+		return errors.New("syrnck BEP: folder required")
+	}
+	if options.PollInterval == 0 {
+		options.PollInterval = 250 * time.Millisecond
+	}
+	if options.PollInterval < 50*time.Millisecond || options.PollInterval > time.Minute {
+		return errors.New("syrnck BEP: invalid folder polling interval")
+	}
+	if options.QueueBytes == 0 {
+		options.QueueBytes = 32 * 1024 * 1024
+	}
+	if options.QueueBytes < 1024*1024 || options.QueueBytes > 128*1024*1024 {
+		return errors.New("syrnck BEP: invalid folder index queue budget")
+	}
+	paired := false
+	for _, peer := range folder.options.Catalog.Peers {
+		paired = paired || peer == options.Device.RemoteDevice
+	}
+	if !paired {
+		return errors.New("syrnck BEP: unpaired folder session peer")
+	}
+	local, err := validateDevice(&options.Device)
+	if err != nil {
+		return err
+	}
+	if local != folder.options.Catalog.LocalDevice {
+		return errors.New("syrnck BEP: folder local certificate identity differs")
+	}
+	return nil
+}
+
 // OpenFolderSession owns transport even on failure. It checks the local
 // certificate's full identity against the folder configuration and authenticates
 // the explicit peer with OpenDeviceConnection. Workers own no idle Store.
@@ -64,31 +97,8 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 	if ctx == nil || folder == nil || transport == nil {
 		return nil, errors.New("syrnck BEP: folder, context and connected transport required")
 	}
-	if options.PollInterval == 0 {
-		options.PollInterval = 250 * time.Millisecond
-	}
-	if options.PollInterval < 50*time.Millisecond || options.PollInterval > time.Minute {
-		return nil, errors.New("syrnck BEP: invalid folder polling interval")
-	}
-	if options.QueueBytes == 0 {
-		options.QueueBytes = 32 * 1024 * 1024
-	}
-	if options.QueueBytes < 1024*1024 || options.QueueBytes > 128*1024*1024 {
-		return nil, errors.New("syrnck BEP: invalid folder index queue budget")
-	}
-	paired := false
-	for _, peer := range folder.options.Catalog.Peers {
-		paired = paired || peer == options.Device.RemoteDevice
-	}
-	if !paired {
-		return nil, errors.New("syrnck BEP: unpaired folder session peer")
-	}
-	local, err := validateDevice(&options.Device)
-	if err != nil {
+	if err := prepareFolderSessionOptions(folder, &options); err != nil {
 		return nil, err
-	}
-	if local != folder.options.Catalog.LocalDevice {
-		return nil, errors.New("syrnck BEP: folder local certificate identity differs")
 	}
 	if _, err := folder.Refresh(ctx); err != nil {
 		return nil, err
