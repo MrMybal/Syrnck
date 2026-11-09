@@ -125,7 +125,13 @@ void io_checkpoint(std::string_view phase,const fs::path &path) {
 int main(int argc,char **argv) {
  try {
   require(argc>=3,"checkout edit probe expects mode and root");
-  const std::string mode=argv[1];const auto root=path_from_utf8(argv[2]);fixture_root=root;
+  const std::string mode=argv[1];
+  // Store paths expand Windows short names. Use the same physical spelling
+  // before classifying object checkpoints; aliases must not become filesystem
+  // events with unrelated occurrence counts.
+  const auto supplied=path_from_utf8(argv[2]);
+  if(mode=="prepare"||mode=="prepare-copy-race")fs::create_directories(supplied);
+  const auto root=fs::canonical(supplied);fixture_root=root;
   if(mode=="prepare"||mode=="prepare-copy-race") {
    require(argc==6,"checkout edit fixture expects encryption scope transition");
    prepare(root,std::string_view(argv[3])=="encrypted",argv[4],argv[5]);

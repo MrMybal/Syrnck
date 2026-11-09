@@ -73,6 +73,16 @@ inventory refusals, including a disappearing `new/3.BIN.tmp` entry. Those
 engine refusals were not ignored or declared fixed. The fixture copy makes a
 recurrence inspectable; final qualification retains normal temporary placement.
 
+`checkout_edit_checkpoint_paths` covers a separate confirmed probe issue:
+Windows short fixture paths were compared lexically against canonical Store
+paths, misclassifying chunk/manifest/revision checkpoints as filesystem events.
+The probe now canonicalizes its owned root before binding and classification.
+Four plain/encrypted primary/partial cases compare the complete checkpoint
+sequence through canonical and alternate path spellings. Windows requests real
+8.3 spellings when available; other filesystems also exercise a lexical alias.
+The local Windows regression exercised four real short-path aliases. This
+changes probe coordinates, not native engine operations or crash boundaries.
+
 ## Local measurements before final platform qualification
 
 Windows x64, Release, parallel four, same development machine:

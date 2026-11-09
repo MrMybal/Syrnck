@@ -261,6 +261,10 @@ if(SYRNCK_BUILD_TESTS)
   add_test(NAME checkout_edit_version_crashes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/checkout_edit_version_crashes.py
     $<TARGET_FILE:syrnck_checkout_edit_crash_probe> $<TARGET_FILE:syrnck_checkout_edit_reader>)
   set_tests_properties(checkout_edit_version_crashes PROPERTIES TIMEOUT 300 PROCESSORS 2)
+  add_test(NAME checkout_edit_checkpoint_paths COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/checkout_edit_paths.py
+    $<TARGET_FILE:syrnck_checkout_edit_crash_probe> $<TARGET_FILE:syrnck_checkout_edit_reader>)
+  set_tests_properties(checkout_edit_checkpoint_paths PROPERTIES TIMEOUT 60)
   foreach(shard RANGE 0 7)
     add_test(NAME checkout_edit_crashes_${shard} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/checkout_edit_crashes.py
       $<TARGET_FILE:syrnck_checkout_edit_crash_probe> $<TARGET_FILE:syrnck_checkout_edit_reader> --shard ${shard}/8)
