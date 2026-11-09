@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -79,43 +80,7 @@ func TestFolderRecoveryAfterProcessTermination(t *testing.T) {
 				if err := right.Close(); err != nil {
 					t.Fatal(err)
 				}
-				command := exec.Command(os.Args[0], "-test.run=^TestFolderProcessChild$", "-test.timeout=20s")
-				command.Env = append(os.Environ(), "SYRNCK_FOLDER_CHILD="+options.Directory, "SYRNCK_FOLDER_PHASE="+phase)
-				var diagnostics bytes.Buffer
-				command.Stderr = &diagnostics
-				stdout, err := command.StdoutPipe()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err = command.Start(); err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() {
-					if command.ProcessState == nil {
-						_ = command.Process.Kill()
-						_ = command.Wait()
-					}
-				})
-				ready := make(chan string, 1)
-				go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
-				select {
-				case line := <-ready:
-					if line != "folder-checkpoint\n" {
-						_ = command.Process.Kill()
-						_ = command.Wait()
-						t.Fatal("wrong child checkpoint", line, diagnostics.String())
-					}
-				case <-time.After(8 * time.Second):
-					_ = command.Process.Kill()
-					_ = command.Wait()
-					t.Fatal("folder checkpoint timed out", diagnostics.String())
-				}
-				if err = command.Process.Kill(); err != nil {
-					t.Fatal(err)
-				}
-				if err = command.Wait(); err == nil {
-					t.Fatal("child was not terminated")
-				}
+				terminateFolderAtCheckpoint(t, options, phase)
 				gc := exec.Command(cli, "--store", options.Storage, "gc", "--delete")
 				for _, value := range os.Environ() {
 					if !strings.HasPrefix(strings.ToUpper(value), "SYRNCK_KEY=") {
@@ -131,7 +96,7 @@ func TestFolderRecoveryAfterProcessTermination(t *testing.T) {
 				wanted := []byte("complete incoming bytes")
 				if phase == "after" {
 					wanted = []byte("local edit after native publication")
-					if err = os.WriteFile(filepath.Join(options.Directory, "asset"), wanted, 0600); err != nil {
+					if err := os.WriteFile(filepath.Join(options.Directory, "asset"), wanted, 0600); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -182,6 +147,172 @@ func TestFolderRecoveryAfterProcessTermination(t *testing.T) {
 					return err
 				})
 				if err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+func terminateFolderAtCheckpoint(t *testing.T, options FolderOptions, phase string) {
+	t.Helper()
+	command := exec.Command(os.Args[0], "-test.run=^TestFolderProcessChild$", "-test.timeout=20s")
+	command.Env = append(os.Environ(), "SYRNCK_FOLDER_CHILD="+options.Directory, "SYRNCK_FOLDER_PHASE="+phase)
+	var diagnostics bytes.Buffer
+	command.Stderr = &diagnostics
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	})
+	ready := make(chan string, 1)
+	go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
+	select {
+	case line := <-ready:
+		if line != "folder-checkpoint\n" {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+			t.Fatal("wrong child checkpoint", line, diagnostics.String())
+		}
+	case <-time.After(8 * time.Second):
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		t.Fatal("folder checkpoint timed out", diagnostics.String())
+	}
+	if err = command.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err = command.Wait(); err == nil {
+		t.Fatal("child was not terminated")
+	}
+}
+
+func TestConflictCopiesSurviveTerminationGCAndBackup(t *testing.T) {
+	cli := os.Getenv("SYRNCK_TEST_CLI")
+	if cli == "" {
+		t.Fatal("requires built CLI")
+	}
+	ctx := context.Background()
+	for _, encrypted := range []bool{false, true} {
+		for _, phase := range []string{"before", "after"} {
+			t.Run(fmt.Sprintf("%v/%s", encrypted, phase), func(t *testing.T) {
+				root := tempDirectory(t)
+				leftID, rightID := folderProcessIDs()
+				suffix := map[bool]string{false: "plain", true: "encrypted"}[encrypted]
+				left := createTestFolder(t, folderTestOptions(filepath.Join(root, "left-"+suffix), leftID, rightID, encrypted), map[string][]byte{"asset": []byte("incoming concurrent bytes")})
+				options := folderTestOptions(filepath.Join(root, "right-"+suffix), rightID, leftID, encrypted)
+				options.ConflictCopies = true
+				right := createTestFolder(t, options, map[string][]byte{"asset": []byte("local concurrent bytes")})
+				previous := folderSnapshot(t, right).Files[0]
+				incoming := folderSnapshot(t, left).Files[0]
+				prepareFolderApplication(t, left, right, "asset")
+				var candidate syrnck.ObjectKey
+				var expected map[string]catalogRevisionFile
+				if err := right.withStore(ctx, func(store *syrnck.Store) error {
+					loaded, err := right.load(ctx, store)
+					if err != nil {
+						return err
+					}
+					candidate = syrnck.ObjectKey{Kind: "revision", ID: loaded.pending.Candidate}
+					tree, err := nativeTree(store, candidate)
+					expected = tree.Files
+					return err
+				}); err != nil {
+					t.Fatal(err)
+				}
+				if len(expected) != 2 {
+					t.Fatal("prepared candidate lost conflict data", expected)
+				}
+				if err := right.Close(); err != nil {
+					t.Fatal(err)
+				}
+				// The helper intentionally opens with the strict default policy:
+				// recovery must apply the already frozen choice, not recompute it.
+				terminateFolderAtCheckpoint(t, options, phase)
+				runCLI := func(storage string, arguments ...string) {
+					t.Helper()
+					command := exec.Command(cli, append([]string{"--store", storage}, arguments...)...)
+					for _, value := range os.Environ() {
+						upper := strings.ToUpper(value)
+						if !strings.HasPrefix(upper, "SYRNCK_KEY=") && !strings.HasPrefix(upper, "SYRNCK_BACKUP_KEY=") {
+							command.Env = append(command.Env, value)
+						}
+					}
+					if encrypted {
+						command.Env = append(command.Env, "SYRNCK_KEY="+hex.EncodeToString(bytes.Repeat([]byte{83}, 32)))
+					}
+					if output, err := command.CombinedOutput(); err != nil {
+						t.Fatalf("%v: %v %s", arguments, err, output)
+					}
+				}
+				runCLI(options.Storage, "gc", "--delete")
+				backup, restored := filepath.Join(root, "backup"), filepath.Join(root, "restored")
+				runCLI(options.Storage, "backup", "create", backup)
+				runCLI(backup, "backup", "verify")
+				runCLI(backup, "backup", "restore", restored)
+				var key []byte
+				if encrypted {
+					key = bytes.Repeat([]byte{83}, 32)
+				}
+				store, err := syrnck.Open(restored, syrnck.Options{Key: key})
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, entry := range []CatalogEntry{previous, incoming} {
+					if err := store.VerifyFile(entry.Manifest); err != nil {
+						store.Close()
+						t.Fatal("restored backup lost conflict input", err)
+					}
+				}
+				if _, err := nativeTree(store, candidate); err != nil {
+					store.Close()
+					t.Fatal(err)
+				}
+				store.Close()
+				options.ConflictCopies = false
+				reopened, err := NewFolder(ctx, options)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer reopened.Close()
+				if _, err := reopened.Snapshot(ctx); !errors.Is(err, ErrFolderPending) {
+					t.Fatal("unacknowledged candidate advertised", err)
+				}
+				if _, err := reopened.Refresh(ctx); err != nil {
+					t.Fatal(err)
+				}
+				snapshot := folderSnapshot(t, reopened)
+				if len(snapshot.Files) != 2 {
+					t.Fatal("recovered conflict differs", snapshot.Files)
+				}
+				if err := reopened.withStore(ctx, func(store *syrnck.Store) error {
+					for name, file := range expected {
+						view, err := NewFile(ctx, store, file.Manifest, "project", name, 0)
+						if err != nil {
+							return err
+						}
+						data, err := os.ReadFile(filepath.Join(options.Directory, filepath.FromSlash(name)))
+						if err != nil {
+							return err
+						}
+						wanted, err := store.ReadRange(file.Manifest, 0, uint64(view.Info().Size))
+						if err != nil {
+							return err
+						}
+						if !bytes.Equal(data, wanted) {
+							t.Fatal("recovery changed frozen conflict bytes", name)
+						}
+					}
+					return nil
+				}); err != nil {
 					t.Fatal(err)
 				}
 			})

@@ -35,6 +35,7 @@ type FolderOptions struct {
 	OpenStore                     func(context.Context) (*syrnck.Store, error)
 	UsePermissions                bool
 	PreserveCheckoutEdits         bool
+	ConflictCopies                bool
 	AuditInterval                 time.Duration
 }
 
@@ -682,7 +683,12 @@ func (f *Folder) selectIncoming(ctx context.Context, store *syrnck.Store, loaded
 				}
 			}
 			if err := draft.Adopt(device, entry.Info.Name); err != nil {
-				return nil, nil, err
+				if !f.options.ConflictCopies || !errors.Is(err, ErrCatalogConflict) {
+					return nil, nil, err
+				}
+				if _, err := draft.ResolveConcurrent(ctx, store, device, entry.Info.Name); err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 	}

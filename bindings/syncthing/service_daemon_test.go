@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,7 +65,7 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			configuration := map[string]any{"version": 1, "directory": directory, "storage": storage, "folder": "project", "certificate": certPath, "private_key": keyPath,
-				"peer": reference.device.String(), "mode": "dial", "address": reference.bep, "key_env": "SYRNCK_BEP_DAEMON_TEST_KEY", "poll_ms": 100, "retry_min_ms": 50, "retry_max_ms": 200}
+				"peer": reference.device.String(), "mode": "dial", "address": reference.bep, "key_env": "SYRNCK_BEP_DAEMON_TEST_KEY", "conflict_copies": true, "poll_ms": 100, "retry_min_ms": 50, "retry_max_ms": 200}
 			encoded, err := json.Marshal(configuration)
 			if err != nil {
 				t.Fatal(err)
@@ -160,6 +161,56 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 				case <-ctx.Done():
 					t.Fatal("offline upstream rename did not remove old native path", err)
 				case <-time.After(25 * time.Millisecond):
+				}
+			}
+			stop()
+			// Both sides edit the acknowledged file while the service is stopped.
+			// Force each winner once using upstream's mtime ordering; native local
+			// versions use their committed capture timestamp.
+			localEdit, peerEdit := []byte("offline Syrnck conflict"), []byte("offline upstream conflict")
+			if err := os.WriteFile(filepath.Join(directory, filepath.FromSlash(renamed)), localEdit, 0600); err != nil {
+				t.Fatal(err)
+			}
+			peerPath := filepath.Join(reference.folder, filepath.FromSlash(renamed))
+			if err := os.WriteFile(peerPath, peerEdit, 0600); err != nil {
+				t.Fatal(err)
+			}
+			modified := time.Now().Add(2 * time.Hour)
+			want, losing := peerEdit, localEdit
+			if encrypted {
+				modified = time.Now().Add(-2 * time.Hour)
+				want, losing = localEdit, peerEdit
+			}
+			if err := os.Chtimes(peerPath, modified, modified); err != nil {
+				t.Fatal(err)
+			}
+			reference.scan(t, ctx)
+			stop = launch("conflict-restarted")
+			waitApplied(renamed, want)
+			reference.waitFile(t, ctx, renamed, want)
+			for _, directory := range []string{directory, reference.folder} {
+				for {
+					found := false
+					entries, err := os.ReadDir(filepath.Join(directory, "Content"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, entry := range entries {
+						if strings.Contains(entry.Name(), ".sync-conflict-") {
+							data, err := os.ReadFile(filepath.Join(directory, "Content", entry.Name()))
+							if err == nil && bytes.Equal(data, losing) {
+								found = true
+							}
+						}
+					}
+					if found {
+						break
+					}
+					select {
+					case <-ctx.Done():
+						t.Fatal("concurrent contents were not preserved on both devices", directory, ctx.Err())
+					case <-time.After(25 * time.Millisecond):
+					}
 				}
 			}
 			stop()

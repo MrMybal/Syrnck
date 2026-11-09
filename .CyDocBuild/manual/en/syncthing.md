@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 8
+revision: 9
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -301,8 +301,48 @@ The catalog retains previous complete versions through ordinary native revision
 parents; its pending candidates are also GC roots. Process-termination tests kill
 a real child before and after native publication, run GC, reopen, recover and
 verify the incoming bytes or a subsequent local edit, with plain/encrypted
-Stores. Concurrent protocol versions currently block; automatic conflict copies
-are not yet implemented by this BEP controller.
+Stores. Concurrent protocol versions block by default; the explicit
+[conflict-copy policy](doc:syncthing#protocol-conflicts) retains both contents.
+
+## Concurrent protocol versions {#protocol-conflicts}
+
+Set `FolderOptions.ConflictCopies: true`, or `"conflict_copies": true` in the
+standalone configuration, to resolve concurrent regular-file vectors. The
+strict default still returns `ErrCatalogConflict`; `Catalog.Adopt` keeps that
+behavior. Embedders can explicitly call `Catalog.ResolveConcurrent(ctx, store,
+peer, name)` on a draft, then publish it with the normal verified transaction.
+Its result describes the draft choice, not a working-file receipt.
+
+Both live inputs are checked against their announced BEP blocks before choosing
+a winner. The pinned upstream `FileInfo.WinsConflict` selects the newer modified
+time, then orders concurrent vectors on a tie. Locally captured versions use the
+native capture timestamp. The winner keeps its metadata and receives the union
+of both vectors. Concurrent equal contents coalesce by the native whole-file
+hash, independently of chunk boundaries; two tombstones also coalesce.
+
+Different losing contents become a tracked sibling containing `.sync-conflict-`,
+with a deterministic origin/vector/content identity and the short extension
+preserved. A losing deletion has no contents to copy; a winning deletion keeps
+the losing live file in a copy. Copy names reserve existing tracked names and
+tombstones, including Unicode case/normalization and file/directory prefix
+collisions. Bounded alternate names avoid replacing an occupied tracked path.
+Other native namespace or working-file obstructions still block application.
+Copies follow the workspace's materialization selection; hidden copies remain
+retained logical files. There is no text or binary content merge.
+
+The complete winner, copy and causal choices are frozen in the existing native
+pending transaction. Recovery applies that candidate even if the option is
+subsequently disabled. Only its owned completion receipt permits catalog
+acknowledgement. Both inputs remain reachable through catalog history; copies
+are ordinary tracked files and are not automatically retired. Syncthing may
+create its own conflict-copy names when it resolves first.
+
+Tests cover symmetric two-controller convergence without repeated history,
+equal-content coalescing, live/deleted combinations, validation failures and
+Unicode collisions. Actual process termination before/after publication, GC,
+verified backup/restore and recovery preserve both inputs in plain/encrypted
+Stores. Standalone processes also retain the losing contents on both devices
+against the unmodified reference daemon, with each side winning once.
 
 ## Continuous authenticated sessions {#folder-sessions}
 
@@ -317,12 +357,11 @@ being processed and never blocks the BEP reader waiting for native disk work.
 
 The embedding application supplies listening/dialing, certificate/key storage
 and OS lifecycle. The [resident service](doc:syncthing#folder-service) provides
-reconnect backoff and independent offline capture. This module is separate from
-the CMake engine distribution. The controller currently applies regular files
+reconnect backoff and independent offline capture. This module is optional; the CMake BEP target packages the standalone executable. The controller currently applies regular files
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
 platform ownership/xattrs or receive-encrypted folders. It retains incoming
 metadata but does not claim these paths have been applied. It also lacks
-reconciliation of concurrent protocol versions, persistent download resume, automatic membership
+persistent download resume, automatic membership
 changes/history retirement and authored/signature policy for newly synthesized
 incoming native candidates. Large-project performance and power-loss durability
 are not qualified. The native resident publication agent is a separate feature.
@@ -419,7 +458,7 @@ TLS cancellation and local capture while an authenticated peer withholds folder
 configuration. Existing session tests separately qualify the pinned upstream
 daemon. The application still supplies network listening/dialing, certificates,
 key storage and OS lifecycle. OS service packaging and
-complete folder/concurrent-version semantics remain unfinished.
+complete directory/symlink semantics remain unfinished.
 
 ## Standalone foreground executable {#standalone-service}
 
@@ -459,9 +498,10 @@ under its filesystem permissions; Store encryption protects stored objects.
 
 Configuration version 1 rejects duplicate/unknown fields and inputs over 64 KiB.
 `poll_ms` is 50..60000 (zero selects 250); retry bounds default to 500 and 30000 ms.
-`use_permissions` and `preserve_checkout_edits` default false; the example enables
-explicit [active-file preservation](doc:syncthing#active-checkout-edits).
-This does not resolve concurrent BEP version vectors.
+`use_permissions`, `preserve_checkout_edits` and `conflict_copies` default false.
+The example explicitly enables [active-file preservation](doc:syncthing#active-checkout-edits)
+and [concurrent-version copies](doc:syncthing#protocol-conflicts). These protect
+different situations and can be configured independently.
 
 Stop with Ctrl+C or SIGTERM. Restart with the same identity/configuration to
 resume retained native/catalog state. Standard output is canonical JSON;

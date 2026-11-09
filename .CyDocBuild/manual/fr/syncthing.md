@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 8
+sourceRevision: 9
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -203,7 +203,7 @@ Syrnck chiffré vérifie le fichier complet. Les annonces réelles de renommage 
 tombstone ont aussi été reçues. Cela prouve transport et interopérabilité des
 fichiers ordinaires. Un autre test réel conserve index complets/deltas et données,
 ferme les Stores pendant l’attente réseau puis se reconnecte après un renommage
-hors ligne avec tombstone persistant. Le service autonome reste à réaliser.
+hors ligne avec tombstone persistant. Le [service autonome](doc:syncthing#standalone-service) est disponible pour les fichiers ordinaires.
 Sans binaire explicite, ce test annonce qu’il est ignoré ; les tests ordinaires
 de l’adaptateur continuent de s’exécuter.
 
@@ -249,8 +249,50 @@ candidats en attente sont aussi des racines de GC. Les tests terminent brutaleme
 un vrai processus avant/après publication native, exécutent le GC, rouvrent,
 reprennent et vérifient les données reçues ou leur édition locale ultérieure,
 avec Stores chiffrés et non chiffrés. Les versions protocolaires concurrentes
-bloquent actuellement ; les copies de conflit automatiques de ce contrôleur BEP
-restent à réaliser.
+bloquent par défaut ; la [politique explicite de copies](doc:syncthing#protocol-conflicts)
+conserve les deux contenus.
+
+## Versions protocolaires concurrentes {#protocol-conflicts}
+
+Activer `FolderOptions.ConflictCopies: true`, ou `"conflict_copies": true` dans
+la configuration autonome, pour résoudre les vecteurs concurrents de fichiers
+ordinaires. Le défaut strict rend toujours `ErrCatalogConflict` ; `Catalog.Adopt`
+garde ce comportement. Une intégration peut appeler explicitement
+`Catalog.ResolveConcurrent(ctx, store, peer, name)` sur un brouillon, puis le
+publier par la transaction vérifiée habituelle. Le résultat décrit le choix du
+brouillon, pas un reçu d’application aux fichiers de travail.
+
+Les deux contenus vivants sont vérifiés contre leurs blocs BEP annoncés avant
+arbitrage. `FileInfo.WinsConflict` de la version amont figée choisit la date de
+modification la plus récente, puis ordonne les vecteurs concurrents en cas
+d’égalité. Une version capturée localement utilise le timestamp de capture
+native. Le gagnant conserve ses métadonnées et reçoit l’union des deux vecteurs.
+Des contenus concurrents identiques sont regroupés par hash natif du fichier
+complet, indépendamment du découpage ; deux tombstones sont aussi regroupés.
+
+Le contenu perdant distinct devient une copie voisine suivie avec `.sync-conflict-`,
+une identité déterministe origine/vecteur/contenu et l’extension courte conservée.
+Une suppression perdante n’a rien à copier ; une suppression gagnante garde le
+fichier vivant perdant dans une copie. Les noms suivis et tombstones existants
+sont réservés, avec casse/normalisation Unicode et collisions de préfixes
+fichier/dossier. Des variantes bornées évitent d’écraser un chemin suivi occupé.
+Les autres obstacles natifs de structure ou de fichiers de travail bloquent.
+Les copies respectent la sélection matérialisée ; une copie masquée reste un
+fichier logique retenu. Il n’y a pas de fusion de contenu texte ou binaire.
+
+Gagnant, copie et causalité sont figés dans la transaction native en attente.
+La reprise applique ce candidat même après désactivation de l’option. Seul son
+reçu de fin à propriétaire autorise l’acquittement du catalogue. Les deux entrées
+restent accessibles dans l’historique ; les copies sont des fichiers suivis sans
+retrait automatique. Syncthing peut créer ses propres noms de copie s’il résout
+le conflit en premier.
+
+Les tests couvrent convergence symétrique de deux contrôleurs sans historique
+répété, contenus identiques, combinaisons vivant/supprimé, refus de données
+invalides et collisions Unicode. Arrêts forcés avant/après publication, GC,
+sauvegarde/restauration vérifiées et reprise gardent les deux entrées dans des
+Stores clairs/chiffrés. Les processus autonomes conservent aussi le perdant sur
+les deux appareils face au daemon amont non modifié, avec chaque côté gagnant.
 
 ## Sessions authentifiées continues {#folder-sessions}
 
@@ -264,12 +306,11 @@ blocages et fin. `Close` arrête les workers et attend transport/callback de fin
 
 L’application fournit écoute/connexion, certificats/clés et cycle de vie OS.
 Le [service résident](doc:syncthing#folder-service) gère attente de reconnexion
-et capture hors ligne indépendante. Ce module est séparé de la
-distribution CMake du moteur. Le contrôleur applique les fichiers ordinaires et
+et capture hors ligne indépendante. Ce module est optionnel ; la cible BEP CMake distribue l’exécutable autonome. Le contrôleur applique les fichiers ordinaires et
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
 vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
-Copies pour versions protocolaires concurrentes, reprise persistante de téléchargement, gestion automatique
+Reprise persistante de téléchargement, gestion automatique
 des membres/retrait d’historique et politique d’auteur/signature des nouveaux
 candidats natifs entrants restent à réaliser. Performances à grande échelle et
 durabilité face à une coupure électrique ne sont pas qualifiées. L’agent natif
@@ -370,8 +411,8 @@ reconnexion TCP, renommage/tombstone, fermeture des transports échoués,
 annulation TLS bloquée et capture locale sans configuration distante. Les tests
 de session qualifient séparément le daemon amont figé. L’application fournit
 encore écoute/connexion réseau, certificats, stockage des clés et cycle de vie OS.
-Installation de service OS et sémantique complète des dossiers
-et versions concurrentes restent à terminer.
+Installation de service OS et métadonnées complètes des dossiers/liens
+restent à terminer.
 
 ## Exécutable autonome au premier plan {#standalone-service}
 
@@ -413,7 +454,9 @@ La configuration version 1 refuse doublons/champs inconnus et plus de 64 Kio.
 `poll_ms` vaut 50..60000 (zéro choisit 250) ; les délais de reconnexion valent
 500/30000 ms par défaut. `use_permissions` et `preserve_checkout_edits` valent
 false ; l’exemple active la [préservation des éditions](doc:syncthing#active-checkout-edits).
-Cela ne résout pas les vecteurs BEP concurrents.
+`conflict_copies` vaut également false par défaut ; l’exemple active les
+[copies pour vecteurs concurrents](doc:syncthing#protocol-conflicts). Ces deux
+politiques protègent des situations distinctes et se configurent séparément.
 
 Ctrl+C ou SIGTERM arrête le processus. Redémarrer avec la même identité et la
 même configuration reprend état natif/catalogue. La sortie JSON reste canonique ;

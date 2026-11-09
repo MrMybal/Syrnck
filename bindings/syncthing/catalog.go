@@ -573,9 +573,8 @@ func verifyCatalogData(ctx context.Context, store *syrnck.Store, folder string, 
 // index, preserving its causal vector. Concurrent versions are reported without
 // choosing a winner or deleting either side. Working-file application is separate.
 func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
-	state := cloneCatalogState(c.state)
 	name = protocolName(name)
-	for _, peer := range state.Peers {
+	for _, peer := range c.state.Peers {
 		if peer.Device != device.String() {
 			continue
 		}
@@ -587,8 +586,8 @@ func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
 		if !entry.Info.Deleted && entry.Info.Type == protocol.FileInfoTypeFile && entry.Manifest == "" {
 			return errors.New("syrnck BEP: peer file data has not been verified")
 		}
-		if j, found := findCatalogEntry(state.Files, name); found {
-			existing := state.Files[j]
+		if j, found := findCatalogEntry(c.state.Files, name); found {
+			existing := c.state.Files[j]
 			switch entry.Info.Version.Compare(existing.Info.Version) {
 			case protocol.Lesser:
 				return errors.New("syrnck BEP: cannot adopt an older version")
@@ -607,9 +606,13 @@ func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
 				return nil
 			}
 		}
-		if state.Sequence == math.MaxInt64 {
+		if c.state.Sequence == math.MaxInt64 {
 			return errors.New("syrnck BEP: local sequence overflow")
 		}
+		// Most controller passes encounter already acknowledged entries. Clone
+		// only when adopting a new version, not the full catalog per idle file.
+		state := cloneCatalogState(c.state)
+		entry.Info = copyInfo(entry.Info)
 		state.Sequence++
 		entry.Info.Sequence = state.Sequence
 		state.Files = setCatalogEntry(state.Files, entry)
