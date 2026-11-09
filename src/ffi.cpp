@@ -6,6 +6,8 @@
 #include <syrnck/core.hpp>
 #include <syrnck/keys.hpp>
 #include <syrnck/signing_keys.hpp>
+#include <syrnck/sealed.hpp>
+#include <limits>
 #include "key_envelope.hpp"
 #include <syrnck/watcher.hpp>
 #include <syrnck/workspace.hpp>
@@ -22,6 +24,10 @@ struct SyrnckSecretKey {
 struct SyrnckSigningKey {
   syrnck::SecretKey seed;
   explicit SyrnckSigningKey(syrnck::SecretKey value) : seed(std::move(value)) {}
+};
+struct SyrnckSealedKey {
+  syrnck::SecretKey key;
+  explicit SyrnckSealedKey(syrnck::SecretKey value) : key(std::move(value)) {}
 };
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
@@ -97,6 +103,34 @@ bool key_output(unsigned char *out, std::size_t capacity, std::size_t *length) {
   syrnck::require(out && capacity >= SYRNCK_PROTECTED_KEY_SIZE, "insufficient output capacity");
   *length = 0;
   return true;
+}
+std::span<const std::uint8_t> sealed_key_envelope(const unsigned char *value, std::size_t length) {
+  syrnck::require(value && length == SYRNCK_PROTECTED_KEY_SIZE, "invalid protected key envelope");
+  const std::span<const std::uint8_t> input{value, length};
+  (void)syrnck::protected_sealed_key_options(input);
+  return input;
+}
+const syrnck::SecretKey &checked(const SyrnckSealedKey *key) {
+  syrnck::require(key != nullptr, "null sealed key handle");
+  return key->key;
+}
+syrnck::SealedLimits sealed_limits(const SyrnckSealedLimits *value) {
+  syrnck::SealedLimits result;
+  if (value) {
+    const auto assign = [](std::uint64_t input, std::size_t &field) {
+      if (!input)
+        return;
+      syrnck::require(input <= std::numeric_limits<std::size_t>::max(), "sealed limit is too large");
+      field = static_cast<std::size_t>(input);
+    };
+    assign(value->max_objects, result.max_objects);
+    assign(value->max_work, result.max_work);
+    assign(value->max_index_cache_bytes, result.max_index_cache_bytes);
+    assign(value->max_new_index_bytes, result.max_new_index_bytes);
+    assign(value->max_history, result.max_history);
+  }
+  result.validate();
+  return result;
 }
 syrnck::Store &checked(SyrnckStore *p) {
   syrnck::require(p != nullptr, "null store handle");
@@ -373,6 +407,142 @@ int syrnck_secret_key_open(const unsigned char *envelope, std::size_t envelope_l
   });
 }
 int syrnck_secret_key_close(SyrnckSecretKey *key) { return boundary([&] { delete key; }); }
+int syrnck_sealed_key_protect(const unsigned char *key, std::size_t key_length, const unsigned char *password,
+                              std::size_t password_length, const SyrnckPasswordKdf *options,
+                              unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    const auto costs = key_costs(options);
+    const auto pass = key_password(password, password_length);
+    syrnck::require((!key && !key_length) || (key && key_length == 32),
+                    "secret key length must be zero or 32 with a valid key");
+    if (!key_output(out, capacity, length))
+      return;
+    const auto secret =
+        key_length ? syrnck::SecretKey::from_bytes({key, key_length}) : syrnck::SecretKey::generate();
+    const auto value = syrnck::protect_sealed_key(secret, pass, costs);
+    std::memcpy(out, value.data(), value.size());
+    *length = value.size();
+  });
+}
+int syrnck_sealed_key_change_password(const unsigned char *envelope, std::size_t envelope_length,
+                                      const unsigned char *old_password, std::size_t old_length,
+                                      const unsigned char *new_password, std::size_t new_length,
+                                      const SyrnckPasswordKdf *options, unsigned char *out,
+                                      std::size_t capacity, std::size_t *length) {
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    const auto input = sealed_key_envelope(envelope, envelope_length);
+    const auto before = key_password(old_password, old_length),
+               after = key_password(new_password, new_length);
+    std::optional<syrnck::PasswordKdfOptions> costs;
+    if (options)
+      costs = key_costs(options, syrnck::protected_sealed_key_options(input));
+    if (!key_output(out, capacity, length))
+      return;
+    const auto result = syrnck::change_sealed_key_password(input, before, after, costs);
+    std::memcpy(out, result.data(), result.size());
+    *length = result.size();
+  });
+}
+int syrnck_sealed_key_open(const unsigned char *envelope, std::size_t envelope_length,
+                           const unsigned char *password, std::size_t password_length,
+                           SyrnckSealedKey **out) {
+  if (out)
+    *out = nullptr;
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    const auto input = sealed_key_envelope(envelope, envelope_length),
+               pass = key_password(password, password_length);
+    *out = new SyrnckSealedKey(syrnck::open_protected_sealed_key(input, pass));
+  });
+}
+int syrnck_sealed_key_close(SyrnckSealedKey *key) {
+  return boundary([&] { delete key; });
+}
+int syrnck_sealed_key_public_json(const SyrnckSealedKey *key, char **out, std::size_t *length) {
+  if (out)
+    *out = nullptr;
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    syrnck::require(out && length, "null sealed output");
+    json_output(syrnck::Json{{"version", 1},
+                             {"type", "sealed-key"},
+                             {"realm", syrnck::sealed_realm_id(checked(key))}},
+                out, length, {});
+  });
+}
+int syrnck_sealed_snapshot_json_ex(SyrnckStore *source, SyrnckStore *wire, const SyrnckSealedKey *key,
+                                   const char *channel, const unsigned char *roots, std::size_t roots_length,
+                                   const char *previous, const SyrnckSealedLimits *limits,
+                                   const SyrnckOperation *operation, char **out, std::size_t *length) {
+  if (out)
+    *out = nullptr;
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    syrnck::require(out && length, "null sealed output");
+    const auto control = operation_options(operation);
+    syrnck::throw_if_cancelled(control.stop);
+    const auto bounds = sealed_limits(limits);
+    syrnck::require(roots && roots_length <= syrnck::max_object_size, "invalid sealed root references");
+    // The legacy reference-table reader accepts unordered tables with last-key
+    // semantics. Caller-supplied sealed roots require unambiguous field names
+    // at every depth, before any source/wire operation can publish data.
+    const auto document = syrnck::parse_unique_json({roots, roots_length});
+    syrnck::require(document.is_object() && !document.empty() && document.size() <= 100000,
+                    "invalid sealed root references");
+    syrnck::Refs selected;
+    for (const auto &[name, value] : document.items()) {
+      syrnck::validate_ref(name);
+      selected.emplace_hint(selected.end(), name, syrnck::parse_key(value));
+    }
+    const auto parent =
+        previous && *previous ? std::optional{std::string(previous)} : std::optional<std::string>{};
+    const auto result = syrnck::seal_snapshot(checked(source), checked(wire), checked(key), checked(channel),
+                                              selected, parent, bounds, control);
+    json_output(result, out, length, {});
+  });
+}
+int syrnck_sealed_inspect_json_ex(SyrnckStore *wire, const SyrnckSealedKey *key, const char *snapshot,
+                                  const char *channel, const SyrnckSealedLimits *limits,
+                                  const SyrnckOperation *operation, char **out, std::size_t *length) {
+  if (out)
+    *out = nullptr;
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    syrnck::require(out && length, "null sealed output");
+    const auto control = operation_options(operation);
+    syrnck::throw_if_cancelled(control.stop);
+    const auto bounds = sealed_limits(limits);
+    const auto result = syrnck::inspect_sealed_snapshot(checked(wire), checked(key), checked(snapshot),
+                                                        checked(channel), bounds, control);
+    json_output(result, out, length, control.stop);
+  });
+}
+int syrnck_sealed_open_json_ex(SyrnckStore *wire, SyrnckStore *destination, const SyrnckSealedKey *key,
+                               const char *snapshot, const char *channel, const char *checkpoint,
+                               const SyrnckSealedLimits *limits, const SyrnckOperation *operation, char **out,
+                               std::size_t *length) {
+  if (out)
+    *out = nullptr;
+  if (length)
+    *length = 0;
+  return boundary([&] {
+    syrnck::require(out && length, "null sealed output");
+    const auto control = operation_options(operation);
+    syrnck::throw_if_cancelled(control.stop);
+    const auto bounds = sealed_limits(limits);
+    const auto result =
+        syrnck::open_sealed_snapshot(checked(wire), checked(destination), checked(key), checked(snapshot),
+                                     checked(channel), checked(checkpoint), bounds, control);
+    json_output(result, out, length, {});
+  });
+}
 int syrnck_store_open_secret(const char *path, bool create, const SyrnckSecretKey *key, SyrnckStore **out) {
   if (out) *out = nullptr;
   return boundary([&] {

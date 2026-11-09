@@ -1277,6 +1277,8 @@ SYRNCK_MESSAGE("native virtual snapshot cannot parent itself", "un snapshot virt
 SYRNCK_MESSAGE("rebasing cousins requires merge-preserving rebase", "le déplacement des racines latérales exige la préservation des fusions")
 
 // Sealed repository and end-to-end transfer diagnostics.
+SYRNCK_MESSAGE("null sealed key handle", "propriétaire de clé de bout en bout nul")
+SYRNCK_MESSAGE("null sealed output", "sortie du chiffrement de bout en bout nulle")
 SYRNCK_MESSAGE("invalid sealed wire location", "emplacement du store de transport chiffré invalide")
 SYRNCK_MESSAGE("SYRNCK_SEALED_KEY must encode exactly 32 bytes", "SYRNCK_SEALED_KEY doit encoder exactement 32 octets")
 SYRNCK_MESSAGE("SYRNCK_SEALED_KEY_FILE must name a protected sealed key file", "SYRNCK_SEALED_KEY_FILE doit désigner un fichier de clé de bout en bout protégé")

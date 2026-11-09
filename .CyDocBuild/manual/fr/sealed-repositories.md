@@ -5,7 +5,7 @@ description: Clés clientes séparées, snapshots opaques au serveur, transferts
 section: Storage
 parent: storage
 order: 57
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Ce que le serveur voit {#threat-model}
@@ -42,7 +42,7 @@ syrnck --store clone/.syrnck sealed open SEALED_ID --wire private-cache/team-wir
 
 Ces chemins illustrent l'usage : `private-cache` doit être hors des deux projets. `snapshot` prend des noms de références locales de rétention explicites ; consulter `refs` pour les choisir. `--channel NOM` vaut `main` par défaut. Pour une préparation incrémentale, ajouter `--previous SEALED_ID` de même clé/canal. Un index Merkle opaque persistant réutilise le chiffré inchangé et met à jour les chemins d'index affectés. Des racines identiques rendent l'ID précédent sans nouveaux nonces.
 
-L'inspection reste en lecture seule. L'ouverture vérifie hashes typés originaux et hashes complets des fichiers, importe les objets originaux, puis publie atomiquement des références immuables `sealed/roots/ID/NAME_HASH` et le point de contrôle choisi. Branches natives, staging et fichiers de travail restent en place. Lire le rapport privé `roots`, puis demander explicitement checkout/export natif ou reconstruction du manifeste. Les rapports contiennent noms/IDs originaux et restent côté client.
+L'inspection reste en lecture seule. L'ouverture vérifie hashes typés originaux et hashes complets des fichiers, importe les objets originaux, puis publie atomiquement des références immuables `sealed/roots/ID/NAME_HASH` et le point de contrôle choisi. Branches natives, staging et fichiers de travail restent en place. Une publication réussie gagne sur une demande d’arrêt dans son callback final. IO/allocation de sortie peuvent encore échouer après publication ; relire les références et établir le résultat avant une relance. Lire le rapport privé `roots`, puis demander explicitement checkout/export natif ou reconstruction du manifeste. Les rapports contiennent noms/IDs originaux et restent côté client.
 
 ## Transférer via le serveur ordinaire {#remote}
 
@@ -88,4 +88,4 @@ Les objets utilisent des nonces XChaCha20-Poly1305 aléatoires frais de 24 octet
 | `--sealed-new-index-bytes` | 67108864 | Nouvelles adresses comptées avant chiffrement |
 | `--sealed-max-history` | 100000 | Parcours des prédécesseurs du point accepté |
 
-Un nœud contient au plus 256 entrées de feuille ou 16 liens enfants. Ces bornes ne représentent pas la RAM totale. Préparation/vérification auditent encore fermetures et octets complets ; seuls génération du chiffré, changements Merkle et corps d'objets transférés sont différentiels. Performances sur gros projets et workflows hors Windows restent à qualifier. L'[API C++](doc:api-sealed-repositories) existe ; bindings C/Go, intégration résidente/BEP, coffres OS, gestion des appareils, rotation/révocation distribuée, réparation automatique de répliques et rétention distribuée restent à terminer.
+Un nœud contient au plus 256 entrées de feuille ou 16 liens enfants. Ces bornes ne représentent pas la RAM totale. Préparation/vérification auditent encore fermetures et octets complets ; seuls génération du chiffré, changements Merkle et corps d'objets transférés sont différentiels. Performances sur gros projets et workflows hors Windows restent à qualifier. L'[API C++](doc:api-sealed-repositories), l'[ABI C](doc:api-c-abi#sealed-repositories) et le [binding Go](doc:go-binding#sealed-repositories) fournissent préparation/inspection/import locaux, avec propriétaires natifs de clés maîtresses distincts. Les wrappers réseau reprenables restent C++/CLI. Intégration résidente/BEP, coffres OS, gestion des appareils, rotation/révocation distribuée, réparation automatique de répliques et rétention distribuée restent à terminer.

@@ -13,6 +13,9 @@ var zeroSigningKeyHandle nativeSigningKeyHandle
 // an empty seed. Purpose-specific envelopes cannot be opened as storage keys.
 // Inputs are borrowed synchronously; callers own and wipe their passwords/seeds.
 func ProtectSigningKey(seed, password []byte, options PasswordKdfOptions) ([]byte, error) {
+	if len(seed) == 0 {
+		seed = nil
+	}
 	if len(seed) != 0 && len(seed) != 32 {
 		return nil, errors.New("syrnck: signing seed must contain exactly 32 bytes")
 	}

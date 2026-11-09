@@ -7,7 +7,7 @@ namespace {
 fs::path plain_path;
 std::string phase;
 bool armed = false;
-void pause() {
+void wait_for_parent() {
   armed = false;
   std::cout << "{\"paused\":true}" << std::endl;
   std::string line;
@@ -38,7 +38,7 @@ int entry(int argc, char **argv) {
                                if (armed && phase == "transfer" &&
                                    event.phase == ProgressPhase::transferring &&
                                    event.path.starts_with("v1/objects/") && event.bytes)
-                                 pause();
+                                 wait_for_parent();
                              }};
     if (std::string_view(argv[1]) == "push") {
       const auto root = plain.refs().at("heads/main");
@@ -62,7 +62,7 @@ void io_checkpoint(std::string_view event, const fs::path &target) {
     return;
   if ((phase == "before-checkpoint" && event == "atomic.file_synced") ||
       (phase == "after-checkpoint" && event == "atomic.published"))
-    pause();
+    wait_for_parent();
 }
 } // namespace syrnck::testing
 #ifdef _WIN32

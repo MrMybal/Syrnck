@@ -5,7 +5,7 @@ description: Separate client keys, opaque server snapshots, differential transfe
 section: Storage
 parent: storage
 order: 57
-revision: 1
+revision: 2
 ---
 
 ## What the server can see {#threat-model}
@@ -42,7 +42,7 @@ syrnck --store clone/.syrnck sealed open SEALED_ID --wire private-cache/team-wir
 
 Paths above are illustrative: `private-cache` must not be inside either project. `snapshot` takes explicit local retention-reference names; inspect `refs` to select them. `--channel NAME` defaults to `main`. For an incremental preparation, add `--previous SEALED_ID` from the same key/channel. A persistent opaque Merkle index reuses unchanged ciphertext and updates affected index paths. Identical roots return the previous sealed ID without generating new nonces.
 
-Inspection is read-only. Opening verifies original typed hashes and whole-file hashes, imports original objects, then atomically publishes immutable `sealed/roots/ID/NAME_HASH` retention roots and the selected checkpoint. Native branches, staging and workspace files are not replaced. Read the private `roots` report, then use the normal native checkout/export or manifest reconstruction workflow explicitly. Reports contain original root names/IDs and belong on the client.
+Inspection is read-only. Opening verifies original typed hashes and whole-file hashes, imports original objects, then atomically publishes immutable `sealed/roots/ID/NAME_HASH` retention roots and the selected checkpoint. Native branches, staging and workspace files are not replaced. Successful publication wins a stop request in its completion callback. IO/output-allocation failures can still follow publication; reload refs and establish the outcome before retrying. Read the private `roots` report, then use the normal native checkout/export or manifest reconstruction workflow explicitly. Reports contain original root names/IDs and belong on the client.
 
 ## Transfer through the ordinary server {#remote}
 
@@ -88,4 +88,4 @@ Objects use fresh random 24-byte XChaCha20-Poly1305 nonces. Keyed BLAKE3 derives
 | `--sealed-new-index-bytes` | 67108864 | Charged new address entries before encryption |
 | `--sealed-max-history` | 100000 | Accepted-checkpoint predecessor traversal |
 
-Nodes have at most 256 leaf entries or 16 child links. These bounds do not represent total RSS. Preparation/verification still audits full original closures and file bytes; only ciphertext generation, Merkle changes and transferred object bodies are differential. Large-project performance and non-Windows sealed workflows still need qualification. The [C++ API](doc:api-sealed-repositories) is available; C/Go bindings, resident/BEP integration, OS vaults, device membership, distributed key rotation/revocation, automatic replica repair and distributed retention remain unfinished.
+Nodes have at most 256 leaf entries or 16 child links. These bounds do not represent total RSS. Preparation/verification still audits full original closures and file bytes; only ciphertext generation, Merkle changes and transferred object bodies are differential. Large-project performance and non-Windows sealed workflows still need qualification. The [C++ API](doc:api-sealed-repositories), [C ABI](doc:api-c-abi#sealed-repositories) and [Go binding](doc:go-binding#sealed-repositories) provide local preparation/inspection/import, with purpose-separated native master owners. Resumable network wrappers remain C++/CLI. Resident/BEP integration, OS vaults, device membership, distributed key rotation/revocation, automatic replica repair and distributed retention remain unfinished.

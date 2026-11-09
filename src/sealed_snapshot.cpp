@@ -386,7 +386,9 @@ Json seal_snapshot(const Store &source, const Store &wire, const SecretKey &secr
   result["sealed_objects"] = changes.size();
   result["reused_objects"] = objects.size() - changes.size();
   result["plaintext_bytes_sealed"] = encrypted_bytes;
-  report_progress(options, {ProgressPhase::planning, {}, objects.size(), objects.size(), true});
+  // The retained root is already published. A final callback may request stop,
+  // but cannot turn that proven publication into a cancellation result.
+  report_progress({{}, options.progress}, {ProgressPhase::planning, {}, objects.size(), objects.size(), true});
   return result;
 }
 Json inspect_sealed_snapshot(const Store &wire, const SecretKey &secret, std::string_view snapshot,
@@ -465,7 +467,9 @@ Json open_sealed_snapshot(const Store &wire, const Store &destination, const Sec
   result["state"] = "opened";
   result["checkpoint"] = checkpoint;
   result["imported_objects"] = imported;
-  report_progress(options, {ProgressPhase::planning, {}, objects.size(), objects.size(), true});
+  // Checkpoint and original roots were committed together. Preserve success
+  // when a completion observer requests cancellation after that boundary.
+  report_progress({{}, options.progress}, {ProgressPhase::planning, {}, objects.size(), objects.size(), true});
   return result;
 }
 } // namespace syrnck

@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 12
+revision: 13
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -233,3 +233,30 @@ Close. Use `NativeIdentityOptions.Signer` and `RequireSignature: true` to attach
 independent state to short Store sessions without repeating Argon2id. Seed and
 Signer are mutually exclusive. Closing an owner does not revoke a configured
 Store or older envelopes; failed setup preserves the previous identity.
+
+## Sealed repository owners {#sealed-repositories}
+
+`ProtectSealedKey`, `ChangeSealedKeyPassword` and `OpenProtectedSealedKey` use the distinct 104-byte [sealed master-key envelope](doc:sealed-repositories#key-files). `SealedKey` keeps the unwrapped master in native memory with no plaintext export. `PublicMetadata` returns only version/type/public realm. Keep the owner alive until all operations finish, then Close explicitly. Input passwords/keys remain caller-owned; clear those buffers when no longer needed. An empty key/seed slice selects generation for all three protectors: storage, signing and sealed.
+
+`SealSnapshot`, `InspectSnapshot` and `OpenSnapshot` accept a context, typed roots, an explicit channel and `SealedLimits`. Zero limits select core defaults. Sealing verifies the original closure and retains an opaque wire snapshot; inspection is read-only. Opening imports verified originals and atomically retains roots/checkpoint without changing native heads, staging or files. Existing checkpoints reject rollback/forks. A separate checkpoint permits explicit historical restoration.
+
+The following function receives already opened, distinct source/wire/destination Stores and a verified original root. The wire path must be outside plaintext Stores, conventional project directories and registered workspaces. `previous` is an exact earlier sealed ID or empty for the initial snapshot.
+
+```go
+func restoreSealed(ctx context.Context, source, wire, destination *syrnck.Store,
+    envelope, password []byte, root syrnck.ObjectKey, previous string,
+) (syrnck.SealedSnapshotReport, error) {
+    master, err := syrnck.OpenProtectedSealedKey(envelope, password)
+    if err != nil { return syrnck.SealedSnapshotReport{}, err }
+    defer master.Close()
+    prepared, err := master.SealSnapshot(ctx, source, wire, "main",
+        map[string]syrnck.ObjectKey{"heads/main": root}, previous, syrnck.SealedLimits{})
+    if err != nil { return syrnck.SealedSnapshotReport{}, err }
+    return master.OpenSnapshot(ctx, wire, destination, prepared.Snapshot, "main",
+        "sealed/checkpoints/local-restore", syrnck.SealedLimits{})
+}
+```
+
+Reports contain private original names/IDs and belong on the client. Transport only `ObjectKey{Kind: "revision", ID: report.Snapshot}` and its ordinary wire closure. The existing `CopyMissing` helper can exercise that opaque copy locally without a master key. Production resumable HTTP publication/fetch currently uses the C++/CLI [sealed transfer workflow](doc:sealed-repositories#remote); its remote-CAS/session wrappers are not part of this Go API. The resident agent and BEP folder service still need sealed integration.
+
+Go serializes the owner and all participating Stores, in consistent Store order, with context-aware lock waits. Concurrent Close waits for native use to finish. Context cancellation requests the native one-shot source and joins that request before release; successful publication wins a later stop request. An IO/output-allocation error can still follow publication, so reload refs and establish the outcome before retrying. These APIs do not add distributed key rotation/revocation, OS vaults or automatic encrypted-history retirement.

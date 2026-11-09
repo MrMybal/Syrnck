@@ -38,6 +38,9 @@ func keyPassword(password []byte) error {
 // when key is empty. It returns only an encrypted envelope. Inputs are borrowed
 // for the synchronous call; the caller owns and clears password/key buffers.
 func ProtectKey(key, password []byte, options PasswordKdfOptions) ([]byte, error) {
+	if len(key) == 0 {
+		key = nil
+	}
 	if len(key) != 0 && len(key) != 32 {
 		return nil, errors.New("syrnck: key must contain exactly 32 bytes")
 	}

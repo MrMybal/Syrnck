@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 12
+sourceRevision: 13
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -245,3 +245,30 @@ Les [enveloppes de signature dédiées](doc:signing-keys) utilisent
 indépendant pour chaque session courte sans refaire Argon2id. Seed et Signer
 s’excluent. Fermer le propriétaire ne révoque ni Store configuré ni ancienne
 enveloppe ; un échec préserve l’identité précédente.
+
+## Propriétaires de dépôts chiffrés {#sealed-repositories}
+
+`ProtectSealedKey`, `ChangeSealedKeyPassword` et `OpenProtectedSealedKey` utilisent l'[enveloppe maîtresse chiffrée distincte](doc:sealed-repositories#key-files) de 104 octets. `SealedKey` garde la clé déchiffrée dans la mémoire native sans export en clair. `PublicMetadata` rend seulement version/type/domaine public. Garder le propriétaire vivant jusqu'à la fin des opérations, puis fermer explicitement. Mots de passe/clés fournis restent à l'appelant ; effacer ces buffers lorsqu'ils ne servent plus. Une tranche de clé/graine vide sélectionne la génération pour les trois protecteurs : stockage, signature et chiffrement de bout en bout.
+
+`SealSnapshot`, `InspectSnapshot` et `OpenSnapshot` acceptent contexte, racines typées, canal explicite et `SealedLimits`. Des limites nulles sélectionnent les défauts du cœur. La préparation vérifie la fermeture originale et retient un snapshot opaque ; l'inspection reste en lecture seule. L'ouverture importe les originaux vérifiés et retient atomiquement racines/point de contrôle sans changer HEAD natifs, staging ou fichiers. Un point existant refuse recul/divergence. Un point séparé permet une restauration historique explicite.
+
+La fonction suivante reçoit des Stores source/transport/destination ouverts et distincts et une racine originale vérifiée. Le transport doit être hors des Stores en clair, dossiers conventionnels de projets et workspaces enregistrés. `previous` est un ID chiffré précédent exact, ou vide pour le premier snapshot.
+
+```go
+func restoreSealed(ctx context.Context, source, wire, destination *syrnck.Store,
+    envelope, password []byte, root syrnck.ObjectKey, previous string,
+) (syrnck.SealedSnapshotReport, error) {
+    master, err := syrnck.OpenProtectedSealedKey(envelope, password)
+    if err != nil { return syrnck.SealedSnapshotReport{}, err }
+    defer master.Close()
+    prepared, err := master.SealSnapshot(ctx, source, wire, "main",
+        map[string]syrnck.ObjectKey{"heads/main": root}, previous, syrnck.SealedLimits{})
+    if err != nil { return syrnck.SealedSnapshotReport{}, err }
+    return master.OpenSnapshot(ctx, wire, destination, prepared.Snapshot, "main",
+        "sealed/checkpoints/local-restore", syrnck.SealedLimits{})
+}
+```
+
+Les rapports contiennent noms/IDs originaux privés et restent côté client. Transférer seulement `ObjectKey{Kind: "revision", ID: report.Snapshot}` et sa fermeture de transport ordinaire. Le helper `CopyMissing` existant permet de tester cette copie opaque localement sans clé maîtresse. Publication/réception HTTP reprenables de production utilisent actuellement le [workflow chiffré C++/CLI](doc:sealed-repositories#remote) ; ses wrappers CAS/sessions distants ne font pas partie de cette API Go. Agent résident et service de dossiers BEP attendent encore leur intégration chiffrée.
+
+Go sérialise propriétaire et Stores participants dans un ordre de Stores cohérent, avec attentes de verrou annulables par contexte. Close concurrent attend la fin de l'usage natif. L'annulation demande la source native unique et joint cette demande avant libération ; une publication réussie gagne sur une demande d'arrêt ultérieure. IO/allocation de sortie peuvent encore échouer après publication : relire les références et prouver le résultat avant une relance. Ces API ne fournissent ni rotation/révocation distribuée, ni coffre OS, ni retrait automatique de l'historique chiffré.

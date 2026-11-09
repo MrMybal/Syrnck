@@ -10,7 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
-- Explicit sealed C++/CLI snapshots and resumable ciphertext transfers: independent protected keys, opaque metadata, persistent Merkle reuse and retained-client rollback checks. Resident/BEP sealed integration remains unfinished.
+- Explicit sealed C++/C/Go snapshots and resumable C++/CLI ciphertext transfers: independent protected keys, opaque metadata, persistent Merkle reuse and retained-client rollback checks. Resident/BEP sealed integration remains unfinished.
 - Native merge-preserving rebase with ordered DAG replay, recursive merge bases and frozen recovery; Windows Go syscall pointer lifetimes are regression-tested across GC and goroutine stack changes.
 - Bounded edited-rename detection across native history/blame, merge/replay/rebase/index and signed resident synchronization, with explicit structural conflicts and frozen checkout recovery.
 - Relocatable native CMake SDK with exported C++/C targets, bundled static dependencies and independent installed-consumer qualification.

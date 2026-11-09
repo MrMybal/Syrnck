@@ -18,6 +18,7 @@ typedef struct SyrnckWorkspace SyrnckWorkspace;
 typedef struct SyrnckCancellation SyrnckCancellation;
 typedef struct SyrnckSecretKey SyrnckSecretKey;
 typedef struct SyrnckSigningKey SyrnckSigningKey;
+typedef struct SyrnckSealedKey SyrnckSealedKey;
 /**
  * @doc api-c-abi
  * @locale en
@@ -59,6 +60,22 @@ typedef struct SyrnckSigningKey SyrnckSigningKey;
  * store_open_secret borrows the owner during construction; the Store keeps its own key.
  * Closing an owner does not close/revoke existing Stores. KDF calls are synchronous.
  * See [key files](doc:key-files) and [Go owners](doc:go-binding#protected-keys).
+ *
+ * ## Sealed repositories {#sealed-repositories}
+ * sealed_key_protect/change_password/open/close own a distinct end-to-end master;
+ * sealed_key_public_json exposes its public realm only. No plaintext export exists.
+ * sealed_snapshot_json_ex verifies explicit typed roots and retains an opaque wire
+ * snapshot. sealed_inspect_json_ex is read-only. sealed_open_json_ex imports verified
+ * originals and atomically retains roots/checkpoint, without replacing native heads/files.
+ * Wire/plaintext Stores and known workspaces must not overlap. Keep both Stores and
+ * the master alive; serialize their calls/close. SyrnckSealedLimits uses fixed uint64
+ * fields, with zero selecting defaults. JSON outputs are allocated once; no size query
+ * reexecutes preparation/import. Free with string_free; failures reset outputs to NULL/0.
+ * A successful publication wins a stop request in its completion callback. IO/output
+ * allocation may still fail after publication: reload refs before retrying.
+ * Progress callbacks must not reenter/close any Store or the sealed master.
+ * Private root names/IDs stay client-side. See [sealed repositories](doc:sealed-repositories)
+ * and the [Go binding](doc:go-binding#sealed-repositories). Network wrappers remain C++/CLI.
  *
  * ## Native authors and signatures {#authorship}
  * Purpose-separated signing_key_protect/change_password/open/close and signing_key_public_json
@@ -139,6 +156,23 @@ typedef struct SyrnckSigningKey SyrnckSigningKey;
  * store_open_secret emprunte le propriétaire pendant la construction ; le Store garde sa propre clé.
  * Fermer le propriétaire ne ferme ni ne révoque les Stores ouverts. La dérivation est synchrone.
  * Voir les [fichiers de clés](doc:key-files) et les [propriétaires Go](doc:go-binding#protected-keys).
+ *
+ * ## Dépôts chiffrés {#sealed-repositories}
+ * sealed_key_protect/change_password/open/close possèdent une clé de bout en bout distincte ;
+ * sealed_key_public_json expose seulement son domaine public. Aucun export en clair n'existe.
+ * sealed_snapshot_json_ex vérifie les racines typées explicites et retient un snapshot
+ * opaque. sealed_inspect_json_ex reste en lecture seule. sealed_open_json_ex importe les
+ * originaux vérifiés et retient atomiquement racines/point de contrôle, sans changer HEAD/fichiers.
+ * Stores de transport/en clair et workspaces connus ne doivent pas se recouvrir. Garder
+ * Stores et clé vivants ; sérialiser appels/fermetures. SyrnckSealedLimits a des champs uint64
+ * fixes, zéro sélectionnant les défauts. Les sorties JSON sont allouées une seule fois,
+ * sans requête de taille qui rejouerait l'opération. Libérer avec string_free ; les erreurs
+ * remettent les sorties à NULL/0. Une publication réussie gagne sur une demande d'arrêt
+ * dans son callback final. IO/allocation peuvent encore échouer après publication : relire
+ * les références avant une relance. Les callbacks ne doivent réentrer/fermer ni
+ * un Store ni la clé maîtresse. Noms/IDs privés restent côté client. Voir les
+ * [dépôts chiffrés](doc:sealed-repositories) et le [binding Go](doc:go-binding#sealed-repositories).
+ * Les wrappers réseau restent en C++/CLI.
  *
  * ## Auteurs natifs et signatures {#authorship}
  * signing_key_protect/change_password/open/close et signing_key_public_json conservent une graine
@@ -229,6 +263,25 @@ SYRNCK_API int syrnck_signing_key_close(SyrnckSigningKey *);
 /* Allocated public algorithm/key_id/public_key JSON; free with string_free.
  * Outputs reset to NULL/0 on failure. */
 SYRNCK_API int syrnck_signing_key_public_json(const SyrnckSigningKey *, char **out, size_t *length);
+/* Independent end-to-end master keys. Same 104-byte query/output/cost rules as
+ * key_protect/key_change_password, with a distinct authenticated purpose.
+ * NULL key/zero length generates a new master. Storage/signing envelopes fail.
+ * Owners never export plaintext key bytes; serialize calls and Close exactly
+ * once. Borrowed password/key buffers remain caller-owned and are not wiped.
+ * Opening resets *out to NULL on failure. NULL close is accepted. */
+SYRNCK_API int syrnck_sealed_key_protect(const unsigned char *key, size_t key_len,
+    const unsigned char *password, size_t password_len, const SyrnckPasswordKdf *,
+    unsigned char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_sealed_key_change_password(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *old_password, size_t old_password_len,
+    const unsigned char *new_password, size_t new_password_len, const SyrnckPasswordKdf *,
+    unsigned char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_sealed_key_open(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *password, size_t password_len, SyrnckSealedKey **out);
+SYRNCK_API int syrnck_sealed_key_close(SyrnckSealedKey *);
+/* Allocated public {version,type,realm} JSON; free with string_free.
+ * Outputs reset to NULL/0 on failure. The realm is a public 32-hex identifier. */
+SYRNCK_API int syrnck_sealed_key_public_json(const SyrnckSealedKey *, char **out, size_t *length);
 /* Authenticate once and keep the unwrapped secret in native move-only ownership.
  * Serialize key operations and close, and close exactly once. No plaintext key
  * export exists. Output resets to NULL on failure. KDF calls are synchronous. */
@@ -344,6 +397,37 @@ typedef struct SyrnckOperation {
   SyrnckProgressCallback progress; /* NULL = no callback */
   void *user;
 } SyrnckOperation;
+
+/* Zero fields / NULL select core SealedLimits defaults. Fixed ABI 1 layout;
+ * uint64 values are checked before conversion to platform size_t/allocation. */
+typedef struct SyrnckSealedLimits {
+  uint64_t max_objects, max_work, max_index_cache_bytes, max_new_index_bytes, max_history;
+} SyrnckSealedLimits;
+/* Prepare an opaque snapshot from explicit roots {name:{kind,id}} (<=16 MiB,
+ * 1..100000 entries, no duplicate fields). previous=NULL/empty selects no parent.
+ * Source is read-only; wire retains sealed/prepared/ID only after verification.
+ * Stores must not overlap or lie inside known/conventional plaintext workspaces.
+ * All JSON results here are allocated once, length includes NUL: string_free.
+ * There is no size-query/re-execution convention for these mutating operations.
+ * On error outputs reset to NULL/0; valid unreferenced objects may remain.
+ * Successful publication wins late cancellation; allocation/IO can still fail
+ * after publication. Reload refs and establish the outcome before retrying.
+ * Callbacks must not reenter or close either Store OR the sealed-key owner. */
+SYRNCK_API int syrnck_sealed_snapshot_json_ex(SyrnckStore *source, SyrnckStore *wire,
+    const SyrnckSealedKey *, const char *channel, const unsigned char *roots, size_t roots_len,
+    const char *previous, const SyrnckSealedLimits *, const SyrnckOperation *, char **out, size_t *length);
+/* Authenticate/audit without importing or modifying refs. */
+SYRNCK_API int syrnck_sealed_inspect_json_ex(SyrnckStore *wire, const SyrnckSealedKey *,
+    const char *snapshot, const char *channel, const SyrnckSealedLimits *, const SyrnckOperation *,
+    char **out, size_t *length);
+/* Import originals, then atomically retain original roots and a checkpoint under
+ * sealed/checkpoints/. Never replaces native branches/indexes/workspace files.
+ * Existing checkpoints reject rollback/forks. Restore history with another name.
+ * Keep wire/destination/key owners alive and serialize their calls through return.
+ * Returned root names/IDs are private client data, not wire-server metadata. */
+SYRNCK_API int syrnck_sealed_open_json_ex(SyrnckStore *wire, SyrnckStore *destination,
+    const SyrnckSealedKey *, const char *snapshot, const char *channel, const char *checkpoint,
+    const SyrnckSealedLimits *, const SyrnckOperation *, char **out, size_t *length);
 
 /* Create an unpinned object and return out_id[65]. Chunk bytes remain exact;
  * manifest/revision JSON is schema-validated and canonically encoded by C++.

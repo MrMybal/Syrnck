@@ -21,6 +21,9 @@ class SealedTransfers(unittest.TestCase):
 
     def setUp(self):
         base.ServerAccess.setUp(self)
+        for name in list(self.env):
+            if name.upper().startswith('SYRNCK_SEALED_'):
+                self.env.pop(name)
         self.env['SYRNCK_SEALED_KEY'] = '71' * 32
         self.wire = self.root / 'sender-wire'
         self.clone = self.root / 'clone'

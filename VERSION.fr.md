@@ -10,7 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
-- Snapshots C++/CLI chiffrés de bout en bout et transferts opaques reprenables : clés protégées indépendantes, métadonnées opaques, réutilisation Merkle persistante et contrôles locaux des retours en arrière. Intégration résidente/BEP encore à réaliser.
+- Snapshots C++/C/Go chiffrés de bout en bout et transferts opaques C++/CLI reprenables : clés protégées indépendantes, métadonnées opaques, réutilisation Merkle persistante et contrôles locaux des retours en arrière. Intégration résidente/BEP encore à réaliser.
 - Rebase natif préservant les fusions avec rejeu du DAG ordonné, bases récursives et reprise figée ; durée de vie des pointeurs syscall Go Windows vérifiée avec GC et changements de piles.
 - Renommages modifiés bornés pour historique/blame, merge/rejeu/rebase/index et synchronisation résidente signée ; conflits structurels explicites et reprise de checkout figé.
 - SDK CMake natif déplaçable : cibles C++/C exportées, dépendances statiques distribuées et qualification de consommateurs installés indépendants.

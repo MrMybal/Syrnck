@@ -39,7 +39,11 @@ namespace syrnck {
  * `SealedLimits` bounds objects, work, index caching/new entries and checkpoint history.
  * These are operation bounds, not total RSS or whole-operation differential-work guarantees.
  * See [sealed repositories](doc:sealed-repositories) for metadata leakage, first-contact
- * trust, shared-key permissions, retention and integration limits. No C/Go sealed API exists yet.
+ * trust, shared-key permissions, retention and integration limits. The [C
+ * ABI](doc:api-c-abi#sealed-repositories) and [Go binding](doc:go-binding#sealed-repositories) expose local
+ * preparation/inspection/import; network wrappers remain C++/CLI. Successful publication wins a
+ * completion-callback stop request; other observer/IO/output-allocation errors can still follow publication,
+ * requiring a ref reload.
  */
 /**
  * @doc api-sealed-repositories
@@ -80,7 +84,11 @@ namespace syrnck {
  * `SealedLimits` borne objets, travail, cache/nouvelles entrées d'index et historique de contrôle.
  * Ces bornes ne garantissent ni la RAM totale ni un travail global limité aux différences.
  * Voir les [dépôts chiffrés](doc:sealed-repositories) pour métadonnées visibles, confiance initiale,
- * permissions à clé partagée, rétention et limites d'intégration. L'API chiffrée C/Go reste à réaliser.
+ * permissions à clé partagée, rétention et limites d'intégration. L'[ABI
+ * C](doc:api-c-abi#sealed-repositories) et le [binding Go](doc:go-binding#sealed-repositories) exposent
+ * préparation/inspection/import locaux ; les wrappers réseau restent en C++/CLI. Une publication réussie
+ * gagne sur l'arrêt demandé dans le callback final ; les autres erreurs d'observateur/IO/allocation imposent
+ * encore de relire les références.
  */
 // A sealed projection is an ordinary Store containing ciphertext and opaque
 // Merkle index nodes. Its HTTP server never receives the client's master key.
