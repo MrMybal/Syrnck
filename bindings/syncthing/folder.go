@@ -36,7 +36,9 @@ type FolderOptions struct {
 	UsePermissions                bool
 	PreserveCheckoutEdits         bool
 	ConflictCopies                bool
-	AuditInterval                 time.Duration
+	// ResumeDownloads retains plaintext private ranges across interrupted runs.
+	ResumeDownloads bool
+	AuditInterval   time.Duration
 }
 
 type FolderStatus struct {
@@ -116,6 +118,9 @@ type Folder struct {
 }
 
 func NewFolder(ctx context.Context, options FolderOptions) (*Folder, error) {
+	if options.ResumeDownloads && options.Storage == "" {
+		return nil, errors.New("syrnck BEP: persistent downloads require an explicit Store directory")
+	}
 	if options.AuditInterval == 0 {
 		options.AuditInterval = 5 * time.Minute
 	}
@@ -983,6 +988,15 @@ func (f *Folder) Step(ctx context.Context, requestFor func(protocol.DeviceID) Re
 			return status, errors.New("syrnck BEP: peer offline")
 		}
 		options := DownloadOptions{}
+		var resume *folderResume
+		if f.options.ResumeDownloads {
+			resume, err = f.acquireResume(download)
+			if err != nil {
+				return status, err
+			}
+			defer func() { err = errors.Join(err, resume.Close()) }()
+			options.ResumeDirectory = resume.directory
+		}
 		if download.Reuse != nil {
 			options.ReuseIndex = &download.Reuse.Info
 			options.ReadReuse = func(ctx context.Context, req *protocol.Request) ([]byte, error) {
@@ -1024,6 +1038,14 @@ func (f *Folder) Step(ctx context.Context, requestFor func(protocol.DeviceID) Re
 		f.mu.Unlock()
 		if err != nil {
 			return status, err
+		}
+		if resume != nil {
+			if err = staged.Close(); err != nil {
+				return status, err
+			}
+			if err = resume.retire(); err != nil {
+				return status, err
+			}
 		}
 		status.State = "downloaded"
 	}

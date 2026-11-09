@@ -262,12 +262,20 @@ func TestFolderControllerBidirectionalWorkspaceChangesAndGC(t *testing.T) {
 }
 
 func TestFolderControllerRefusesStaleDownload(t *testing.T) {
+	for _, resume := range []bool{false, true} {
+		t.Run(fmt.Sprint(resume), func(t *testing.T) { testFolderControllerStaleDownload(t, resume) })
+	}
+}
+
+func testFolderControllerStaleDownload(t *testing.T, resume bool) {
 	ctx := context.Background()
 	root := tempDirectory(t)
 	leftID := protocol.NewDeviceID([]byte("changing source"))
 	rightID := protocol.NewDeviceID([]byte("changing receiver"))
 	left := createTestFolder(t, folderTestOptions(filepath.Join(root, "left-plain"), leftID, rightID, false), map[string][]byte{"asset": block(6)})
-	right := createTestFolder(t, folderTestOptions(filepath.Join(root, "right-plain"), rightID, leftID, false), nil)
+	options := folderTestOptions(filepath.Join(root, "right-plain"), rightID, leftID, false)
+	options.ResumeDownloads = resume
+	right := createTestFolder(t, options, nil)
 	old := exchangeFolderIndex(t, left, right, true, 0)
 	changed := false
 	_, err := right.Step(ctx, func(protocol.DeviceID) RequestFunc {

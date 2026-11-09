@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/syncthing/syncthing v1.30.0-rc.1.0.20261020195438-d6d0181f7d46
+	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
 	syrnck.local/bindings/go v0.0.0
 )
@@ -39,7 +40,6 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20261007192929-f45ad48fbe92 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect

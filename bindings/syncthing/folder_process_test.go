@@ -158,41 +158,7 @@ func terminateFolderAtCheckpoint(t *testing.T, options FolderOptions, phase stri
 	t.Helper()
 	command := exec.Command(os.Args[0], "-test.run=^TestFolderProcessChild$", "-test.timeout=20s")
 	command.Env = append(os.Environ(), "SYRNCK_FOLDER_CHILD="+options.Directory, "SYRNCK_FOLDER_PHASE="+phase)
-	var diagnostics bytes.Buffer
-	command.Stderr = &diagnostics
-	stdout, err := command.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = command.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if command.ProcessState == nil {
-			_ = command.Process.Kill()
-			_ = command.Wait()
-		}
-	})
-	ready := make(chan string, 1)
-	go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
-	select {
-	case line := <-ready:
-		if line != "folder-checkpoint\n" {
-			_ = command.Process.Kill()
-			_ = command.Wait()
-			t.Fatal("wrong child checkpoint", line, diagnostics.String())
-		}
-	case <-time.After(8 * time.Second):
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		t.Fatal("folder checkpoint timed out", diagnostics.String())
-	}
-	if err = command.Process.Kill(); err != nil {
-		t.Fatal(err)
-	}
-	if err = command.Wait(); err == nil {
-		t.Fatal("child was not terminated")
-	}
+	terminateProcessAtCheckpoint(t, command, "folder-checkpoint\n")
 }
 
 func TestConflictCopiesSurviveTerminationGCAndBackup(t *testing.T) {
@@ -317,5 +283,48 @@ func TestConflictCopiesSurviveTerminationGCAndBackup(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func terminateProcessAtCheckpoint(t *testing.T, command *exec.Cmd, checkpoint string, beforeKill ...func()) {
+	t.Helper()
+	hideReferenceProcess(command)
+	var diagnostics bytes.Buffer
+	command.Stderr = &diagnostics
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	})
+	ready := make(chan string, 1)
+	go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
+	select {
+	case line := <-ready:
+		if line != checkpoint {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+			t.Fatal("wrong child checkpoint", line, diagnostics.String())
+		}
+	case <-time.After(8 * time.Second):
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		t.Fatal("folder checkpoint timed out", diagnostics.String())
+	}
+	for _, check := range beforeKill {
+		check()
+	}
+	if err = command.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err = command.Wait(); err == nil {
+		t.Fatal("child was not terminated")
 	}
 }

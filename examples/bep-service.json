@@ -10,6 +10,7 @@
   "key_env": "SYRNCK_KEY",
   "preserve_checkout_edits": true,
   "conflict_copies": true,
+  "resume_downloads": false,
   "use_permissions": false,
   "poll_ms": 250,
   "retry_min_ms": 500,

@@ -42,6 +42,7 @@ type configuration struct {
 	UsePermissions        bool   `json:"use_permissions"`
 	PreserveCheckoutEdits bool   `json:"preserve_checkout_edits"`
 	ConflictCopies        bool   `json:"conflict_copies"`
+	ResumeDownloads       bool   `json:"resume_downloads"`
 	PollMilliseconds      uint32 `json:"poll_ms"`
 	RetryMinMilliseconds  uint32 `json:"retry_min_ms"`
 	RetryMaxMilliseconds  uint32 `json:"retry_max_ms"`
@@ -280,7 +281,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 	}
 	folder, err := bep.NewFolder(ctx, bep.FolderOptions{Directory: config.Directory, Storage: config.Storage, Workspace: config.Workspace,
 		Catalog:   bep.CatalogOptions{Folder: config.Folder, LocalDevice: local, Peers: []protocol.DeviceID{peer}},
-		OpenStore: provider, UsePermissions: config.UsePermissions, PreserveCheckoutEdits: config.PreserveCheckoutEdits, ConflictCopies: config.ConflictCopies})
+		OpenStore: provider, UsePermissions: config.UsePermissions, PreserveCheckoutEdits: config.PreserveCheckoutEdits, ConflictCopies: config.ConflictCopies, ResumeDownloads: config.ResumeDownloads})
 	if err != nil {
 		return err
 	}

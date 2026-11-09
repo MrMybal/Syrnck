@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 9
+revision: 10
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -304,6 +304,47 @@ verify the incoming bytes or a subsequent local edit, with plain/encrypted
 Stores. Concurrent protocol versions block by default; the explicit
 [conflict-copy policy](doc:syncthing#protocol-conflicts) retains both contents.
 
+## Persistent controller downloads {#persistent-downloads}
+
+`FolderOptions.ResumeDownloads: true` enables reuse of verified private ranges
+across connection loss and controller/process restart. The standalone equivalent
+is `"resume_downloads": true`; the default is false. An embedding must supply an
+explicit Store directory. The optional path lives below
+`STORE/bep-downloads/v1/`, grouped by folder/workspace identity, with a separate
+hash for the pinned peer, index generation and exact announced content index.
+A changed generation/content index selects another path.
+
+An operating-system file lock serializes staging for that folder across
+controllers, without opening a native Store during network waits. Lock
+contention reports `ErrFolderDownloadBusy`; process termination releases the
+lock. The lock file remains in place to preserve its identity. Windows, Linux
+and macOS have lock implementations; other unsupported targets refuse this
+option. Do not remove or edit the private staging/lock paths while running.
+
+Every saved range is rehashed against the announced SHA-256 before reuse.
+Incomplete or corrupt blocks are requested again. Import verifies the complete
+stream. Attachment requires the current peer generation and exact announced
+metadata before retaining the immutable manifest. Stale downloads cannot be
+installed. A complete matching staging pair is removed only after successful
+catalog retention; native working-file application still uses its owned
+transaction and receipt.
+
+Persistent staging is **plaintext even when Store objects are encrypted**. Keep
+the Store directory private and enable the option deliberately. The example
+leaves it disabled. Core backups do not include these private unretained ranges.
+Failed/obsolete staging is kept for retry or inspection; automated age/quota
+retirement remains unfinished. After stopping all controllers, such directories
+can be removed; they are not history roots. Unknown entries or mismatched
+metadata are refused, never recursively deleted. An interrupted cleanup can
+leave an incomplete private directory requiring inspection.
+
+Tests exercise reopen, corrupted-range rejection, exclusive lock contention,
+changed peer generation and stale announcements. Actual child-process kills in
+plain/encrypted Stores retain the first verified block and request only the
+remaining blocks after restart. Reference-daemon standalone tests enable this
+option with both-direction changes, offline rename and conflicts. This does not
+establish power-loss durability or protection from arbitrary external writers.
+
 ## Concurrent protocol versions {#protocol-conflicts}
 
 Set `FolderOptions.ConflictCopies: true`, or `"conflict_copies": true` in the
@@ -361,7 +402,7 @@ reconnect backoff and independent offline capture. This module is optional; the 
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
 platform ownership/xattrs or receive-encrypted folders. It retains incoming
 metadata but does not claim these paths have been applied. It also lacks
-persistent download resume, automatic membership
+automatic membership
 changes/history retirement and authored/signature policy for newly synthesized
 incoming native candidates. Large-project performance and power-loss durability
 are not qualified. The native resident publication agent is a separate feature.
@@ -500,7 +541,8 @@ Configuration version 1 rejects duplicate/unknown fields and inputs over 64 KiB.
 `poll_ms` is 50..60000 (zero selects 250); retry bounds default to 500 and 30000 ms.
 `use_permissions`, `preserve_checkout_edits` and `conflict_copies` default false.
 The example explicitly enables [active-file preservation](doc:syncthing#active-checkout-edits)
-and [concurrent-version copies](doc:syncthing#protocol-conflicts). These protect
+and [concurrent-version copies](doc:syncthing#protocol-conflicts).
+`resume_downloads` also defaults false; read the [plaintext staging requirements](doc:syncthing#persistent-downloads) before enabling it. These protect
 different situations and can be configured independently.
 
 Stop with Ctrl+C or SIGTERM. Restart with the same identity/configuration to

@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 9
+sourceRevision: 10
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -252,6 +252,48 @@ avec Stores chiffrés et non chiffrés. Les versions protocolaires concurrentes
 bloquent par défaut ; la [politique explicite de copies](doc:syncthing#protocol-conflicts)
 conserve les deux contenus.
 
+## Téléchargements persistants du contrôleur {#persistent-downloads}
+
+`FolderOptions.ResumeDownloads: true` réutilise les plages privées vérifiées
+après perte de connexion et redémarrage du contrôleur/processus. L’équivalent
+autonome est `"resume_downloads": true` ; le défaut vaut false. Une intégration
+doit fournir explicitement le dossier du Store. Le chemin optionnel reste sous
+`STORE/bep-downloads/v1/`, groupé par identité du dossier/workspace, avec un hash
+du pair épinglé, de la génération et de l’index exact du contenu annoncé.
+Une autre génération ou un autre contenu choisit un chemin distinct.
+
+Un verrou système sérialise le staging du dossier entre contrôleurs, sans Store
+natif ouvert pendant l’attente réseau. Une contention rend
+`ErrFolderDownloadBusy` ; terminer le processus libère le verrou. Son fichier
+reste en place pour conserver son identité. Windows, Linux et macOS possèdent
+une implémentation ; les autres cibles non prises en charge refusent cette
+option. Ne pas supprimer ni modifier ces chemins pendant l’exécution.
+
+Chaque plage sauvegardée est rehashée contre le SHA-256 annoncé avant réemploi.
+Un bloc incomplet ou corrompu est redemandé. L’import vérifie le flux complet. L’attachement exige génération et métadonnées
+exactes toujours annoncées avant rétention du manifeste immuable. Aucun téléchargement périmé n’est installé.
+Le couple de staging complet correspondant est retiré uniquement après
+rétention réussie du catalogue ; l’application aux fichiers de travail utilise
+toujours sa transaction native à propriétaire et son reçu.
+
+Le staging persistant est **en clair même avec des objets du Store chiffrés**.
+Garder le dossier du Store privé et activer l’option volontairement. L’exemple la
+laisse désactivée. Les sauvegardes du moteur n’incluent pas ces plages privées
+non retenues. Le staging échoué ou obsolète reste disponible pour reprise ou
+inspection ; retrait automatique selon âge/quota reste à finir. Après arrêt de
+tous les contrôleurs, ces dossiers peuvent être retirés ; ce ne sont pas des
+racines d’historique. Entrées inconnues ou métadonnées différentes sont refusées,
+sans suppression récursive. Un nettoyage interrompu peut laisser un dossier
+privé incomplet à inspecter.
+
+Les tests couvrent réouverture, corruption, contention du verrou, génération
+distante modifiée et annonces périmées. De vrais processus terminés brutalement
+dans des Stores clairs/chiffrés gardent le premier bloc vérifié et redemandent
+seulement les autres au redémarrage. Les tests autonomes face au daemon amont
+activent cette option pour changements dans les deux sens, renommage hors ligne
+et conflits. Cela ne prouve ni durabilité après coupure ni résistance à tout
+écrivain externe.
+
 ## Versions protocolaires concurrentes {#protocol-conflicts}
 
 Activer `FolderOptions.ConflictCopies: true`, ou `"conflict_copies": true` dans
@@ -310,7 +352,7 @@ et capture hors ligne indépendante. Ce module est optionnel ; la cible BEP CMak
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
 vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
-Reprise persistante de téléchargement, gestion automatique
+Gestion automatique
 des membres/retrait d’historique et politique d’auteur/signature des nouveaux
 candidats natifs entrants restent à réaliser. Performances à grande échelle et
 durabilité face à une coupure électrique ne sont pas qualifiées. L’agent natif
@@ -455,7 +497,8 @@ La configuration version 1 refuse doublons/champs inconnus et plus de 64 Kio.
 500/30000 ms par défaut. `use_permissions` et `preserve_checkout_edits` valent
 false ; l’exemple active la [préservation des éditions](doc:syncthing#active-checkout-edits).
 `conflict_copies` vaut également false par défaut ; l’exemple active les
-[copies pour vecteurs concurrents](doc:syncthing#protocol-conflicts). Ces deux
+[copies pour vecteurs concurrents](doc:syncthing#protocol-conflicts).
+`resume_downloads` vaut false par défaut ; lire les [conditions du staging en clair](doc:syncthing#persistent-downloads) avant activation. Ces deux
 politiques protègent des situations distinctes et se configurent séparément.
 
 Ctrl+C ou SIGTERM arrête le processus. Redémarrer avec la même identité et la

@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Staging BEP persistant facultatif : reprise des plages vérifiées après déconnexion/arrêt de processus, verrou OS distinct et retrait après rétention du catalogue ; le staging en clair demande une activation explicite.
 - Exécutable optionnel `syrnck-bep` : configuration locale stricte, aide anglais/français, appareils épinglés, capture hors ligne, tests de redémarrage et sources/notices des dépendances distribuées.
 
 - API de service résident BEP : capture hors ligne indépendante, reconnexion appairée/attente et arrêt joint de TLS/transports ; installation en service OS reste à terminer.

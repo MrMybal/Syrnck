@@ -224,6 +224,16 @@ func validateIndex(folder string, info protocol.FileInfo) error {
 	return nil
 }
 
+func stageMetadata(folder string, info protocol.FileInfo) ([]byte, error) {
+	return json.Marshal(struct {
+		Version      int
+		Folder, Name string
+		Size         int64
+		BlockSize    int
+		Hash         string
+	}{1, folder, info.Name, info.Size, info.BlockSize(), hex.EncodeToString(protocol.BlocksHash(info.Blocks))})
+}
+
 func stage(folder string, info protocol.FileInfo, directory string) (*os.File, func(), error) {
 	if directory == "" {
 		file, err := os.CreateTemp("", ".syrnck-bep-*")
@@ -232,13 +242,7 @@ func stage(folder string, info protocol.FileInfo, directory string) (*os.File, f
 		}
 		return file, func() { _ = os.Remove(file.Name()) }, nil
 	}
-	metadata, err := json.Marshal(struct {
-		Version      int
-		Folder, Name string
-		Size         int64
-		BlockSize    int
-		Hash         string
-	}{1, folder, info.Name, info.Size, info.BlockSize(), hex.EncodeToString(protocol.BlocksHash(info.Blocks))})
+	metadata, err := stageMetadata(folder, info)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -65,7 +65,7 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			configuration := map[string]any{"version": 1, "directory": directory, "storage": storage, "folder": "project", "certificate": certPath, "private_key": keyPath,
-				"peer": reference.device.String(), "mode": "dial", "address": reference.bep, "key_env": "SYRNCK_BEP_DAEMON_TEST_KEY", "conflict_copies": true, "poll_ms": 100, "retry_min_ms": 50, "retry_max_ms": 200}
+				"peer": reference.device.String(), "mode": "dial", "address": reference.bep, "key_env": "SYRNCK_BEP_DAEMON_TEST_KEY", "conflict_copies": true, "resume_downloads": true, "poll_ms": 100, "retry_min_ms": 50, "retry_max_ms": 200}
 			encoded, err := json.Marshal(configuration)
 			if err != nil {
 				t.Fatal(err)
@@ -107,6 +107,22 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 						}
 					}
 				})
+				// Do not open the native Store from the acknowledgement probe
+				// until constructor capture has released its exclusive lock.
+				for {
+					data, err := os.ReadFile(filepath.Join(root, label+"-events.log"))
+					var event struct {
+						Event string `json:"event"`
+					}
+					if err == nil && json.NewDecoder(bytes.NewReader(data)).Decode(&event) == nil && event.Event == "ready" {
+						break
+					}
+					select {
+					case <-ctx.Done():
+						t.Fatal("standalone service did not initialize", ctx.Err())
+					case <-time.After(10 * time.Millisecond):
+					}
+				}
 				return stop
 			}
 			waitApplied := func(name string, wanted []byte) {
