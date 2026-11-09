@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 11
+revision: 12
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -223,3 +223,13 @@ func openProtectedStore(path string, envelope, password []byte) (*syrnck.Store, 
 `OpenProtected(path, envelope, password, create)` provides that one-shot convenience. For service callbacks, keep one owner alive until all service workers join, and open short Store sessions from it. Derivation is synchronous and bounded; passwords contain 1..4096 exact bytes, including NUL for SDK calls. Clear caller-owned input buffers when no longer needed. Authentication failure does not create a Store directory.
 
 [CLI key files](doc:key-files) use the same envelope. Pair this binding with the matching native library; ABI 1 has additive key entry points.
+
+## Protected signers {#protected-signers}
+
+[Purpose-separated signing envelopes](doc:signing-keys) use `ProtectSigningKey`,
+`ChangeSigningKeyPassword` and `OpenProtectedSigner`. The move-only native owner
+is exposed as a non-copyable Go `SigningKey` with public metadata and explicit
+Close. Use `NativeIdentityOptions.Signer` and `RequireSignature: true` to attach
+independent state to short Store sessions without repeating Argon2id. Seed and
+Signer are mutually exclusive. Closing an owner does not revoke a configured
+Store or older envelopes; failed setup preserves the previous identity.

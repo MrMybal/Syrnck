@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 27
+sourceRevision: 28
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -21,7 +21,7 @@ L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers o
 
 ## Sécurité, rétention et récupération {#security}
 
-Les objets peuvent être chiffrés au repos, avec clés indépendantes pour sauvegardes/restaurations. L’[API de protection des clés par mot de passe](doc:api-password-keys) fournit une dérivation Argon2id bornée et des enveloppes authentifiées. Les [fichiers de clés CLI](doc:key-files) permettent création, protection d’une clé existante et changement de mot de passe ; les propriétaires natifs opaques C/Go ouvrent des sessions Store courtes sans exporter les clés déchiffrées. Le CLI BEP autonome accepte aussi un fichier de clé protégé, authentifié au démarrage ; le redémarrage recharge les identifiants modifiés. Les serveurs de confiance reçoivent les objets en clair dans le transport sécurisé. Chiffrement de bout en bout, coffres système, fournisseurs de graines de signature protégées, rotation/révocation distribuée, réparation automatique de répliques et GC distribué restent inachevés.
+Les objets peuvent être chiffrés au repos, avec clés indépendantes pour sauvegardes/restaurations. L’[API de protection des clés par mot de passe](doc:api-password-keys) fournit une dérivation Argon2id bornée et des enveloppes authentifiées. Les [fichiers de clés CLI](doc:key-files) permettent création, protection d’une clé existante et changement de mot de passe ; les propriétaires natifs opaques C/Go ouvrent des sessions Store courtes sans exporter les clés déchiffrées. Le CLI BEP autonome accepte aussi un fichier de clé protégé, authentifié au démarrage ; le redémarrage recharge les identifiants modifiés. Les serveurs de confiance reçoivent les objets en clair dans le transport sécurisé. Les [fournisseurs de graines de signature protégées](doc:signing-keys) sont disponibles en C++/CLI/C/Go et dans les deux services résidents. Chiffrement de bout en bout, coffres système, rotation/révocation distribuée, réparation automatique de répliques et GC distribué restent inachevés.
 
 La rétention est explicite. Les archives conservent les versions tant que leurs racines restent présentes ; une sauvegarde vérifiée peut protéger le retrait manuel, sans politique automatique par âge/release. Arrêt de processus et panne d’alimentation sont des garanties différentes. Aucune opération n’établit une sûreté universelle après coupure électrique, sur stockage réseau ou face à un écrivain externe hostile.
 

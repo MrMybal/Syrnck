@@ -1,5 +1,8 @@
 """Authored native revisions and private-seed ownership through the CLI."""
 import json
+import tempfile
+from pathlib import Path
+from fixture_timing import remove_owned_case
 import unittest
 import native_workflows as base
 
@@ -14,6 +17,79 @@ class NativeAuthorship(unittest.TestCase):
 
     def metadata(self, identifier):
         return json.loads(self.cmd("inspect", "revision", identifier))
+
+    def test_protected_signing_file_rewrap_and_fail_closed_identity(self):
+        private = Path(tempfile.mkdtemp(prefix="syrnck-private-signing-"))
+        self.addCleanup(remove_owned_case, private.parent, private.name)
+        secret = private / "clé de signature.bin"
+        password = "  Signature 🔐 密钥  "
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = password
+        self.env["SYRNCK_SIGNING_SEED"] = "1d" * 32
+        protected = json.loads(self.call("signing-key", "protect", secret, "--memory-mib", "65", "--passes", "4").stdout)
+        self.assertEqual(protected["type"], "protected-signing-key")
+        self.assertTrue(protected["authenticated"])
+        self.assertEqual(secret.stat().st_size, 104)
+        original = secret.read_bytes()
+        profile = json.loads(self.call("native", "identity", "--name", "Protected author",
+                                       "--email", "protected@example.invalid").stdout)
+        self.assertEqual(profile["signing_key"], protected["key_id"])
+        self.env.pop("SYRNCK_SIGNING_SEED")
+        inspected = json.loads(self.call("signing-key", "inspect", secret).stdout)
+        self.assertFalse(inspected["authenticated"])
+        self.assertNotIn("public_key", inspected)
+        self.assertEqual(json.loads(self.call("signing-key", "verify", secret).stdout)["public_key"], protected["public_key"])
+        self.call("key", "verify", secret, ok=False)
+        self.env["SYRNCK_SIGNING_KEY_FILE"] = str(secret)
+        (self.root / "code").write_bytes(b"signed via protected file\n")
+        first = self.commit("protected signature")
+        self.assertEqual(self.metadata(first)["signature"]["key_id"], protected["key_id"])
+        self.assertNotIn(password, (self.store / "native-identity.json").read_text(encoding="utf-8"))
+        before = self.snapshot()
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = "wrong credential"
+        result = self.call("--lang", "fr", "native", "commit", "-m", "must fail", ok=False)
+        self.assertIn("authentification", result.stderr.decode("utf-8"))
+        self.assertEqual(self.snapshot(), before)
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = password
+        self.env["SYRNCK_SIGNING_SEED"] = "1d" * 32
+        self.call("native", "identity", ok=False)
+        self.assertEqual(self.snapshot(), before)
+        self.env.pop("SYRNCK_SIGNING_SEED")
+        broken = bytearray(original); broken[88] ^= 1; secret.write_bytes(broken)
+        self.call("native", "identity", ok=False)
+        self.assertEqual(self.snapshot(), before)
+        secret.write_bytes(original)
+        self.env["SYRNCK_NEW_SIGNING_KEY_PASSWORD"] = "new signing password"
+        next_file = private / "rewrapped.bin"
+        changed = json.loads(self.call("signing-key", "rewrap", secret, next_file).stdout)
+        self.assertEqual(changed["key_id"], protected["key_id"])
+        self.assertEqual((changed["memory_kib"], changed["passes"]), (65 * 1024, 4))
+        self.assertEqual(secret.read_bytes(), original)
+        self.call("signing-key", "create", secret, ok=False)
+        self.env["SYRNCK_SIGNING_KEY_FILE"] = str(next_file)
+        self.call("native", "identity", ok=False)
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = self.env["SYRNCK_NEW_SIGNING_KEY_PASSWORD"]
+        (self.root / "code").write_bytes(b"same identity after rewrap\n")
+        second = self.commit("rewrapped signer")
+        self.assertEqual(self.metadata(second)["signature"]["key_id"], protected["key_id"])
+        self.env["SYRNCK_SIGNING_KEY_FILE"] = str(secret)
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = password
+        self.assertEqual(json.loads(self.call("native", "identity").stdout)["signing_key"], protected["key_id"])
+        generated = json.loads(self.call("signing-key", "create", private / "fresh.bin").stdout)
+        self.assertNotEqual(generated["key_id"], protected["key_id"])
+        for value in (password.encode(), b"1d" * 32, self.env["SYRNCK_NEW_SIGNING_KEY_PASSWORD"].encode()):
+            self.assertNotIn(value, result.stdout + result.stderr)
+        self.call("gc", "--delete"); self.call("fsck")
+
+    def test_empty_signing_environment_has_specific_diagnostics(self):
+        before = self.snapshot()
+        self.env["SYRNCK_SIGNING_SEED"] = ""
+        error = self.call("native", "identity", ok=False).stderr
+        self.assertIn(b"SYRNCK_SIGNING_SEED must encode exactly 32 bytes", error)
+        self.env.pop("SYRNCK_SIGNING_SEED")
+        self.env["SYRNCK_SIGNING_KEY_FILE"] = ""
+        error = self.call("native", "identity", ok=False).stderr
+        self.assertIn(b"SYRNCK_SIGNING_KEY_FILE must name a protected signing key file", error)
+        self.assertEqual(self.snapshot(), before)
 
     def test_profile_signed_commits_rewrites_and_public_history(self):
         (self.root / "code").write_bytes(b"base\n")

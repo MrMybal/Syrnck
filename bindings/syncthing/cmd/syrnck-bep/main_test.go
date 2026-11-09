@@ -56,133 +56,149 @@ func TestStandaloneProcessRetainsOfflineVersionsAfterHardTermination(t *testing.
 	if !filepath.IsAbs(executable) {
 		t.Fatal("standalone executable path must be absolute")
 	}
-	for _, encrypted := range []bool{false, true} {
-		t.Run(map[bool]string{false: "plain", true: "encrypted"}[encrypted], func(t *testing.T) {
-			root := t.TempDir()
-			directory := filepath.Join(root, "work")
-			if err := os.Mkdir(directory, 0700); err != nil {
-				t.Fatal(err)
-			}
-			cert, key, _ := testIdentity(t, root)
-			_, _, peer := testIdentity(t, t.TempDir())
-			var storageKey []byte
-			if encrypted {
-				storageKey = bytes.Repeat([]byte{91}, 32)
-			}
-			t.Setenv("SYRNCK_BEP_PROCESS_TEST_KEY", hex.EncodeToString(storageKey))
-			storage := filepath.Join(directory, ".syrnck")
-			store, err := syrnck.Open(storage, syrnck.Options{Create: true, Key: storageKey})
-			if err != nil {
-				t.Fatal(err)
-			}
-			store.Close()
-			config := configuration{Version: 1, Directory: directory, Storage: storage, Folder: "project", Certificate: cert, PrivateKey: key, Peer: peer, Mode: "listen", Address: "127.0.0.1:0", KeyEnv: "SYRNCK_BEP_PROCESS_TEST_KEY", Author: &syrnck.NativeIdentity{Name: "Process author", Email: "process@example.invalid", TimezoneOffset: -60}, SigningKeyEnv: "SYRNCK_BEP_PROCESS_SIGNING_KEY"}
-			t.Setenv("SYRNCK_BEP_PROCESS_SIGNING_KEY", hex.EncodeToString(bytes.Repeat([]byte{34}, 32)))
-			document, err := json.Marshal(config)
-			if err != nil {
-				t.Fatal(err)
-			}
-			configPath := filepath.Join(root, "service.json")
-			if err := os.WriteFile(configPath, document, 0600); err != nil {
-				t.Fatal(err)
-			}
-			previous := ""
-			var manifests []string
-			contents := []string{"first offline process version", "second offline process version"}
-			for _, content := range contents {
-				if err := os.WriteFile(filepath.Join(directory, "asset.bin"), []byte(content), 0600); err != nil {
+	for _, protectedSigner := range []bool{false, true} {
+		for _, encrypted := range []bool{false, true} {
+			t.Run(map[bool]string{false: "plain", true: "encrypted"}[encrypted]+"-"+map[bool]string{false: "raw", true: "protected"}[protectedSigner], func(t *testing.T) {
+				root := t.TempDir()
+				directory := filepath.Join(root, "work")
+				if err := os.Mkdir(directory, 0700); err != nil {
 					t.Fatal(err)
 				}
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				command := exec.CommandContext(ctx, executable, "run", "--config", configPath)
-				hideProcess(command)
-				command.Env = os.Environ()
-				if runtime.GOOS == "windows" {
-					// Qualify automatic adjacent native library lookup in the child.
-					filtered := command.Env[:0]
-					for _, entry := range command.Env {
-						if !strings.HasPrefix(strings.ToUpper(entry), "SYRNCK_LIBRARY=") {
-							filtered = append(filtered, entry)
+				cert, key, _ := testIdentity(t, root)
+				_, _, peer := testIdentity(t, t.TempDir())
+				var storageKey []byte
+				if encrypted {
+					storageKey = bytes.Repeat([]byte{91}, 32)
+				}
+				t.Setenv("SYRNCK_BEP_PROCESS_TEST_KEY", hex.EncodeToString(storageKey))
+				storage := filepath.Join(directory, ".syrnck")
+				store, err := syrnck.Open(storage, syrnck.Options{Create: true, Key: storageKey})
+				if err != nil {
+					t.Fatal(err)
+				}
+				store.Close()
+				config := configuration{Version: 1, Directory: directory, Storage: storage, Folder: "project", Certificate: cert, PrivateKey: key, Peer: peer, Mode: "listen", Address: "127.0.0.1:0", KeyEnv: "SYRNCK_BEP_PROCESS_TEST_KEY", Author: &syrnck.NativeIdentity{Name: "Process author", Email: "process@example.invalid", TimezoneOffset: -60}, SigningKeyEnv: "SYRNCK_BEP_PROCESS_SIGNING_KEY"}
+				t.Setenv("SYRNCK_BEP_PROCESS_SIGNING_KEY", hex.EncodeToString(bytes.Repeat([]byte{34}, 32)))
+				if protectedSigner {
+					config.SigningKeyEnv = ""
+					config.SigningKeyFile = filepath.Join(root, "author.syrsig")
+					config.SigningKeyPasswordEnv = "SYRNCK_BEP_PROCESS_SIGNING_PASSWORD"
+					password := []byte("standalone signing credential")
+					envelope, err := syrnck.ProtectSigningKey(bytes.Repeat([]byte{34}, 32), password, syrnck.PasswordKdfOptions{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(config.SigningKeyFile, envelope, 0600); err != nil {
+						t.Fatal(err)
+					}
+					t.Setenv(config.SigningKeyPasswordEnv, string(password))
+				}
+				document, err := json.Marshal(config)
+				if err != nil {
+					t.Fatal(err)
+				}
+				configPath := filepath.Join(root, "service.json")
+				if err := os.WriteFile(configPath, document, 0600); err != nil {
+					t.Fatal(err)
+				}
+				previous := ""
+				var manifests []string
+				contents := []string{"first offline process version", "second offline process version"}
+				for _, content := range contents {
+					if err := os.WriteFile(filepath.Join(directory, "asset.bin"), []byte(content), 0600); err != nil {
+						t.Fatal(err)
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					command := exec.CommandContext(ctx, executable, "run", "--config", configPath)
+					hideProcess(command)
+					command.Env = os.Environ()
+					if runtime.GOOS == "windows" {
+						// Qualify automatic adjacent native library lookup in the child.
+						filtered := command.Env[:0]
+						for _, entry := range command.Env {
+							if !strings.HasPrefix(strings.ToUpper(entry), "SYRNCK_LIBRARY=") {
+								filtered = append(filtered, entry)
+							}
+						}
+						command.Env = filtered
+					}
+					var diagnostics bytes.Buffer
+					command.Stderr = &diagnostics
+					output, err := command.StdoutPipe()
+					if err != nil {
+						cancel()
+						t.Fatal(err)
+					}
+					if err := command.Start(); err != nil {
+						cancel()
+						t.Fatal(err)
+					}
+					var ready struct{ Event string }
+					decodeError := json.NewDecoder(output).Decode(&ready)
+					killError := command.Process.Kill()
+					waitError := command.Wait()
+					cancel()
+					_ = output.Close()
+					if decodeError != nil || ready.Event != "ready" || killError != nil || waitError == nil {
+						t.Fatal("standalone process did not publish then terminate", decodeError, ready, killError, waitError, diagnostics.String())
+					}
+					store, err = syrnck.Open(storage, syrnck.Options{Key: storageKey})
+					if err != nil {
+						t.Fatal(err)
+					}
+					refs, err := store.Refs()
+					if err != nil {
+						store.Close()
+						t.Fatal(err)
+					}
+					root, ok := refs["heads/main"]
+					if !ok {
+						store.Close()
+						t.Fatal("terminated process lost native head")
+					}
+					data, err := store.Get(root)
+					if err != nil {
+						store.Close()
+						t.Fatal(err)
+					}
+					var revision struct {
+						Version   int `json:"version"`
+						Signature struct {
+							PublicKey string `json:"public_key"`
+						} `json:"signature"`
+						Parents []string `json:"parents"`
+						Files   map[string]struct {
+							Manifest string `json:"manifest"`
+						} `json:"files"`
+					}
+					if err := json.Unmarshal(data, &revision); err != nil {
+						store.Close()
+						t.Fatal(err)
+					}
+					expected := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{34}, 32)).Public().(ed25519.PublicKey)
+					if revision.Version != 2 || revision.Signature.PublicKey != hex.EncodeToString(expected) {
+						store.Close()
+						t.Fatal("standalone capture did not use native signing identity", string(data))
+					}
+					if previous != "" && (len(revision.Parents) != 1 || revision.Parents[0] != previous) {
+						store.Close()
+						t.Fatal("restarted process replaced historical parent", revision.Parents)
+					}
+					previous = root.ID
+					manifests = append(manifests, revision.Files["asset.bin"].Manifest)
+					for i, manifest := range manifests {
+						got, err := store.ReadRange(manifest, 0, uint64(len(contents[i])))
+						if err != nil || string(got) != contents[i] {
+							store.Close()
+							t.Fatal("old process version is not reconstructible", i, err)
 						}
 					}
-					command.Env = filtered
-				}
-				var diagnostics bytes.Buffer
-				command.Stderr = &diagnostics
-				output, err := command.StdoutPipe()
-				if err != nil {
-					cancel()
-					t.Fatal(err)
-				}
-				if err := command.Start(); err != nil {
-					cancel()
-					t.Fatal(err)
-				}
-				var ready struct{ Event string }
-				decodeError := json.NewDecoder(output).Decode(&ready)
-				killError := command.Process.Kill()
-				waitError := command.Wait()
-				cancel()
-				_ = output.Close()
-				if decodeError != nil || ready.Event != "ready" || killError != nil || waitError == nil {
-					t.Fatal("standalone process did not publish then terminate", decodeError, ready, killError, waitError, diagnostics.String())
-				}
-				store, err = syrnck.Open(storage, syrnck.Options{Key: storageKey})
-				if err != nil {
-					t.Fatal(err)
-				}
-				refs, err := store.Refs()
-				if err != nil {
-					store.Close()
-					t.Fatal(err)
-				}
-				root, ok := refs["heads/main"]
-				if !ok {
-					store.Close()
-					t.Fatal("terminated process lost native head")
-				}
-				data, err := store.Get(root)
-				if err != nil {
-					store.Close()
-					t.Fatal(err)
-				}
-				var revision struct {
-					Version   int `json:"version"`
-					Signature struct {
-						PublicKey string `json:"public_key"`
-					} `json:"signature"`
-					Parents []string `json:"parents"`
-					Files   map[string]struct {
-						Manifest string `json:"manifest"`
-					} `json:"files"`
-				}
-				if err := json.Unmarshal(data, &revision); err != nil {
-					store.Close()
-					t.Fatal(err)
-				}
-				expected := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{34}, 32)).Public().(ed25519.PublicKey)
-				if revision.Version != 2 || revision.Signature.PublicKey != hex.EncodeToString(expected) {
-					store.Close()
-					t.Fatal("standalone capture did not use native signing identity", string(data))
-				}
-				if previous != "" && (len(revision.Parents) != 1 || revision.Parents[0] != previous) {
-					store.Close()
-					t.Fatal("restarted process replaced historical parent", revision.Parents)
-				}
-				previous = root.ID
-				manifests = append(manifests, revision.Files["asset.bin"].Manifest)
-				for i, manifest := range manifests {
-					got, err := store.ReadRange(manifest, 0, uint64(len(contents[i])))
-					if err != nil || string(got) != contents[i] {
-						store.Close()
-						t.Fatal("old process version is not reconstructible", i, err)
+					if err := store.Close(); err != nil {
+						t.Fatal(err)
 					}
 				}
-				if err := store.Close(); err != nil {
-					t.Fatal(err)
-				}
-			}
-		})
+			})
+		}
 	}
 }
 

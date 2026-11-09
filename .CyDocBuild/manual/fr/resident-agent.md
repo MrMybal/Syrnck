@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 8
+sourceRevision: 9
 ---
 
 ## Fonctionnement continu {#run}
@@ -230,3 +230,5 @@ requises. Le texte compatible suit la destination ; les conflits structurels
 restent bloqués. Identité, signatures, branches et chemins gardent leurs
 contrôles. Un checkout préparé reprend sa cible figée même si le processus
 suivant omet l'option.
+
+Le [fournisseur de signature protégé](doc:signing-keys#services) authentifie une fois au démarrage et conserve le signataire natif développé entre sessions courtes. Les changements d’identifiants demandent un redémarrage ; un fournisseur configuré indisponible empêche ce démarrage.

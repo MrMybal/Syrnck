@@ -1,4 +1,5 @@
 #include "cli_identity.hpp"
+#include "cli_keys.hpp"
 #include "native_workspace.hpp"
 #include <monocypher.h>
 #include <charconv>
@@ -17,8 +18,10 @@ std::optional<std::string> environment(const char *name) {
   require(required <= 8192, "native identity environment value exceeds its limit");
   std::wstring value(required, L'\0');
   struct Wipe { std::wstring &value; ~Wipe() { crypto_wipe(value.data(), value.size() * sizeof(wchar_t)); } } wipe{value};
+  SetLastError(ERROR_SUCCESS);
   const auto length = GetEnvironmentVariableW(wide_name.c_str(), value.data(), required);
-  require(length && length < required, "cannot read native identity environment");
+  require(length < required && (length || GetLastError() == ERROR_SUCCESS), "cannot read native identity environment");
+  if (!length) return std::string{};
   const auto size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), static_cast<int>(length), nullptr, 0, nullptr, nullptr);
   require(size > 0, "cannot read native identity environment");
   std::string result(static_cast<std::size_t>(size), '\0');
@@ -68,23 +71,31 @@ std::int32_t native_timezone_offset(std::string_view value) {
 }
 std::optional<SigningKey> signing_key_environment() {
   auto value = environment("SYRNCK_SIGNING_SEED");
-  if (!value) return {};
-  struct Wipe { std::string &value; ~Wipe() { crypto_wipe(value.data(), value.size()); } } wipe{*value};
+  struct Wipe { std::optional<std::string> &value; ~Wipe() {
+    if (value) crypto_wipe(value->data(), value->size());
+  } } wipe{value};
+  std::optional<SigningKey> signer;
+  try { signer = protected_signing_key_environment(); }
+  catch (...) { discard_signing_seed_environment(); throw; }
   discard_signing_seed_environment();
+  if (signer || !value) return signer;
   require(value->size() == 64, "SYRNCK_SIGNING_SEED must encode exactly 32 bytes");
   auto seed = unhex(*value);
   struct WipeSeed { Bytes &value; ~WipeSeed() { crypto_wipe(value.data(), value.size()); } } wipe_seed{seed};
   return SigningKey::from_seed(seed);
 }
 void discard_signing_seed_environment() {
+  for (const auto *name : {"SYRNCK_SIGNING_SEED", "SYRNCK_SIGNING_KEY_FILE", "SYRNCK_SIGNING_KEY_PASSWORD", "SYRNCK_NEW_SIGNING_KEY_PASSWORD"}) {
 #ifdef _WIN32
-  SetLastError(ERROR_SUCCESS);
-  const auto result = SetEnvironmentVariableW(L"SYRNCK_SIGNING_SEED", nullptr);
-  require((result != 0 || GetLastError() == ERROR_ENVVAR_NOT_FOUND) && _putenv_s("SYRNCK_SIGNING_SEED", "") == 0,
-      "cannot clear signing seed environment");
+    const std::wstring wide(name, name + std::char_traits<char>::length(name));
+    SetLastError(ERROR_SUCCESS);
+    const auto result = SetEnvironmentVariableW(wide.c_str(), nullptr);
+    require((result != 0 || GetLastError() == ERROR_ENVVAR_NOT_FOUND) && _putenv_s(name, "") == 0,
+        "cannot clear signing seed environment");
 #else
-  require(::unsetenv("SYRNCK_SIGNING_SEED") == 0, "cannot clear signing seed environment");
+    require(::unsetenv(name) == 0, "cannot clear signing seed environment");
 #endif
+  }
 }
 void load_native_identity(Store &store) {
   auto identity = read_profile(store);
@@ -97,7 +108,8 @@ void load_native_identity(Store &store) {
   }
   auto signer = signing_key_environment();
   require(identity || !signer, "signing seed requires a native identity");
-  if (identity) store.use_native_identity(std::move(*identity), std::move(signer));
+  const bool required = signer.has_value();
+  if (identity) store.use_native_identity(std::move(*identity), std::move(signer), required);
 }
 void save_native_identity(const Store &store, const NativeIdentity &identity, OperationOptions options) {
   throw_if_cancelled(options.stop); require_no_native_checkout(store);

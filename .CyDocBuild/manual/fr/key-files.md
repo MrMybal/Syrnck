@@ -5,7 +5,7 @@ description: Créer, vérifier et reprotéger les fichiers de clés ; ouvrir les
 section: Storage
 parent: storage
 order: 55
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Créer un fichier de clé {#create}
@@ -63,4 +63,4 @@ L'[API C++](doc:api-password-keys) détient les octets secrets dans `SecretKey`,
 
 ## Travaux de sécurité restants {#limits}
 
-Ces fournisseurs ouvrent le chiffrement au repos existant. Ils ne fournissent ni transport d'objets chiffré de bout en bout, ni coffre OS, ni rotation/révocation distribuée, ni fournisseur de graine de signature de révision protégée. Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).
+Ces fournisseurs ouvrent le chiffrement au repos existant. Ils ne fournissent ni transport d'objets chiffré de bout en bout, ni coffre OS, ni rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).

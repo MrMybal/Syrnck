@@ -17,6 +17,7 @@ typedef struct SyrnckStore SyrnckStore;
 typedef struct SyrnckWorkspace SyrnckWorkspace;
 typedef struct SyrnckCancellation SyrnckCancellation;
 typedef struct SyrnckSecretKey SyrnckSecretKey;
+typedef struct SyrnckSigningKey SyrnckSigningKey;
 /**
  * @doc api-c-abi
  * @locale en
@@ -60,6 +61,10 @@ typedef struct SyrnckSecretKey SyrnckSecretKey;
  * See [key files](doc:key-files) and [Go owners](doc:go-binding#protected-keys).
  *
  * ## Native authors and signatures {#authorship}
+ * Purpose-separated signing_key_protect/change_password/open/close and signing_key_public_json
+ * own an authenticated Ed25519 seed without exporting it. store_use_native_signer borrows that
+ * owner and installs independent Store state. See [protected signers](doc:signing-keys#services).
+ *
  * store_use_native_identity selects a handle-local author and optional Ed25519 seed. No secret is
  * persisted or exported; the caller owns its input seed, while native key ownership ends at replacement,
  * clear_native_identity or Store close. native_identity_json returns public metadata only.
@@ -136,6 +141,10 @@ typedef struct SyrnckSecretKey SyrnckSecretKey;
  * Voir les [fichiers de clés](doc:key-files) et les [propriétaires Go](doc:go-binding#protected-keys).
  *
  * ## Auteurs natifs et signatures {#authorship}
+ * signing_key_protect/change_password/open/close et signing_key_public_json conservent une graine
+ * Ed25519 authentifiée sans l’exporter. store_use_native_signer emprunte ce propriétaire et installe
+ * un état indépendant dans le Store. Voir les [signataires protégés](doc:signing-keys#services).
+ *
  * store_use_native_identity choisit un auteur local au handle et une graine Ed25519 facultative.
  * Aucun secret n'est persisté ni exporté ; l'appelant possède sa graine, et la clé native disparaît
  * au remplacement, à clear_native_identity ou à la fermeture du Store. native_identity_json reste public.
@@ -202,6 +211,24 @@ SYRNCK_API int syrnck_key_change_password(const unsigned char *envelope, size_t 
     const unsigned char *old_password, size_t old_password_len,
     const unsigned char *new_password, size_t new_password_len, const SyrnckPasswordKdf *options,
     unsigned char *out, size_t capacity, size_t *length);
+/* Purpose-separated Ed25519 seed envelopes. Same 104-byte query/output and
+ * cost rules as key_protect/key_change_password. Storage envelopes are rejected.
+ * A NULL seed with zero length generates a new signer; no plaintext is returned. */
+SYRNCK_API int syrnck_signing_key_protect(const unsigned char *seed, size_t seed_len,
+    const unsigned char *password, size_t password_len, const SyrnckPasswordKdf *options,
+    unsigned char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_signing_key_change_password(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *old_password, size_t old_password_len,
+    const unsigned char *new_password, size_t new_password_len, const SyrnckPasswordKdf *options,
+    unsigned char *out, size_t capacity, size_t *length);
+/* Authenticate once; an opaque native owner retains/wipes the seed. Serialize
+ * calls and close. Output resets to NULL on failure. No raw export exists. */
+SYRNCK_API int syrnck_signing_key_open(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *password, size_t password_len, SyrnckSigningKey **out);
+SYRNCK_API int syrnck_signing_key_close(SyrnckSigningKey *);
+/* Allocated public algorithm/key_id/public_key JSON; free with string_free.
+ * Outputs reset to NULL/0 on failure. */
+SYRNCK_API int syrnck_signing_key_public_json(const SyrnckSigningKey *, char **out, size_t *length);
 /* Authenticate once and keep the unwrapped secret in native move-only ownership.
  * Serialize key operations and close, and close exactly once. No plaintext key
  * export exists. Output resets to NULL on failure. KDF calls are synchronous. */
@@ -223,6 +250,12 @@ SYRNCK_API int syrnck_store_close(SyrnckStore *store);
  * reading and recovery of already prepared signed revisions remain available. */
 SYRNCK_API int syrnck_store_use_native_identity(SyrnckStore *, const char *name, const char *email,
     int32_t timezone_offset, const unsigned char *seed, size_t seed_len, bool require_signature);
+/* Borrow a protected signer's native seed while installing independent expanded
+ * Store-owned signing state. Closing the owner does not revoke that Store.
+ * A NULL signer explicitly selects no key; require_signature can still be true.
+ * Invalid identity/owner or Store state preserves the previous configuration. */
+SYRNCK_API int syrnck_store_use_native_signer(SyrnckStore *, const char *name, const char *email,
+    int32_t timezone_offset, const SyrnckSigningKey *, bool require_signature);
 SYRNCK_API int syrnck_store_clear_native_identity(SyrnckStore *);
 /* Allocated public metadata or null, freed with string_free. Never emits seed
  * material. Outputs reset to NULL/0 on failure. Identity is not persisted. */

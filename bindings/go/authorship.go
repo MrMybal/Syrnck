@@ -24,6 +24,8 @@ func (s *Store) UseNativeIdentity(identity NativeIdentity, seed []byte) error {
 
 type NativeIdentityOptions struct {
 	Seed []byte
+	// Signer borrows an authenticated native owner, mutually exclusive with Seed.
+	Signer *SigningKey
 	// A missing seed still permits reading/recovering retained signed targets;
 	// fresh commits fail rather than silently downgrading to unsigned revisions.
 	RequireSignature bool
@@ -41,6 +43,16 @@ func (s *Store) ConfigureNativeIdentity(identity NativeIdentity, options NativeI
 	}
 	if len(seed) != 0 && len(seed) != 32 {
 		return errors.New("syrnck: signing seed must contain exactly 32 bytes or be absent")
+	}
+	if options.Signer != nil {
+		if len(seed) != 0 {
+			return errors.New("syrnck: choose a signing seed or a protected signer")
+		}
+		return options.Signer.with(func(signer nativeSigningKeyHandle) error {
+			return s.with(func() error {
+				return nativeUseSigner(s.handle, name, email, identity.TimezoneOffset, signer, options.RequireSignature)
+			})
+		})
 	}
 	return s.with(func() error {
 		return nativeUseIdentity(s.handle, name, email, identity.TimezoneOffset, seed, options.RequireSignature)

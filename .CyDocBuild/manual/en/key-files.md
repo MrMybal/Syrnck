@@ -5,7 +5,7 @@ description: Create, verify and rewrap key files; unlock native Stores without e
 section: Storage
 parent: storage
 order: 55
-revision: 2
+revision: 3
 ---
 
 ## Create a key file {#create}
@@ -63,4 +63,4 @@ The [C++ API](doc:api-password-keys) owns secret bytes through move-only `Secret
 
 ## Remaining security work {#limits}
 
-These providers unlock existing at-rest encryption. They do not implement end-to-end object transport, an OS key vault, distributed key rotation/revocation or a protected revision-signing-seed provider. Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).
+These providers unlock existing at-rest encryption. They do not implement end-to-end object transport, an OS key vault, distributed key rotation/revocation. Revision signing uses [separate protected signers](doc:signing-keys). Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).

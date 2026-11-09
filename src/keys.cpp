@@ -1,11 +1,20 @@
 #include <syrnck/keys.hpp>
+#include "key_envelope.hpp"
 #include <monocypher.h>
 #include <algorithm>
 #include <vector>
 
 namespace syrnck {
 namespace {
-constexpr std::array<std::uint8_t, 8> magic{'S','Y','R','K','E','Y',1,0};
+constexpr std::array<std::uint8_t, 8> key_magic{'S','Y','R','K','E','Y',1,0};
+constexpr std::array<std::uint8_t, 8> signing_magic{'S','Y','R','S','I','G',1,0};
+const std::array<std::uint8_t, 8> &purpose_magic(detail::SecretPurpose purpose) {
+  switch (purpose) {
+  case detail::SecretPurpose::storage_key: return key_magic;
+  case detail::SecretPurpose::signing_seed: return signing_magic;
+  }
+  throw Error("invalid protected key purpose");
+}
 constexpr std::size_t header_size = 56, envelope_size = 104;
 void password_size(std::span<const std::uint8_t> password) {
   require(!password.empty() && password.size() <= 4096, "key password must contain 1..4096 bytes");
@@ -72,8 +81,9 @@ std::span<const std::uint8_t, 32> SecretKey::view() const & {
   require(valid_, "secret key has been moved");
   return value_;
 }
-Bytes protect_secret_key(const SecretKey &secret, std::span<const std::uint8_t> password,
-    PasswordKdfOptions options) {
+Bytes detail::protect_secret_for(const SecretKey &secret, std::span<const std::uint8_t> password,
+    PasswordKdfOptions options, SecretPurpose purpose) {
+  const auto &magic = purpose_magic(purpose);
   options.validate(); password_size(password);
   const auto plain = secret.view();
   Bytes result(envelope_size);
@@ -87,16 +97,17 @@ Bytes protect_secret_key(const SecretKey &secret, std::span<const std::uint8_t> 
       result.data() + 32, result.data(), header_size, plain.data(), plain.size());
   return result;
 }
-PasswordKdfOptions protected_key_options(std::span<const std::uint8_t> envelope) {
+PasswordKdfOptions detail::protected_options_for(std::span<const std::uint8_t> envelope, SecretPurpose purpose) {
+  const auto &magic = purpose_magic(purpose);
   require(envelope.size() == envelope_size && std::equal(magic.begin(), magic.end(), envelope.begin()),
       "invalid protected key envelope");
   const PasswordKdfOptions options{number(envelope.subspan(8, 4)), number(envelope.subspan(12, 4))};
   options.validate();
   return options;
 }
-SecretKey open_secret_key(std::span<const std::uint8_t> envelope,
-    std::span<const std::uint8_t> password) {
-  const auto options = protected_key_options(envelope);
+SecretKey detail::open_secret_for(std::span<const std::uint8_t> envelope,
+    std::span<const std::uint8_t> password, SecretPurpose purpose) {
+  const auto options = protected_options_for(envelope, purpose);
   password_size(password);
   const auto key = SecretKey::from_password(password, envelope.subspan(16, 16), options);
   Key plain{}; Wipe wipe{plain};
@@ -104,6 +115,16 @@ SecretKey open_secret_key(std::span<const std::uint8_t> envelope,
       envelope.data() + 32, envelope.data(), header_size, envelope.data() + header_size, plain.size()) == 0,
       "protected key authentication failed");
   return SecretKey::from_bytes(plain);
+}
+Bytes protect_secret_key(const SecretKey &secret, std::span<const std::uint8_t> password,
+    PasswordKdfOptions options) {
+  return detail::protect_secret_for(secret, password, options, detail::SecretPurpose::storage_key);
+}
+PasswordKdfOptions protected_key_options(std::span<const std::uint8_t> envelope) {
+  return detail::protected_options_for(envelope, detail::SecretPurpose::storage_key);
+}
+SecretKey open_secret_key(std::span<const std::uint8_t> envelope, std::span<const std::uint8_t> password) {
+  return detail::open_secret_for(envelope, password, detail::SecretPurpose::storage_key);
 }
 Bytes change_secret_key_password(std::span<const std::uint8_t> envelope,
     std::span<const std::uint8_t> old_password, std::span<const std::uint8_t> new_password,

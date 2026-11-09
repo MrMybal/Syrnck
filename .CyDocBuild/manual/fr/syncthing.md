@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 12
+sourceRevision: 13
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -585,3 +585,5 @@ avec Stores clairs/chiffrés, éditions dans les deux sens et renommage distant 
 ligne après redémarrage. Des arrêts brutaux distincts vérifient la reconstruction
 des anciennes/nouvelles versions. Exécution et déplacement de distribution
 Linux/macOS dépendent encore de leur CI ; la configuration ne les prouve pas.
+
+Le service autonome accepte aussi les [clés de signature natives protégées](doc:signing-keys#services), avec `signing_key_file` et `signing_key_password_env`. L’authentification précède workers/écoute et utilise un propriétaire natif dédié entre sessions courtes.

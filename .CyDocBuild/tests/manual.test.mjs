@@ -80,9 +80,9 @@ test('export is local, text-only, with no implementation listings or internal re
 test('API extraction uses reviewed public-header annotations only', async () => {
   const reviewed = await json(resolve(base, 'api-translations.json'));
   const extracted = [];
-  for (const path of ['include/syrnck.h', 'include/syrnck/core.hpp', 'include/syrnck/keys.hpp'])
+  for (const path of ['include/syrnck.h', 'include/syrnck/core.hpp', 'include/syrnck/keys.hpp', 'include/syrnck/signing_keys.hpp'])
     extracted.push(...extractComments(await readFile(resolve(root, path), 'utf8'), path));
-  assert.deepEqual(extracted.filter(p => p.locale === 'en').map(p => p.id).sort(), ['api-c-abi', 'api-password-keys', 'api-store']);
+  assert.deepEqual(extracted.filter(p => p.locale === 'en').map(p => p.id).sort(), ['api-c-abi', 'api-password-keys', 'api-signing-keys', 'api-store']);
   for (const page of extracted.filter(p => p.locale === 'en')) {
     assert.equal(createHash('sha256').update(page.markdown).digest('hex'),
       reviewed[page.id.replace(/^api-/, '')].englishSha256);

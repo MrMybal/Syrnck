@@ -1268,5 +1268,12 @@
   "key rewrap": "key-files#password-change",
   "key inspect": "key-files#create",
   "key verify": "key-files#create",
-  "native-recursive-bases": "native-merge#recursive-bases"
+  "native-recursive-bases": "native-merge#recursive-bases",
+  "signing-key": "signing-keys",
+  "protected-signers": "signing-keys#services",
+  "signing-key create": "signing-keys#create",
+  "signing-key protect": "signing-keys#existing",
+  "signing-key rewrap": "signing-keys#password-change",
+  "signing-key inspect": "signing-keys#create",
+  "signing-key verify": "signing-keys#create"
 }

@@ -10,6 +10,16 @@ func humanError(language string, err error) string {
 		return value
 	}
 	messages := map[string]string{
+		"choose signing_key_env or signing_key_file":                                        "choisir signing_key_env ou signing_key_file",
+		"signing_key_password_env requires signing_key_file":                                "signing_key_password_env requiert signing_key_file",
+		"signing_key_file requires an explicit author":                                      "signing_key_file requiert un auteur explicite",
+		"invalid signing key password environment variable name":                            "nom de variable du mot de passe de signature invalide",
+		"signing key password requires a separate environment variable":                     "le mot de passe de signature requiert une variable distincte",
+		"signing key password environment variable must contain 1..4096 bytes":              "la variable du mot de passe de signature doit contenir 1 à 4096 octets",
+		"signing_key_file must be one regular non-linked 104-byte envelope":                 "signing_key_file doit être une enveloppe de 104 octets dans un fichier ordinaire sans lien",
+		"signing_key_file changed while opening":                                            "signing_key_file a changé pendant son ouverture",
+		"protected signing key must be outside the workspace or inside its protected Store": "la clé de signature protégée doit être hors du workspace ou dans son Store protégé",
+
 		"key_password_env requires key_file":                                                   "key_password_env requiert key_file",
 		"invalid key password environment variable name":                                       "nom de variable d’environnement de mot de passe invalide",
 		"key password requires a separate environment variable":                                "le mot de passe de clé demande une variable d’environnement distincte",

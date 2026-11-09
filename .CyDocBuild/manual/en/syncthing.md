@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 12
+revision: 13
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -626,3 +626,5 @@ daemon in plaintext/encrypted Stores, with both-direction edits and an upstream
 offline rename across process restart. Separate hard-termination tests reconstruct
 both old and new native versions. Linux/macOS executable and relocation checks
 remain subject to their CI results; the source configuration alone is not proof.
+
+The standalone service also supports [protected native signing keys](doc:signing-keys#services) through `signing_key_file` and `signing_key_password_env`. Authentication precedes workers/listeners and uses a typed native owner shared across short Store sessions.

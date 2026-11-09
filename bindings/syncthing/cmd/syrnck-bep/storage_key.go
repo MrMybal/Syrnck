@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -35,16 +36,23 @@ func loadStorageKey(config configuration, directory, storage string) (*syrnck.Se
 	}
 	password := []byte(passwordValue)
 	defer clear(password)
+	envelope, err := protectedEnvelope(config.KeyFile, "key_file", "storage", directory, storage)
+	if err != nil {
+		return nil, err
+	}
+	return syrnck.OpenProtectedKey(envelope, password)
+}
+func protectedEnvelope(path, label, purpose, directory, storage string) ([]byte, error) {
 	// Compare the opened object as well as the pathname. A linked input must not
 	// silently select a different envelope, directory, device, or unbounded file.
-	info, err := os.Lstat(config.KeyFile)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() != syrnck.ProtectedKeySize {
-		return nil, errors.New("key_file must be one regular non-linked 104-byte envelope")
+		return nil, fmt.Errorf("%s must be one regular non-linked 104-byte envelope", label)
 	}
-	resolved, err := canonicalExisting(config.KeyFile)
+	resolved, err := canonicalExisting(path)
 	if err != nil {
 		return nil, err
 	}
@@ -53,9 +61,9 @@ func loadStorageKey(config configuration, directory, storage string) (*syrnck.Se
 		return nil, err
 	}
 	if selected {
-		return nil, errors.New("protected storage key must be outside the workspace or inside its protected Store")
+		return nil, fmt.Errorf("protected %s key must be outside the workspace or inside its protected Store", purpose)
 	}
-	file, err := os.Open(config.KeyFile)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -65,11 +73,11 @@ func loadStorageKey(config configuration, directory, storage string) (*syrnck.Se
 		return nil, err
 	}
 	if !opened.Mode().IsRegular() || opened.Size() != syrnck.ProtectedKeySize || !os.SameFile(info, opened) {
-		return nil, errors.New("key_file changed while opening")
+		return nil, fmt.Errorf("%s changed while opening", label)
 	}
 	envelope, err := io.ReadAll(io.LimitReader(file, syrnck.ProtectedKeySize+1))
 	if err != nil {
 		return nil, err
 	}
-	return syrnck.OpenProtectedKey(envelope, password)
+	return envelope, nil
 }

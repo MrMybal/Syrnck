@@ -339,6 +339,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   key rewrap ENTREE SORTIE           Changer le mot de passe vers un nouveau fichier
   key inspect|verify FICHIER         Lire l’en-tête public ou authentifier la clé
     [--password-env NOM] [--new-password-env NOM] [--memory-mib 64..256] [--passes 3..10]
+  signing-key create|protect|rewrap|inspect|verify
+                                      Protéger les graines de signature Ed25519
   put FICHIER [--fixed-size OCTETS] [--workers 1..64] [--buffer-mib 32]
                                      Importer et conserver un fichier complet
   get MANIFESTE NOUVEAU_FICHIER [--offset N --length N]   Reconstruire un fichier ou une plage
@@ -563,6 +565,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   key rewrap INPUT OUTPUT            Change its password into a new file
   key inspect|verify FILE            Read the public header or authenticate the key
     [--password-env NAME] [--new-password-env NAME] [--memory-mib 64..256] [--passes 3..10]
+  signing-key create|protect|rewrap|inspect|verify
+                                      Protect Ed25519 revision signing seeds
   put FILE [--fixed-size BYTES] [--workers 1..64] [--buffer-mib 32]
                                      Ingest and retain a complete file
   get MANIFEST NEW_FILE [--offset N --length N]   Reconstruct a file or byte range
@@ -819,7 +823,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   // Only native revision creation/profile commands consume this secret. Help,
   // Git children and unrelated commands must not inherit it.
   const bool agent_run = command == "agent" && !args.values.empty() && args.values.front() == "run";
-  if (!agent_run && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
+  if (command != "signing-key" && !agent_run && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
   require(!native_workspace || command == "native" || command == "help" || agent_run,
       "workspace selection is only available for native commands and agent run");
   // Documentation is independent of repository state, encryption and credentials.
@@ -852,8 +856,13 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << hex(random_bytes(32)) << '\n';
     return 0;
   }
-  if (command == "key") {
+  if (command == "key" || command == "signing-key") {
     cli::KeyCommand request;
+    request.signing = command == "signing-key";
+    if (request.signing) {
+      request.password_env = "SYRNCK_SIGNING_KEY_PASSWORD";
+      request.new_password_env = "SYRNCK_NEW_SIGNING_KEY_PASSWORD";
+    }
     request.action = args.pop();
     if (request.action != "inspect") {
       if (auto name = args.option("--password-env")) request.password_env = *name;
@@ -1568,7 +1577,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         require(name && email, "native identity configuration requires --name and --email");
         NativeIdentity identity{*name, *email, timezone ? cli::native_timezone_offset(*timezone) : 0};
         identity.validate(); auto signer = cli::signing_key_environment();
-        store.use_native_identity(identity, std::move(signer));
+        const bool signature_required = signer.has_value();
+        store.use_native_identity(identity, std::move(signer), signature_required);
         cli::save_native_identity(store, identity, {control->token(), observe});
       } else cli::load_native_identity(store);
       print(store.native_identity());

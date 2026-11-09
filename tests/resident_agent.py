@@ -59,6 +59,31 @@ class ResidentAgent(unittest.TestCase):
     save_policy = signed.ServerSignatures.save_policy
     metadata = signed.ServerSignatures.metadata
 
+    def test_protected_signing_owner_survives_short_store_sessions(self):
+        secret = self.root / "protected-signer.bin"
+        password = "Resident signature 🔐"
+        self.env["SYRNCK_SIGNING_KEY_PASSWORD"] = password
+        sealed = json.loads(self.cmd("signing-key", "protect", secret).stdout)
+        original = secret.read_bytes()
+        self.env.pop("SYRNCK_SIGNING_SEED")
+        self.env["SYRNCK_SIGNING_KEY_FILE"] = str(secret)
+        self.write("Source/code.cpp", b"protected first\n")
+        with self.serving(strict=True), self.agent() as agent:
+            first = agent.state("pushed")["local_revision"]
+            self.assertEqual(self.metadata(first)["signature"]["key_id"], sealed["key_id"])
+            agent.state("synced", working_clean=True)
+            secret.unlink()  # Native signing state must already be owned by this process.
+            self.write("Source/code.cpp", b"protected second\n")
+            second = agent.state("pushed")["local_revision"]
+            self.assertNotEqual(first, second)
+            self.assertEqual(self.metadata(second)["signature"]["key_id"], sealed["key_id"])
+            agent.state("synced", working_clean=True)
+        failed = self.cmd("agent", "run", self.url, "--remote-branch", "scratch", "--duration-ms", "100", actor="alice", ok=False)
+        self.assertNotIn(password.encode(), failed.stdout + failed.stderr)
+        self.assertIn(b"protected key file must be a regular non-linked file", failed.stderr)
+        secret.write_bytes(original)
+        self.cmd("fsck")
+
     def test_repeated_capture_reuses_assets_and_complete_observation(self):
         self.write("Content/large.bin", b"a" * (8 * 1024 * 1024))
         self.write("Source/code.cpp", b"first\n")

@@ -1248,3 +1248,11 @@ SYRNCK_MESSAGE("native merge base report exceeds 16 MiB", "le rapport des bases 
 SYRNCK_MESSAGE("native virtual merge requires multiple bases", "la fusion virtuelle native requiert plusieurs bases")
 SYRNCK_MESSAGE("ambiguous native merge base requires current, incoming, remove, or file resolution", "une base de fusion native ambiguë requiert une résolution current, incoming, remove ou file")
 SYRNCK_MESSAGE("native merge base argument exceeds 268435456", "un argument des bases de fusion natives dépasse 268435456")
+
+SYRNCK_MESSAGE("invalid protected key purpose", "type de clé protégée invalide")
+SYRNCK_MESSAGE("choose either SYRNCK_SIGNING_SEED or SYRNCK_SIGNING_KEY_FILE", "choisir SYRNCK_SIGNING_SEED ou SYRNCK_SIGNING_KEY_FILE")
+SYRNCK_MESSAGE("SYRNCK_SIGNING_KEY_FILE must name a protected signing key file", "SYRNCK_SIGNING_KEY_FILE doit désigner un fichier de clé de signature protégée")
+SYRNCK_MESSAGE("set SYRNCK_SIGNING_KEY_PASSWORD for the protected signing key file", "définir SYRNCK_SIGNING_KEY_PASSWORD pour le fichier de clé de signature protégée")
+SYRNCK_MESSAGE("set SYRNCK_SIGNING_SEED before protecting an existing signer", "définir SYRNCK_SIGNING_SEED avant de protéger une clé de signature existante")
+
+SYRNCK_MESSAGE("null signing key handle", "handle de clé de signature nul")

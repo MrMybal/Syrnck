@@ -5,7 +5,7 @@ description: Auteur d’origine, committer actuel et signatures Ed25519 facultat
 section: Versionnage
 order: 305
 parent: native-history
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Configurer une identité {#identity}
@@ -124,3 +124,5 @@ locales au handle et préparent des révisions signées neuves. Une signature ex
 peut bloquer les nouvelles révisions sans graine tout en gardant lecture/reprise
 publiques. `NativeIdentityContext` C++ conserve cette politique avec le signataire
 exclusif transféré entre handles. Politique et clé privée ne sont pas persistées.
+
+Les graines de signature protégées CLI/C++/C/Go sont disponibles dans le [guide des signataires protégés](doc:signing-keys). Un échec d’authentification du fournisseur fichier ne produit pas de capture non signée ; la politique obligatoire reste locale au processus sauf règle serveur.

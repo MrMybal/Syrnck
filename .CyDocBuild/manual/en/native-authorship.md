@@ -5,7 +5,7 @@ description: Original authors, current committers and optional Ed25519 signature
 section: Version control
 order: 305
 parent: native-history
-revision: 4
+revision: 5
 ---
 
 ## Configure an identity {#identity}
@@ -122,3 +122,5 @@ identities and prepare fresh signed revisions. A required-signature policy can
 block new revisions without a seed while retaining public read/recovery access.
 C++ `NativeIdentityContext` carries this policy when moving its exclusive signer
 between Store handles. The policy and private key are not persisted.
+
+Password-protected CLI/C++/C/Go signing seeds are available through the [protected signer guide](doc:signing-keys). File providers never fall back to unsigned capture on authentication failure; mandatory policy remains process-local unless enforced by the server.

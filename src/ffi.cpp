@@ -5,6 +5,8 @@
 #include <syrnck.h>
 #include <syrnck/core.hpp>
 #include <syrnck/keys.hpp>
+#include <syrnck/signing_keys.hpp>
+#include "key_envelope.hpp"
 #include <syrnck/watcher.hpp>
 #include <syrnck/workspace.hpp>
 #include "native_workspace.hpp"
@@ -16,6 +18,10 @@ struct SyrnckStore {
 struct SyrnckSecretKey {
   syrnck::SecretKey key;
   explicit SyrnckSecretKey(syrnck::SecretKey value) : key(std::move(value)) {}
+};
+struct SyrnckSigningKey {
+  syrnck::SecretKey seed;
+  explicit SyrnckSigningKey(syrnck::SecretKey value) : seed(std::move(value)) {}
 };
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
@@ -77,10 +83,11 @@ syrnck::PasswordKdfOptions key_costs(const SyrnckPasswordKdf *options, syrnck::P
   result.validate();
   return result;
 }
-std::span<const std::uint8_t> key_envelope(const unsigned char *value, std::size_t length) {
+std::span<const std::uint8_t> key_envelope(const unsigned char *value, std::size_t length, bool signing = false) {
   syrnck::require(value != nullptr && length == SYRNCK_PROTECTED_KEY_SIZE, "invalid protected key envelope");
   const std::span<const std::uint8_t> result{value, length};
-  (void)syrnck::protected_key_options(result);
+  if (signing) (void)syrnck::protected_signing_key_options(result);
+  else (void)syrnck::protected_key_options(result);
   return result;
 }
 bool key_output(unsigned char *out, std::size_t capacity, std::size_t *length) {
@@ -302,6 +309,60 @@ int syrnck_key_change_password(const unsigned char *envelope, std::size_t envelo
     *length = result.size();
   });
 }
+int syrnck_signing_key_protect(const unsigned char *seed, std::size_t seed_length,
+    const unsigned char *password, std::size_t password_length, const SyrnckPasswordKdf *options,
+    unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length) *length = 0;
+  return boundary([&] {
+    const auto cost = key_costs(options);
+    const auto pass = key_password(password, password_length);
+    syrnck::require((!seed && seed_length == 0) || (seed && seed_length == 32),
+        "signing seed length must be 0 or 32");
+    if (!key_output(out, capacity, length)) return;
+    const auto result = seed_length ? syrnck::protect_signing_seed({seed, seed_length}, pass, cost)
+                                   : syrnck::generate_protected_signing_key(pass, cost);
+    std::memcpy(out, result.envelope.data(), result.envelope.size());
+    *length = result.envelope.size();
+  });
+}
+int syrnck_signing_key_change_password(const unsigned char *envelope, std::size_t envelope_length,
+    const unsigned char *old_password, std::size_t old_length, const unsigned char *new_password,
+    std::size_t new_length, const SyrnckPasswordKdf *options,
+    unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length) *length = 0;
+  return boundary([&] {
+    const auto input = key_envelope(envelope, envelope_length, true);
+    const auto before = key_password(old_password, old_length), after = key_password(new_password, new_length);
+    std::optional<syrnck::PasswordKdfOptions> costs;
+    if (options) costs = key_costs(options, syrnck::protected_signing_key_options(input));
+    if (!key_output(out, capacity, length)) return;
+    const auto result = syrnck::change_signing_key_password(input, before, after, costs);
+    std::memcpy(out, result.envelope.data(), result.envelope.size());
+    *length = result.envelope.size();
+  });
+}
+int syrnck_signing_key_open(const unsigned char *envelope, std::size_t envelope_length,
+    const unsigned char *password, std::size_t password_length, SyrnckSigningKey **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    const auto input = key_envelope(envelope, envelope_length, true), pass = key_password(password, password_length);
+    *out = new SyrnckSigningKey(syrnck::detail::open_secret_for(input, pass,
+        syrnck::detail::SecretPurpose::signing_seed));
+  });
+}
+int syrnck_signing_key_close(SyrnckSigningKey *key) { return boundary([&] { delete key; }); }
+int syrnck_signing_key_public_json(const SyrnckSigningKey *key, char **out, std::size_t *length) {
+  if (out) *out = nullptr;
+  if (length) *length = 0;
+  return boundary([&] {
+    syrnck::require(out != nullptr && length != nullptr, "null identity output");
+    syrnck::require(key != nullptr, "null signing key handle");
+    const auto public_key = syrnck::SigningKey::from_seed(key->seed.view()).public_key();
+    json_output(syrnck::Json{{"version", 1}, {"algorithm", "ed25519"}, {"public_key", syrnck::hex(public_key)},
+        {"key_id", syrnck::signing_key_id(public_key)}}, out, length, {});
+  });
+}
 int syrnck_secret_key_open(const unsigned char *envelope, std::size_t envelope_length,
     const unsigned char *password, std::size_t password_length, SyrnckSecretKey **out) {
   if (out) *out = nullptr;
@@ -339,6 +400,17 @@ int syrnck_store_use_native_identity(SyrnckStore *p, const char *name, const cha
     syrnck::require(length == 0 || (length == 32 && seed != nullptr), "signing seed length must be 0 or 32");
     std::optional<syrnck::SigningKey> signer;
     if (length) signer.emplace(syrnck::SigningKey::from_seed({seed, length}));
+    store.use_native_identity(std::move(identity), std::move(signer), required);
+  });
+}
+int syrnck_store_use_native_signer(SyrnckStore *p, const char *name, const char *email,
+    std::int32_t offset, const SyrnckSigningKey *key, bool required) {
+  return boundary([&] {
+    auto &store = checked(p);
+    syrnck::NativeIdentity identity{checked(name), checked(email), offset};
+    identity.validate();
+    std::optional<syrnck::SigningKey> signer;
+    if (key) signer.emplace(syrnck::SigningKey::from_seed(key->seed.view()));
     store.use_native_identity(std::move(identity), std::move(signer), required);
   });
 }

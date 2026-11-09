@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 8
+revision: 9
 ---
 
 ## Run continuously {#run}
@@ -222,3 +222,5 @@ native history is fetched. The `--rename-max-*` budgets apply. C++ sessions set
 Compatible text edits follow the destination; structural conflicts stay blocked.
 Identity, signature, branch and path checks still govern publication. An owned
 prepared checkout resumes its frozen target if a later process omits the option.
+
+The [protected signing-file provider](doc:signing-keys#services) authenticates once at startup and retains native expanded signing state between short Store sessions. Changed or removed credentials require restart; an explicitly configured unavailable provider prevents startup.

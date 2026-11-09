@@ -1,6 +1,7 @@
 #include "cli_keys.hpp"
 #include "native_workspace.hpp"
 #include <syrnck/keys.hpp>
+#include <syrnck/signing_keys.hpp>
 #include <algorithm>
 #include <cstdlib>
 #include <mutex>
@@ -59,19 +60,21 @@ struct Environment {
   Environment &operator=(const Environment &) = delete;
   ~Environment() { if (value) wipe_secret(*value); }
 };
-std::optional<SecretKey> raw_key() {
-  Environment raw("SYRNCK_KEY", 64);
+std::optional<SecretKey> raw_key(bool signing = false) {
+  Environment raw(signing ? "SYRNCK_SIGNING_SEED" : "SYRNCK_KEY", 64);
   if (!raw.value) return {};
-  require(raw.value->size() == 64, "SYRNCK_KEY must encode exactly 32 bytes");
+  if (signing) require(raw.value->size() == 64, "SYRNCK_SIGNING_SEED must encode exactly 32 bytes");
+  else require(raw.value->size() == 64, "SYRNCK_KEY must encode exactly 32 bytes");
   auto decoded = unhex({reinterpret_cast<const char *>(raw.value->data()), raw.value->size()});
   WipeBytes wipe{decoded};
   return SecretKey::from_bytes(decoded);
 }
-Bytes key_file(const fs::path &path) {
+Bytes key_file(const fs::path &path, bool signing = false) {
   const auto status = fs::symlink_status(path);
   require(fs::is_regular_file(status) && !native_link_like(path, status), "protected key file must be a regular non-linked file");
   auto value = read_bytes(path, 104);
-  (void)protected_key_options(value);
+  if (signing) (void)protected_signing_key_options(value);
+  else (void)protected_key_options(value);
   return value;
 }
 fs::path output_path(const std::string &name) {
@@ -83,8 +86,8 @@ fs::path output_path(const std::string &name) {
   require(fs::symlink_status(result).type() == fs::file_type::not_found, "protected key output already exists");
   return result;
 }
-Json metadata(PasswordKdfOptions options) {
-  return Json{{"version",1},{"type","protected-key"},{"bytes",104},{"kdf","argon2id"},
+Json metadata(PasswordKdfOptions options, bool signing = false) {
+  return Json{{"version",1},{"type",signing ? "protected-signing-key" : "protected-key"},{"bytes",104},{"kdf","argon2id"},
       {"memory_kib",options.memory_kib},{"passes",options.passes},{"lanes",1},
       {"cipher","xchacha20-poly1305"},{"authenticated",false}};
 }
@@ -124,17 +127,32 @@ std::optional<Key> encryption_key_environment() {
   std::copy(cache.entry->secret.view().begin(), cache.entry->secret.view().end(), result.begin());
   return result;
 }
+std::optional<SigningKey> protected_signing_key_environment() {
+  Environment file("SYRNCK_SIGNING_KEY_FILE", 32768);
+  if (!file.value) return {};
+  Environment raw("SYRNCK_SIGNING_SEED", 64);
+  require(!raw.value, "choose either SYRNCK_SIGNING_SEED or SYRNCK_SIGNING_KEY_FILE");
+  require(!file.value->empty(), "SYRNCK_SIGNING_KEY_FILE must name a protected signing key file");
+  Environment password("SYRNCK_SIGNING_KEY_PASSWORD", 4096);
+  require(password.value && !password.value->empty(), "set SYRNCK_SIGNING_KEY_PASSWORD for the protected signing key file");
+  const auto envelope = key_file(path_from_utf8(text(*file.value)), true);
+  return open_protected_signing_key(envelope, *password.value);
+}
 Json run_key_command(const KeyCommand &request) {
   require(request.action == "create" || request.action == "protect" || request.action == "rewrap" ||
       request.action == "inspect" || request.action == "verify",
       "unknown key command; use create, protect, rewrap, inspect or verify");
   if (request.action == "inspect" || request.action == "verify") {
-    const auto envelope = key_file(path_from_utf8(request.input));
-    auto result = metadata(protected_key_options(envelope));
+    const auto envelope = key_file(path_from_utf8(request.input), request.signing);
+    auto result = metadata(request.signing ? protected_signing_key_options(envelope) : protected_key_options(envelope), request.signing);
     if (request.action == "verify") {
       Environment password(request.password_env, 4096);
       require(password.value && !password.value->empty(), "set the selected key password environment variable");
-      (void)open_secret_key(envelope, *password.value);
+      if (request.signing) {
+        auto signer = open_protected_signing_key(envelope, *password.value);
+        result["public_key"] = hex(signer.public_key());
+        result["key_id"] = signing_key_id(signer.public_key());
+      } else (void)open_secret_key(envelope, *password.value);
       result["authenticated"] = true;
     }
     return result;
@@ -143,8 +161,8 @@ Json run_key_command(const KeyCommand &request) {
   Bytes input;
   auto options = PasswordKdfOptions{};
   if (request.action == "rewrap") {
-    input = key_file(path_from_utf8(request.input));
-    options = protected_key_options(input);
+    input = key_file(path_from_utf8(request.input), request.signing);
+    options = request.signing ? protected_signing_key_options(input) : protected_key_options(input);
   }
   if (request.memory_mib) {
     require(*request.memory_mib >= 64 && *request.memory_mib <= 256, "password KDF memory must be 64..256 whole MiB");
@@ -155,17 +173,29 @@ Json run_key_command(const KeyCommand &request) {
   Environment password(request.password_env, 4096);
   require(password.value && !password.value->empty(), "set the selected key password environment variable");
   Bytes envelope;
+  std::optional<SigningPublicKey> public_key;
   if (request.action == "rewrap") {
     Environment next(request.new_password_env, 4096);
     require(next.value && !next.value->empty(), "set the selected new key password environment variable");
-    envelope = change_secret_key_password(input, *password.value, *next.value, options);
+    if (request.signing) {
+      auto sealed = change_signing_key_password(input, *password.value, *next.value, options);
+      envelope = std::move(sealed.envelope); public_key = sealed.public_key;
+    } else envelope = change_secret_key_password(input, *password.value, *next.value, options);
   } else {
-    auto secret = request.action == "create" ? std::optional{SecretKey::generate()} : raw_key();
-    require(secret.has_value(), "set SYRNCK_KEY before protecting an existing key");
-    envelope = protect_secret_key(*secret, *password.value, options);
+    auto secret = request.action == "create" ? std::optional{SecretKey::generate()} : raw_key(request.signing);
+    if (request.signing) require(secret.has_value(), "set SYRNCK_SIGNING_SEED before protecting an existing signer");
+    else require(secret.has_value(), "set SYRNCK_KEY before protecting an existing key");
+    if (request.signing) {
+      auto sealed = protect_signing_seed(secret->view(), *password.value, options);
+      envelope = std::move(sealed.envelope); public_key = sealed.public_key;
+    } else envelope = protect_secret_key(*secret, *password.value, options);
   }
   atomic_write(output, envelope, false);
-  auto result = metadata(options);
+  auto result = metadata(options, request.signing);
+  if (public_key) {
+    result["public_key"] = hex(*public_key);
+    result["key_id"] = signing_key_id(*public_key);
+  }
   result["authenticated"] = true;
   result["path"] = utf8(output);
   return result;

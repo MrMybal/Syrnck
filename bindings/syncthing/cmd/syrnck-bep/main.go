@@ -47,6 +47,8 @@ type configuration struct {
 	ResumeDownloads       bool                   `json:"resume_downloads"`
 	Author                *syrnck.NativeIdentity `json:"author,omitempty"`
 	SigningKeyEnv         string                 `json:"signing_key_env,omitempty"`
+	SigningKeyFile        string                 `json:"signing_key_file,omitempty"`
+	SigningKeyPasswordEnv string                 `json:"signing_key_password_env,omitempty"`
 	PollMilliseconds      uint32                 `json:"poll_ms"`
 	RetryMinMilliseconds  uint32                 `json:"retry_min_ms"`
 	RetryMaxMilliseconds  uint32                 `json:"retry_max_ms"`
@@ -188,6 +190,26 @@ func loadConfiguration(path string) (configuration, error) {
 			return config, errors.New("key password requires a separate environment variable")
 		}
 	}
+	if config.SigningKeyPasswordEnv != "" && config.SigningKeyFile == "" {
+		return config, errors.New("signing_key_password_env requires signing_key_file")
+	}
+	if config.SigningKeyFile != "" {
+		if config.SigningKeyEnv != "" {
+			return config, errors.New("choose signing_key_env or signing_key_file")
+		}
+		if config.Author == nil {
+			return config, errors.New("signing_key_file requires an explicit author")
+		}
+		if config.SigningKeyPasswordEnv == "" {
+			config.SigningKeyPasswordEnv = "SYRNCK_SIGNING_KEY_PASSWORD"
+		}
+		if !validEnvironmentName(config.SigningKeyPasswordEnv) {
+			return config, errors.New("invalid signing key password environment variable name")
+		}
+		if config.SigningKeyPasswordEnv == config.KeyEnv || config.SigningKeyPasswordEnv == config.KeyPasswordEnv {
+			return config, errors.New("signing key password requires a separate environment variable")
+		}
+	}
 	if config.Author != nil && (config.Author.Name == "" || config.Author.Email == "" || config.Author.TimezoneOffset < -1439 || config.Author.TimezoneOffset > 1439) {
 		return config, errors.New("author requires name, email and a timezone offset in -1439..1439 minutes")
 	}
@@ -227,6 +249,9 @@ func loadConfiguration(path string) (configuration, error) {
 	config.PrivateKey = resolve(config.PrivateKey)
 	if config.KeyFile != "" {
 		config.KeyFile = resolve(config.KeyFile)
+	}
+	if config.SigningKeyFile != "" {
+		config.SigningKeyFile = resolve(config.SigningKeyFile)
 	}
 	return config, nil
 }
@@ -307,6 +332,13 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 	if protectedKey != nil {
 		defer func() { result = errors.Join(result, protectedKey.Close()) }()
 	}
+	protectedSigner, err := loadSigningKey(config, directory, storage)
+	if err != nil {
+		return err
+	}
+	if protectedSigner != nil {
+		defer func() { result = errors.Join(result, protectedSigner.Close()) }()
+	}
 	provider := func(ctx context.Context) (*syrnck.Store, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -349,7 +381,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 			return nil, err
 		}
 		if config.Author != nil {
-			if err := store.ConfigureNativeIdentity(*config.Author, syrnck.NativeIdentityOptions{Seed: signingSeed, RequireSignature: config.SigningKeyEnv != ""}); err != nil {
+			if err := store.ConfigureNativeIdentity(*config.Author, syrnck.NativeIdentityOptions{Seed: signingSeed, Signer: protectedSigner, RequireSignature: config.SigningKeyEnv != "" || config.SigningKeyFile != ""}); err != nil {
 				store.Close()
 				return nil, err
 			}

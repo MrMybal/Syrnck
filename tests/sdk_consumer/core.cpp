@@ -1,6 +1,7 @@
 #include <syrnck/core.hpp>
 #include <syrnck/git.hpp>
 #include <syrnck/keys.hpp>
+#include <syrnck/signing_keys.hpp>
 #include <algorithm>
 #include <iostream>
 
@@ -11,6 +12,11 @@ int main(int argc, char **argv) {
     syrnck::Key key{};
     std::copy(secret.view().begin(), secret.view().end(), key.begin());
     syrnck::Bytes bytes(256 * 1024, 77);
+    const syrnck::Bytes password(32, 17);
+    const auto protected_signer = syrnck::generate_protected_signing_key(password);
+    const auto signer = syrnck::open_protected_signing_key(protected_signer.envelope, password);
+    if (signer.public_key() != protected_signer.public_key ||
+        !syrnck::verify_ed25519(protected_signer.public_key, signer.sign(bytes), bytes)) return 7;
     syrnck::ObjectKey retained{};
     {
       syrnck::Store store(syrnck::path_from_utf8(argv[1]), key, true);
