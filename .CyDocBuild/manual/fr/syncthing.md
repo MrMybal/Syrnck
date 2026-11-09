@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -353,8 +353,7 @@ leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
 vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
 Gestion automatique
-des membres/retrait d’historique et politique d’auteur/signature des nouveaux
-candidats natifs entrants restent à réaliser. Performances à grande échelle et
+des membres/retrait d’historique reste à réaliser. Performances à grande échelle et
 durabilité face à une coupure électrique ne sont pas qualifiées. L’agent natif
 résident de publication est une autre fonctionnalité.
 
@@ -455,6 +454,40 @@ de session qualifient séparément le daemon amont figé. L’application fourni
 encore écoute/connexion réseau, certificats, stockage des clés et cycle de vie OS.
 Installation de service OS et métadonnées complètes des dossiers/liens
 restent à terminer.
+
+## Auteur natif et politique de signature {#native-authorship}
+
+Configurer chaque Store rendu par `FolderOptions.OpenStore` avec l’[API d’identité](doc:go-binding#native-authorship).
+Captures locales et révisions natives entrantes synthétisées utilisent alors
+cet auteur/committer et son signataire facultatif. Une version BEP entrante
+devient une révision d’intégration native locale, sans prétendre reprendre
+l’auteur natif du pair. Le suivi interne du catalogue garde ses métadonnées v1.
+Clés TLS d’appareil, clés de stockage et graines de signature ont des rôles
+distincts. Les vecteurs de fichiers BEP n’importent pas les signatures natives.
+
+Le JSON autonome accepte `author` facultatif : `name`, `email` et `timezone_offset`
+(minutes vers l’est de UTC). Sans auteur, le comportement v1 reste. Avec auteur
+sans `signing_key_env`, captures/candidats sont en v2 non signée. `signing_key_env`
+nomme une variable majuscule distincte contenant une graine Ed25519 de 32 octets
+sous forme de 64 caractères hexadécimaux, pour exiger des signatures. Aucune graine
+brute en JSON ni arguments. Chaque Store court reçoit sa copie de clé native ;
+les buffers Go décodés sont effacés immédiatement ensuite.
+
+Une variable de signature configurée mais absente permet la reprise publique
+d’un candidat signé déjà préparé, puis bloque les nouvelles révisions jusqu’au
+retour de la graine. Une graine mal formée échoue. Les éditions restent en place
+si la signature échoue. Candidat, parents et reçus natifs restent figés ; aucune
+nouvelle signature pendant la reprise. Retirer l’exigence dans la configuration
+est un changement de politique explicite. Coffres OS, distribution des secrets
+et autorisation des signataires restent externes ; signature valide ne vaut pas
+permission serveur.
+
+Les tests terminent brutalement les applications signées avant/après publication
+dans des Stores clairs/chiffrés, reprennent sans clé privée, refusent un repli non
+signé sur l’édition suivante, puis reprennent les signatures avec le fournisseur
+restauré. Redémarrages de processus autonomes et tests contre le daemon réel
+qualifient captures locales et révisions natives entrantes signées. Le daemon
+amont ne signe pas lui-même les révisions natives Syrnck.
 
 ## Exécutable autonome au premier plan {#standalone-service}
 

@@ -48,6 +48,17 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * output proves nothing: an IO error can follow atomic publication, so reload and establish its outcome.
  * See [catalog transactions](doc:go-binding#catalog-transactions) for ownership and an example.
  *
+ * ## Native authors and signatures {#authorship}
+ * store_use_native_identity selects a handle-local author and optional Ed25519 seed. No secret is
+ * persisted or exported; the caller owns its input seed, while native key ownership ends at replacement,
+ * clear_native_identity or Store close. native_identity_json returns public metadata only.
+ * prepare_native_revision_ex accepts a fresh v1 draft, checks its complete parent/file closure and
+ * applies the selected author/signature. It returns an unpinned v1/v2 object without changing refs/files.
+ * An explicitly required signature with a missing seed blocks fresh revisions, while retained signed
+ * targets can still be read and recovered. Re-authoring v2 input is refused. Internal snapshots and
+ * raw object_put keep their own contracts; this is not a server authorization boundary.
+ * See [native authorship in Go](doc:go-binding#native-authorship) for provider lifetimes and publication.
+ *
  * ## Guarded native workspace actions {#native-actions}
  * workspace_native_state_json_ex reads target, typed revision, materialization and checkout state.
  * Capture and checkout require the exact SyrnckNativeExpected target/revision/policy object.
@@ -103,6 +114,17 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * une erreur IO peut suivre la publication atomique ; relire et établir son résultat avant de réessayer.
  * Voir les [transactions de catalogue](doc:go-binding#catalog-transactions) pour les règles et l'exemple.
  *
+ * ## Auteurs natifs et signatures {#authorship}
+ * store_use_native_identity choisit un auteur local au handle et une graine Ed25519 facultative.
+ * Aucun secret n'est persisté ni exporté ; l'appelant possède sa graine, et la clé native disparaît
+ * au remplacement, à clear_native_identity ou à la fermeture du Store. native_identity_json reste public.
+ * prepare_native_revision_ex accepte un brouillon v1 neuf, vérifie parents/fichiers complets et applique
+ * auteur/signature. L'objet v1/v2 rendu n'a pas de référence ; aucun fichier ni ref n'est modifié.
+ * Une signature exigée sans graine bloque les nouvelles révisions ; lecture et reprise des cibles
+ * signées retenues restent possibles. Réattribuer un objet v2 est refusé. Snapshots internes et
+ * object_put brut gardent leurs contrats ; ce n'est pas une autorisation de publication serveur.
+ * Voir [auteurs natifs en Go](doc:go-binding#native-authorship) pour durée de vie et publication.
+ *
  * ## Actions natives de workspace protégées {#native-actions}
  * workspace_native_state_json_ex lit cible, révision typée, matérialisation et état de checkout.
  * Capture et checkout exigent la cible/révision/objet de sélection exacts dans SyrnckNativeExpected.
@@ -145,6 +167,18 @@ SYRNCK_API int syrnck_store_open(const char *path, bool create, const unsigned c
  * contexts must already be registered; failure preserves the old selection. */
 SYRNCK_API int syrnck_store_use_workspace(SyrnckStore *store, const char *name);
 SYRNCK_API int syrnck_store_close(SyrnckStore *store);
+/* Handle-local native authorship. Name/email are validated UTF-8. seed_len is
+ * zero for unsigned authorship or exactly 32 for an Ed25519 seed. No input
+ * pointer is retained; the owned native key is wiped on replacement/clear/Close.
+ * Failure preserves the previous identity. Callers own and wipe their seed.
+ * require_signature blocks fresh revisions if no seed is currently supplied;
+ * reading and recovery of already prepared signed revisions remain available. */
+SYRNCK_API int syrnck_store_use_native_identity(SyrnckStore *, const char *name, const char *email,
+    int32_t timezone_offset, const unsigned char *seed, size_t seed_len, bool require_signature);
+SYRNCK_API int syrnck_store_clear_native_identity(SyrnckStore *);
+/* Allocated public metadata or null, freed with string_free. Never emits seed
+ * material. Outputs reset to NULL/0 on failure. Identity is not persisted. */
+SYRNCK_API int syrnck_store_native_identity_json(SyrnckStore *, char **out, size_t *length);
 /* Caller provides out_id[65]. Ingested files are retained under ffi/<id>. */
 SYRNCK_API int syrnck_ingest_file(SyrnckStore *store, const char *path, char *out_id);
 /* algorithm: 0 = FastCDC2020, 1 = fixed (min = average = max).
@@ -250,6 +284,14 @@ SYRNCK_API int syrnck_ingest_buffer_ex(SyrnckStore *store, const unsigned char *
  * buffer bound. Concurrent source writers are the caller's responsibility. */
 SYRNCK_API int syrnck_prepare_file_ex(SyrnckStore *store, const char *path, const SyrnckChunking *chunking,
                                        const SyrnckOperation *operation, char *out_id);
+/* Canonicalize a fresh v1 revision draft, verify all parents/files, then apply
+ * the Store handle's optional native author/signature. Rejects v2 input rather
+ * than silently rewriting authorship. Returns UNPINNED revision ID in out[65];
+ * retain through a guarded ref transaction before closing Store/permitting GC.
+ * No refs or working files change. Cancellation/progress cover closure checks;
+ * late IO failure may leave a complete unreferenced object/reader feature gate. */
+SYRNCK_API int syrnck_prepare_native_revision_ex(SyrnckStore *, const unsigned char *draft,
+    size_t length, const SyrnckOperation *, char *out_id);
 /* Typed reference table JSON {name:{kind,id}}; length includes NUL. The standard
  * (NULL,0) query / caller-owned capacity convention applies. No refs are changed. */
 SYRNCK_API int syrnck_refs_json(SyrnckStore *store, char *out, size_t capacity, size_t *length);

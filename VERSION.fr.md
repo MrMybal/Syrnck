@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Auteurs/signataires natifs locaux aux handles C/Go et préparation vérifiée des révisions neuves ; signatures exigées sans repli non signé, reprise des candidats signés retenus sans clé privée.
 - Staging BEP persistant facultatif : reprise des plages vérifiées après déconnexion/arrêt de processus, verrou OS distinct et retrait après rétention du catalogue ; le staging en clair demande une activation explicite.
 - Exécutable optionnel `syrnck-bep` : configuration locale stricte, aide anglais/français, appareils épinglés, capture hors ligne, tests de redémarrage et sources/notices des dépendances distribuées.
 

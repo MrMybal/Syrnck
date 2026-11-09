@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 9
+sourceRevision: 10
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -178,3 +178,41 @@ Respecter le [contrat des éditions actives](doc:workspace-abi#active-checkout-e
 réutilisation. `CaptureContext` conserve son résultat limité à l’ID. Les
 manifestes de session peuvent survivre à la réouverture du Store, avec inventaire
 et vérification complète. Voir les [limites](doc:performance#incremental-capture).
+
+## Auteurs natifs et nouvelles révisions {#native-authorship}
+
+`UseNativeIdentity(identity, seed)` choisit auteur/committer pour un handle Store.
+Sans graine, les métadonnées v2 sont non signées ; une graine de 32 octets active
+Ed25519 natif. `NativeIdentity` contient nom, email et décalage de fuseau en minutes
+vers l’est de UTC. UTF-8 invalide, contrôles, longueurs excessives et décalages
+hors -1439..1439 sont refusés. Un remplacement échoué garde l’identité précédente.
+
+`ConfigureNativeIdentity(identity, NativeIdentityOptions{Seed: seed,
+RequireSignature: true})` impose une signature. Sans graine disponible, lecture
+et reprise restent possibles mais captures/préparations neuves échouent, sans
+repli non signé. `ClearNativeIdentity()` retire explicitement identité/politique
+du handle. `NativeIdentityMetadata()` retourne identité, identifiants publics et
+le drapeau actif `signature_required`, jamais la graine.
+
+`PrepareNativeRevisionContext(ctx, draft)` accepte un JSON borné de brouillon v1
+neuf. C++ le canonicalise, vérifie parents/fichiers complets, puis applique
+identité/signature du handle. Un objet v2 est refusé sans remplacer son auteur.
+La révision rendue sans référence doit être publiée par refs protégées avant
+libération du Store au GC. Aucune ref ni fichier de travail n’est modifié.
+L’annulation couvre la vérification ; une erreur IO tardive peut laisser un objet
+non référencé ou le drapeau de lecteur requis. `PutContext` brut conserve son
+contrat explicite de métadonnées de bas niveau.
+
+L’ABI C expose `store_use_native_identity`, `store_clear_native_identity`,
+`store_native_identity_json` et `prepare_native_revision_ex` dans le header
+livré. Aucun pointeur secret n’est retenu. La clé native est effacée au
+remplacement/clear/Close ; l’appelant contrôle, sérialise et efface ses buffers
+de graine. Ces API n’ajoutent aucune clé privée aux configurations/sauvegardes.
+
+Un fournisseur résident configure chaque nouveau Store avant de le rendre.
+Arrêter ses consommateurs avant de retirer le fournisseur. Le contrôleur
+Syncthing utilise ce contexte pour captures locales et révisions natives
+entrantes synthétisées ; sa [configuration autonome](doc:syncthing#native-authorship)
+accepte auteur explicite et variable de graine distincte. Une signature locale
+n’est ni identité d’appareil BEP ni permission serveur. La publication serveur
+garde sa politique de clés/identités autorisées. Le coffre OS reste à développer.

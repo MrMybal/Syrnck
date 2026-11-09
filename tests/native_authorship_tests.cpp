@@ -159,18 +159,18 @@ void producers(const fs::path &base) {
 }
 void identity_session(const fs::path &base) {
   const auto expected_key = signing_key_id(signer(28).public_key());
-  std::optional<NativeIdentityContext> context{NativeIdentityContext{{"Resident", "resident@example.invalid", 90}, signer(28)}};
+  std::optional<NativeIdentityContext> context{NativeIdentityContext{{"Resident", "resident@example.invalid", 90}, signer(28), true}};
   std::string previous;
   for (unsigned index = 0; index < 3; ++index) {
     Fixture f(base / std::to_string(index));
     f.write("code", "same process, a fresh Store handle");
-    f.store.use_native_identity(std::move(context->identity), std::move(context->signer));
+    f.store.use_native_identity(std::move(context->identity), std::move(context->signer), context->require_signature);
     context.reset();
     const auto revision = f.store.commit_directory(f.project, "main", "resident commit");
     signed_revision(f.store, revision, "Resident", "Resident");
     require(f.store.native_identity()["signing_key"] == expected_key, "resident identity lost its original signing key");
     context = f.store.take_native_identity();
-    require(context && context->identity.timezone_offset == 90 && context->signer &&
+    require(context && context->require_signature && context->identity.timezone_offset == 90 && context->signer &&
         signing_key_id(context->signer->public_key()) == expected_key && f.store.native_identity().is_null(), "taking identity did not transfer exclusive ownership");
     require(!f.store.take_native_identity(), "empty identity returned a second context");
     previous = revision;

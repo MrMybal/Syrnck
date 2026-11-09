@@ -76,7 +76,8 @@ func TestStandaloneProcessRetainsOfflineVersionsAfterHardTermination(t *testing.
 				t.Fatal(err)
 			}
 			store.Close()
-			config := configuration{Version: 1, Directory: directory, Storage: storage, Folder: "project", Certificate: cert, PrivateKey: key, Peer: peer, Mode: "listen", Address: "127.0.0.1:0", KeyEnv: "SYRNCK_BEP_PROCESS_TEST_KEY"}
+			config := configuration{Version: 1, Directory: directory, Storage: storage, Folder: "project", Certificate: cert, PrivateKey: key, Peer: peer, Mode: "listen", Address: "127.0.0.1:0", KeyEnv: "SYRNCK_BEP_PROCESS_TEST_KEY", Author: &syrnck.NativeIdentity{Name: "Process author", Email: "process@example.invalid", TimezoneOffset: -60}, SigningKeyEnv: "SYRNCK_BEP_PROCESS_SIGNING_KEY"}
+			t.Setenv("SYRNCK_BEP_PROCESS_SIGNING_KEY", hex.EncodeToString(bytes.Repeat([]byte{34}, 32)))
 			document, err := json.Marshal(config)
 			if err != nil {
 				t.Fatal(err)
@@ -146,6 +147,10 @@ func TestStandaloneProcessRetainsOfflineVersionsAfterHardTermination(t *testing.
 					t.Fatal(err)
 				}
 				var revision struct {
+					Version   int `json:"version"`
+					Signature struct {
+						PublicKey string `json:"public_key"`
+					} `json:"signature"`
 					Parents []string `json:"parents"`
 					Files   map[string]struct {
 						Manifest string `json:"manifest"`
@@ -154,6 +159,11 @@ func TestStandaloneProcessRetainsOfflineVersionsAfterHardTermination(t *testing.
 				if err := json.Unmarshal(data, &revision); err != nil {
 					store.Close()
 					t.Fatal(err)
+				}
+				expected := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{34}, 32)).Public().(ed25519.PublicKey)
+				if revision.Version != 2 || revision.Signature.PublicKey != hex.EncodeToString(expected) {
+					store.Close()
+					t.Fatal("standalone capture did not use native signing identity", string(data))
 				}
 				if previous != "" && (len(revision.Parents) != 1 || revision.Parents[0] != previous) {
 					store.Close()

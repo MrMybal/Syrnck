@@ -245,6 +245,29 @@ int syrnck_store_close(SyrnckStore *store) {
 int syrnck_store_use_workspace(SyrnckStore *p, const char *name) {
   return boundary([&] { checked(p).use_native_workspace(name ? name : ""); });
 }
+int syrnck_store_use_native_identity(SyrnckStore *p, const char *name, const char *email,
+    std::int32_t offset, const unsigned char *seed, std::size_t length, bool required) {
+  return boundary([&] {
+    auto &store = checked(p);
+    syrnck::NativeIdentity identity{checked(name), checked(email), offset};
+    identity.validate();
+    syrnck::require(length == 0 || (length == 32 && seed != nullptr), "signing seed length must be 0 or 32");
+    std::optional<syrnck::SigningKey> signer;
+    if (length) signer.emplace(syrnck::SigningKey::from_seed({seed, length}));
+    store.use_native_identity(std::move(identity), std::move(signer), required);
+  });
+}
+int syrnck_store_clear_native_identity(SyrnckStore *p) {
+  return boundary([&] { checked(p).clear_native_identity(); });
+}
+int syrnck_store_native_identity_json(SyrnckStore *p, char **out, std::size_t *length) {
+  if (out) *out = nullptr;
+  if (length) *length = 0;
+  return boundary([&] {
+    syrnck::require(out != nullptr && length != nullptr, "null identity output");
+    json_output(checked(p).native_identity(), out, length, {});
+  });
+}
 int syrnck_ingest_file(SyrnckStore *p, const char *path, char *out) {
   return syrnck_ingest_file_ex(p, path, nullptr, out);
 }
@@ -363,6 +386,19 @@ int syrnck_object_put(SyrnckStore *p, const char *kind, const unsigned char *dat
     const std::span<const std::uint8_t> input{data, length};
     const auto key = type == syrnck::Kind::chunk ? store.put(type, input).first
         : store.put(type, syrnck::canonical_metadata(type, input)).first;
+    std::memcpy(out, key.id.c_str(), 65);
+  });
+}
+int syrnck_prepare_native_revision_ex(SyrnckStore *p, const unsigned char *data, std::size_t length,
+    const SyrnckOperation *operation, char *out) {
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null ID output"); out[0] = 0;
+    syrnck::require(length <= syrnck::max_object_size, "object too large");
+    syrnck::require(data != nullptr || length == 0, "null revision draft");
+    const auto control = operation_options(operation);
+    syrnck::throw_if_cancelled(control.stop);
+    auto draft = syrnck::parse_unique_json({data, length});
+    const auto key = checked(p).prepare_native_revision(std::move(draft), control);
     std::memcpy(out, key.id.c_str(), 65);
   });
 }

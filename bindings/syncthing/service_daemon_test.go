@@ -66,6 +66,9 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 			}
 			configuration := map[string]any{"version": 1, "directory": directory, "storage": storage, "folder": "project", "certificate": certPath, "private_key": keyPath,
 				"peer": reference.device.String(), "mode": "dial", "address": reference.bep, "key_env": "SYRNCK_BEP_DAEMON_TEST_KEY", "conflict_copies": true, "resume_downloads": true, "poll_ms": 100, "retry_min_ms": 50, "retry_max_ms": 200}
+			t.Setenv("SYRNCK_BEP_DAEMON_SIGNING_KEY", hex.EncodeToString(bytes.Repeat([]byte{35}, 32)))
+			configuration["author"] = map[string]any{"name": "BEP integration", "email": "bep@example.invalid", "timezone_offset": 60}
+			configuration["signing_key_env"] = "SYRNCK_BEP_DAEMON_SIGNING_KEY"
 			encoded, err := json.Marshal(configuration)
 			if err != nil {
 				t.Fatal(err)
@@ -146,6 +149,27 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 						}
 					}
 					if ack {
+						store, err := syrnck.Open(storage, syrnck.Options{Key: key})
+						if err != nil {
+							continue
+						}
+						refs, readErr := store.Refs()
+						if readErr != nil {
+							store.Close()
+							t.Fatal(readErr)
+						}
+						revision, readErr := store.Get(refs["heads/main"])
+						store.Close()
+						if readErr != nil {
+							t.Fatal(readErr)
+						}
+						var metadata struct {
+							Version   int             `json:"version"`
+							Signature json.RawMessage `json:"signature"`
+						}
+						if err := json.Unmarshal(revision, &metadata); err != nil || metadata.Version != 2 || len(metadata.Signature) == 0 || string(metadata.Signature) == "null" {
+							t.Fatal("standalone native candidate is not signed", err, string(revision))
+						}
 						return
 					}
 					select {

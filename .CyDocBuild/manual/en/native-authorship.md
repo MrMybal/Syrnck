@@ -5,7 +5,7 @@ description: Original authors, current committers and optional Ed25519 signature
 section: Version control
 order: 305
 parent: native-history
-revision: 3
+revision: 4
 ---
 
 ## Configure an identity {#identity}
@@ -117,5 +117,8 @@ principals, branch/path ACLs and asset locks; [access v2](doc:server-signatures)
 can also require approved signatures and bind committer keys/identities to
 accounts. It checks current policy for newly admitted history, preserving the
 existing branch baseline. An OS signing-key vault and distributed revocation
-remain separate work. Native history authorship APIs are currently C++/CLI; C/Go object
-import and reconstruction can read validated v2 objects without a signing seed.
+remain separate work. [C and Go authorship APIs](doc:go-binding#native-authorship) configure handle-local
+identities and prepare fresh signed revisions. A required-signature policy can
+block new revisions without a seed while retaining public read/recovery access.
+C++ `NativeIdentityContext` carries this policy when moving its exclusive signer
+between Store handles. The policy and private key are not persisted.

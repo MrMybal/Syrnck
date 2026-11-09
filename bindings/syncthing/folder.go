@@ -885,7 +885,7 @@ func (f *Folder) prepareApplication(ctx context.Context, store *syrnck.Store, lo
 	if err != nil {
 		return err
 	}
-	candidate, err := store.PutContext(ctx, "revision", encoded)
+	candidate, err := store.PrepareNativeRevisionContext(ctx, encoded)
 	if err != nil {
 		return err
 	}

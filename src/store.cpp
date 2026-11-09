@@ -24,6 +24,7 @@ struct Store::Impl {
   std::string native_workspace;
   std::optional<NativeIdentity> native_identity;
   std::optional<SigningKey> native_signer;
+  bool native_signature_required = false;
   std::optional<Key> key;
   FileLock lock;
   PackStorage packs;
@@ -611,22 +612,25 @@ Refs Store::refs() const {
   return parse_refs(read_bytes(root() / "refs.json", max_object_size), "invalid refs document");
 }
 std::string_view Store::native_workspace_name() const { return impl_->native_workspace; }
-void Store::use_native_identity(NativeIdentity identity, std::optional<SigningKey> signer) {
+void Store::use_native_identity(NativeIdentity identity, std::optional<SigningKey> signer, bool required) {
   require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
   identity.validate();
   if (signer) (void)signer->public_key();
   impl_->native_identity = std::move(identity); impl_->native_signer = std::move(signer);
+  impl_->native_signature_required = required;
 }
 void Store::clear_native_identity() {
   require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
   impl_->native_signer.reset(); impl_->native_identity.reset();
+  impl_->native_signature_required = false;
 }
 std::optional<NativeIdentityContext> Store::take_native_identity() {
   require(progress_callback_depth == 0, "cannot select native identity from a progress callback");
   if (!impl_->native_identity) return {};
   std::optional<NativeIdentityContext> result{NativeIdentityContext{
-      std::move(*impl_->native_identity), std::move(impl_->native_signer)}};
+      std::move(*impl_->native_identity), std::move(impl_->native_signer), impl_->native_signature_required}};
   impl_->native_signer.reset(); impl_->native_identity.reset();
+  impl_->native_signature_required = false;
   return result;
 }
 Json Store::native_identity() const {
@@ -634,6 +638,7 @@ Json Store::native_identity() const {
   const auto &identity = *impl_->native_identity;
   Json result{{"name", identity.name}, {"email", identity.email}, {"timezone_offset", identity.timezone_offset},
       {"signing_key", Json{}}, {"public_key", Json{}}};
+  if (impl_->native_signature_required) result["signature_required"] = true;
   if (impl_->native_signer) {
     const auto key = impl_->native_signer->public_key();
     result["signing_key"] = signing_key_id(key); result["public_key"] = hex(key);
@@ -641,6 +646,7 @@ Json Store::native_identity() const {
   return result;
 }
 Json Store::native_commit_metadata(Json draft, std::optional<Json> author) const {
+  require(!impl_->native_signature_required || impl_->native_signer.has_value(), "native signing key is required for new revisions");
   if (!impl_->native_identity) {
     require(draft.value("version", 1) == 1 && (!author || author->is_null()),
         "rewriting authored revisions requires a committer identity");
@@ -660,6 +666,21 @@ Json Store::native_commit_metadata(Json draft, std::optional<Json> author) const
         {"public_key", hex(key)}, {"value", hex(signature)}};
   }
   return result;
+}
+ObjectKey Store::prepare_native_revision(Json draft, OperationOptions options) const {
+  throw_if_cancelled(options.stop);
+  require(!impl_->native_signature_required || impl_->native_signer.has_value(), "native signing key is required for new revisions");
+  draft = parse_unique_json(canonical_metadata(Kind::revision, bytes(draft.dump())));
+  require(draft.at("version") == 1, "fresh native revision requires a v1 draft");
+  std::vector<ObjectKey> dependencies;
+  for (const auto &parent : draft.at("parents"))
+    dependencies.push_back({Kind::revision, parent.get<std::string>()});
+  for (const auto &[name, file] : draft.at("files").items())
+    dependencies.push_back({Kind::manifest, file.at("manifest").get<std::string>()});
+  (void)closure(dependencies, true, options.stop, options.progress);
+  const auto encoded = canonical_metadata(Kind::revision, bytes(native_commit_metadata(std::move(draft)).dump()));
+  throw_if_cancelled(options.stop);
+  return put(Kind::revision, encoded).first;
 }
 void Store::use_native_workspace(std::string_view name) {
   require(progress_callback_depth == 0, "cannot select native workspace from a progress callback");

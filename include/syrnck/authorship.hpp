@@ -14,5 +14,6 @@ struct NativeIdentity {
 struct NativeIdentityContext {
   NativeIdentity identity;
   std::optional<SigningKey> signer;
+  bool require_signature = false;
 };
 } // namespace syrnck

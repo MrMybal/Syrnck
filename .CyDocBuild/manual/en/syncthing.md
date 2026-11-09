@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 10
+revision: 11
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -403,8 +403,7 @@ and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
 platform ownership/xattrs or receive-encrypted folders. It retains incoming
 metadata but does not claim these paths have been applied. It also lacks
 automatic membership
-changes/history retirement and authored/signature policy for newly synthesized
-incoming native candidates. Large-project performance and power-loss durability
+changes/history retirement. Large-project performance and power-loss durability
 are not qualified. The native resident publication agent is a separate feature.
 
 `StagedFile.PrepareWithChunking(ctx, store, syrnck.Chunking{})` keeps default
@@ -500,6 +499,39 @@ configuration. Existing session tests separately qualify the pinned upstream
 daemon. The application still supplies network listening/dialing, certificates,
 key storage and OS lifecycle. OS service packaging and
 complete directory/symlink semantics remain unfinished.
+
+## Native author and signing policy {#native-authorship}
+
+Configure every Store returned by `FolderOptions.OpenStore` with the native
+[identity API](doc:go-binding#native-authorship). Local captures and synthesized
+incoming workspace revisions then use that author/committer and optional signer.
+An incoming BEP version becomes a local native integration revision; it does not
+claim the peer's native author identity. Catalog bookkeeping remains internal v1
+metadata. TLS device keys, storage keys and native signing seeds have separate
+roles. This does not import remote native signatures through BEP file vectors.
+
+The standalone JSON accepts optional `author` with `name`, `email` and
+`timezone_offset` (minutes east of UTC). Without author, legacy v1 behavior stays.
+With author but no `signing_key_env`, captures/candidates are unsigned v2. Set
+`signing_key_env` to a separate uppercase environment variable containing a
+32-byte Ed25519 seed as 64 hexadecimal characters to require signatures. No raw
+seed belongs in JSON or process arguments. Each short-lived Store receives a
+native key copy; decoded Go seed buffers are cleared immediately afterward.
+
+An unset configured signing variable allows public recovery of an already
+prepared signed candidate, then blocks fresh revisions until the seed returns.
+A malformed seed is an error. Working edits remain in place when signing fails.
+Prepared candidates keep their exact signed bytes, parents and native receipt
+guards; they are never re-signed during recovery. Clearing the requirement in the
+configuration is an explicit policy change. OS vaults, secret distribution and
+signer authorization remain external; a valid signature is not a server grant.
+
+Tests kill signed incoming applications before/after native publication in
+plain/encrypted Stores, recover without the private key, reject unsigned fallback
+for a subsequent edit and resume signing after restoring the provider. Standalone
+process restart and live reference-daemon tests qualify signed local captures
+and incoming native revisions. The reference daemon itself does not sign native
+Syrnck revisions.
 
 ## Standalone foreground executable {#standalone-service}
 

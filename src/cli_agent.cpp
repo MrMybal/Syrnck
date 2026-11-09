@@ -93,7 +93,7 @@ int run_agent(const fs::path &directory, const fs::path &storage, const AgentCom
       try {
         store = open_store();
         if (identity) {
-          store->use_native_identity(std::move(identity->identity), std::move(identity->signer));
+          store->use_native_identity(std::move(identity->identity), std::move(identity->signer), identity->require_signature);
           identity.reset(); attached = true;
         }
         try { frame = sync.tick(*store, remote, changes, operation, transfer); }

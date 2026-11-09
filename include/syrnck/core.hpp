@@ -532,13 +532,17 @@ public:
   std::string_view native_workspace_name() const;
   // Handle-local identity and exclusive signing-key ownership. No secret export.
   // Identity changes are refused from progress callbacks.
-  void use_native_identity(NativeIdentity, std::optional<SigningKey> = {});
+  void use_native_identity(NativeIdentity, std::optional<SigningKey> = {}, bool require_signature = false);
   void clear_native_identity();
   std::optional<NativeIdentityContext> take_native_identity();
   Json native_identity() const;
   // No override means a fresh author. An engaged null preserves an unknown
   // legacy author during rewriting; an engaged stamp preserves that author.
   Json native_commit_metadata(Json draft, std::optional<Json> original_author = {}) const;
+  // Prepare a fresh v1 draft using this handle's optional author/signer. Verify
+  // every parent and file closure first. No refs or working files are changed;
+  // retain the returned object through a guarded publication before permitting GC.
+  ObjectKey prepare_native_revision(Json draft, OperationOptions = {}) const;
   std::string native_workspace_reference(std::string_view local) const;
   void validate_native_workspace(const fs::path &) const;
   Json register_native_workspace(const fs::path &primary, std::string_view name,

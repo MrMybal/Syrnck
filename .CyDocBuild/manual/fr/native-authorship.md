@@ -5,7 +5,7 @@ description: Auteur d’origine, committer actuel et signatures Ed25519 facultat
 section: Versionnage
 order: 305
 parent: native-history
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Configurer une identité {#identity}
@@ -119,5 +119,8 @@ utilise principal authentifié, ACL de branches/chemins et verrous d’assets ;
 [l’accès v2](doc:server-signatures) peut aussi imposer des signatures approuvées
 et lier clés/identités de committer aux comptes. Il vérifie la politique actuelle
 pour l’histoire nouvellement admise tout en préservant la base déjà publiée.
-Coffre système de signature et révocation distribuée restent à développer. L’API d’auteur natif est actuellement
-C++/CLI ; import et reconstruction C/Go lisent les objets v2 validés sans graine.
+Coffre système de signature et révocation distribuée restent à développer. Les [API d’auteur C/Go](doc:go-binding#native-authorship) configurent des identités
+locales au handle et préparent des révisions signées neuves. Une signature exigée
+peut bloquer les nouvelles révisions sans graine tout en gardant lecture/reprise
+publiques. `NativeIdentityContext` C++ conserve cette politique avec le signataire
+exclusif transféré entre handles. Politique et clé privée ne sont pas persistées.

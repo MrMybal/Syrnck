@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 9
+revision: 10
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -165,3 +165,42 @@ Use the [active-edit contract](doc:workspace-abi#active-checkout-edits); ordinar
 `CaptureContext` keeps its revision-only result. Session manifests can survive
 Store reopens, with complete enumeration and object verification. See
 [capture boundaries](doc:performance#incremental-capture).
+
+## Native authorship and fresh revisions {#native-authorship}
+
+`UseNativeIdentity(identity, seed)` selects a native author/committer for one
+Store handle. An absent seed creates unsigned v2 metadata; a 32-byte seed selects
+native Ed25519 signing. `NativeIdentity` contains name, email and timezone offset
+in minutes east of UTC. Validation rejects invalid UTF-8, controls, excessive
+lengths and offsets outside -1439..1439. Failed replacement keeps the old identity.
+
+Use `ConfigureNativeIdentity(identity, NativeIdentityOptions{Seed: seed,
+RequireSignature: true})` for a required signature. Without a supplied seed,
+reading and recovery still work, but fresh native captures/preparations fail;
+there is no silent unsigned fallback. `ClearNativeIdentity()` explicitly removes
+this handle's identity/policy. `NativeIdentityMetadata()` returns public identity,
+key identifiers and an enabled `signature_required` flag, never the seed.
+
+`PrepareNativeRevisionContext(ctx, draft)` accepts bounded JSON for a fresh v1
+revision. C++ canonicalizes it, verifies the complete parents/files, then applies
+the handle's identity/signature. It rejects v2 input rather than replacing an
+existing author. The unpinned returned revision needs guarded ref publication
+before releasing Store to GC. It changes no refs or working files. Cancellation
+covers closure verification; a late IO error may leave an unreferenced object
+or the required-reader feature gate. This is distinct from raw `PutContext`,
+which keeps its explicit low-level metadata contract.
+
+The C API exposes matching `store_use_native_identity`,
+`store_clear_native_identity`, `store_native_identity_json` and
+`prepare_native_revision_ex` operations in the distributed header. No secret
+pointer is retained. Native signing keys are wiped on replacement/clear/Close;
+callers control, serialize and wipe their own seed buffers. Configurations and
+backups do not acquire a private signing key from these APIs.
+
+A resident provider must configure each newly opened Store before returning it.
+Stop its consumers before retiring the provider. The Syncthing controller uses
+this context for local captures and synthesized incoming native revisions;
+[its standalone configuration](doc:syncthing#native-authorship) supports an explicit
+author and a separate signing-key environment variable. Signatures are local
+claims, not BEP device identity or server permission. Server publication still
+uses its own approved-key/identity policy. OS vault integration remains separate.

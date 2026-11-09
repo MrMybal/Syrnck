@@ -28,24 +28,26 @@ import (
 )
 
 type configuration struct {
-	Version               int    `json:"version"`
-	Directory             string `json:"directory"`
-	Storage               string `json:"storage"`
-	Workspace             string `json:"workspace"`
-	Folder                string `json:"folder"`
-	Certificate           string `json:"certificate"`
-	PrivateKey            string `json:"private_key"`
-	Peer                  string `json:"peer"`
-	Mode                  string `json:"mode"`
-	Address               string `json:"address"`
-	KeyEnv                string `json:"key_env"`
-	UsePermissions        bool   `json:"use_permissions"`
-	PreserveCheckoutEdits bool   `json:"preserve_checkout_edits"`
-	ConflictCopies        bool   `json:"conflict_copies"`
-	ResumeDownloads       bool   `json:"resume_downloads"`
-	PollMilliseconds      uint32 `json:"poll_ms"`
-	RetryMinMilliseconds  uint32 `json:"retry_min_ms"`
-	RetryMaxMilliseconds  uint32 `json:"retry_max_ms"`
+	Version               int                    `json:"version"`
+	Directory             string                 `json:"directory"`
+	Storage               string                 `json:"storage"`
+	Workspace             string                 `json:"workspace"`
+	Folder                string                 `json:"folder"`
+	Certificate           string                 `json:"certificate"`
+	PrivateKey            string                 `json:"private_key"`
+	Peer                  string                 `json:"peer"`
+	Mode                  string                 `json:"mode"`
+	Address               string                 `json:"address"`
+	KeyEnv                string                 `json:"key_env"`
+	UsePermissions        bool                   `json:"use_permissions"`
+	PreserveCheckoutEdits bool                   `json:"preserve_checkout_edits"`
+	ConflictCopies        bool                   `json:"conflict_copies"`
+	ResumeDownloads       bool                   `json:"resume_downloads"`
+	Author                *syrnck.NativeIdentity `json:"author,omitempty"`
+	SigningKeyEnv         string                 `json:"signing_key_env,omitempty"`
+	PollMilliseconds      uint32                 `json:"poll_ms"`
+	RetryMinMilliseconds  uint32                 `json:"retry_min_ms"`
+	RetryMaxMilliseconds  uint32                 `json:"retry_max_ms"`
 }
 
 func limitedFile(path string, limit int64) ([]byte, error) {
@@ -170,6 +172,25 @@ func loadConfiguration(path string) (configuration, error) {
 			return config, errors.New("invalid key environment variable name")
 		}
 	}
+	if config.Author != nil && (config.Author.Name == "" || config.Author.Email == "" || config.Author.TimezoneOffset < -1439 || config.Author.TimezoneOffset > 1439) {
+		return config, errors.New("author requires name, email and a timezone offset in -1439..1439 minutes")
+	}
+	if config.SigningKeyEnv != "" {
+		if config.Author == nil {
+			return config, errors.New("signing_key_env requires an explicit author")
+		}
+		if config.SigningKeyEnv == config.KeyEnv {
+			return config, errors.New("storage and revision signing keys require different environment variables")
+		}
+		if len(config.SigningKeyEnv) > 128 {
+			return config, errors.New("invalid signing key environment variable name")
+		}
+		for i, c := range config.SigningKeyEnv {
+			if !(c == '_' || c >= 'A' && c <= 'Z' || i > 0 && c >= '0' && c <= '9') {
+				return config, errors.New("invalid signing key environment variable name")
+			}
+		}
+	}
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return config, err
@@ -277,7 +298,28 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 				return nil, errors.New("storage key environment variable must contain 64 hexadecimal characters")
 			}
 		}
-		return syrnck.Open(config.Storage, syrnck.Options{Key: key})
+		var signingSeed []byte
+		defer func() { clear(signingSeed) }()
+		if config.SigningKeyEnv != "" {
+			if encoded := os.Getenv(config.SigningKeyEnv); encoded != "" {
+				var err error
+				signingSeed, err = hex.DecodeString(encoded)
+				if err != nil || len(signingSeed) != 32 {
+					return nil, errors.New("revision signing key environment variable must contain 64 hexadecimal characters")
+				}
+			}
+		}
+		store, err := syrnck.Open(config.Storage, syrnck.Options{Key: key})
+		if err != nil {
+			return nil, err
+		}
+		if config.Author != nil {
+			if err := store.ConfigureNativeIdentity(*config.Author, syrnck.NativeIdentityOptions{Seed: signingSeed, RequireSignature: config.SigningKeyEnv != ""}); err != nil {
+				store.Close()
+				return nil, err
+			}
+		}
+		return store, nil
 	}
 	folder, err := bep.NewFolder(ctx, bep.FolderOptions{Directory: config.Directory, Storage: config.Storage, Workspace: config.Workspace,
 		Catalog:   bep.CatalogOptions{Folder: config.Folder, LocalDevice: local, Peers: []protocol.DeviceID{peer}},
