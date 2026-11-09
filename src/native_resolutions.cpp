@@ -274,7 +274,7 @@ void NativeRebaseTodo::validate() const {
     validate_id(step.source);
     require(seen.insert(step.source).second, "duplicate native rebase todo source");
     require(step.action == "pick" || step.action == "drop" || step.action == "reword" ||
-                step.action == "squash" || step.action == "fixup",
+                step.action == "squash" || step.action == "fixup" || step.action == "merge",
             "invalid native rebase todo action");
     require(step.message.has_value() == (step.action == "reword"), "invalid native rebase todo message");
     if (step.action == "squash" || step.action == "fixup")

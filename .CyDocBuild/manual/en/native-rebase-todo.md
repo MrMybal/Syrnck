@@ -5,12 +5,12 @@ description: Editable and interactive native rebase guide.
 section: Version control
 order: 320
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Editable and interactive native rebase {#editable-and-interactive-native-rebase}
 
-Native linear rebase supports a complete reviewed sequence, either from an
+Native rebase supports a complete reviewed sequence, either from an
 editable JSON document or a terminal prompt. Both routes use the same C++
 planner, conflict resolutions, text composition and recoverable checkout.
 
@@ -49,6 +49,7 @@ by the template. Messages may contain Unicode, newlines and empty text.
 | Action | Result |
 | --- | --- |
 | `pick` | Replay the source delta and preserve its message/timestamp. |
+| `merge` | Recreate an original merge with its ordered remapped parents; requires `--rebase-merges`. |
 | `drop` | Replay nothing; retain its original history in the checkout archive. |
 | `reword` | Replay the delta, keep its timestamp and use the required `message`. |
 | `squash` | Replay the delta into the preceding picked result, retaining that result's timestamp/parent and appending the source message after two newlines. |
@@ -102,14 +103,15 @@ code page or interpreting message backslashes as path separators.
 
 ## Limits, recovery and scope {#limits-recovery-and-scope}
 
-The ordinary linear-range, clean-workspace and complete-file verification
+The selected range mode, clean-workspace and complete-file verification
 requirements apply. Todo JSON and aggregate interactive input are limited to
 16 MiB, with at most 100,000 rows and 1 MiB per explicit/combined new message.
 Rebase reports remain independently bounded at 16 MiB and now include `todo`,
 per-step `action`, fold `replaces`, `result_commits` and `dropped_commits`.
 `completed_commits`/`replayed_commits` count non-dropped source deltas, while
 `result_commits` counts the resulting chain after folds. The template is also
-available in a normal rebase plan; a non-linear range has no todo template.
+available in a normal rebase plan. Without `--rebase-merges`, a non-linear range
+has no todo template.
 
 Application verifies all inputs, materializes surviving commits and uses the
 existing journal to install the final files, publish the branch and archive
@@ -117,6 +119,10 @@ the old head. Recover or abort an interrupted checkout with the documented
 [rebase recovery commands](doc:native-rebase#apply-and-recover). A failed or
 cancelled preparation can leave unreferenced valid objects for later GC.
 
-This is interactive **linear** rewriting. Merge-preserving rebase, editor
-launching, split/edit stops, automatic fixup matching and execution of test
-commands are not implemented by these actions.
+With `--rebase-merges`, the sequence covers the [whole DAG](doc:native-rebase#preserve-merges),
+including side branches and original merge rows. Keep parents before children;
+`pick` and `reword` also recreate an original merge. Squash/fixup require the
+preceding unflushed candidate to be the remapped first parent and to have no
+remaining child references. A fold that would rewrite a branch point is refused.
+Folding a merge retains its other remapped parents. Editor launching, split/edit
+stops, automatic fixup matching and execution of test commands remain unsupported.

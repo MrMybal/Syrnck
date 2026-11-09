@@ -19,12 +19,14 @@ class Synthesis {
   OperationOptions options_;
   NativeTextMergeBatch *text_;
   NativeRenameBatch *renames_;
+  NativeMergeBaseCallbacks callbacks_;
   std::size_t work_ = 0, input_ = 0, merges_ = 0, depth_ = 0, report_bytes_ = 4096;
   Json steps_ = Json::array();
   void work(std::size_t amount) {
     throw_if_cancelled(options_.stop);
     require(amount <= limits_.max_work - work_, "native merge base work limit exceeded");
     work_ += amount;
+    if (callbacks_.work) callbacks_.work(amount);
   }
   void input(std::size_t amount) {
     require(amount <= limits_.max_input_bytes - input_, "native merge base input limit exceeded");
@@ -32,6 +34,14 @@ class Synthesis {
   }
   NativeMergeBase load(const std::string &id) {
     work(1);
+    if (callbacks_.read) {
+      auto files = callbacks_.read(id, options_);
+      input(256);
+      for (const auto &[path, file] : files) {
+        work(1); input(Json(path).dump().size() + file.json().dump().size() + 3);
+      }
+      return NativeMergeBase{id, std::move(files), {}, {}};
+    }
     const auto revision = store_.metadata(Kind::revision, id);
     input(revision.dump().size());
     NativeMergeBase result{id, {}, {}, {}};
@@ -126,9 +136,10 @@ class Synthesis {
 
 public:
   Synthesis(const Store &store, const NativeAncestryGraph &graph, const NativeMergeBaseLimits &limits,
-            OperationOptions options, NativeTextMergeBatch *text, NativeRenameBatch *renames)
+            OperationOptions options, NativeTextMergeBatch *text, NativeRenameBatch *renames,
+            NativeMergeBaseCallbacks callbacks)
       : store_(store), graph_(graph), limits_(limits), options_(std::move(options)), text_(text),
-        renames_(renames) {}
+        renames_(renames), callbacks_(std::move(callbacks)) {}
   NativeMergeBase run(std::vector<std::string> bases) {
     auto result = build(bases, 1);
     result.report = Json{{"version", 1},
@@ -154,10 +165,11 @@ public:
 NativeMergeBase synthesize_native_merge_base(const Store &store, const NativeAncestryGraph &graph,
                                              std::vector<std::string> bases,
                                              const NativeMergeBaseLimits &limits, OperationOptions options,
-                                             NativeTextMergeBatch *text, NativeRenameBatch *renames) {
+                                             NativeTextMergeBatch *text, NativeRenameBatch *renames,
+                                             NativeMergeBaseCallbacks callbacks) {
   throw_if_cancelled(options.stop);
   limits.validate();
   require(bases.size() > 1, "native virtual merge requires multiple bases");
-  return Synthesis(store, graph, limits, std::move(options), text, renames).run(std::move(bases));
+  return Synthesis(store, graph, limits, std::move(options), text, renames, std::move(callbacks)).run(std::move(bases));
 }
 } // namespace syrnck

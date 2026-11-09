@@ -258,10 +258,19 @@ struct NativeRebaseOptions {
   // One shared text budget covers the entire range, including virtual results.
   std::optional<TextDiffOptions> text_merge{};
   // Explicit complete sequence: pick/drop/reword/squash/fixup, with reordering.
+  // In preserve_merges mode, merge is also accepted and parents precede children.
   std::optional<NativeRebaseTodo> todo{};
   // Freeze the committer clock across both candidate-generation passes.
   std::optional<std::uint64_t> committer_timestamp{};
   std::optional<NativeRenameOptions> renames{};
+  bool preserve_merges = false;
+  // Rebase boundary parents and unrelated roots onto the destination too.
+  // Otherwise cousins retain their original branch points.
+  bool rebase_cousins = false;
+  NativeGraphLimits graph_limits{};
+  NativeMergeBaseLimits base_limits{};
+  std::size_t max_graph_work = 64 * 1024 * 1024;
+  std::size_t max_delta_bytes = 64 * 1024 * 1024;
 };
 struct NativeStageRebaseOptions {
   std::optional<NativeResolutionSet> resolutions{};
@@ -640,7 +649,8 @@ public:
   Json merge_directory(const fs::path &, std::string_view branch, std::string_view expected_revision,
                        std::string_view source, std::string_view message, const NativeMergeOptions & = {},
                        OperationOptions = {}) const;
-  // Replay the linear range (base, head] onto an exact new base. Planning never
+  // Replay (base, head] onto an exact new base; optional DAG-preserving replay.
+  // Planning never
   // stores candidates; virtual IDs preserve source messages and authors. With
   // an identity, the current committer uses one frozen time for both passes.
   Json plan_rebase(const fs::path &, std::string_view branch, std::string_view base, std::string_view onto,

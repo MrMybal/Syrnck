@@ -1,16 +1,16 @@
 ---
 id: native-rebase
-title: Rebase linéaire
-description: Guide : Rebase linéaire.
+title: Rebase natif
+description: Rebase linéaire et avec préservation des fusions.
 section: Versionnage
 order: 310
 parent: native-history
-sourceRevision: 3
+sourceRevision: 4
 ---
 
-# Rebase linéaire natif {#native-linear-rebase}
+# Rebase natif {#native-linear-rebase}
 
-Le plan rejoue la plage explicite (BASE, HEAD] sur une autre révision. BASE est exclue et doit être atteinte en suivant les parents uniques de la branche ; aucune base commune implicite. Une [séquence éditable/interactif](doc:native-rebase-todo) peut réordonner, retirer, reformuler, squash/fixup ; sans séquence, les règles ordinaires ci-dessous s’appliquent.
+Par défaut, le plan rejoue la plage explicite (BASE, HEAD] sur une autre révision. BASE est exclue et doit être atteinte en suivant les parents uniques de la branche ; aucune base commune implicite. Une [séquence éditable/interactif](doc:native-rebase-todo) peut réordonner, retirer, reformuler, squash/fixup ; sans séquence, les règles ordinaires ci-dessous s’appliquent.
 
 Sélecteurs usuels au CLI, IDs exacts en C++. Branche sélectionnée par défaut, --branch et --directory dans les contraintes de liaison. Workspace avec tous suivis propres, aucun non-suivi/ignoré obstructif, aucun index ni récupération checkout/switch.
 
@@ -34,7 +34,7 @@ JSON : head/base/onto/mode, commits ordonnés, steps, completed_commits, target 
 
 Les IDs virtuels suivent l’algorithme de révision ordinaire et la validation complète des métadonnées. Aucun candidat n’est écrit ni fichier/référence déplacé ; un ID proposé peut donc être absent du Store. Avec identité, `--committer-time SECONDS` fige la date exposée par `committer_timestamp` ; sinon des invocations distinctes peuvent choisir des dates et IDs différents. Mêmes entrées, identité, clé et date donnent les mêmes IDs. Sans identité, les dates anciennes sont conservées. --verify audite toute l’histoire head/base/onto et les fichiers ; sans cela, pas d’audit de blocs hors fichiers éligibles aux tentatives textuelles. Chaque étape rend resolution_context vide et resolved ; le contexte global est un modèle de série.
 
-Rapports et chaque révision plate limités à 16 Mio. Le plan garde liste d’IDs/rapport bornés et snapshots courants, pas toutes les tables candidates ; il peut relire les métadonnées. Beaucoup de changements par étape peuvent atteindre le plafond avant le compte de commits. C++/CLI, progression bilingue, annulation coopérative et callbacks non réentrants. Historique C/Go et préservation des merges restent à développer ; l’édition interactive linéaire est disponible séparément.
+Rapports et chaque révision plate limités à 16 Mio. Le plan garde liste d’IDs/rapport bornés et snapshots courants, pas toutes les tables candidates ; il peut relire les métadonnées. Beaucoup de changements par étape peuvent atteindre le plafond avant le compte de commits. C++/CLI, progression bilingue, annulation coopérative et callbacks non réentrants. Les bindings d’historique C/Go restent à développer ; l’édition interactive couvre les modes linéaire et préservation des fusions décrits ci-dessous.
 
 ```cpp
 syrnck::NativeRebaseOptions settings;
@@ -120,3 +120,78 @@ auto plan = store.plan_rebase(project, "feature", old_base, new_base, settings, 
 auto result = store.rebase_directory(project, "feature", expected_head,
                                      old_base, new_base, settings);
 ```
+
+
+## Préserver le graphe de fusions {#preserve-merges}
+
+`--rebase-merges` rejoue toutes les révisions accessibles depuis HEAD, sauf BASE
+et ses ancêtres. BASE doit être ancêtre de HEAD par un lien parent quelconque ;
+sinon le plan rend `base_not_ancestor`. La séquence éditable complète place les
+parents avant les enfants ; le parcours par défaut traite les branches latérales
+avant la branche du premier parent. Chaque fusion garde ses parents remappés dans
+leur ordre. Les branches et tags sources restent inchangés.
+
+```text
+syrnck native rebase-todo OLD_BASE --onto upstream --rebase-merges > todo.json
+syrnck native rebase-plan OLD_BASE --onto upstream --rebase-merges --todo todo.json --verify
+syrnck native rebase OLD_BASE --onto upstream --rebase-merges --todo todo.json --expect OLD_TIP_ID
+```
+
+Sans `--rebase-cousins`, une branche latérale dont le parent de frontière diffère
+de BASE conserve cette frontière, y compris une racine indépendante. Avec
+`--rebase-cousins`, ces parents de frontière et racines sont aussi rattachés à
+ONTO. Retirer un commit remappe ses enfants vers son premier parent remappé ;
+retirer une racine indépendante enlève ce parent à ses enfants. Retirer une fusion
+supprime volontairement ses autres liens parents. Si toute l’ascendance
+survivante de la source finale est retirée, la cible devient ONTO.
+
+Une fusion est recréée en fusionnant ses parents originaux, en fusionnant ses
+nouveaux parents, puis en rejouant les éditions propres au commit de fusion entre
+ces deux résultats automatiques. Les éditions manuelles restent conservées sans
+réintroduire les changements automatiques d’une branche volontairement retirée.
+Les deux calculs utilisent les bases communes récursives bornées, la composition
+textuelle facultative et l’alignement des renommages. Un seul budget texte/
+renommages couvre toute l’opération, y compris ces calculs intermédiaires.
+
+Une résolution enregistrée de contenu/ajout/suppression n’est réutilisée que si
+les conflits d’origine et recréés ont une provenance logique identique. Sinon,
+les chemins originaux incertains exigent des choix explicites (`ambiguous_base`),
+tout comme les nouveaux conflits entre parents (`merge_recreation`), même si un
+fichier provisoire correspond à la source enregistrée. Les ambiguïtés structurelles
+restent explicites. Le choix `base` ne peut sélectionner une base originale
+provisoire et incertaine.
+
+Utiliser les contextes retournés : pour une fusion, `base` identifie le résultat
+automatique des anciens parents, `head` celui des nouveaux parents et `parent`
+le premier parent d’origine. Ces identités virtuelles adressées par contenu
+peuvent être absentes du Store. Elles lient tous les parents ordonnés ; modifier
+une branche latérale invalide aussi les choix ultérieurs.
+
+```cpp
+syrnck::NativeRebaseOptions settings;
+settings.preserve_merges = true;
+settings.rebase_cousins = false;
+auto plan = store.plan_rebase(project, "feature", old_base, new_base, settings, true);
+```
+
+En plus de `--max-commits`, ce mode accepte `--max-revisions` (défaut 100000 ;
+1..1000000) et `--max-links` (défaut 1000000 ; 0..10000000), comptant l’historique
+chargé et les candidats virtuels ajoutés, y compris ceux remplacés par regroupement.
+`--rebase-max-work` borne le travail comptabilisé de graphe/snapshot/fusion
+(défaut 67108864 ; 1..1073741824). La synthèse récursive utilise les mêmes bornes
+`--base-max-count/merges/depth/work/input-bytes` que la fusion native.
+
+Le cache virtuel garde des deltas de fichiers par candidat et un snapshot complet
+récent. `--rebase-max-delta-bytes` borne l’estimation encodée des deltas (défaut
+67108864 ; 1024..268435456). Ce n’est pas une limite mémoire globale : snapshots
+courants décodés, métadonnées sources, graphe, buffers texte et rapports ont leurs
+coûts propres. Le rapport expose `preserve_merges`, `rebase_cousins`,
+`result_merges`, `visited_revisions`, `parent_links`, `graph_work` et les compteurs
+`virtual_snapshots`. Les étapes de fusion exposent les deux rapports de parents,
+`recorded_resolutions_reused` et `result_parents`.
+
+Le plan reste sans écriture. L’application répète le calcul déterministe vérifié
+et matérialise des révisions ordinaires, parents avant enfants ; seule la cible
+finale modifie le workspace. L’archive de checkout protège tout le graphe original
+et ses blocs après GC. Les règles de reprise signée, chiffrée, packée et de
+workspace partiel s’appliquent aussi à ce mode.

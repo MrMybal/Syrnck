@@ -179,7 +179,8 @@ Critère de sortie : après partitions réseau et modifications concurrentes, co
 - [x] Rebase linéaire avec séquence modifiable et saisie interactive anglais/français : réordonner, pick/drop/reword/squash/fixup, contexte figé, conflits après retrait d'une dépendance et checkout récupérable.
 - [x] Reset hard récupérable : empreinte du contenu réel, sauvegarde des modifications locales/index/obstructions ordinaires avant remplacement, publication atomique et restitution des dossiers vides à l'annulation.
 - [x] Stash natif : captures travail/index complètes, portée untracked explicite, réapplication trois voies et index distinct, conflits/résolutions, archivage, récupération et pop atomique sans déplacer la branche.
-- [ ] Rebase préservant les merges et arrêts edit/split ; résolution interactive des conflits de rejeu.
+- [x] Rebase avec préservation des fusions : DAG de parents ordonnés, branches latérales et mode cousins explicite, éditions propres aux fusions, résolutions liées aux deux résultats automatiques, bases croisées récursives, cache de deltas borné, séquence complète éditable et récupération après arrêts forcés.
+- [ ] Arrêts edit/split et édition interactive des fichiers pendant les conflits de rejeu.
 - [x] Plan de rebase linéaire natif sur base explicite : rejeu virtuel déterministe, messages/dates et commits vides conservés, conflits bloquants par étape, parcours/rapport bornés et contrôle du workspace sans écriture.
 - [x] Application du rebase linéaire : vérification complète avant création des candidats, IDs conformes au plan, checkout final récupérable, ancienne tête archivée, reprise/annulation et reconstruction des anciennes versions après GC.
 - [x] Résolutions explicites par étape du rebase : tête/deux bases et parents virtuels attendus, choix complets ou manifestes personnalisés, validation stricte, vérification des blocs et conservation après GC ; tests d'arrêts forcés pendant création et application.

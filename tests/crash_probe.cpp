@@ -207,13 +207,15 @@ NativeMergeOptions merge_settings(const Json &info) {
 bool rebase_operation(std::string_view op) {
   return op == "rebase" || op == "rebase-abort" || op == "rebase-resolved" || op == "rebase-resolved-abort" ||
          op == "rebase-move" || op == "rebase-move-abort" || op == "rebase-text" ||
-         op == "rebase-text-abort" || op == "rebase-todo" || op == "rebase-todo-abort";
+         op == "rebase-text-abort" || op == "rebase-todo" || op == "rebase-todo-abort" ||
+         op == "rebase-merges" || op == "rebase-merges-abort";
 }
 bool rebase_abort(std::string_view op) {
   return rebase_operation(op) && op.ends_with("-abort");
 }
 NativeRebaseOptions rebase_settings(const Store &store, const Json &info) {
   NativeRebaseOptions settings;
+  settings.preserve_merges = info["operation"].get<std::string>().starts_with("rebase-merges");
   if (info["operation"].get<std::string>().starts_with("rebase-todo")) {
     const auto head = parse_key(info["old_revision"]).id;
     const auto first = store.metadata(Kind::revision, head)["parents"][0].get<std::string>();
@@ -284,7 +286,15 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
   std::optional<ObjectKey> rebase_base;
   if (rebase_operation(operation)) {
     rebase_base = tip;
-    if (operation.starts_with("rebase-text")) {
+    if (operation.starts_with("rebase-merges")) {
+      const auto first = put_revision(store, old, rebase_base);
+      auto value = revision(old, rebase_base);
+      value["message"] = "Independent side branch";
+      const auto side = store.put(Kind::revision, bytes(value.dump())).first;
+      value["parents"] = Json::array({first.id, side.id});
+      value["message"] = "Recorded two-parent merge";
+      tip = store.put(Kind::revision, bytes(value.dump())).first;
+    } else if (operation.starts_with("rebase-text")) {
       rebase_base = put_text_revision(store, old, 0);
       const auto first = put_text_revision(store, old, 2, rebase_base);
       tip = put_text_revision(store, old, 6, first);
@@ -459,6 +469,13 @@ void prepare(const fs::path &root, bool encrypted, const std::string &operation)
         store.plan_rebase(root.parent_path(), "main", rebase_base->id, onto.id, rebase_settings(store, info));
     check(plan["ready"] == true, "rebase crash fixture is not ready");
     info["rebase_target"] = plan["target"];
+    if (operation.starts_with("rebase-merges")) {
+      info["rebase_graph"] = Json::array();
+      for (const auto &row : plan["steps"])
+        info["rebase_graph"].push_back(Json{{"target", row["target"]},
+                                            {"source", row["source"]},
+                                            {"parents", row["result_parents"]}});
+    }
   }
   if (rewrite_operation(operation)) {
     const auto parent = store.metadata(Kind::revision, tip.id)["parents"][0].get<std::string>();
@@ -1021,7 +1038,16 @@ Json verify(const fs::path &root, const Json &info, bool resumed) {
       if (refs.at("heads/main") != old) {
         check(refs.at("heads/main").id == info["rebase_target"].get<std::string>(),
               "rebase published another virtual target");
-        if (op.starts_with("rebase-todo")) {
+        if (op.starts_with("rebase-merges")) {
+          check(head["parents"].size() == 2, "recovered graph rebase flattened its merge");
+          for (const auto &row : info["rebase_graph"]) {
+            const auto value = store.metadata(Kind::revision, row["target"].get<std::string>()),
+                       original = store.metadata(Kind::revision, row["source"].get<std::string>());
+            check(value["parents"] == row["parents"] && value["message"] == original["message"] &&
+                      value["timestamp"] == original["timestamp"],
+                  "recovered graph rebase changed ordered ancestry or source metadata");
+          }
+        } else if (op.starts_with("rebase-todo")) {
           check(head["parents"] == Json::array({parse_key(info["rebase_onto"]).id}) &&
                     head["message"] == "Crash-safe folded replay" && head["timestamp"] == 0,
                 "edited rebase lost its folded metadata or parent");

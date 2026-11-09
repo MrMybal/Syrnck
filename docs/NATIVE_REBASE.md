@@ -1,4 +1,4 @@
-# Native linear rebase
+# Native rebase
 
 This guide has moved to the local CyDoc manual. / Ce guide est maintenant dans le manuel CyDoc local.
 
@@ -27,3 +27,8 @@ Run `syrnck help native-rebase` to open installed help. / Pour ouvrir l’aide i
 ## Optional bounded text composition
 
 [English](../Documentation/Documentation.html#/en/native-rebase/optional-bounded-text-composition) · [Français](../Documentation/Documentation.html#/fr/native-rebase/optional-bounded-text-composition)
+
+
+## Preserve the merge graph
+
+[English](../Documentation/Documentation.html#/en/native-rebase/preserve-merges) · [Français](../Documentation/Documentation.html#/fr/native-rebase/preserve-merges)

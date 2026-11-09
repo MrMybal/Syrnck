@@ -116,10 +116,11 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
                                          NativeTextMergeBatch *shared_batch,
                                          const NativeConflictCopyContext *copies, NativeRenameBatch *renames,
                                          bool preserve_incoming_representation,
-                                         const std::set<std::string> *ambiguous_base) {
+                                         const std::set<std::string> *ambiguous_base,
+                                         const std::set<std::string> *pending_merge) {
   NativeFileMergeResult result;
   std::optional<NativeRenameAlignment> aligned;
-  if (renames && (!ambiguous_base || ambiguous_base->empty())) {
+  if (renames && (!ambiguous_base || ambiguous_base->empty()) && (!pending_merge || pending_merge->empty())) {
     auto alignment = align_native_renames(original_input, current_input, incoming_input, *renames, options);
     result.renames = std::move(alignment.report);
     if (alignment.applied) aligned = std::move(alignment);
@@ -140,6 +141,7 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
       throw_if_cancelled(options.stop);
       paths.insert(path);
     }
+  if (pending_merge) paths.insert(pending_merge->begin(), pending_merge->end());
   Json changes = Json::array(), conflicts = Json::array();
   ReportBudget budget;
   if (aligned)
@@ -152,7 +154,9 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
     const NativeSnapshotFile *chosen = ours;
     std::optional<NativeSnapshotFile> merged;
     std::string_view reason;
-    if (ambiguous_base && ambiguous_base->contains(path) && !equal(ours, theirs)) {
+    if (pending_merge && pending_merge->contains(path)) {
+      reason = "merge_recreation";
+    } else if (ambiguous_base && ambiguous_base->contains(path) && !equal(ours, theirs)) {
       // A provisional value from a conflicted virtual ancestor is never used
       // to infer that either actual branch was unchanged.
       reason = "ambiguous_base";

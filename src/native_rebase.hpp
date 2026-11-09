@@ -12,4 +12,7 @@ NativeRebasePlan prepare_native_rebase(const Store &, const fs::path &, std::str
                                        std::string_view base, std::string_view onto,
                                        const NativeRebaseOptions &, bool verify_objects, OperationOptions,
                                        const NativeRebaseSink & = {}, std::optional<std::uint64_t> committer_timestamp = {});
+NativeRebasePlan prepare_native_rebase_merges(const Store &, const fs::path &, std::string_view branch,
+    std::string_view base, std::string_view onto, const NativeRebaseOptions &, bool verify_objects,
+    OperationOptions, const NativeRebaseSink &, std::optional<std::uint64_t> frozen_clock);
 } // namespace syrnck

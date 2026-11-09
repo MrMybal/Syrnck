@@ -1,16 +1,16 @@
 ---
 id: native-rebase
-title: Native linear rebase
-description: Native linear rebase guide.
+title: Native rebase
+description: Linear and merge-preserving native rebase.
 section: Version control
 order: 310
 parent: native-history
-revision: 3
+revision: 4
 ---
 
-# Native linear rebase {#native-linear-rebase}
+# Native rebase {#native-linear-rebase}
 
-Native rebase planning replays the explicitly selected linear range `(BASE, HEAD]`
+By default, native rebase planning replays the explicitly selected linear range `(BASE, HEAD]`
 onto another revision. `BASE` is excluded and must be reached by following the
 branch's single-parent chain. There is no implicit merge-base selection.
 
@@ -91,8 +91,9 @@ auto plan = store.plan_rebase(project, "feature", old_base, new_base,
 
 Planning supports English/French progress/errors and cooperative cancellation;
 JSON fields/reason codes remain English. Callbacks must not reenter the Store.
-The planning API is exposed through C++ and CLI; C/Go native history bindings,
-merge preservation remain future work. [Interactive linear rebase](doc:native-rebase-todo) is available.
+The planning API is exposed through C++ and CLI; C/Go native history bindings
+remain future work. [Interactive rebase](doc:native-rebase-todo) is available for
+both the linear mode and the explicit merge-preserving mode below.
 
 ## Apply and recover {#apply-and-recover}
 
@@ -159,7 +160,7 @@ syrnck native rebase OLD_BASE --onto upstream --resolutions choices.json --expec
 
 The wrapper has exactly `version: 1`, original branch `head`, excluded `base`,
 `onto` and `steps`. Each step uses the shared [file resolution schema](doc:native-resolutions)
-with `operation: rebase`, original commit `source`, its original parent as both
+with `operation: rebase`, original commit `source`, and, in linear mode, its original parent as both
 `base` and `parent`, and its current virtual parent as `head`. For the first step,
 that virtual head is ONTO; later heads are the preceding candidate IDs. Use the
 returned contexts, including every exact ID, rather than constructing them by hand.
@@ -236,3 +237,76 @@ auto plan = store.plan_rebase(project, "feature", old_base, new_base, settings, 
 auto result = store.rebase_directory(project, "feature", expected_head,
                                      old_base, new_base, settings);
 ```
+
+
+## Preserve the merge graph {#preserve-merges}
+
+`--rebase-merges` replays every revision reachable from HEAD except BASE and
+its ancestors. BASE must be an ancestor of HEAD through any parent edge; otherwise
+the plan reports `base_not_ancestor`. Parents precede children in the complete
+editable sequence; the default traversal visits side branches before the first
+parent branch. Each merge keeps its ordered remapped parents. Source branches
+and tags remain unchanged.
+
+```text
+syrnck native rebase-todo OLD_BASE --onto upstream --rebase-merges > todo.json
+syrnck native rebase-plan OLD_BASE --onto upstream --rebase-merges --todo todo.json --verify
+syrnck native rebase OLD_BASE --onto upstream --rebase-merges --todo todo.json --expect OLD_TIP_ID
+```
+
+Without `--rebase-cousins`, side branches whose boundary parent differs from BASE
+keep that boundary, including unrelated roots. Adding `--rebase-cousins` also
+attaches these boundary parents and roots to ONTO. Dropping a commit maps children
+to its remapped first parent; dropping an unrelated root leaves its children
+without that parent. Dropping a merge deliberately removes its other parent edges.
+If all surviving ancestry of the final source was dropped, the target is ONTO.
+
+A merge is recreated by merging its original parents, merging its new parents,
+then replaying the actual merge commit's additional edits between those two
+automatic results. This preserves merge-only changes without reintroducing the
+automatic changes of a deliberately dropped branch. Both parent mergers use the
+bounded recursive common-base synthesis, optional text composition and rename
+alignment. The one text/rename budget covers the entire operation, including
+these intermediate computations.
+
+A recorded content/add/delete resolution can be reused only when the original
+and recreated conflicts have identical logical input provenance. Otherwise
+uncertain original paths require explicit choices (`ambiguous_base`), and newly
+conflicting parent results require choices (`merge_recreation`), even if a
+provisional file matches the recorded source. Structural ambiguity stays explicit.
+The `base` choice cannot select a provisional uncertain original base.
+
+Use the returned resolution contexts: a merge step's `base` identifies the
+original automatic parent result, `head` identifies the recreated parent result,
+and `parent` is the original first parent. These are content-addressed virtual
+identities, which can be absent from the Store. They bind every ordered parent;
+changing a side branch invalidates later choices as well.
+
+```cpp
+syrnck::NativeRebaseOptions settings;
+settings.preserve_merges = true;
+settings.rebase_cousins = false;
+auto plan = store.plan_rebase(project, "feature", old_base, new_base, settings, true);
+```
+
+In addition to `--max-commits`, this mode accepts `--max-revisions` (default
+100,000; 1..1,000,000) and `--max-links` (default 1,000,000; 0..10,000,000), counting
+loaded history and appended virtual candidates; folded candidates also consume
+graph budget. `--rebase-max-work` bounds charged graph/snapshot/merge work
+(default 67,108,864; 1..1,073,741,824). Recursive synthesis has the same
+`--base-max-count/merges/depth/work/input-bytes` limits as native merge.
+
+The virtual snapshot cache retains per-candidate file deltas and one recent
+complete snapshot. `--rebase-max-delta-bytes` bounds the encoded delta estimate
+(default 67,108,864; 1,024..268,435,456). This is not a total process-memory limit:
+decoded current snapshots, source metadata, graph, text buffers and reports have
+their own costs. The report includes `preserve_merges`, `rebase_cousins`,
+`result_merges`, `visited_revisions`, `parent_links`, `graph_work` and
+`virtual_snapshots` counters. Merge rows expose original/recreated parent reports,
+`recorded_resolutions_reused` and `result_parents`.
+
+Planning stays read-only. Application repeats the verified deterministic
+calculation and materializes ordinary revisions in parent-before-child order;
+only the final target updates the workspace. The checkout archive retains the
+entire original DAG and its blocks through GC. The existing signed, encrypted,
+packed and partial-workspace recovery rules also apply to this mode.

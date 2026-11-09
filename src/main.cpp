@@ -180,10 +180,10 @@ NativeRebaseTodo interactive_rebase_todo(const Store &store, NativeRebaseTodo in
     if (end < message.size())
       while (end && (static_cast<unsigned char>(message[end]) & 0xc0) == 0x80)
         --end;
-    std::cerr << step.source << ' ' << Json(message.substr(0, end)).dump() << '\n';
+    std::cerr << step.action << ' ' << step.source << ' ' << Json(message.substr(0, end)).dump() << '\n';
   }
   std::cerr << localize("Enter action REVISION per line; reword adds a message. Actions: pick, drop, reword, "
-                        "squash, fixup.\nEnd with '.'; '.' alone keeps the original sequence.\n",
+                        "squash, fixup, merge.\nEnd with '.'; '.' alone keeps the original sequence.\n",
                         language)
             << std::flush;
   require(std::cerr.good(), "output write failed");
@@ -278,6 +278,20 @@ std::optional<NativeRenameOptions> rename_options(Args &args) {
   limits.min_similarity = static_cast<std::uint32_t>(value);
   limits.validate();
   return limits;
+}
+NativeMergeBaseLimits merge_base_limits(Args &args, bool *used = nullptr) {
+  NativeMergeBaseLimits limits;
+  auto read = [&](const char *flag, std::size_t &limit) {
+    if (const auto value = args.option(flag)) {
+      if (used) *used = true;
+      const auto number = integer(*value);
+      require(number <= 256 * 1024 * 1024, "native merge base argument exceeds 268435456");
+      limit = static_cast<std::size_t>(number);
+    }
+  };
+  read("--base-max-count", limits.max_bases); read("--base-max-merges", limits.max_virtual_merges);
+  read("--base-max-depth", limits.max_depth); read("--base-max-work", limits.max_work);
+  read("--base-max-input-bytes", limits.max_input_bytes); limits.validate(); return limits;
 }
 net::TransferOptions transfer_options(Args &args) {
   net::TransferOptions limits;
@@ -453,12 +467,16 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
     --no-recursive-bases exige --base si plusieurs meilleurs ancêtres communs existent
     Budgets : --base-max-count/merges/depth/work/input-bytes N
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
-  native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
+)"
+              << R"(  native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto RÉVISION [mêmes options sauf --verify] [--expect ID]
   native rebase-todo BASE --onto RÉVISION    Exporter la séquence modifiable
+    --rebase-merges : recréer le graphe de fusions ; --rebase-cousins déplace aussi ses racines latérales.
+    Bornes du graphe : --max-revisions N, --max-links N, --rebase-max-work N,
+      --rebase-max-delta-bytes N et --base-max-count/merges/depth/work/input-bytes N.
     --committer-time SECONDES : figer la date avec une identité configurée.
-    --todo FICHIER_JSON ou --interactive : ordre, pick/drop/reword/squash/fixup.
+    --todo FICHIER_JSON ou --interactive : ordre, pick/drop/reword/squash/fixup/merge.
     --resolutions FICHIER_JSON : choix par étape liés à la tête et aux deux bases.
     Merge/rejeu : --resolutions FICHIER_JSON applique les choix liés au plan.
   native cherry-pick-plan RÉVISION [--mainline N] [--verify] [--text-merge]
@@ -678,12 +696,16 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
     --no-recursive-bases requires --base when several best common ancestors exist
     Budgets: --base-max-count/merges/depth/work/input-bytes N
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
-  native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
+)"
+              << R"(  native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
   native rebase BASE --onto REVISION [same options except --verify] [--expect ID]
   native rebase-todo BASE --onto REVISION    Export an editable sequence
+    --rebase-merges: recreate the merge graph; --rebase-cousins also moves side roots.
+    Graph budgets: --max-revisions N, --max-links N, --rebase-max-work N,
+      --rebase-max-delta-bytes N and --base-max-count/merges/depth/work/input-bytes N.
     --committer-time SECONDS: freeze the time with a configured identity.
-    --todo JSON_FILE or --interactive: order, pick/drop/reword/squash/fixup.
+    --todo JSON_FILE or --interactive: order, pick/drop/reword/squash/fixup/merge.
     --resolutions JSON_FILE: per-step choices bound to the head and both bases.
     Merge/replay: --resolutions JSON_FILE applies choices bound to the plan.
   native cherry-pick-plan REVISION [--mainline N] [--verify] [--text-merge]
@@ -2096,19 +2118,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
       settings.recursive_bases = !args.flag("--no-recursive-bases");
-      auto base_limit = [&](const char *flag, std::size_t &limit) {
-        if (const auto value = args.option(flag)) {
-          const auto number = integer(*value);
-          require(number <= 256 * 1024 * 1024, "native merge base argument exceeds 268435456");
-          limit = static_cast<std::size_t>(number);
-        }
-      };
-      base_limit("--base-max-count", settings.base_limits.max_bases);
-      base_limit("--base-max-merges", settings.base_limits.max_virtual_merges);
-      base_limit("--base-max-depth", settings.base_limits.max_depth);
-      base_limit("--base-max-work", settings.base_limits.max_work);
-      base_limit("--base-max-input-bytes", settings.base_limits.max_input_bytes);
-      settings.base_limits.validate();
+      settings.base_limits = merge_base_limits(args);
       settings.renames = rename_options(args);
       settings.conflict_copies = args.flag("--conflict-copies");
       settings.resolutions = resolutions_input();
@@ -2145,6 +2155,35 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
       NativeRebaseOptions settings;
+      settings.preserve_merges = args.flag("--rebase-merges");
+      settings.rebase_cousins = args.flag("--rebase-cousins");
+      bool graph_budgets = false;
+      settings.base_limits = merge_base_limits(args, &graph_budgets);
+      const auto graph_revisions = args.option("--max-revisions"), graph_links = args.option("--max-links");
+      const auto graph_work = args.option("--rebase-max-work"), delta_bytes = args.option("--rebase-max-delta-bytes");
+      require(settings.preserve_merges || (!graph_budgets && !graph_revisions && !graph_links && !graph_work && !delta_bytes),
+              "native rebase graph budgets require --rebase-merges");
+      require(!settings.rebase_cousins || settings.preserve_merges, "rebasing cousins requires merge-preserving rebase");
+      if (graph_revisions) {
+        const auto n = integer(*graph_revisions);
+        require(n >= 1 && n <= 1000000, "native graph revision limit must be in 1..1000000");
+        settings.graph_limits.max_revisions = static_cast<std::size_t>(n);
+      }
+      if (graph_links) {
+        const auto n = integer(*graph_links);
+        require(n <= 10000000, "native graph parent link limit must be in 0..10000000");
+        settings.graph_limits.max_parent_links = static_cast<std::size_t>(n);
+      }
+      if (graph_work) {
+        const auto n = integer(*graph_work);
+        require(n >= 1 && n <= 1073741824, "native rebase graph work limit must be in 1..1073741824");
+        settings.max_graph_work = static_cast<std::size_t>(n);
+      }
+      if (delta_bytes) {
+        const auto n = integer(*delta_bytes);
+        require(n >= 1024 && n <= 268435456, "native rebase delta limit must be in 1024..268435456");
+        settings.max_delta_bytes = static_cast<std::size_t>(n);
+      }
       settings.renames = rename_options(args);
       if (const auto clock = args.option("--committer-time")) settings.committer_timestamp = integer(*clock);
       if (args.flag("--text-merge"))
@@ -2171,7 +2210,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       if (exporting || interactive) {
         const auto original =
             store.plan_rebase(directory, branch, base, target, settings, verify, {control->token(), observe});
-        require(!original["todo"].is_null(), "native rebase todo requires a linear range");
+        if (settings.preserve_merges)
+          require(!original["todo"].is_null(), "native rebase todo requires an ancestor base");
+        else
+          require(!original["todo"].is_null(), "native rebase todo requires a linear range");
         if (exporting) {
           print(original["todo"]);
           return 0;

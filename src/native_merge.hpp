@@ -24,7 +24,8 @@ NativeFileMergeResult merge_native_files(const Store &, const NativeSnapshot &ba
                                          const TextDiffOptions * = nullptr, NativeTextMergeBatch * = nullptr,
                                          const NativeConflictCopyContext * = nullptr,
                                          NativeRenameBatch * = nullptr, bool preserve_incoming_representation = false,
-                                         const std::set<std::string> *ambiguous_base = nullptr);
+                                         const std::set<std::string> *ambiguous_base = nullptr,
+                                         const std::set<std::string> *pending_merge = nullptr);
 struct NativeMergePlan {
   std::string head;
   std::optional<std::string> base;

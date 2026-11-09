@@ -50,6 +50,8 @@ Json Store::rebase_directory(const fs::path &directory, std::string_view branch,
   result["replayed_commits"] = mode == "rebase" ? count : 0;
   result["result_commits"] = created;
   result["dropped_commits"] = dropped;
+  result["preserve_merges"] = settings.preserve_merges;
+  result["rebase_cousins"] = settings.rebase_cousins;
   return result;
 }
 } // namespace syrnck

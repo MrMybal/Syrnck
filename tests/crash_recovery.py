@@ -18,6 +18,9 @@ PRODUCTION = Path(sys.argv.pop(1)).resolve(strict=True)
 REBASE_TODO_ONLY = "--rebase-todo-only" in sys.argv
 if REBASE_TODO_ONLY:
     sys.argv.remove("--rebase-todo-only")
+REBASE_MERGES_ONLY = "--rebase-merges-only" in sys.argv
+if REBASE_MERGES_ONLY:
+    sys.argv.remove("--rebase-merges-only")
 SHARD = CrashShard.from_argv()
 ENV = {key: value for key, value in os.environ.items()
        if key.upper() not in ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
@@ -131,12 +134,12 @@ def cases():
         atomic(rewrite, ("refs",))
         if rewrite.startswith("reset-soft") or rewrite.startswith("squash"):
             atomic(rewrite, ("revision",))
-    for rebase in ("rebase", "rebase-resolved", "rebase-move", "rebase-text", "rebase-todo"):
+    for rebase in ("rebase", "rebase-resolved", "rebase-move", "rebase-text", "rebase-todo", "rebase-merges"):
         result.extend((rebase if operation == "checkout" else rebase + "-abort", phase, kind, occurrence)
                       for operation, phase, kind, occurrence in list(result)
                       if operation in ("checkout", "checkout-abort"))
         if rebase != "rebase-move":
-            for occurrence in ((1,) if rebase == "rebase-todo" else (1, 2)):
+            for occurrence in ((1,) if rebase == "rebase-todo" else (1, 2, 3) if rebase == "rebase-merges" else (1, 2)):
                 atomic(rebase, ("revision",), occurrence)
         if rebase == "rebase-text":
             for occurrence in (1, 2):
@@ -171,6 +174,8 @@ def cases():
             for phase in ("checkout.directory_created", "checkout.directory_removed"):
                 result.append((operation, phase, "namespace-entry", occurrence))
     selected = [row for row in result if row[0].startswith("rebase-todo")] if REBASE_TODO_ONLY else result
+    if REBASE_MERGES_ONLY:
+        selected = [row for row in result if row[0].startswith("rebase-merges")]
     return SHARD.select(selected)
 
 

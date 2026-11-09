@@ -5,7 +5,7 @@ description: Guide : Rebase éditable et interactif.
 section: Versionnage
 order: 320
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Rebase éditable et interactif {#editable-and-interactive-native-rebase}
@@ -68,8 +68,8 @@ drop FOURTH_ID
 
 ## Bornes, récupération et portée {#limits-recovery-and-scope}
 
-Les règles de plage linéaire, propreté et vérification complète s’appliquent. Todo JSON et saisie interactive agrégée : 16 Mio ; 100000 lignes ; 1 Mio par message explicite/combiné. Rapport séparément borné à 16 Mio, avec todo, action par étape, replaces des folds, result_commits, dropped_commits. completed_commits/replayed_commits comptent les deltas non dropped ; result_commits la chaîne finale après folds. Le modèle est aussi dans le plan ordinaire ; une plage non linéaire n’en a pas.
+Les règles du mode de plage choisi, de propreté et de vérification complète s’appliquent. Todo JSON et saisie interactive agrégée : 16 Mio ; 100000 lignes ; 1 Mio par message explicite/combiné. Rapport séparément borné à 16 Mio, avec todo, action par étape, replaces des folds, result_commits, dropped_commits. completed_commits/replayed_commits comptent les deltas non dropped ; result_commits la chaîne finale après folds. Le modèle est aussi dans le plan ordinaire ; une plage non linéaire exige `--rebase-merges` pour en obtenir un.
 
 L’application vérifie les entrées, matérialise les commits survivants puis installe fichiers, branche et archive de l’ancienne tête avec le journal. Après interruption, suivre les [commandes de rebase](doc:native-rebase#apply-and-recover). Une préparation échouée/annulée peut laisser des objets valides non référencés.
 
-Il s’agit de réécriture linéaire interactive. Préservation des fusions, lancement d’éditeur, étapes split/edit, association automatique fixup et exécution de tests ne sont pas implémentés par ces actions.
+Avec `--rebase-merges`, la séquence couvre [tout le graphe](doc:native-rebase#preserve-merges), branches latérales et fusions comprises. `merge` recrée une fusion originale ; `pick` et `reword` recréent aussi les fusions. Garder les parents avant les enfants. Squash/fixup exige que le candidat précédent non finalisé soit le premier parent remappé et n’ait plus de références d’enfants à venir. Un regroupement modifiant un point de branchement est refusé. Regrouper une fusion conserve ses autres parents remappés. Lancement d’éditeur, étapes split/edit, association automatique fixup et exécution de tests restent indisponibles.

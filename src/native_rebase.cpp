@@ -26,6 +26,10 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                                        OperationOptions options, const NativeRebaseSink &sink,
                                        std::optional<std::uint64_t> frozen_clock) {
   throw_if_cancelled(options.stop);
+  if (settings.preserve_merges)
+    return prepare_native_rebase_merges(store, directory, branch, base, onto, settings, verify_objects,
+                                        options, sink, frozen_clock);
+  require(!settings.rebase_cousins, "rebasing cousins requires merge-preserving rebase");
   const bool identified = !store.native_identity().is_null();
   require(identified || !settings.committer_timestamp, "native committer timestamp requires an identity");
   const auto clock = identified ? std::optional{frozen_clock.value_or(settings.committer_timestamp.value_or(unix_seconds()))}
@@ -89,6 +93,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
     require(id == base && settings.todo->steps.size() == range.size(),
             "native rebase todo must name every commit in the linear range");
     for (const auto &step : settings.todo->steps) {
+      require(step.action != "merge", "native merge todo action requires merge-preserving rebase");
       require(seen.contains(step.source), "native rebase todo source is outside the range");
       require(step.action != "drop" || !settings.resolutions ||
                   !settings.resolutions->steps.contains(step.source),
