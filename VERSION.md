@@ -10,7 +10,9 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
-- Native-backed BEP resident service API with independent offline capture, paired reconnection/backoff and joined transport/TLS shutdown; standalone executable and OS packaging remain unfinished.
+- Optional standalone `syrnck-bep` with strict local configuration, EN/FR help, explicit device pinning, offline capture, process-restart qualification and packaged runtime source/license notices.
+
+- Native-backed BEP resident service API with independent offline capture, paired reconnection/backoff and joined transport/TLS shutdown; OS service installation remains unfinished.
 
 - Session-local manifest reuse for resident-agent and C/Go captures, with strong filesystem stamps, complete inventory/object verification and separate source I/O counters.
 
@@ -37,7 +39,7 @@ These source features are not an announcement of a prebuilt release. Each operat
 - Named/detached HEAD, independent linked workspaces, recoverable live selection changes, partial hard reset/stash and archived unregister/restore are available. Linked relocation stays on the same filesystem; primary/cross-filesystem relocation remains unfinished.
 - Exact-content rename history exists; edited renames/copies and their merge/rebase integration remain incomplete. Authored revisions are opt-in; server access v2 can require approved signing keys. Registration is manual and policy changes require restart. OS signing-key vaults, distributed revocation and merge-preserving rebase remain unfinished.
 - `agent run` continuously captures selected local changes, deletions and exact renames, retains offline snapshots and resumes guarded native publication. The optional `--bidirectional` mode applies incoming descendants and merges compatible concurrent histories with both parents preserved. Unresolved conflicts and acknowledged remote deletion/rewinds are blocked. The agent can recover its own guarded transactions offline and retains observed remote history before completing publications. Explicit conflict copies preserve concurrent data; OS service installation remains unfinished.
-- The optional Syncthing adapter covers regular-file BEP data and explicitly paired device connections. Its catalog persists folder/index state and reports causal conflicts. Its continuous controller applies regular files and tombstones to native workspaces, with receipt-backed recovery and real-daemon reconnection tests. Directory/symlink metadata, conflicts between concurrent BEP versions, standalone service orchestration, discovery, a pairing UI, membership management and automatic history retirement remain incomplete.
+- The optional Syncthing adapter covers regular-file BEP data and explicitly paired device connections. Its catalog persists folder/index state and reports causal conflicts. Its continuous controller applies regular files and tombstones to native workspaces, with receipt-backed recovery and real-daemon reconnection tests. Directory/symlink metadata, conflicts between concurrent BEP versions, OS service installation, discovery, a pairing UI, membership management and automatic history retirement remain incomplete.
 - XChaCha20-Poly1305 protects objects at rest. The trusted server receives decoded objects. End-to-end encryption, key recovery and distributed rotation/revocation remain unfinished. Checkout/staging files can contain plaintext.
 - Flat manifests and revision metadata are limited to 16 MiB. Cache and in-flight budgets do not bound total process memory. No real Unreal-project throughput guarantee is established.
 - Archives and other roots retain old versions until explicit retirement. Removing all roots and collecting data makes those versions unrecoverable without a retained backup. Automatic retention policy and distributed GC remain unfinished.

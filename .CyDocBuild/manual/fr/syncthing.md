@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 7
+sourceRevision: 8
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -16,7 +16,7 @@ Le module gère données de fichiers ordinaires, connexions à appareils associ�
 catalogue causal durable et contrôleur continu de workspace natif. `Folder`
 capture les changements locaux, applique les versions entrantes vérifiées et
 conserve l’état de reprise ; `FolderSession` le fait fonctionner sur BEP
-authentifié. Découverte, interface d’appairage, exécutable de service autonome et
+authentifié. Découverte, interface d’appairage, installation du service OS et
 sémantique complète des dossiers Syncthing restent à terminer, selon les limites
 précisées ci-dessous.
 
@@ -370,5 +370,85 @@ reconnexion TCP, renommage/tombstone, fermeture des transports échoués,
 annulation TLS bloquée et capture locale sans configuration distante. Les tests
 de session qualifient séparément le daemon amont figé. L’application fournit
 encore écoute/connexion réseau, certificats, stockage des clés et cycle de vie OS.
-Exécutable autonome, installation de service et sémantique complète des dossiers
+Installation de service OS et sémantique complète des dossiers
 et versions concurrentes restent à terminer.
+
+## Exécutable autonome au premier plan {#standalone-service}
+
+L’exécutable optionnel `syrnck-bep` maintient le service résident pour un workspace
+existant et un pair explicitement associé. Il capture hors ligne, authentifie le
+pair, se reconnecte et applique les versions ordinaires contrôlées. Aucun processus
+Git ni installation Go ne sont nécessaires à l’exécution. Le moteur C++ conserve
+stockage et révisions.
+
+```text
+syrnck-bep device-id --certificate device/cert.pem
+syrnck-bep run --config service.json
+syrnck-bep --lang fr run --config service.json
+```
+
+Fournir un certificat et une clé privée d’appareil distincts, puis autoriser le
+Device ID complet affiché chez le pair. Une identité créée par `syncthing generate`
+convient ; conserver ensemble certificat et clé correspondante. Une connexion à
+soi-même est refusée. Le CLI importe les identités ; génération, rotation et
+coffre système restent des travaux distincts. L’ID de dossier doit être commun.
+
+Copier `share/Syrnck/examples/bep-service.json` installé dans le dossier de
+configuration puis adapter chemins, pair et adresse. L’exemple existe aussi dans
+`examples` des sources. Initialiser d’abord le Store avec le CLI `syrnck` principal.
+Les chemins relatifs partent du fichier de configuration. Le Store vaut
+`directory/.syrnck` par défaut ; `workspace` choisit un contexte lié existant.
+`mode: dial` se connecte à `address` ; `listen` y accepte une connexion. L’adresse
+`hôte:port` est explicite. Chaque processus possède transport et Folder.
+
+La clé PEM privée doit rester hors du dossier de travail ou dans son Store
+protégé, après résolution des liens. Elle ne doit pas devenir du contenu source.
+`key_env` nomme la variable de clé de stockage (`SYRNCK_KEY` par défaut) : absente,
+aucune clé n’est fournie ; sinon, 64 caractères hexadécimaux doivent correspondre
+au Store existant. Aucun secret brut dans JSON ou arguments. Identité TLS et clé
+de chiffrement au repos ont des rôles différents. Le fichier PEM reste protégé
+par les droits du système de fichiers ; le chiffrement concerne les objets du Store.
+
+La configuration version 1 refuse doublons/champs inconnus et plus de 64 Kio.
+`poll_ms` vaut 50..60000 (zéro choisit 250) ; les délais de reconnexion valent
+500/30000 ms par défaut. `use_permissions` et `preserve_checkout_edits` valent
+false ; l’exemple active la [préservation des éditions](doc:syncthing#active-checkout-edits).
+Cela ne résout pas les vecteurs BEP concurrents.
+
+Ctrl+C ou SIGTERM arrête le processus. Redémarrer avec la même identité et la
+même configuration reprend état natif/catalogue. La sortie JSON reste canonique ;
+`ready` indique initialisation locale/écoute, pas synchronisation terminée.
+Aide et diagnostics propres au CLI sont anglais/français ; `--lang` prime sur
+`SYRNCK_LANG`, puis anglais. Les détails système/bibliothèque gardent leur langue.
+Le CLI principal ouvre cette page par `syrnck --lang fr help syncthing --section standalone-service`.
+Installation de service OS, orchestration de plusieurs pairs et sémantique
+complète des dossiers/liens restent à terminer.
+
+## Construire et distribuer l’exécutable {#build-standalone-service}
+
+Activer `-DSYRNCK_BUILD_BEP_SERVICE=ON` dans CMake (par défaut avec les tests
+Syncthing). Construire d’abord `syrnck_ffi`. Avec Go 1.26.2+, préparer une fois les
+dépendances publiques figées :
+
+```text
+python scripts/build_bep_service.py --download --library BIBLIOTHEQUE_NATIVE --output EXECUTABLE_BEP
+```
+
+Le preset Windows utilise `build/Release/syrnck_ffi.dll` et
+`build/Release/syrnck-bep.exe` ; Linux : `build/libsyrnck_ffi.so` et
+`build/syrnck-bep` ; macOS : `build/libsyrnck_ffi.dylib` et `build/syrnck-bep`.
+Construire ensuite normalement : CMake appelle le même outil hors ligne. Unix
+nécessite cgo et la bibliothèque native correspondante. Utiliser un build sans
+sanitizer pour cet exécutable, séparé des contrôles ASan du cœur.
+
+`cmake --install build --config Release --prefix dist` installe exécutable,
+bibliothèque correspondante et manuel local. Les archives sources inchangées
+des modules Go réellement utilisés, licences/notices, licence du runtime Go et
+manifest d’empreintes sont conservés dans `share/licenses/Syrnck/bep`. Les garder
+avec la distribution ; MIT du projet ne remplace pas les licences tierces.
+
+Les tests Windows utilisent de vrais processus autonomes et le daemon amont figé,
+avec Stores clairs/chiffrés, éditions dans les deux sens et renommage distant hors
+ligne après redémarrage. Des arrêts brutaux distincts vérifient la reconstruction
+des anciennes/nouvelles versions. Exécution et déplacement de distribution
+Linux/macOS dépendent encore de leur CI ; la configuration ne les prouve pas.

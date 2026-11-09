@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 8
+revision: 9
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -128,7 +128,7 @@ Close Stores/sessions explicitly before removing their directories. The trusted 
 
 ## Syncthing {#syncthing}
 
-The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Its native-backed catalog persists folder indexes, vectors, tombstones and verified data; staged downloads avoid holding Store across network waits. The [continuous file controller](doc:syncthing#folder-controller) applies verified versions to native workspaces with owned recovery. Full directory/symlink semantics, copies for concurrent protocol versions, discovery, a pairing UI and standalone service orchestration remain unfinished.
+The optional [Syncthing module](doc:syncthing) adapts manifests to fixed SHA-256 BEP blocks using the pinned Syncthing v2.1.7 library. Authenticated device connections and differential transfers are tested against its real daemon. Syrnck objects and CDC retain their own format. Its native-backed catalog persists folder indexes, vectors, tombstones and verified data; staged downloads avoid holding Store across network waits. The [continuous file controller](doc:syncthing#folder-controller) applies verified versions to native workspaces with owned recovery. Full directory/symlink semantics, copies for concurrent protocol versions, discovery, a pairing UI and OS service installation remain unfinished.
 
 ## Registered workspaces {#registered-workspaces}
 

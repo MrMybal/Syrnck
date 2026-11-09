@@ -34,8 +34,15 @@ The optional Go adapter in `bindings/syncthing` depends on Syncthing's upstream
 protocol library ([pinned module](bindings/syncthing/go.mod), based on v2.1.7).
 Syncthing remains an external [MPL-2.0 dependency](https://github.com/syncthing/syncthing/blob/v2.1.7/LICENSE),
 with its original notices. Its other Go module dependencies retain their own
-licenses. They are downloaded separately and are not part of the CMake engine
-installation. No Lore or Syncthing implementation is vendored into the C++ core;
+licenses. They are prepared separately. Enabling `SYRNCK_BUILD_BEP_SERVICE`
+adds the resident `syrnck-bep` executable to the CMake installation. Its builder
+uses the actual platform runtime import graph, checks pinned module contents and
+retains every external runtime module's unmodified source ZIP with module
+version/checksum and SHA-256, root license/notice files and the Go runtime license
+under `share/licenses/Syrnck/bep`. This includes Syncthing and other dependencies
+with their own terms. Keep this directory with the binary distribution; the
+manifest identifies the exact compiled dependency set. No Lore or Syncthing
+implementation is vendored into the C++ core;
 the MIT project license does not relicense any upstream component.
 
 The optional documentation build uses Node.js; installed help is plain local

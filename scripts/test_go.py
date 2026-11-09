@@ -25,6 +25,9 @@ if test_cli.is_file():
 test_edit_helper = library.parent / ("syrnck_checkout_edit_tests.exe" if os.name == "nt" else "syrnck_checkout_edit_tests")
 if test_edit_helper.is_file():
     env["SYRNCK_TEST_CHECKOUT_EDIT_HELPER"] = str(test_edit_helper)
+test_bep_service = library.parent / ("syrnck-bep.exe" if os.name == "nt" else "syrnck-bep")
+if test_bep_service.is_file() and not env.get("SYRNCK_TEST_BEP_SERVICE"):
+    env["SYRNCK_TEST_BEP_SERVICE"] = str(test_bep_service)
 if os.name == "nt":
     env["SYRNCK_LIBRARY"] = str(library)
     env["CGO_ENABLED"] = "0"
