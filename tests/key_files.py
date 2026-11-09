@@ -6,14 +6,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from fixture_timing import remove_owned_case
 
 CLI = str(Path(sys.argv.pop(1)).resolve())
 
 class KeyFiles(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="syrnck-key-files-")
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(tempfile.mkdtemp(prefix="syrnck-key-files-"))
+        self.addCleanup(remove_owned_case, self.root.parent, self.root.name)
         self.env = {key:value for key,value in os.environ.items() if not key.upper().startswith("SYRNCK_")}
         self.password = "  Clé locale 🔐 密钥  "
         self.env["SYRNCK_KEY_PASSWORD"] = self.password
