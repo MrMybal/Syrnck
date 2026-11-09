@@ -50,7 +50,7 @@ point to the canonical manual. Do not maintain duplicate guides there.
 
 Public C++/C documentation uses CyDoc's real `cydoc/extract` API with an explicit
 distributed-header allowlist. It does not infer C++ signatures, Go semantics or
-binding ownership. The two extracted API pages have reviewed English digests
+binding ownership. The extracted API pages have reviewed English digests
 in `api-translations.json`; update those digests only after reviewing the French
 annotation. Implementation sources, tests and private indexes are not exported.
 Go and BEP contracts stay in authored integration guides.

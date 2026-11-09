@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 29
+revision: 30
 ---
 
 ## Workspace and versioning {#workspace}
@@ -21,7 +21,7 @@ The Syncthing adapter handles regular-file block indexes/requests/responses and 
 
 ## Security, retention and recovery {#security}
 
-Objects can be encrypted at rest, with separately keyed backups/restores. The [password-protected key API](doc:api-password-keys) provides bounded Argon2id derivation and authenticated envelopes. [CLI key files](doc:key-files) support creation, existing-key protection and password changes; C/Go opaque native owners open short Store sessions without exporting unwrapped keys. The standalone BEP CLI also supports a protected key file, authenticated once at startup; restarting reloads changed credentials. Trusted servers receive plaintext objects over the secured transport. [Protected signing-seed providers](doc:signing-keys) are available in C++/CLI/C/Go and both resident services. End-to-end encryption, system key vaults, distributed rotation/revocation, automatic replica repair and distributed GC remain unfinished.
+Objects can be encrypted at rest, with separately keyed backups/restores. The [password-protected key API](doc:api-password-keys) provides bounded Argon2id derivation and authenticated envelopes. [CLI key files](doc:key-files) support creation, existing-key protection and password changes; C/Go opaque native owners open short Store sessions without exporting unwrapped keys. The standalone BEP CLI also supports a protected key file, authenticated once at startup; restarting reloads changed credentials. Ordinary transfers give plaintext objects to trusted servers. The explicit [sealed C++/CLI workflow](doc:sealed-repositories) supplies opaque encrypted snapshots, differential ciphertext reuse and retained-client freshness checkpoints; its master key stays on clients. First-contact root trust and resident/BEP integration remain unfinished. [Protected signing-seed providers](doc:signing-keys) are available in C++/CLI/C/Go and both resident services. System key vaults, distributed rotation/revocation, automatic replica repair and distributed GC remain unfinished. Sealed history still retains all previous carrier snapshots; changing an envelope password does not retire their keys or bytes.
 
 Retention is explicit. Archives preserve versions until their protecting roots are retired; a verified backup can protect manual retirement, but automatic age/release policies are not implemented. Process interruption and power-loss durability are different guarantees. No operation establishes universal power-loss, network-filesystem or hostile external-writer safety.
 

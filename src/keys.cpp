@@ -8,10 +8,12 @@ namespace syrnck {
 namespace {
 constexpr std::array<std::uint8_t, 8> key_magic{'S','Y','R','K','E','Y',1,0};
 constexpr std::array<std::uint8_t, 8> signing_magic{'S','Y','R','S','I','G',1,0};
+constexpr std::array<std::uint8_t, 8> sealed_magic{'S','Y','R','E','2','E',1,0};
 const std::array<std::uint8_t, 8> &purpose_magic(detail::SecretPurpose purpose) {
   switch (purpose) {
   case detail::SecretPurpose::storage_key: return key_magic;
   case detail::SecretPurpose::signing_seed: return signing_magic;
+  case detail::SecretPurpose::sealed_master: return sealed_magic;
   }
   throw Error("invalid protected key purpose");
 }

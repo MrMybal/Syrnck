@@ -4,7 +4,7 @@ title: Architecture
 description: Architecture guide.
 section: Getting started
 order: 10
-revision: 5
+revision: 6
 ---
 
 # Syrnck architecture {#architecture-de-syrnck}
@@ -104,7 +104,7 @@ Objects are compressed then encrypted at rest with XChaCha20-Poly1305, random 25
 
 [Network Zstd](doc:network-compression) level 1 negotiates logical frames, falling back to raw for poor gain/budget. Decoder validates before import; network counters/throttling include retries separately from successful logical bytes.
 
-Transfers expose decoded objects through HTTPS to a trusted server. End-to-end encryption would need opaque metadata, dedup/equality-leakage policy, rollback protection and device revocation. [Syncthing untrusted encryption](https://docs.syncthing.net/specs/untrusted.html) binds blocks to file/offset, reducing correlation but preventing the desired cross-file/position deduplication if adopted unchanged. Its TLS certificate/device identity is distinct from Syrnck token/proxy transport.
+Ordinary transfers expose decoded objects through HTTPS to a trusted server. The explicit [sealed workflow](doc:sealed-repositories) instead encrypts original objects/metadata on the client and transfers opaque carrier snapshots, with keyed equality addresses and retained-client rollback checkpoints. First-contact trust, resident/BEP integration and distributed device/key revocation remain incomplete. [Syncthing untrusted encryption](https://docs.syncthing.net/specs/untrusted.html) binds blocks to file/offset, reducing correlation but preventing the desired cross-file/position deduplication if adopted unchanged. Its TLS certificate/device identity is distinct from Syrnck token/proxy transport.
 
 ## Integrity and current limits {#integrite-et-limites-actuelles}
 

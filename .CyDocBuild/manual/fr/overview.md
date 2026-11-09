@@ -4,7 +4,7 @@ title: Syrnck
 description: Syrnck
 section: Syrnck
 order: 0
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Choisir son parcours {#getting-started}
@@ -31,4 +31,4 @@ Utiliser `syrnck help`, `syrnck help native-tags` ou `syrnck --lang fr help nati
 
 ## Limites actuelles {#limits}
 
-Lire l’[architecture](doc:architecture), les [formats](doc:protocol) et les [limites](doc:limits) avant intégration ou déploiement. Le chiffrement protège les objets au repos, tandis que les transferts fournissent des objets décodés au serveur de confiance. Chiffrement de bout en bout, rétention distribuée et service complet de synchronisation continue restent à développer. Le code original de Syrnck est sous MIT ; les [notices des dépendances](doc:licenses) s’appliquent séparément.
+Lire l’[architecture](doc:architecture), les [formats](doc:protocol) et les [limites](doc:limits) avant intégration ou déploiement. Chiffrement au repos et transferts ordinaires d’objets décodés restent disponibles. Le [workflow C++/CLI chiffré explicite](doc:sealed-repositories) chiffre objets/métadonnées originaux avant transfert, avec contrôle local des retours en arrière. Son intégration résidente/BEP, la révocation/rétention distribuée et un service complet de synchronisation sans surveillance restent à terminer. Le code original de Syrnck est sous MIT ; les [notices des dépendances](doc:licenses) s’appliquent séparément.

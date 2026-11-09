@@ -4,7 +4,7 @@ title: Architecture
 description: Guide : Architecture.
 section: Premiers pas
 order: 10
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 # Architecture de Syrnck {#architecture-de-syrnck}
@@ -126,7 +126,7 @@ La clé se fournit via `SYRNCK_KEY`, pas dans la configuration. Il n'y a pas enc
 
 La [compression réseau négociée](doc:network-compression) utilise Zstandard niveau 1 sur les objets logiques, avec repli brut si le gain ou le budget ne suffit pas. Le décodage vérifie la trame avant import et écrit directement dans le buffer réservé. Les compteurs et cibles de débit réseau incluent les tentatives répétées ; les octets logiques réussis gardent leur compteur distinct.
 
-Les objets sont déchiffrés pour le transfert, protégé par HTTPS lorsqu'il est distant. Le serveur est donc de confiance. Un chiffrement de bout en bout devra rendre le serveur opaque, protéger les manifestes et établir une politique explicite de déduplication et de fuite d'égalité par dépôt. Il devra également traiter les attaques par rejeu d'anciennes racines et la révocation des appareils.
+Les transferts ordinaires déchiffrent les objets pour un serveur de confiance via HTTPS lorsqu'il est distant. Le [workflow chiffré explicite](doc:sealed-repositories) chiffre au contraire objets/métadonnées côté client et transfère des supports opaques, avec adresses d'égalité à clé et points locaux contre le retour en arrière. Confiance initiale, intégration résidente/BEP et révocation distribuée des appareils/clés restent à terminer.
 
 Le [mode appareils non fiables de Syncthing](https://docs.syncthing.net/specs/untrusted.html) illustre un autre compromis : son chiffrement de blocs dépend du fichier et de l'offset, ce qui limite les corrélations. Reprendre ce choix tel quel empêcherait la déduplication globale entre fichiers et positions visée ici. Son transport BEP utilise TLS et l'identité des certificats ; le prototype Syrnck utilise un jeton et un proxy TLS, sans identité d'appareil Syncthing.
 

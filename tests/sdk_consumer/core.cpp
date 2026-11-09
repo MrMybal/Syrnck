@@ -2,6 +2,7 @@
 #include <syrnck/git.hpp>
 #include <syrnck/keys.hpp>
 #include <syrnck/signing_keys.hpp>
+#include <syrnck/sealed.hpp>
 #include <algorithm>
 #include <iostream>
 
@@ -26,6 +27,16 @@ int main(int argc, char **argv) {
       auto parsed = syrnck::git::parse_pointer(pointer);
       if (!parsed || parsed->manifest != retained.id || parsed->size != bytes.size()) return 3;
       if (syrnck::parse_key(syrnck::Json::parse(syrnck::key_json(retained).dump())) != retained) return 4;
+      const auto master = syrnck::SecretKey::generate();
+      const auto protected_master = syrnck::protect_sealed_key(master, password);
+      const auto opened_master = syrnck::open_protected_sealed_key(protected_master, password);
+      if (syrnck::sealed_realm_id(master) != syrnck::sealed_realm_id(opened_master)) return 8;
+      syrnck::Store wire(syrnck::path_from_utf8(std::string(argv[1]) + "-wire"), {}, true);
+      syrnck::Store destination(syrnck::path_from_utf8(std::string(argv[1]) + "-opened"), {}, true);
+      const auto sealed = syrnck::seal_snapshot(store, wire, master, "sdk", {{"sdk/object", retained}});
+      syrnck::open_sealed_snapshot(wire, destination, opened_master, sealed["snapshot"].get<std::string>(),
+                                    "sdk", "sealed/checkpoints/sdk");
+      if (destination.get(retained) != bytes) return 9;
     }
     syrnck::Store reopened(syrnck::path_from_utf8(argv[1]), key);
     syrnck::wipe_secret(key);

@@ -1275,5 +1275,18 @@
   "signing-key protect": "signing-keys#existing",
   "signing-key rewrap": "signing-keys#password-change",
   "signing-key inspect": "signing-keys#create",
-  "signing-key verify": "signing-keys#create"
+  "signing-key verify": "signing-keys#create",
+  "sealed": "sealed-repositories",
+  "sealed fetch": "sealed-repositories#remote",
+  "sealed inspect": "sealed-repositories#local",
+  "sealed open": "sealed-repositories#local",
+  "sealed push": "sealed-repositories#remote",
+  "sealed resume": "sealed-repositories#resume",
+  "sealed snapshot": "sealed-repositories#local",
+  "sealed-key": "sealed-repositories#key-files",
+  "sealed-key create": "sealed-repositories#key-files",
+  "sealed-key inspect": "sealed-repositories#key-files",
+  "sealed-key protect": "sealed-repositories#key-files",
+  "sealed-key rewrap": "sealed-repositories#key-files",
+  "sealed-key verify": "sealed-repositories#key-files"
 }

@@ -4,7 +4,7 @@ title: Syrnck
 description: Syrnck
 section: Syrnck
 order: 0
-revision: 3
+revision: 4
 ---
 
 ## Choose your workflow {#getting-started}
@@ -31,4 +31,4 @@ Run `syrnck help`, `syrnck help native-tags`, or `syrnck --lang fr help native-t
 
 ## Current boundaries {#limits}
 
-Read the [architecture](doc:architecture), [formats](doc:protocol) and [limits](doc:limits) before embedding or deploying. Encryption protects stored objects, while transfers expose decoded objects to the trusted server. End-to-end encryption, distributed retention and a complete continuous synchronization service are not implemented. Syrnck's original code is MIT; [dependency notices](doc:licenses) apply separately.
+Read the [architecture](doc:architecture), [formats](doc:protocol) and [limits](doc:limits) before embedding or deploying. At-rest encryption and ordinary decoded-object transfers remain available. The explicit [sealed C++/CLI workflow](doc:sealed-repositories) encrypts original objects and metadata before transfer, with retained-client rollback checks. Its resident/BEP integration, distributed key revocation/retention and a complete unattended synchronization service remain unfinished. Syrnck's original code is MIT; [dependency notices](doc:licenses) apply separately.

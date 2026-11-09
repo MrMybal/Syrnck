@@ -6,6 +6,7 @@
 #include "cli_text_diff.hpp"
 #include "cli_identity.hpp"
 #include "cli_keys.hpp"
+#include "sealed_internal.hpp"
 #include "native_authorship.hpp"
 #include <algorithm>
 #include <fstream>
@@ -16,6 +17,7 @@
 #include <syrnck/git_net.hpp>
 #include <syrnck/net.hpp>
 #include <syrnck/native_net.hpp>
+#include <syrnck/sealed_net.hpp>
 #include <syrnck/i18n.hpp>
 #include <syrnck/asset_locks.hpp>
 #include <syrnck/backup.hpp>
@@ -537,6 +539,17 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
+  sealed-key create|protect FICHIER | inspect|verify FICHIER | rewrap SOURCE CIBLE
+    Mot de passe : SYRNCK_SEALED_KEY_PASSWORD ; nouveau : SYRNCK_NEW_SEALED_KEY_PASSWORD.
+  sealed snapshot RÉF... --wire DOSSIER [--channel main] [--previous ID]
+  sealed inspect ID --wire DOSSIER [--channel main]
+  sealed open ID --wire DOSSIER --checkpoint sealed/checkpoints/NOM [--channel main]
+  sealed push URL RÉF... --wire DOSSIER [--channel main] [--allow-rewrite]
+  sealed fetch URL --wire DOSSIER [--channel main]
+  sealed resume URL SESSION --wire DOSSIER [--channel main]
+    Clé séparée : SYRNCK_SEALED_KEY ou SYRNCK_SEALED_KEY_FILE avec SYRNCK_SEALED_KEY_PASSWORD.
+    Budgets : --sealed-max-objects N, --sealed-max-work N, --sealed-cache-bytes N,
+              --sealed-new-index-bytes N, --sealed-max-history N ; progression et options de transfert.
   agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
@@ -766,6 +779,17 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
+  sealed-key create|protect FILE | inspect|verify FILE | rewrap SOURCE TARGET
+    Password: SYRNCK_SEALED_KEY_PASSWORD; new password: SYRNCK_NEW_SEALED_KEY_PASSWORD.
+  sealed snapshot REF... --wire DIR [--channel main] [--previous ID]
+  sealed inspect ID --wire DIR [--channel main]
+  sealed open ID --wire DIR --checkpoint sealed/checkpoints/NAME [--channel main]
+  sealed push URL REF... --wire DIR [--channel main] [--allow-rewrite]
+  sealed fetch URL --wire DIR [--channel main]
+  sealed resume URL SESSION --wire DIR [--channel main]
+    Separate key: SYRNCK_SEALED_KEY or SYRNCK_SEALED_KEY_FILE with SYRNCK_SEALED_KEY_PASSWORD.
+    Budgets: --sealed-max-objects N, --sealed-max-work N, --sealed-cache-bytes N,
+             --sealed-new-index-bytes N, --sealed-max-history N; progress and transfer options.
   agent run URL [--directory DIR] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
@@ -845,7 +869,10 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   // Only native revision creation/profile commands consume this secret. Help,
   // Git children and unrelated commands must not inherit it.
   const bool agent_run = command == "agent" && !args.values.empty() && args.values.front() == "run";
-  if (command != "signing-key" && !agent_run && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
+  const bool sealed_writes = command == "sealed" && !args.values.empty() &&
+      (args.values.front() == "snapshot" || args.values.front() == "push");
+  if (command != "signing-key" && !agent_run && !sealed_writes && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
+  if (command != "sealed" && command != "sealed-key") cli::discard_sealed_key_environment();
   require(!native_workspace || command == "native" || command == "help" || agent_run,
       "workspace selection is only available for native commands and agent run");
   // Documentation is independent of repository state, encryption and credentials.
@@ -878,12 +905,17 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     std::cout << hex(random_bytes(32)) << '\n';
     return 0;
   }
-  if (command == "key" || command == "signing-key") {
+  if (command == "key" || command == "signing-key" || command == "sealed-key") {
     cli::KeyCommand request;
     request.signing = command == "signing-key";
+    request.sealed = command == "sealed-key";
     if (request.signing) {
       request.password_env = "SYRNCK_SIGNING_KEY_PASSWORD";
       request.new_password_env = "SYRNCK_NEW_SIGNING_KEY_PASSWORD";
+    }
+    if (request.sealed) {
+      request.password_env = "SYRNCK_SEALED_KEY_PASSWORD";
+      request.new_password_env = "SYRNCK_NEW_SEALED_KEY_PASSWORD";
     }
     request.action = args.pop();
     if (request.action != "inspect") {
@@ -920,7 +952,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   }
   std::string sub;
   if (command == "git" || command == "native" || command == "agent" || command == "config" ||
-      command == "leases" || command == "locks" || command == "backup")
+      command == "leases" || command == "locks" || command == "backup" || command == "sealed")
     sub = args.pop();
   if (command == "native" && sub == "watch") {
     cli::NativeWatchCommand request;
@@ -1167,7 +1199,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   require(!(text_progress && json_progress), "choose one progress output mode");
   bool cancellable =
       command == "put" || command == "get" || command == "compare" || command == "fsck" ||
-      command == "pack" || command == "gc" || command == "locks" || command == "backup" ||
+      command == "pack" || command == "gc" || command == "locks" || command == "backup" || command == "sealed" ||
       (command == "config" && sub == "require-feature") ||
       (command == "native" &&
        (sub == "identity" || sub == "workspaces" || sub == "materialization" || sub == "materialization-plan" || sub == "materialization-set" || sub.starts_with("workspace-") || sub == "commit" || sub == "export" || sub == "status" || sub == "diff" || sub == "diff-text" ||
@@ -1335,6 +1367,63 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     auto checked = store.fsck({control->token(), observe});
     std::cout << localize("Verified ", language) << checked
               << localize(" objects and every file hash\n", language);
+  } else if (command == "sealed") {
+    require(sub == "snapshot" || sub == "inspect" || sub == "open" || sub == "push" || sub == "fetch" || sub == "resume",
+            "unknown sealed command; use snapshot, inspect, open, push, fetch or resume");
+    const auto location = args.option("--wire");
+    require(location && !location->empty(), "sealed commands require a separate --wire store");
+    const auto channel = args.option("--channel").value_or("main");
+    sealed_detail::channel_name(channel);
+    SealedLimits bounds;
+    auto number = [&](std::string_view option, std::size_t &value) {
+      if (const auto raw = args.option(option)) {
+        const auto parsed = integer(*raw);
+        require(parsed <= std::numeric_limits<std::size_t>::max(), "sealed limit is too large");
+        value = static_cast<std::size_t>(parsed);
+      }
+    };
+    number("--sealed-max-objects", bounds.max_objects); number("--sealed-max-work", bounds.max_work);
+    number("--sealed-cache-bytes", bounds.max_index_cache_bytes); number("--sealed-new-index-bytes", bounds.max_new_index_bytes);
+    number("--sealed-max-history", bounds.max_history); bounds.validate();
+    const bool writing = sub == "snapshot" || sub == "push";
+    const auto previous = sub == "snapshot" ? args.option("--previous") : std::optional<std::string>{};
+    const auto checkpoint = sub == "open" ? args.option("--checkpoint") : std::optional<std::string>{};
+    if (sub == "open") require(checkpoint.has_value(), "sealed open requires --checkpoint sealed/checkpoints/NAME");
+    const bool allow_rewrite = sub == "push" && args.flag("--allow-rewrite");
+    const bool network = sub == "push" || sub == "fetch" || sub == "resume";
+    auto transfers = network ? transfer_options(args) : net::TransferOptions{};
+    args.paths();
+    if (writing) require(!args.values.empty(), "sealed snapshot and push require explicit source references");
+    else args.count(sub == "resume" ? 2 : 1);
+    Refs selected;
+    std::size_t begin = sub == "push" ? 1 : 0;
+    if (writing) {
+      const auto available = store.refs();
+      require(args.values.size() > begin, "sealed snapshot and push require explicit source references");
+      for (auto i = begin; i < args.values.size(); ++i) {
+        const auto found = available.find(args.values[i]);
+        require(found != available.end(), "unknown sealed source reference");
+        require(selected.emplace(*found).second, "duplicate sealed source reference");
+      }
+      cli::load_native_identity(store);
+    }
+    auto secret = cli::sealed_key_environment();
+    require(secret.has_value(), "set SYRNCK_SEALED_KEY or SYRNCK_SEALED_KEY_FILE");
+    const OperationOptions operation{control->token(), observe};
+    const auto wire_path = path_from_utf8(*location);
+    sealed_detail::validate_wire_location(store, wire_path, operation);
+    const bool create_wire = (writing || sub == "fetch") && !fs::is_regular_file(wire_path / "config.json");
+    Store wire(wire_path, {}, create_wire, store_options);
+    if (sub == "snapshot") print(seal_snapshot(store, wire, *secret, channel, selected, previous, bounds, operation));
+    else if (sub == "inspect") print(inspect_sealed_snapshot(wire, *secret, args.values[0], channel, bounds, operation));
+    else if (sub == "open") print(open_sealed_snapshot(wire, store, *secret, args.values[0], channel, *checkpoint, bounds, operation));
+    else {
+      require(token.has_value(), "set SYRNCK_TOKEN");
+      const net::Remote remote(args.values[0], *token, ca_path);
+      if (sub == "push") print(net::push_sealed_snapshot(store, wire, remote, *secret, channel, selected, allow_rewrite, bounds, operation, transfers));
+      else if (sub == "fetch") print(net::fetch_sealed_snapshot(wire, store, remote, *secret, channel, bounds, operation, transfers));
+      else print(net::resume_sealed_transfer(wire, store, remote, *secret, channel, args.values[1], bounds, operation, transfers));
+    }
   } else if (command == "native") {
     if (sub == "commit" || sub == "detach-history" || sub == "squash" || sub == "merge" || sub == "cherry-pick" ||
         sub == "revert" || sub == "rebase" || sub == "rebase-plan" || sub == "rebase-todo") cli::load_native_identity(store);

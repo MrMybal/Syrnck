@@ -10,5 +10,8 @@
   },
   "signing-keys": {
     "englishSha256": "dc78f27fa07e50cb23f90cff10116d65f3c9de698bca04b8fc85b9579c501816"
+  },
+  "sealed-repositories": {
+    "englishSha256": "7792a49bd50e5e918f9fa42fe3baaee1a76e7b93e2e8409e1cbed3470b73d33b"
   }
 }

@@ -200,9 +200,10 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 
 ## 6 — Sécurité, rétention et exploitation
 
-- [ ] Chiffrement de bout en bout, manifestes opaques et racines authentifiées.
+- [x] Projection chiffrée C++/CLI : blocs/manifestes/révisions originaux opaques, index Merkle persistant, nonces frais et racines authentifiées ; transferts HTTP ordinaires, checkpoint local anti-retour, publications CAS et reprise après arrêts forcés.
+- [ ] Intégrer les snapshots chiffrés aux bindings C/Go, à l’agent résident et au service BEP ; échange initial des racines de confiance et comparaison entre appareils.
 - [ ] Dérivation de clés, coffre système, rotation, révocation et récupération.
-- [ ] Modèle explicite de fuite d'égalité ; déduplication bornée au domaine autorisé.
+- [x] Modèle explicite de fuite d’égalité/tailles/historique pour le transport chiffré ; adresses à clé bornées au domaine de clé maîtresse, sans chiffrement déterministe/convergent.
 - [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.
 - [x] Retrait explicite de racines d’archives natives simples et de fetch : aperçu lié aux références et à une sauvegarde distincte vérifiée, couverture complète des versions, retrait atomique et GC séparé ; anciennes têtes serveur conservées avant remplacement.
 - [ ] Distinguer cache local évictable et copie durable : ne jamais évincer l'unique exemplaire.

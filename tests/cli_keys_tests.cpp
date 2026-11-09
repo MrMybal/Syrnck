@@ -1,6 +1,7 @@
 #include "native_history_fixture.hpp"
 #include "cli_keys.hpp"
 #include <syrnck/keys.hpp>
+#include <syrnck/sealed.hpp>
 #include <chrono>
 #include <iostream>
 #ifdef _WIN32
@@ -54,6 +55,32 @@ int main() {
     require(cli::encryption_key_environment() == first,"raw provider compatibility failed");
     environment("SYRNCK_KEY",{});
     require(!cli::encryption_key_environment(),"missing provider became a key");
+    environment("SYRNCK_SEALED_KEY", hex(next));
+    auto sealed = cli::sealed_key_environment();
+    require(sealed && std::equal(sealed->view().begin(), sealed->view().end(), next.begin()), "sealed raw provider changed its key");
+    require(!cli::sealed_key_environment(), "sealed raw provider did not clear process credentials");
+    const auto sealed_path = temporary.path / "sealed-key.bin";
+    atomic_write(sealed_path, protect_sealed_key(SecretKey::from_bytes(next), bytes(password)), false);
+    environment("SYRNCK_KEY", hex(first));
+    environment("SYRNCK_SEALED_KEY_FILE", utf8(sealed_path));
+    environment("SYRNCK_SEALED_KEY_PASSWORD", password);
+    sealed = cli::sealed_key_environment();
+    require(sealed && std::equal(sealed->view().begin(), sealed->view().end(), next.begin()), "sealed protected provider changed its key");
+    require(!cli::sealed_key_environment() && cli::encryption_key_environment() == first,
+            "sealed provider retained its credentials or cleared the independent storage provider");
+    environment("SYRNCK_SEALED_KEY_FILE", utf8(sealed_path));
+    environment("SYRNCK_SEALED_KEY_PASSWORD", "wrong");
+    fails([&] { cli::sealed_key_environment(); });
+    require(!cli::sealed_key_environment(), "failed sealed authentication retained process credentials");
+    environment("SYRNCK_SEALED_KEY_FILE", utf8(path));
+    environment("SYRNCK_SEALED_KEY_PASSWORD", password);
+    fails([&] { cli::sealed_key_environment(); });
+    require(!cli::sealed_key_environment(), "wrong-purpose sealed provider retained credentials");
+    environment("SYRNCK_SEALED_KEY_FILE", utf8(sealed_path));
+    environment("SYRNCK_SEALED_KEY_PASSWORD", password);
+    environment("SYRNCK_SEALED_KEY", hex(next));
+    fails([&] { cli::sealed_key_environment(); });
+    require(!cli::sealed_key_environment(), "ambiguous sealed providers retained credentials");
     std::cout<<"Native key-file provider cache, changed credentials and content refresh verified\n";
   } catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }
