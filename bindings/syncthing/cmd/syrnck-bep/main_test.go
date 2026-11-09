@@ -250,8 +250,9 @@ func TestHelpLanguagesAndDeviceIdentityWithoutOpeningStore(t *testing.T) {
 }
 
 func TestCLIListenCancellationRetainsPlainAndEncryptedOfflineSnapshot(t *testing.T) {
-	for _, encrypted := range []bool{false, true} {
-		t.Run(map[bool]string{false: "plain", true: "encrypted"}[encrypted], func(t *testing.T) {
+	for _, provider := range []string{"plain", "encrypted", "protected"} {
+		t.Run(provider, func(t *testing.T) {
+			encrypted := provider != "plain"
 			root := t.TempDir()
 			directory := filepath.Join(root, "work")
 			if err := os.Mkdir(directory, 0700); err != nil {
@@ -287,6 +288,19 @@ func TestCLIListenCancellationRetainsPlainAndEncryptedOfflineSnapshot(t *testing
 				t.Fatal(err)
 			}
 			config := configuration{Version: 1, Directory: directory, Storage: storage, Folder: "project", Certificate: cert, PrivateKey: key, Peer: peer, Mode: "listen", Address: "127.0.0.1:0", KeyEnv: "SYRNCK_BEP_TEST_STORAGE_KEY"}
+			if provider == "protected" {
+				config.KeyFile = filepath.Join(storage, "clé-🔑.syrkey")
+				config.KeyPasswordEnv = "SYRNCK_BEP_TEST_PASSWORD"
+				envelope, err := syrnck.ProtectKey(storageKey, []byte("passphrase-🔑"), syrnck.PasswordKdfOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(config.KeyFile, envelope, 0600); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv(config.KeyEnv, "")
+				t.Setenv(config.KeyPasswordEnv, "passphrase-🔑")
+			}
 			encoded, err := json.Marshal(config)
 			if err != nil {
 				t.Fatal(err)

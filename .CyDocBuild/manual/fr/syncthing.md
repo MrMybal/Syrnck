@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 11
+sourceRevision: 12
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -524,6 +524,20 @@ aucune clé n’est fournie ; sinon, 64 caractères hexadécimaux doivent corres
 au Store existant. Aucun secret brut dans JSON ou arguments. Identité TLS et clé
 de chiffrement au repos ont des rôles différents. Le fichier PEM reste protégé
 par les droits du système de fichiers ; le chiffrement concerne les objets du Store.
+
+Autre possibilité : fournir un [fichier de clé protégé](doc:key-files) avec
+`"key_file": "storage.syrkey"` et, facultativement,
+`"key_password_env": "SYRNCK_KEY_PASSWORD"`. Les chemins relatifs partent du dossier
+contenant le JSON. La variable de mot de passe contient 1..4096 octets exacts
+(UTF-8 depuis l'environnement Windows) et le `key_env` brut configuré doit être
+vide. Aucun mot de passe dans JSON ou arguments. Le fichier est une enveloppe de
+104 octets ordinaire, sans lien, hors du workspace ou dans son Store protégé.
+L'échec d'authentification arrête avant capture/écoute, sans repli sur un Store
+clair. Le propriétaire natif est réutilisé jusqu'à l'arrêt de tous les workers,
+sans exporter la clé en clair vers Go. Tout changement d'enveloppe/mot de passe
+requiert un redémarrage : réenvelopper la même clé dans un nouveau fichier et
+mettre à jour configuration/identifiants avant de relancer. Un service actif
+garde sa clé déjà authentifiée. Cela ne révoque pas les anciennes enveloppes.
 
 La configuration version 1 refuse doublons/champs inconnus et plus de 64 Kio.
 `poll_ms` vaut 50..60000 (zéro choisit 250) ; les délais de reconnexion valent

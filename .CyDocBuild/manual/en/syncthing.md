@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 11
+revision: 12
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -568,6 +568,19 @@ absent means no supplied key; otherwise its value must be 64 hexadecimal
 characters matching the existing Store. No raw key belongs in JSON or arguments.
 TLS identity and at-rest encryption keys have different roles. The PEM file stays
 under its filesystem permissions; Store encryption protects stored objects.
+
+Alternatively, supply a [password-protected key file](doc:key-files) with
+`"key_file": "storage.syrkey"` and optional `"key_password_env": "SYRNCK_KEY_PASSWORD"`.
+Relative paths resolve against the JSON configuration directory. Its password
+variable must contain 1..4096 exact bytes (UTF-8 from the Windows environment),
+and the configured raw `key_env` must be empty. No password belongs in JSON or
+arguments. The file must be a regular, non-linked 104-byte envelope outside the
+working tree or inside the protected Store. Authentication failure stops before
+capture/listening; it never falls back to an unencrypted Store. The native key
+owner is reused until all service workers stop, without exporting its plaintext
+key to Go. Changed envelopes/passwords require a restart; rewrap the same key to
+a new file and update configuration/credentials before restarting. Running
+services keep their already authenticated key. This does not revoke old envelopes.
 
 Configuration version 1 rejects duplicate/unknown fields and inputs over 64 KiB.
 `poll_ms` is 50..60000 (zero selects 250); retry bounds default to 500 and 30000 ms.

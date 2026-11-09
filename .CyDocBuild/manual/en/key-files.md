@@ -5,7 +5,7 @@ description: Create, verify and rewrap key files; unlock native Stores without e
 section: Storage
 parent: storage
 order: 55
-revision: 1
+revision: 2
 ---
 
 ## Create a key file {#create}
@@ -43,7 +43,7 @@ syrnck --store project/.syrnck fsck
 
 The file provider applies to native, Git, server and resident-agent commands that open a Store. Missing/wrong credentials, malformed files and linked input files fail without falling back to plaintext. Input must be one regular, non-linked 104-byte envelope file. Resident processes reuse authenticated keys for identical envelope/password bytes; changed files or credentials require fresh authentication. Restart a process when changing its inherited environment.
 
-The optional standalone `syrnck-bep` executable still uses its own configured raw `key_env`; its configuration does not yet expose this file provider. Applications using the Go service library can supply a native key owner in their `OpenStore` callback.
+The optional standalone `syrnck-bep` executable accepts `key_file` and `key_password_env` in its [local configuration](doc:syncthing#standalone-service). Relative key paths resolve against the configuration file. It authenticates once at startup and retains a native key owner until workers have stopped. Envelope/password changes take effect after restart. Applications using the Go service library can supply the same owner in their `OpenStore` callback.
 
 ## Change a password {#password-change}
 

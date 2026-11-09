@@ -39,6 +39,8 @@ type configuration struct {
 	Mode                  string                 `json:"mode"`
 	Address               string                 `json:"address"`
 	KeyEnv                string                 `json:"key_env"`
+	KeyFile               string                 `json:"key_file,omitempty"`
+	KeyPasswordEnv        string                 `json:"key_password_env,omitempty"`
 	UsePermissions        bool                   `json:"use_permissions"`
 	PreserveCheckoutEdits bool                   `json:"preserve_checkout_edits"`
 	ConflictCopies        bool                   `json:"conflict_copies"`
@@ -172,6 +174,20 @@ func loadConfiguration(path string) (configuration, error) {
 			return config, errors.New("invalid key environment variable name")
 		}
 	}
+	if config.KeyPasswordEnv != "" && config.KeyFile == "" {
+		return config, errors.New("key_password_env requires key_file")
+	}
+	if config.KeyFile != "" {
+		if config.KeyPasswordEnv == "" {
+			config.KeyPasswordEnv = "SYRNCK_KEY_PASSWORD"
+		}
+		if !validEnvironmentName(config.KeyPasswordEnv) {
+			return config, errors.New("invalid key password environment variable name")
+		}
+		if config.KeyPasswordEnv == config.KeyEnv || config.KeyPasswordEnv == config.SigningKeyEnv {
+			return config, errors.New("key password requires a separate environment variable")
+		}
+	}
 	if config.Author != nil && (config.Author.Name == "" || config.Author.Email == "" || config.Author.TimezoneOffset < -1439 || config.Author.TimezoneOffset > 1439) {
 		return config, errors.New("author requires name, email and a timezone offset in -1439..1439 minutes")
 	}
@@ -209,6 +225,9 @@ func loadConfiguration(path string) (configuration, error) {
 	}
 	config.Certificate = resolve(config.Certificate)
 	config.PrivateKey = resolve(config.PrivateKey)
+	if config.KeyFile != "" {
+		config.KeyFile = resolve(config.KeyFile)
+	}
 	return config, nil
 }
 
@@ -281,6 +300,13 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 			return err
 		}
 	}
+	protectedKey, err := loadStorageKey(config, directory, storage)
+	if err != nil {
+		return err
+	}
+	if protectedKey != nil {
+		defer func() { result = errors.Join(result, protectedKey.Close()) }()
+	}
 	provider := func(ctx context.Context) (*syrnck.Store, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -291,8 +317,11 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 				key[i] = 0
 			}
 		}()
-		if text := os.Getenv(config.KeyEnv); text != "" {
+		if text := os.Getenv(config.KeyEnv); protectedKey == nil && text != "" {
 			var err error
+			if len(text) != 64 {
+				return nil, errors.New("storage key environment variable must contain 64 hexadecimal characters")
+			}
 			key, err = hex.DecodeString(text)
 			if err != nil || len(key) != 32 {
 				return nil, errors.New("storage key environment variable must contain 64 hexadecimal characters")
@@ -309,7 +338,13 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 				}
 			}
 		}
-		store, err := syrnck.Open(config.Storage, syrnck.Options{Key: key})
+		var store *syrnck.Store
+		var err error
+		if protectedKey != nil {
+			store, err = protectedKey.Open(config.Storage, false)
+		} else {
+			store, err = syrnck.Open(config.Storage, syrnck.Options{Key: key})
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -5,7 +5,7 @@ description: Créer, vérifier et reprotéger les fichiers de clés ; ouvrir les
 section: Storage
 parent: storage
 order: 55
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Créer un fichier de clé {#create}
@@ -43,7 +43,7 @@ syrnck --store project/.syrnck fsck
 
 Le fournisseur de fichier s'applique aux commandes natives, Git, serveur et agent résident qui ouvrent un Store. Identifiants absents/incorrects, fichiers mal formés et entrées liées sont refusés sans repli en clair. L'entrée doit être un fichier ordinaire non lié contenant exactement 104 octets. Les processus résidents réutilisent les clés authentifiées pour des octets d'enveloppe/mot de passe identiques ; tout changement impose une nouvelle authentification. Redémarrer le processus pour changer son environnement hérité.
 
-L'exécutable facultatif autonome `syrnck-bep` utilise encore son propre `key_env` brut configuré ; sa configuration n'expose pas encore ce fournisseur de fichier. Les applications utilisant la bibliothèque de service Go peuvent fournir un propriétaire de clé natif dans leur callback `OpenStore`.
+L'exécutable facultatif autonome `syrnck-bep` accepte `key_file` et `key_password_env` dans sa [configuration locale](doc:syncthing#standalone-service). Les chemins relatifs partent du fichier de configuration. Il authentifie une seule fois au démarrage et conserve un propriétaire natif jusqu'à l'arrêt des workers. Les changements d'enveloppe/mot de passe prennent effet après redémarrage. Les applications utilisant la bibliothèque de service Go peuvent fournir ce même propriétaire dans leur callback `OpenStore`.
 
 ## Changer de mot de passe {#password-change}
 

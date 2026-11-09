@@ -69,6 +69,21 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 			t.Setenv("SYRNCK_BEP_DAEMON_SIGNING_KEY", hex.EncodeToString(bytes.Repeat([]byte{35}, 32)))
 			configuration["author"] = map[string]any{"name": "BEP integration", "email": "bep@example.invalid", "timezone_offset": 60}
 			configuration["signing_key_env"] = "SYRNCK_BEP_DAEMON_SIGNING_KEY"
+			var keyEnvelope []byte
+			if encrypted {
+				keyEnvelope, err = syrnck.ProtectKey(key, []byte("daemon-key-password"), syrnck.PasswordKdfOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				protectedPath := filepath.Join(root, "storage.syrkey")
+				if err := os.WriteFile(protectedPath, keyEnvelope, 0600); err != nil {
+					t.Fatal(err)
+				}
+				configuration["key_file"] = protectedPath
+				configuration["key_password_env"] = "SYRNCK_BEP_DAEMON_PASSWORD"
+				t.Setenv("SYRNCK_BEP_DAEMON_TEST_KEY", "")
+				t.Setenv("SYRNCK_BEP_DAEMON_PASSWORD", "daemon-key-password")
+			}
 			encoded, err := json.Marshal(configuration)
 			if err != nil {
 				t.Fatal(err)
@@ -190,6 +205,25 @@ func TestStandaloneServiceWithReferenceDaemonAndOfflineRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			reference.scan(t, ctx)
+			if encrypted {
+				rewrapped, err := syrnck.ChangeKeyPassword(keyEnvelope, []byte("daemon-key-password"), []byte("changed-daemon-password"), syrnck.PasswordKdfOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				replacementPath := filepath.Join(root, "storage-new.syrkey")
+				if err := os.WriteFile(replacementPath, rewrapped, 0600); err != nil {
+					t.Fatal(err)
+				}
+				configuration["key_file"] = replacementPath
+				updated, err := json.Marshal(configuration)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(configPath, updated, 0600); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("SYRNCK_BEP_DAEMON_PASSWORD", "changed-daemon-password")
+			}
 			stop = launch("restarted")
 			waitApplied(renamed, after)
 			for {

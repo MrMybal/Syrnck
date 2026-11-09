@@ -10,6 +10,14 @@ func humanError(language string, err error) string {
 		return value
 	}
 	messages := map[string]string{
+		"key_password_env requires key_file":                                                   "key_password_env requiert key_file",
+		"invalid key password environment variable name":                                       "nom de variable d’environnement de mot de passe invalide",
+		"key password requires a separate environment variable":                                "le mot de passe de clé demande une variable d’environnement distincte",
+		"key_file conflicts with a nonempty raw storage key environment variable":              "key_file est incompatible avec une variable de clé de stockage brute non vide",
+		"key password environment variable must contain 1..4096 bytes":                         "la variable de mot de passe de clé doit contenir 1..4096 octets",
+		"key_file must be one regular non-linked 104-byte envelope":                            "key_file doit être une enveloppe de 104 octets dans un fichier ordinaire sans lien",
+		"protected storage key must be outside the workspace or inside its protected Store":    "la clé de stockage protégée doit être hors du workspace ou dans son Store protégé",
+		"key_file changed while opening":                                                       "key_file a changé pendant son ouverture",
 		"input file exceeds size limit":                                                        "le fichier dépasse la taille autorisée",
 		"configuration nesting exceeds limit":                                                  "la configuration est trop imbriquée",
 		"configuration contains duplicate or invalid members":                                  "la configuration contient des champs dupliqués ou invalides",
