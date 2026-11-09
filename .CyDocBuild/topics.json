@@ -1267,5 +1267,6 @@
   "key protect": "key-files#existing",
   "key rewrap": "key-files#password-change",
   "key inspect": "key-files#create",
-  "key verify": "key-files#create"
+  "key verify": "key-files#create",
+  "native-recursive-bases": "native-merge#recursive-bases"
 }

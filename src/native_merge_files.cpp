@@ -65,7 +65,8 @@ void preserve_conflicts(NativeFileMergeResult &result, Json &conflicts, std::set
     if (row.contains("other")) continue; // Recompute namespace blockers below.
     const auto path = row["path"].get<std::string>();
     const auto reason = row["reason"].get<std::string>();
-    if (reason != "content" && reason != "add_add" && reason != "modify_delete" && reason != "delete_modify") {
+    if (reason != "content" && reason != "add_add" && reason != "modify_delete" && reason != "delete_modify" &&
+        reason != "ambiguous_base") {
       remaining.push_back(row); continue;
     }
     const auto *ours = lookup(current, path), *theirs = lookup(incoming, path);
@@ -114,10 +115,11 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
                                          const TextDiffOptions *text_limits,
                                          NativeTextMergeBatch *shared_batch,
                                          const NativeConflictCopyContext *copies, NativeRenameBatch *renames,
-                                         bool preserve_incoming_representation) {
+                                         bool preserve_incoming_representation,
+                                         const std::set<std::string> *ambiguous_base) {
   NativeFileMergeResult result;
   std::optional<NativeRenameAlignment> aligned;
-  if (renames) {
+  if (renames && (!ambiguous_base || ambiguous_base->empty())) {
     auto alignment = align_native_renames(original_input, current_input, incoming_input, *renames, options);
     result.renames = std::move(alignment.report);
     if (alignment.applied) aligned = std::move(alignment);
@@ -150,7 +152,11 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
     const NativeSnapshotFile *chosen = ours;
     std::optional<NativeSnapshotFile> merged;
     std::string_view reason;
-    if (equal(ours, theirs) || equal(base, theirs)) {
+    if (ambiguous_base && ambiguous_base->contains(path) && !equal(ours, theirs)) {
+      // A provisional value from a conflicted virtual ancestor is never used
+      // to infer that either actual branch was unchanged.
+      reason = "ambiguous_base";
+    } else if (equal(ours, theirs) || equal(base, theirs)) {
       // Keep our manifest when logical content/mode already has the desired value.
     } else if (equal(base, ours)) {
       chosen = theirs;
@@ -221,6 +227,8 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
         chosen = lookup(incoming, path);
         break;
       case NativeResolutionChoice::base:
+        require(!ambiguous_base || !ambiguous_base->contains(path),
+                "ambiguous native merge base requires current, incoming, remove, or file resolution");
         chosen = lookup(original, path);
         break;
       case NativeResolutionChoice::remove:

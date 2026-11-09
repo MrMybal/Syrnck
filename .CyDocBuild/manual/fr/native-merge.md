@@ -5,7 +5,7 @@ description: Guide : Fusion de branches.
 section: Versionnage
 order: 300
 parent: native-history
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Fusion native {#native-merge}
@@ -23,11 +23,64 @@ syrnck native merge-plan imported --allow-unrelated-histories
 
 up_to_date : source ancêtre de cible, égalité comprise, snapshot actuel exact. fast_forward : cible ancêtre de source, snapshot source exact avec sa représentation. merge : divergence, fusion à trois voies sur la base choisie.
 
-Une meilleure base unique est automatique. Plusieurs donnent multiple_merge_bases ; --base doit choisir une des meilleures annoncées, pas un ancêtre plus ancien. Aucune base récursive virtuelle de Git n’est synthétisée. Sans ancêtre, unrelated_histories bloque sauf --allow-unrelated-histories, qui choisit l’arbre vide ; pas de base explicite alors.
+Une meilleure base unique est automatique. Les bases multiples utilisent la [synthèse récursive](#recursive-bases). `--base` choisit délibérément une meilleure base réelle annoncée, jamais un ancêtre plus ancien. `--no-recursive-bases` rétablit le choix strict : `multiple_merge_bases` bloque tant qu’une base valide n’est pas fournie. Sans ancêtre, `unrelated_histories` bloque sauf `--allow-unrelated-histories`, qui choisit l’arbre vide ; aucune base explicite alors.
 
 Les éditions indépendantes et changements contenu/mode indépendants d’un même fichier se combinent. Contenus concurrents différents, add/add et suppression/modification restent en conflit. Les collisions portables de casse/préfixe sont recalculées. L’égalité logique utilise hash complet/taille/mode, pas le seul découpage ; fast-forward adopte néanmoins la révision exacte.
 
-Sans conflit de snapshot, le plan de checkout exige suivis propres et contrôle ignorés/non-suivis, protections, liens, index et récupération. Une divergence de topologie seule peut être prête sans changement d’octets ; up-to-date reste soumis à ce contrôle prudent. --resolutions accepte les [choix explicites](doc:native-resolutions). Composition textuelle optionnelle ci-dessous ; fusion tenant compte des renommages et synthèse récursive restent à développer.
+Sans conflit de snapshot, le plan de checkout exige suivis propres et contrôle ignorés/non-suivis, protections, liens, index et récupération. Une divergence de topologie seule peut être prête sans changement d’octets ; up-to-date reste soumis à ce contrôle prudent. --resolutions accepte les [choix explicites](doc:native-resolutions). Composition textuelle et alignement des renommages modifiés s’activent explicitement ci-dessous.
+
+## Bases communes récursives {#recursive-bases}
+
+`NativeMergeOptions::recursive_bases = true` combine les meilleures bases triées
+dans des snapshots virtuels déterministes. Pour chaque paire, le moteur cherche
+ses meilleures bases, les synthétise récursivement si nécessaire puis applique
+la même fusion de fichiers à trois voies. Les parents virtuels représentent
+l’union de leurs ancêtres réels. Le graphe d’ascendance est décodé une seule
+fois ; les recherches supplémentaires restent en mémoire. Les snapshots de
+bases sont décodés séparément et comptés dans le budget d’entrées de synthèse.
+
+Le plan rend `base_virtual: true`, un ID `base` synthétique et `base_synthesis` :
+algorithme `recursive_v1`, étapes/parents virtuels, bases réelles, chemins ambigus,
+profondeur et budgets consommés. L’ID identifie le contexte du plan ; ce n’est
+ni une révision stockée ni un sélecteur. Il reste identique en inversant les
+têtes réelles avec les mêmes options. Le commit final a toujours les parents
+`[current_head, source]`. Aucune révision virtuelle n’est écrite ou retenue.
+
+Les conflits intermédiaires conservent une incertitude. Des têtes réelles en
+accord sont acceptées ; une différence de contenu, mode ou présence donne
+`ambiguous_base`, même si un côté correspond à la valeur virtuelle provisoire.
+Choisir `current`, `incoming`, `remove` ou un manifeste `file`. Le choix `base` est
+refusé sur ce chemin car sa version provisoire ne représente pas un accord.
+Autre possibilité : `--base MEILLEUR_ANCETRE_REEL` choisit délibérément une base
+réelle. `--conflict-copies` conserve explicitement les versions réelles selon la
+politique habituelle de copies/suppression ; la version provisoire ne gagne jamais.
+
+Texte et similarité partagent les lots de toute l’opération avec la fusion finale.
+`--text-merge` peut composer le texte intermédiaire compatible ; un résultat non
+résolu conserve l’incertitude. Si elle subsiste, l’alignement final des renommages
+est désactivé (`renames_suppressed: true`). Les étapes héritant d’incertitudes
+utilisent aussi les chemins sans alignement : aucun renommage n’est inféré depuis
+une origine provisoire arbitraire. Seul le texte généré référencé par le snapshot
+final est matérialisé à l’application.
+
+`NativeMergeBaseLimits` borne le coût supplémentaire :
+
+| Champ C++ / option CLI | Défaut | Plage autorisée |
+| --- | --- | --- |
+| `max_bases` / `--base-max-count` | 64 par ensemble récursif | 2..1024 |
+| `max_virtual_merges` / `--base-max-merges` | 256 | 1..4096 |
+| `max_depth` / `--base-max-depth` | 64 niveaux de bases multiples | 1..128 |
+| `max_work` / `--base-max-work` | 16777216 | 1..268435456 |
+| `max_input_bytes` / `--base-max-input-bytes` | 67108864 | 1024..268435456 |
+
+Le travail compte sommets/liens des requêtes, entrées de snapshots et construction
+virtuelle. Les octets comptent les encodages révisions/manifestes à chaque lecture
+et ceux des révisions virtuelles générées. Ces budgets ne bornent pas toute la
+mémoire du processus. Le graphe initial garde ses limites révisions/liens ;
+texte et similarité gardent leurs limites partagées. Limite de synthèse dépassée,
+métadonnées absentes ou annulation : échec sans plan partiel ni écriture.
+Un conflit binaire/textuel intermédiaire conserve plutôt une incertitude.
+Cette méthode prudente ne garantit pas le même résultat que `ort` de Git.
 
 ## Composition textuelle explicite {#opt-in-text-composition}
 
@@ -87,8 +140,7 @@ dans un commit ultérieur après avoir choisi la version souhaitée de l’asset
 Un nom généré ou parent occupé dans les snapshots d’entrée bloque avec
 `conflict_copy_collision`, y compris alias de casse, dossier et fichier qui
 aurait autrement été supprimé. Les obstacles de travail ignorés ou non suivis
-bloquent toujours le checkout. Conflits de casse, fichier/dossier, bases ambiguës
-et historiques sans lien conservent leurs politiques habituelles. Cette option
+bloquent toujours le checkout. Conflits de casse, fichier/dossier et historiques sans lien conservent leurs politiques habituelles. Les chemins à base virtuelle incertaine utilisent les versions réelles actuelle/entrante. Cette option
 ne déduit pas un renommage édité et ne compose pas les données binaires.
 Les copies réutilisent manifests et blocs existants sans payload binaire
 supplémentaire dans le stockage. L’application vérifie les historiques complets

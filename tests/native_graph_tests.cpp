@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "native_graph.hpp"
 #include <algorithm>
 #include <iostream>
 #include <source_location>
@@ -46,6 +47,17 @@ void scenario(const fs::path &root, std::optional<Key> key, unsigned layout) {
               report["source_is_ancestor"] == false && report["target_is_ancestor"] == false &&
               report["visited_revisions"] == 5 && report["parent_links"] == 6,
           "criss-cross bases or traversal counts differ");
+  const NativeAncestryGraph loaded(store, {tip, other}, {}, {});
+  std::size_t cost = 0;
+  const auto grouped = loaded.compare({a, b}, {right}, {}, [&](auto n) { cost += n; });
+  require(grouped.bases == expected && grouped.source_is_ancestor && !grouped.target_is_ancestor &&
+              cost == loaded.size() + loaded.parent_links(),
+          "virtual-parent ancestry or shared work counts differ");
+  require(loaded.compare({left}, {right}, {}).bases == expected,
+          "reused graph lost singleton ancestry");
+  fails([&] { loaded.compare({std::string(64, '0')}, {right}, {}); });
+  fails([&] { loaded.compare({left}, {right}, {}, [](auto) { throw Error("work limit"); }); });
+  fails([&] { NativeAncestryGraph empty(store, {}, {}, {}); });
   report = store.native_ancestry(base, tip);
   require(report["source_is_ancestor"] == true && report["target_is_ancestor"] == false &&
               report["merge_bases"] == Json::array({base}) && report["parent_links"] == 9,
@@ -93,6 +105,17 @@ void long_history(const fs::path &root) {
   require(report["visited_revisions"] == 1025 && report["merge_bases"] == Json::array({base}),
           "iterative long-history traversal differs");
 }
+void cached_queries(const fs::path &root) {
+  Store store(root, {}, true);
+  const auto a = revision(store, "root"), b = revision(store, "child", Json::array({a}));
+  const NativeAncestryGraph graph(store, {b}, {}, {});
+  // The immutable graph must answer without touching Store metadata again.
+  require(fs::remove(root / "objects/revision" / a.substr(0, 2) / a) &&
+              fs::remove(root / "objects/revision" / b.substr(0, 2) / b), "cached graph fixture failed");
+  require(graph.compare({a}, {b}, {}).bases == std::vector<std::string>{a} &&
+              graph.compare({b}, {b}, {}).bases == std::vector<std::string>{b},
+          "reused ancestry graph reread removed metadata");
+}
 void missing_payload(const fs::path &root) {
   std::string tip, chunk;
   {
@@ -130,6 +153,7 @@ int main() {
       }
     long_history(root / "long");
     missing_payload(root / "missing-payload");
+    cached_queries(root / "cached");
     std::cout
         << "native ancestry, best common ancestors, bounded iterative traversal and cancellation passed\n";
   } catch (const std::exception &error) {

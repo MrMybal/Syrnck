@@ -5,7 +5,7 @@ description: Native merge guide.
 section: Version control
 order: 300
 parent: native-history
-revision: 4
+revision: 5
 ---
 
 # Native merge {#native-merge}
@@ -35,11 +35,12 @@ The complete input graph must be available; there is no shallow fallback.
 | `merge` | Neither revision contains the other | Three-way file merge against the selected base |
 
 A unique best common ancestor is selected automatically. Multiple best bases
-produce `multiple_merge_bases`; `--base` must select one of the reported best
-ancestors. An older common ancestor is rejected. This explicit choice does not
-synthesize Git's recursive virtual merge base. No common ancestor produces
-`unrelated_histories` unless `--allow-unrelated-histories` explicitly selects the
-empty tree as baseline. An explicit base cannot be supplied for unrelated roots.
+use [recursive synthesis](#recursive-bases). `--base` deliberately selects one
+reported best ancestor; an older ancestor is rejected. `--no-recursive-bases`
+restores strict selection: `multiple_merge_bases` blocks until a valid `--base`
+is supplied. No common ancestor produces `unrelated_histories` unless
+`--allow-unrelated-histories` explicitly selects the empty tree. An explicit
+base cannot be supplied for unrelated roots.
 
 The file merger combines independent edits and content/mode changes on the same
 file. Different concurrent contents, add/add and delete/modify cases remain
@@ -53,8 +54,60 @@ staging and active recovery. A topology-only divergent merge can be ready even
 with no changed file bytes. Up-to-date plans also use this conservative preflight.
 Explicit file choices and custom manifests can resolve conflicts with
 `--resolutions JSON_FILE`; see [native resolutions](doc:native-resolutions).
-Bounded text merging can be enabled explicitly as described below. Rename
-detection and recursive base synthesis remain future work.
+Bounded text merging and edited-rename alignment can be enabled explicitly below.
+
+## Recursive common bases {#recursive-bases}
+
+Default `NativeMergeOptions::recursive_bases = true` folds sorted best common
+ancestors into deterministic virtual snapshots. For each pair, the engine finds
+their best ancestors, recursively combines those when necessary, and applies
+the same three-way file merger. Virtual parents represent the union of their
+real ancestors. History topology is decoded once into a reusable graph;
+additional ancestry searches operate in memory. Selected base snapshots are
+decoded separately and charged to the synthesis input budget.
+
+The plan reports `base_virtual: true`, a synthetic `base` ID and `base_synthesis`:
+algorithm `recursive_v1`, virtual steps/parents, actual bases, ambiguous paths,
+depth and consumed budgets. The synthetic ID identifies planning context;
+it is not a stored revision or revision selector. It is the same when actual
+heads are reversed with the same settings. Actual commits always use
+`[current_head, source]` as parents. No virtual revision is written or retained.
+
+Intermediate conflicts retain uncertainty. Matching actual heads are accepted;
+differing content, mode or presence produces `ambiguous_base`, even if one side
+matches the provisional virtual value. Choose `current`, `incoming`, `remove` or
+custom `file`. `base` is rejected at that path because its provisional version
+is not an agreed ancestor. Alternatively `--base REAL_BEST_ANCESTOR` deliberately
+selects one actual base. Explicit `--conflict-copies` preserves the actual
+divergent versions with the normal copy/deletion policy, never a provisional
+ancestor as winner.
+
+Text and rename detection share operation-wide batches with the final merge.
+`--text-merge` may compose compatible intermediate text; unfinished composition
+retains uncertainty. With remaining uncertainty, final rename alignment is
+suppressed (`renames_suppressed: true`). Intermediate steps with inherited
+uncertainty also use path-level decisions. No rename is inferred from an
+arbitrary provisional origin. Application materializes only generated text
+referenced by the final snapshot.
+
+`NativeMergeBaseLimits` bounds the additional synthesis cost:
+
+| C++ field / CLI flag | Default | Allowed range |
+| --- | --- | --- |
+| `max_bases` / `--base-max-count` | 64 per recursive set | 2..1024 |
+| `max_virtual_merges` / `--base-max-merges` | 256 | 1..4096 |
+| `max_depth` / `--base-max-depth` | 64 levels with multiple bases | 1..128 |
+| `max_work` / `--base-max-work` | 16777216 | 1..268435456 |
+| `max_input_bytes` / `--base-max-input-bytes` | 67108864 | 1024..268435456 |
+
+Work charges query vertices/edges, snapshot entries and virtual construction.
+Input bytes charge decoded revision/manifest encodings on each load and virtual
+revision encodings. These budgets do not bound total process memory. The initial
+graph keeps separate revision/link limits; text and similarity retain their
+shared limits. A synthesis limit, missing metadata or cancellation fails without
+a partial plan or Store writes. An intermediate binary/text conflict instead
+remains uncertainty. This conservative algorithm does not promise identical
+results to Git's `ort` strategy.
 
 ## Opt-in text composition {#opt-in-text-composition}
 
@@ -141,8 +194,8 @@ later commit after choosing the desired asset version.
 Any occupied generated name or parent in an input snapshot blocks with
 `conflict_copy_collision`, including case aliases, directories and files that
 would otherwise be deleted. Untracked/ignored working obstructions still block
-checkout. Case and file/directory conflicts, ambiguous bases and unrelated
-histories retain their normal policies. This option does not infer an edited
+checkout. Case and file/directory conflicts and unrelated histories retain their normal policies.
+Uncertain virtual-base paths use the actual current/incoming entries. This option does not infer an edited
 rename or compose binary data. Copies share the existing manifests and chunks;
 there is no extra binary payload in the Store for the preserved version.
 Apply verifies the complete input histories and uses the usual signed revision
@@ -229,7 +282,7 @@ file blocks through destructive GC. Reverting a merge uses the existing
 `native revert MERGE_ID --mainline N -m MESSAGE` operation.
 
 The direct result adds `operation: merge`, `mode`, `previous_revision`,
-`merged_revision` and `base` to the checkout result. Recovery reports the generic
+`merged_revision`, `base`, `base_virtual` and `base_synthesis` to the checkout result. Recovery reports the generic
 checkout journal identity and its recorded target; these response labels do not
 change the journal format. Native revision v1 is unchanged.
 

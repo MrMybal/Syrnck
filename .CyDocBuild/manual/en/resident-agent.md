@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 7
+revision: 8
 ---
 
 ## Run continuously {#run}
@@ -49,8 +49,7 @@ Concurrent descendants of a shared history use a three-way merge. Compatible
 file changes and non-overlapping text edits can produce a signed two-parent
 revision, which is published against the exact observed remote root. Text
 composition uses the existing bounded merge engine, including the batch limit
-of 64 attempts and 16 MiB of inputs/results. No unrelated histories or ambiguous
-merge bases are selected automatically. A remote rewrite outside the acknowledged
+of 64 attempts and 16 MiB of inputs/results. [Multiple common bases](doc:native-merge#recursive-bases) use bounded recursive synthesis. Uncertain divergent paths still require resolution or explicit conflict copies. Unrelated histories are not merged automatically. A remote rewrite outside the acknowledged
 history is blocked even if a merge could otherwise combine it.
 
 Unresolved binary, overlapping-text and topology conflicts produce a blocked

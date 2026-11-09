@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 7
+sourceRevision: 8
 ---
 
 ## Fonctionnement continu {#run}
@@ -50,8 +50,7 @@ voies. Les changements de fichiers compatibles et éditions textuelles sans
 chevauchement peuvent produire une révision signée à deux parents, publiée
 contre la racine distante exactement observée. La composition textuelle utilise
 le moteur borné existant, avec au plus 64 essais et 16 Mio d’entrées/résultats par
-lot. Historiques sans lien et bases de fusion ambiguës ne sont pas choisis
-automatiquement. Une réécriture distante hors de l’historique reconnu est bloquée
+lot. Les [bases communes multiples](doc:native-merge#recursive-bases) utilisent une synthèse récursive bornée. Les chemins incertains divergents nécessitent une résolution ou des copies explicites. Les historiques sans lien ne sont pas fusionnés automatiquement. Une réécriture distante hors de l’historique reconnu est bloquée
 même si une fusion pourrait autrement la combiner.
 
 Les conflits binaires, textuels chevauchants ou topologiques non résolus bloquent

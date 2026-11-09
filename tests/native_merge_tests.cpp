@@ -67,7 +67,13 @@ void planning(const fs::path &path, std::optional<Key> key, unsigned physical) {
   const auto left = f.revision(Json{{"asset", a}}, Json::array({arm_a, arm_b}));
   const auto right = f.revision(Json{{"asset", a}}, Json::array({arm_b, arm_a}));
   f.install(left);
-  const auto ambiguous = f.store.plan_merge(path, "main", right);
+  const auto recursive = f.store.plan_merge(path, "main", right);
+  require(recursive["ready"] == true && recursive["base_virtual"] == true &&
+              recursive["merge_bases"].size() == 2 && recursive["base_synthesis"]["ambiguous_paths"].empty(),
+          "identical criss-cross bases were not synthesized");
+  NativeMergeOptions strict;
+  strict.recursive_bases = false;
+  const auto ambiguous = f.store.plan_merge(path, "main", right, strict);
   require(ambiguous["ready"] == false && ambiguous["merge_bases"].size() == 2 &&
               ambiguous["blockers"][0]["reason"] == "multiple_merge_bases",
           "criss-cross base was chosen silently");

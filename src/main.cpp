@@ -448,6 +448,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native merge-plan RÉVISION [--base RÉVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCHE] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--conflict-copies] [--max-revisions 100000] [--max-links 1000000]
+    --no-recursive-bases exige --base si plusieurs meilleurs ancêtres communs existent
+    Budgets : --base-max-count/merges/depth/work/input-bytes N
   native merge RÉVISION [-m MESSAGE] [--expect ID] [mêmes options sauf --verify]
   native rebase-plan BASE --onto RÉVISION [--branch BRANCHE] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
@@ -669,6 +671,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native merge-plan REVISION [--base REVISION] [--allow-unrelated-histories] [--text-merge]
                     [--branch BRANCH] [--directory .] [--verify]
                     [--no-ff | --ff-only] [--conflict-copies] [--max-revisions 100000] [--max-links 1000000]
+    --no-recursive-bases requires --base when several best common ancestors exist
+    Budgets: --base-max-count/merges/depth/work/input-bytes N
   native merge REVISION [-m MESSAGE] [--expect ID] [same options except --verify]
   native rebase-plan BASE --onto REVISION [--branch BRANCH] [--directory .] [--text-merge]
                      [--max-commits 1000] [--verify]
@@ -2081,6 +2085,20 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
+      settings.recursive_bases = !args.flag("--no-recursive-bases");
+      auto base_limit = [&](const char *flag, std::size_t &limit) {
+        if (const auto value = args.option(flag)) {
+          const auto number = integer(*value);
+          require(number <= 256 * 1024 * 1024, "native merge base argument exceeds 268435456");
+          limit = static_cast<std::size_t>(number);
+        }
+      };
+      base_limit("--base-max-count", settings.base_limits.max_bases);
+      base_limit("--base-max-merges", settings.base_limits.max_virtual_merges);
+      base_limit("--base-max-depth", settings.base_limits.max_depth);
+      base_limit("--base-max-work", settings.base_limits.max_work);
+      base_limit("--base-max-input-bytes", settings.base_limits.max_input_bytes);
+      settings.base_limits.validate();
       settings.renames = rename_options(args);
       settings.conflict_copies = args.flag("--conflict-copies");
       settings.resolutions = resolutions_input();

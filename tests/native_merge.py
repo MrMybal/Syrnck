@@ -62,6 +62,67 @@ class NativeMerge(unittest.TestCase):
         self.call("native", "export", picked["target"], self.root / "custom-copy")
         self.assertEqual((self.root / "custom-copy/asset.bin").read_bytes(), b"manual combination")
 
+    def test_recursive_bases_and_explicit_ambiguity_are_bilingual_and_read_only(self):
+        asset = self.root / "asset.bin"
+        asset.write_bytes(b"base")
+        root = self.commit("root")
+        asset.write_bytes(b"one")
+        a = self.commit("a")
+        self.call("native", "branch", "arm-a", a)
+        self.call("native", "checkout", root)
+        asset.write_bytes(b"two")
+        b = self.commit("b")
+        self.call("native", "branch", "arm-b", b)
+        document = self.store / "choices.json"
+
+        def make_merge(head, source):
+            self.call("native", "checkout", head)
+            context = self.replay_plan("merge-plan", source, ready=False)["resolution_context"]
+            context["files"] = {"asset.bin": {"choice": "current"}}
+            document.write_text(json.dumps(context), encoding="utf-8")
+            return json.loads(self.call("native", "merge", source, "--resolutions", document).stdout)["target"]
+
+        left = make_merge(a, "arm-b")
+        right = make_merge(b, "arm-a")
+        self.call("native", "checkout", left)
+        before = self.snapshot()
+        plan = self.replay_plan("merge-plan", right, "--text-merge", "--rename-similarity", "50", ready=False)
+        self.assertTrue(plan["base_virtual"])
+        self.assertEqual(sorted(plan["merge_bases"]), sorted([a, b]))
+        self.assertEqual(plan["base_synthesis"]["ambiguous_paths"], ["asset.bin"])
+        self.assertEqual(plan["conflicts"][0]["reason"], "ambiguous_base")
+        self.assertTrue(plan["renames_suppressed"])
+        self.assertEqual(plan, self.replay_plan("merge-plan", right, "--text-merge", "--rename-similarity", "50",
+                                              "--lang", "fr", ready=False))
+        strict = self.replay_plan("merge-plan", right, "--no-recursive-bases", ready=False)
+        self.assertEqual(strict["blockers"], [{"reason": "multiple_merge_bases"}])
+        self.assertIsNone(strict["base_synthesis"])
+        self.assertFalse(self.replay_plan("merge-plan", right, "--base", a)["base_virtual"])
+        error = self.call("--lang", "fr", "native", "merge-plan", right,
+                          "--base-max-work", "1", ok=False).stderr.decode("utf-8")
+        self.assertIn("limite de travail des bases de fusion natives dépassée", error)
+        for flag, number in (("--base-max-count", "1"), ("--base-max-merges", "0"),
+                             ("--base-max-depth", "129"), ("--base-max-input-bytes", "1023"),
+                             ("--base-max-work", "4294967296")):
+            self.call("native", "merge-plan", right, flag, number, ok=False)
+        self.assertEqual(self.snapshot(), before)
+        context = plan["resolution_context"]
+        context["files"] = {"asset.bin": {"choice": "base"}}
+        document.write_text(json.dumps(context), encoding="utf-8")
+        self.call("native", "merge-plan", right, "--resolutions", document, "--text-merge",
+                  "--rename-similarity", "50", ok=False)
+        context["files"]["asset.bin"]["choice"] = "incoming"
+        document.write_text(json.dumps(context), encoding="utf-8")
+        merged = json.loads(self.call("native", "merge", right, "--resolutions", document,
+                                      "--text-merge", "--rename-similarity", "50").stdout)
+        self.assertTrue(merged["base_virtual"])
+        self.assertEqual(merged["base"], plan["base"])
+        self.assertEqual(asset.read_bytes(), b"two")
+        revision = json.loads(self.call("inspect", "revision", merged["target"]).stdout)
+        self.assertEqual(revision["parents"], [left, right])
+        self.call("gc", "--delete")
+        self.call("fsck")
+
     def test_merge_application_preserves_both_histories_and_source_branch(self):
         asset = self.root / "asset.bin"
         asset.write_bytes(b"original")

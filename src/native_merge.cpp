@@ -1,4 +1,5 @@
 #include "native_merge.hpp"
+#include "native_merge_base.hpp"
 #include <algorithm>
 namespace syrnck {
 NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directory, std::string_view branch,
@@ -8,6 +9,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   if (settings.checkout_owner) validate_id(*settings.checkout_owner);
   if (settings.text_merge)
     settings.text_merge->validate();
+  settings.base_limits.validate();
   require(!settings.no_fast_forward || !settings.fast_forward_only, "choose either --no-ff or --ff-only");
   validate_ref(native_revision_reference(store, std::string(branch)));
   validate_id(source);
@@ -20,7 +22,14 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   const auto refs = store.refs();
   const auto head = refs.find(native_revision_reference(store, std::string(branch)));
   require(head != refs.end() && head->second.kind == Kind::revision, "unknown native branch");
-  const auto graph = store.native_ancestry(head->second.id, source, settings.limits, options);
+  const NativeAncestryGraph ancestry(store, {head->second.id, std::string(source)}, settings.limits, options);
+  const auto graph = ancestry.report(head->second.id, source, options);
+  std::optional<NativeTextMergeBatch> text_batch;
+  if (settings.text_merge) text_batch.emplace(store, *settings.text_merge);
+  std::optional<NativeRenameBatch> rename_batch;
+  if (settings.renames)
+    rename_batch.emplace(store, *settings.renames, text_batch ? &text_batch->generated : nullptr);
+  std::optional<NativeMergeBase> virtual_base;
   NativeMergePlan plan{head->second.id, {}, {}, {}};
   const auto &bases = graph["merge_bases"];
   Json blockers = Json::array();
@@ -33,7 +42,14 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
   } else if (bases.empty() && !settings.allow_unrelated_histories) {
     blockers.push_back(Json{{"reason", "unrelated_histories"}});
   } else if (bases.size() > 1) {
-    blockers.push_back(Json{{"reason", "multiple_merge_bases"}});
+    if (settings.recursive_bases) {
+      virtual_base = synthesize_native_merge_base(store, ancestry, bases.get<std::vector<std::string>>(),
+          settings.base_limits, options, text_batch ? &*text_batch : nullptr,
+          rename_batch ? &*rename_batch : nullptr);
+      plan.base = virtual_base->id;
+    } else {
+      blockers.push_back(Json{{"reason", "multiple_merge_bases"}});
+    }
   }
   const bool up_to_date = graph["target_is_ancestor"].get<bool>();
   const bool forward_possible = graph["source_is_ancestor"].get<bool>();
@@ -49,8 +65,6 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     require(mode == "merge" || settings.resolutions->files.empty(), "native resolution path has no conflict");
   }
   NativeFileMergeResult combined;
-  std::optional<NativeRenameBatch> rename_batch;
-  if (settings.renames) rename_batch.emplace(store, *settings.renames);
   Json workspace;
   if (blockers.empty()) {
     const auto current = read_native_snapshot(store, plan.head, options);
@@ -58,13 +72,15 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
       combined.files = current;
     } else {
       const auto incoming = read_native_snapshot(store, source, options);
-      const auto original = plan.base ? read_native_snapshot(store, *plan.base, options) : NativeSnapshot{};
+      auto original = virtual_base ? std::move(virtual_base->files)
+          : plan.base ? read_native_snapshot(store, *plan.base, options) : NativeSnapshot{};
       const NativeConflictCopyContext copies{plan.head, std::string(source)};
       combined = merge_native_files(store, original, current, incoming, options,
                                     settings.resolutions ? &*settings.resolutions : nullptr,
-                                    settings.text_merge ? &*settings.text_merge : nullptr, nullptr,
+                                    settings.text_merge ? &*settings.text_merge : nullptr, text_batch ? &*text_batch : nullptr,
                                     settings.conflict_copies ? &copies : nullptr,
-                                    !forward && rename_batch ? &*rename_batch : nullptr);
+                                    !forward && rename_batch ? &*rename_batch : nullptr, false,
+                                    virtual_base ? &virtual_base->ambiguous : nullptr);
       // Fast-forward adopts the exact source revision, including its manifests.
       if (forward)
         combined.files = incoming;
@@ -72,8 +88,14 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     if (combined.conflicts.empty())
       workspace = plan_native_checkout_files(store, directory, branch, combined.files, options);
   }
-  if (settings.text_merge && combined.text_merge.is_null())
-    combined.text_merge = NativeTextMergeBatch(store, *settings.text_merge).report();
+  if (text_batch && combined.text_merge.is_null()) combined.text_merge = text_batch->report();
+  if (text_batch)
+    for (const auto &[path, file] : combined.files) {
+      (void)path;
+      throw_if_cancelled(options.stop);
+      if (auto found = text_batch->generated.find(file.manifest); found != text_batch->generated.end())
+        combined.generated.try_emplace(found->first, std::move(found->second));
+    }
   if (verify_objects) {
     auto roots = combined.extra_roots;
     roots.push_back(head->second);
@@ -91,6 +113,10 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"mode", mode},
                      {"base", plan.base ? Json(*plan.base) : Json{}},
                      {"merge_bases", bases},
+                     {"recursive_bases", settings.recursive_bases},
+                     {"base_virtual", virtual_base.has_value()},
+                     {"base_synthesis", virtual_base ? std::move(virtual_base->report) : Json{}},
+                     {"renames_suppressed", bool(settings.renames && virtual_base && !virtual_base->ambiguous.empty())},
                      {"visited_revisions", graph["visited_revisions"]},
                      {"parent_links", graph["parent_links"]},
                      {"allow_unrelated_histories", settings.allow_unrelated_histories},

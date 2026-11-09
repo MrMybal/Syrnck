@@ -5,7 +5,7 @@ description: Native conflict resolutions guide.
 section: Version control
 order: 350
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native conflict resolutions {#native-conflict-resolutions}
@@ -57,6 +57,11 @@ Example document, with illustrative IDs to replace using the actual plan:
   }
 }
 ```
+
+A merge with `base_virtual: true` uses a synthetic `base` context ID. Copy it
+unchanged, keeping the same recursive/text/rename settings. A path marked
+`ambiguous_base` accepts `current`, `incoming`, `remove` or `file`; `base` is
+rejected there. See [recursive bases](doc:native-merge#recursive-bases).
 
 ## Choices {#choices}
 
@@ -117,7 +122,7 @@ Resolution documents do not create persistent conflict state, modify tracked
 files or retain their input objects. Keep the necessary branch/tag/pin roots
 until application. Native [merge](doc:native-merge#opt-in-text-composition) and
 [cherry-pick/revert](doc:native-replay#optional-bounded-text-composition) can
-explicitly enable bounded text composition after user choices. Bounded text composition is also available explicitly in [rebase](doc:native-rebase) and [staging rebase](doc:native-stage-rebase). Rename integration and an interactive conflict editor remain future work. Recovery after application starts uses
+explicitly enable bounded text composition after user choices. Bounded text composition is also available explicitly in [rebase](doc:native-rebase) and [staging rebase](doc:native-stage-rebase). [Edited-rename alignment](doc:native-file-history#rename-merges) is optional; an interactive conflict editor remains future work. Recovery after application starts uses
 `native checkout-status` and `native checkout-recover [--abort]`; it finishes or
 rolls back the recorded candidate without needing the original JSON document.
 Rebase accepts a wrapper binding the original head, excluded base and onto revision,

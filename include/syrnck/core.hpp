@@ -193,6 +193,16 @@ struct NativeRenameOptions {
   std::size_t max_input_bytes = 64 * 1024 * 1024;
   void validate() const;
 };
+// Additional cost of synthesizing multiple best common ancestors. Graph loading
+// keeps NativeGraphLimits; text/rename batches retain their own shared limits.
+struct NativeMergeBaseLimits {
+  std::size_t max_bases = 64;
+  std::size_t max_virtual_merges = 256;
+  std::size_t max_depth = 64;
+  std::size_t max_work = 16 * 1024 * 1024;
+  std::size_t max_input_bytes = 64 * 1024 * 1024;
+  void validate() const;
+};
 struct NativeMergeOptions {
   std::optional<std::string> base{};
   bool allow_unrelated_histories = false;
@@ -210,6 +220,10 @@ struct NativeMergeOptions {
   // files survive a concurrent deletion; namespace/topology conflicts still block.
   bool conflict_copies = false;
   std::optional<NativeRenameOptions> renames{};
+  // Deterministic read-only recursive bases, with explicit ambiguous paths.
+  // Disable to require --base when more than one best common ancestor exists.
+  bool recursive_bases = true;
+  NativeMergeBaseLimits base_limits{};
 };
 struct NativeRebaseResolutionSet {
   std::string head, base, onto;
