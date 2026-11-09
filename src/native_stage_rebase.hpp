@@ -10,5 +10,6 @@ struct NativeStageRebasePlan {
 NativeStageRebasePlan prepare_native_stage_rebase(const Store &, const NativeRewriteState &,
                                                   bool verify_objects, OperationOptions,
                                                   const NativeResolutionSet * = nullptr,
-                                                  const TextDiffOptions * = nullptr);
+                                                  const TextDiffOptions * = nullptr,
+                                                  const NativeRenameOptions * = nullptr);
 } // namespace syrnck

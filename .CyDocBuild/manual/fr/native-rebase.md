@@ -5,7 +5,7 @@ description: Guide : Rebase linéaire.
 section: Versionnage
 order: 310
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 # Rebase linéaire natif {#native-linear-rebase}
@@ -22,7 +22,7 @@ syrnck native rebase-plan OLD_BASE --onto NEW_BASE --max-commits 500
 
 ## Rejeu des fichiers et topologie {#file-replay-and-topology}
 
-Ordre du plus ancien au plus récent : parent original comme base, résultat virtuel précédent comme current et commit original comme incoming. Changements indépendants de fichier/contenu/mode combinés. Conflit de contenu, ajout/suppression ou namespace arrête au premier commit, sans traiter les suivants comme appliqués. Composition textuelle facultative ; fusion consciente des renommages non implémentée.
+Ordre du plus ancien au plus récent : parent original comme base, résultat virtuel précédent comme current et commit original comme incoming. Changements indépendants de fichier/contenu/mode combinés. Conflit de contenu, ajout/suppression ou namespace arrête au premier commit, sans traiter les suivants comme appliqués. Composition textuelle facultative ; le [rejeu avec renommages](doc:native-file-history#rename-merges) s’active avec `--rename-similarity 50`.
 
 Fusion dans la plage : merge_in_range ; fusion à la borne exclue autorisée. Racine atteinte avant BASE : base_not_on_linear_history. Aucun choix arbitraire ni aplatissement silencieux de parents de merge. Défaut 1000 commits, réglable 1..100000 ; dépassement échoue.
 

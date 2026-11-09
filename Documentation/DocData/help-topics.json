@@ -1165,6 +1165,7 @@
   "native-amend#replace-the-tips-snapshot-with-the-current-selected-directory": "native-amend",
   "native-amend#reuse-every-existing-file-entry-and-change-the-message": "native-amend",
   "native-amend#use-exactly-the-prepared-bytes-leaving-later-working-edits-alone": "native-amend",
+  "native-renames": "native-file-history#edited-renames",
   "native-replay#or-before-branch-publication": "native-replay",
   "operations#c-operations": "operations",
   "operations#cli": "operations",

@@ -5,7 +5,8 @@ namespace {
 Json apply_replay(const Store &store, const fs::path &directory, std::string_view branch,
                   std::string_view expected_revision, std::string_view source, NativeReplayKind kind,
                   std::string_view message, std::optional<std::uint32_t> mainline, OperationOptions options,
-                  const NativeResolutionSet *resolutions, const TextDiffOptions *text_limits) {
+                  const NativeResolutionSet *resolutions, const TextDiffOptions *text_limits,
+                  const NativeRenameOptions *rename_limits = nullptr) {
   throw_if_cancelled(options.stop);
   validate_ref(native_revision_reference(store, std::string(branch)));
   validate_id(expected_revision);
@@ -17,7 +18,7 @@ Json apply_replay(const Store &store, const fs::path &directory, std::string_vie
   require(found->second.id == expected_revision, "native replay tip changed; inspect the branch and retry");
   require(!all.contains(native_staging_reference(store, std::string(branch))), "native replay requires an empty staging index");
   auto plan = prepare_native_replay(store, directory, branch, source, kind, mainline, true, options,
-                                    resolutions, text_limits);
+                                    resolutions, text_limits, rename_limits);
   require(plan.report["conflicts"].empty(), "native replay has conflicts; inspect the replay plan");
   require(!plan.report["empty"].get<bool>(), "native replay has no changes");
   require(plan.report["ready"].get<bool>(), "native replay is blocked; inspect the replay plan");
@@ -43,6 +44,7 @@ Json apply_replay(const Store &store, const fs::path &directory, std::string_vie
   result["replayed_revision"] = source;
   result["previous_revision"] = plan.head;
   result["mainline"] = plan.report["mainline"];
+  result["renames"] = plan.report["renames"];
   return result;
 }
 } // namespace
@@ -68,6 +70,7 @@ Json Store::replay_directory_with_options(const fs::path &directory, std::string
                                           OperationOptions options) const {
   return apply_replay(*this, directory, branch, expected_revision, source, kind, message, settings.mainline,
                       options, settings.resolutions ? &*settings.resolutions : nullptr,
-                      settings.text_merge ? &*settings.text_merge : nullptr);
+                      settings.text_merge ? &*settings.text_merge : nullptr,
+                      settings.renames ? &*settings.renames : nullptr);
 }
 } // namespace syrnck

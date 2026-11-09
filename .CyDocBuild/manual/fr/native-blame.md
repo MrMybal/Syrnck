@@ -1,11 +1,11 @@
 ---
 id: native-blame
 title: Attribution native des lignes
-description: Blame vérifié à travers les merges et renommages exacts.
+description: Blame vérifié à travers les merges et renommages modifiés facultatifs.
 section: Versionnage
 order: 251
 parent: native-history
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Attribuer les lignes {#usage}
@@ -42,8 +42,8 @@ admettre plusieurs alignements valides. Les espaces ne sont pas normalisés.
 Les renommages à contenu exact et correspondance unique sont suivis même si le
 découpage change, d’après hash et taille du fichier complet. Le mode exécutable ne
 change pas l’origine des lignes. Plusieurs sources supprimées ou destinations
-ajoutées possibles arrêtent ce suivi ; renommages modifiés et copies ne sont pas
-déduits. `--no-follow` traite le nouveau nom comme un ajout. Un parent binaire ne
+ajoutées possibles arrêtent ce suivi ; les copies ne sont pas déduites. Les renommages modifiés demandent
+l’option explicite ci-dessous. `--no-follow` traite le nouveau nom comme un ajout. Un parent binaire ne
 fournit pas d’origines textuelles.
 
 ## Budgets et erreurs {#limits}
@@ -67,3 +67,11 @@ incomplets ont `lines` et `commits` vides ; une attribution partielle n’est ja
 présentée comme complète. Chemin absent, objets corrompus/manquants, arguments
 invalides et annulation font échouer la commande sans rapport partiel. Progression
 et diagnostics suivent la langue choisie pour l’interface.
+
+## Suivre un renommage modifié {#edited-renames}
+
+`--rename-similarity 50` ou `NativeBlameOptions.renames` active la
+[similarité bornée](doc:native-file-history#edited-renames). Les lignes inchangées
+gardent leur origine ; les lignes modifiées viennent de la révision suivante.
+Les ambiguïtés restent à la frontière du nouveau nom. Ces lectures comptent dans
+le budget global. `rename_limit`/`input_limit` rend `limited` avec `lines`/`commits` vides.

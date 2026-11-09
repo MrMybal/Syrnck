@@ -1,64 +1,58 @@
 #include "native_workspace.hpp"
 #include <syrnck/history.hpp>
 #include "native_authorship.hpp"
+#include "native_renames.hpp"
 #include <algorithm>
 namespace syrnck {
 namespace {
-using Identity = std::pair<std::uint64_t, std::string>;
-Identity identity(const Json &file) {
-  return {file["size"].get<std::uint64_t>(), file["file_hash"].get<std::string>()};
-}
 void budget(std::size_t &used, const Json &row) {
   const auto cost = row.dump().size() + 1;
   require(cost <= max_object_size - used, "native file history report exceeds 16 MiB");
   used += cost;
 }
-} // namespace
-Json native_diff_renames(const Store &store, const std::optional<std::string> &source,
-                         const std::optional<std::string> &target, OperationOptions options) {
+Json diff_with_renames(const Store &store, const std::optional<std::string> &source,
+                       const std::optional<std::string> &target, NativeRenameBatch *batch,
+                       OperationOptions options) {
   auto report = compare_native_snapshots(store, source, target, options);
   auto &changes = report["changes"];
   require(changes.size() <= max_object_size / 128, "native rename comparison exceeds path limit");
-  struct Group {
-    std::vector<std::size_t> removed, added;
+  NativeSnapshot old_files, new_files;
+  std::map<std::string, std::size_t> old_rows, new_rows;
+  auto decode = [](const Json &file) {
+    return NativeSnapshotFile{file["manifest"].get<std::string>(),
+      {file["size"].get<std::uint64_t>(), file["file_hash"].get<std::string>()},
+      file["executable"].get<bool>()};
   };
-  std::map<Identity, Group> groups;
   for (std::size_t i = 0; i < changes.size(); ++i) {
     throw_if_cancelled(options.stop);
-    const auto &row = changes[i];
-    if (row["status"] == "removed")
-      groups[identity(row["source"])].removed.push_back(i);
-    else if (row["status"] == "added")
-      groups[identity(row["target"])].added.push_back(i);
+    auto &row = changes[i];
+    const auto path = row["path"].get<std::string>();
+    if (row["status"] == "removed") {
+      old_files.emplace(path, decode(row["source"])); old_rows.emplace(path, i);
+    } else if (row["status"] == "added") {
+      new_files.emplace(path, decode(row["target"])); new_rows.emplace(path, i);
+    }
   }
+  const auto matches = match_native_renames(old_files, new_files, batch, options);
+  for (const auto &path : matches.ambiguous_sources) changes[old_rows.at(path)]["rename_ambiguous"] = true;
+  for (const auto &path : matches.ambiguous_targets) changes[new_rows.at(path)]["rename_ambiguous"] = true;
   std::vector<bool> consumed(changes.size());
   Json renamed = Json::array();
-  std::uint64_t ambiguous_sources = 0, ambiguous_targets = 0;
   std::size_t used = 4096;
-  for (const auto &[key, group] : groups) {
-    (void)key;
+  for (const auto &[old_path, match] : matches.matches) {
     throw_if_cancelled(options.stop);
-    if (group.removed.size() == 1 && group.added.size() == 1) {
-      const auto old = group.removed[0], next = group.added[0];
-      auto row = changes[next];
-      row["status"] = "renamed";
-      row["old_path"] = changes[old]["path"];
-      row["source"] = changes[old]["source"];
-      row["content_changed"] = false;
-      row["similarity"] = 100;
-      row["executable_changed"] = row["source"]["executable"] != row["target"]["executable"];
-      row["manifest_changed"] = row["source"]["manifest"] != row["target"]["manifest"];
-      budget(used, row);
-      renamed.push_back(std::move(row));
-      consumed[old] = consumed[next] = true;
-    } else if (!group.removed.empty() && !group.added.empty()) {
-      ambiguous_sources += group.removed.size();
-      ambiguous_targets += group.added.size();
-      for (const auto index : group.removed)
-        changes[index]["rename_ambiguous"] = true;
-      for (const auto index : group.added)
-        changes[index]["rename_ambiguous"] = true;
-    }
+    const auto old = old_rows.at(old_path), next = new_rows.at(match.target);
+    auto row = changes[next];
+    row["status"] = "renamed";
+    row["old_path"] = old_path;
+    row["source"] = changes[old]["source"];
+    row["content_changed"] = old_files.at(old_path).content != new_files.at(match.target).content;
+    row["similarity"] = match.similarity;
+    row["executable_changed"] = row["source"]["executable"] != row["target"]["executable"];
+    row["manifest_changed"] = row["source"]["manifest"] != row["target"]["manifest"];
+    budget(used, row);
+    renamed.push_back(std::move(row));
+    consumed[old] = consumed[next] = true;
   }
   const auto count = renamed.size();
   for (std::size_t i = 0; i < changes.size(); ++i)
@@ -75,9 +69,19 @@ Json native_diff_renames(const Store &store, const std::optional<std::string> &s
   report["counts"]["added"] = report["counts"]["added"].get<std::uint64_t>() - count;
   report["counts"]["removed"] = report["counts"]["removed"].get<std::uint64_t>() - count;
   report["counts"]["renamed"] = count;
-  report["rename_detection"] = Json{
-      {"mode", "exact"}, {"ambiguous_sources", ambiguous_sources}, {"ambiguous_targets", ambiguous_targets}};
+  report["rename_detection"] = matches.report;
   return report;
+}
+} // namespace
+Json native_diff_renames(const Store &store, const std::optional<std::string> &source,
+                         const std::optional<std::string> &target, OperationOptions options) {
+  return diff_with_renames(store, source, target, nullptr, options);
+}
+Json native_diff_renames(const Store &store, const std::optional<std::string> &source,
+                         const std::optional<std::string> &target, const NativeRenameOptions &limits,
+                         OperationOptions options) {
+  NativeRenameBatch batch(store, limits);
+  return diff_with_renames(store, source, target, &batch, options);
 }
 Json native_file_history(const Store &store, std::string_view revision, std::string_view path,
                          NativeFileHistoryOptions limits, OperationOptions options) {
@@ -87,6 +91,9 @@ Json native_file_history(const Store &store, std::string_view revision, std::str
   require(limits.limit >= 1 && limits.limit <= 1000, "native file history page limit must be in 1..1000");
   require(limits.max_revisions >= 1 && limits.max_revisions <= 10000,
           "native file history traversal limit must be in 1..10000");
+  require(limits.follow_renames || !limits.renames, "rename similarity requires rename following");
+  std::optional<NativeRenameBatch> renames;
+  if (limits.renames) renames.emplace(store, *limits.renames);
   std::optional<std::string> current{revision};
   std::string selected(path);
   std::set<std::string> seen;
@@ -100,7 +107,7 @@ Json native_file_history(const Store &store, std::string_view revision, std::str
     const auto parent = metadata["parents"].empty()
                             ? std::optional<std::string>{}
                             : std::optional{metadata["parents"][0].get<std::string>()};
-    auto comparison = limits.follow_renames ? native_diff_renames(store, parent, current, options)
+    auto comparison = limits.follow_renames ? diff_with_renames(store, parent, current, renames ? &*renames : nullptr, options)
                                             : compare_native_snapshots(store, parent, current, options);
     const Json *change = nullptr;
     for (const auto &row : comparison["changes"])
@@ -150,6 +157,7 @@ Json native_file_history(const Store &store, std::string_view revision, std::str
               {"requested_path", path},
               {"traversal", "first-parent"},
               {"follow_renames", limits.follow_renames},
+              {"rename_detection", renames ? renames->report() : Json{{"mode", "exact"}}},
               {"entries", std::move(rows)},
               {"visited_revisions", seen.size()},
               {"complete", !current},

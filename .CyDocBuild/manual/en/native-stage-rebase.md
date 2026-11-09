@@ -5,7 +5,7 @@ description: Rebase a native staging index guide.
 section: Version control
 order: 370
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Rebase a native staging index {#rebase-a-native-staging-index}
@@ -27,7 +27,7 @@ The recorded staging parent is the baseline, the current branch head is current,
 and the complete frozen index is incoming. Independent file and executable-mode
 changes combine through the shared three-way file merger. Content, add/delete,
 case and file/directory collisions block the result. Optional text composition is
-described below; rename detection remains future work. A pending checkout/switch
+described below; [rename-aware index rebase](doc:native-file-history#rename-merges) is enabled with `--rename-similarity 50`. A pending checkout/switch
 journal also blocks the plan.
 
 The branch must have a head and an index. An index prepared before the first

@@ -48,6 +48,7 @@ Json Store::merge_directory(const fs::path &directory, std::string_view branch,
   result["previous_revision"] = plan.head;
   result["merged_revision"] = source;
   result["base"] = plan.base ? Json(*plan.base) : Json{};
+  result["renames"] = plan.report["renames"];
   if (settings.conflict_copies) {
     result["conflict_copies"] = true;
     result["resolved"] = plan.report["resolved"];

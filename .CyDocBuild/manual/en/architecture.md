@@ -4,7 +4,7 @@ title: Architecture
 description: Architecture guide.
 section: Getting started
 order: 10
-revision: 4
+revision: 5
 ---
 
 # Syrnck architecture {#architecture-de-syrnck}
@@ -54,7 +54,7 @@ Checkout policies local/download/skip select hydration. Download uses pointer ma
 
 Native history provides complete commits, frozen staging, branches/tags, first-parent log, new-directory export and archived history detachment. [Status/diff](doc:native-comparison) inspect without importing. [Staging](doc:native-staging) retains bytes/base; commit atomically moves head and consumes index, refusing stale bases.
 
-[Text patches](doc:text-patches), [three-way text merge](doc:text-merge), [native merge](doc:native-merge), [linear/interactive rebase](doc:native-rebase), [cherry-pick/revert](doc:native-replay), [stash](doc:native-stash), [blame/exact rename history](doc:native-file-history) and [bisect](doc:native-bisect) exist with bounded policies. Merge-preserving rebase, structured authors and signatures remain future work.
+[Text patches](doc:text-patches), [three-way text merge](doc:text-merge), [native merge](doc:native-merge), [linear/interactive rebase](doc:native-rebase), [cherry-pick/revert](doc:native-replay), [stash](doc:native-stash), [blame/exact rename history](doc:native-file-history) and [bisect](doc:native-bisect) exist with bounded policies. Optional [authored/signed revisions](doc:native-authorship) and [edited-rename alignment](doc:native-file-history#edited-renames) are available. Merge-preserving rebase remains future work.
 
 [Workspace preflight](doc:native-workspace) separates base/index/work and content/mode/representation, requires clean tracked files for checkout, and includes ignored paths for collisions. Links/protected or ambiguous portable paths fail. Clean case/file-directory changes use the [namespace executor](doc:native-checkout#recoverable-namespace-transitions). Optional plan verification does not replace execution validation.
 
@@ -94,7 +94,7 @@ Branches, tags, indexes, archives, pins and received references retain transitiv
 
 Agent compares typed IDs, asks what is missing, transfers verified objects and publishes only a complete closure with expected-value CAS. One Store server supports shared-token or [configured identities/permissions](doc:server-access), serializes storage and excludes offline GC/other Store processes while running. Logical objects are at most 16 MiB, missing batches 4096, server pool 16 threads. [Parallel transfer](doc:parallel-transfers) bounds requests/buffers while Store access stays coordinated.
 
-Block transfer does not resolve concurrent edits. Resident causal versions, deletions, rename/conflict policy and multi-file publication remain separate work. [Read leases](doc:server-read-leases) retain exact roots even after source-ref removal and renew independently, releasing after local completion. [Inventories](doc:upload-inventories) declare keys before presence checks for selective GC; old leases retain global protection. [Receipt pruning](doc:selective-retention) is explicit. Distributed GC remains future work.
+Block transfer does not resolve concurrent edits. The [resident native agent](doc:resident-agent) exchanges guarded revisions and can merge compatible histories. The [BEP controller](doc:syncthing) retains vectors/tombstones and can preserve concurrent regular files. Multi-server publication, directory/symlink metadata and distributed retention remain unfinished. [Read leases](doc:server-read-leases) retain exact roots even after source-ref removal and renew independently, releasing after local completion. [Inventories](doc:upload-inventories) declare keys before presence checks for selective GC; old leases retain global protection. [Receipt pruning](doc:selective-retention) is explicit. Distributed GC remains future work.
 
 C/Go expose object IO, closures, pins and workspace observation. The [BEP adapter](doc:syncthing) uses the upstream Syncthing library’s fixed SHA-256 file blocks without changing Syrnck storage; it is not a full daemon or CDC extension between Syncthing peers.
 

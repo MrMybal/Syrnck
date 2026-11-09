@@ -1,24 +1,6 @@
 #include "native_stage_rebase.hpp"
 namespace syrnck {
 namespace {
-// Keep an explicitly prepared representation when upstream still uses the
-// baseline's representation/content. Independent executable changes combine.
-void preserve_representations(const NativeSnapshot &base, const NativeSnapshot &current,
-                              const NativeSnapshot &incoming, NativeSnapshot &result,
-                              OperationOptions options, const NativeResolutionSet *resolutions) {
-  for (const auto &[path, file] : incoming) {
-    throw_if_cancelled(options.stop);
-    if (resolutions && resolutions->files.contains(path))
-      continue;
-    const auto old = base.find(path), upstream = current.find(path);
-    auto chosen = result.find(path);
-    if (old != base.end() && upstream != current.end() && chosen != result.end() &&
-        file.content == old->second.content && file.manifest != old->second.manifest &&
-        upstream->second.content == old->second.content &&
-        upstream->second.manifest == old->second.manifest && chosen->second.content == file.content)
-      chosen->second.manifest = file.manifest;
-  }
-}
 Json snapshot(const NativeRewriteState &state, const NativeSnapshot &files, OperationOptions options) {
   Json entries = Json::object();
   auto &object = entries.get_ref<Json::object_t &>();
@@ -37,7 +19,7 @@ Json snapshot(const NativeRewriteState &state, const NativeSnapshot &files, Oper
 NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const NativeRewriteState &state,
                                                   bool verify_objects, OperationOptions options,
                                                   const NativeResolutionSet *resolutions,
-                                                  const TextDiffOptions *text_limits) {
+                                                  const TextDiffOptions *text_limits, const NativeRenameOptions *rename_limits) {
   throw_if_cancelled(options.stop);
   if (text_limits)
     text_limits->validate();
@@ -57,11 +39,13 @@ NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const Nati
   const auto current = read_native_snapshot(store, state.head.id, options);
   auto incoming = read_native_snapshot(store, state.index->id, options);
   NativeFileMergeResult combined;
+  std::optional<NativeRenameBatch> renames;
+  if (rename_limits) renames.emplace(store, *rename_limits);
   if (changed) {
     const auto baseline =
         state.index_base ? read_native_snapshot(store, *state.index_base, options) : NativeSnapshot{};
-    combined = merge_native_files(store, baseline, current, incoming, options, resolutions, text_limits);
-    preserve_representations(baseline, current, incoming, combined.files, options, resolutions);
+    combined = merge_native_files(store, baseline, current, incoming, options, resolutions, text_limits,
+                                   nullptr, nullptr, renames ? &*renames : nullptr, true);
   } else {
     require(!resolutions || resolutions->files.empty(), "native resolution path has no conflict");
     combined.files = std::move(incoming);
@@ -110,6 +94,7 @@ NativeStageRebasePlan prepare_native_stage_rebase(const Store &store, const Nati
                      {"blockers", std::move(blockers)}};
   if (text_limits)
     plan.report["text_merge"] = std::move(combined.text_merge);
+  if (rename_limits) plan.report["renames"] = std::move(combined.renames);
   plan.generated = std::move(combined.generated);
   require(plan.report.dump().size() <= max_object_size, "native staging rebase report exceeds 16 MiB");
   report_progress(options, {ProgressPhase::planning, {}, 1, 1, true});
@@ -129,13 +114,14 @@ Json Store::plan_rebase_stage_with_options(std::string_view branch, const Native
   const NativeRewriteState state(*this, branch, options);
   return prepare_native_stage_rebase(*this, state, verify_objects, options,
                                      settings.resolutions ? &*settings.resolutions : nullptr,
-                                     settings.text_merge ? &*settings.text_merge : nullptr)
+                                     settings.text_merge ? &*settings.text_merge : nullptr,
+                                     settings.renames ? &*settings.renames : nullptr)
       .report;
 }
 namespace {
 Json apply(const Store &store, std::string_view branch, std::string_view expected,
            std::string_view expected_index, OperationOptions options, const NativeResolutionSet *resolutions,
-           const TextDiffOptions *text_limits = nullptr) {
+           const TextDiffOptions *text_limits = nullptr, const NativeRenameOptions *rename_limits = nullptr) {
   throw_if_cancelled(options.stop);
   validate_id(expected);
   validate_id(expected_index);
@@ -143,7 +129,7 @@ Json apply(const Store &store, std::string_view branch, std::string_view expecte
   require(state.head.id == expected, "native staging rebase tip changed; refresh the plan");
   require(state.index && state.index->id == expected_index,
           "native staging rebase index changed; refresh the plan");
-  auto plan = prepare_native_stage_rebase(store, state, true, options, resolutions, text_limits);
+  auto plan = prepare_native_stage_rebase(store, state, true, options, resolutions, text_limits, rename_limits);
   require(plan.report["ready"].get<bool>(),
           "native staging rebase is blocked; inspect native rebase-index-plan");
   const bool changed = plan.report["changed"].get<bool>();
@@ -180,6 +166,7 @@ Json Store::rebase_stage_with_options(std::string_view branch, std::string_view 
                                       OperationOptions options) const {
   return apply(*this, branch, expected, expected_index, options,
                settings.resolutions ? &*settings.resolutions : nullptr,
-               settings.text_merge ? &*settings.text_merge : nullptr);
+               settings.text_merge ? &*settings.text_merge : nullptr,
+               settings.renames ? &*settings.renames : nullptr);
 }
 } // namespace syrnck

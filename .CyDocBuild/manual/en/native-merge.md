@@ -5,7 +5,7 @@ description: Native merge guide.
 section: Version control
 order: 300
 parent: native-history
-revision: 3
+revision: 4
 ---
 
 # Native merge {#native-merge}
@@ -237,3 +237,9 @@ change the journal format. Native revision v1 is unchanged.
 auto applied = store.merge_directory(project, "main", expected_id, source_id,
                                       "Merge feature", settings, operation);
 ```
+
+## Rename-aware planning {#renames}
+
+`--rename-similarity 50` enables [rename alignment](doc:native-file-history#rename-merges).
+Use the same options on plan and apply. Structural choices remain explicit;
+`--text-merge` composes compatible text after alignment.

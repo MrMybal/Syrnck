@@ -88,6 +88,9 @@ struct NativePushSync::Impl {
     require(!settings.merge_changes || settings.receive_changes, "native agent merge requires reception");
     require(!settings.conflict_copies || (settings.receive_changes && settings.merge_changes),
         "native agent conflict copies require bidirectional merges");
+    require(!settings.renames || (settings.receive_changes && settings.merge_changes),
+        "native agent rename detection requires bidirectional merges");
+    if (settings.renames) settings.renames->validate();
   }
 };
 NativePushSync::NativePushSync(const Store &store, const fs::path &directory, NativePushSyncOptions settings)
@@ -251,6 +254,7 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
       NativeMergeOptions merge_options; merge_options.text_merge = TextDiffOptions{};
       merge_options.checkout_owner = service;
       merge_options.conflict_copies = state.settings.conflict_copies;
+      merge_options.renames = state.settings.renames;
       auto plan = store.plan_merge(state.directory, state.target, observed->id, merge_options, true, options);
       if (!plan["ready"].get<bool>()) {
         const auto reason = !plan["conflicts"].empty() ? "merge_conflict"

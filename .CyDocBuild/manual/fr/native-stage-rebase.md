@@ -5,7 +5,7 @@ description: Guide : Rejeu d’un index périmé.
 section: Versionnage
 order: 370
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Rejouer un index préparé {#rebase-a-native-staging-index}
@@ -21,7 +21,7 @@ syrnck native rebase-index-plan --branch feature
 
 ## Rejeu et aperçu {#replay-and-preview}
 
-Base = parent enregistré de l’index ; current = tête ; incoming = index complet. Les changements indépendants de fichier/mode se combinent. Contenu concurrent, ajout/suppression, casse ou préfixe fichier/dossier bloquent ; texte optionnel, prise en compte des renommages non implémentée. Un journal checkout/switch en attente bloque.
+Base = parent enregistré de l’index ; current = tête ; incoming = index complet. Les changements indépendants de fichier/mode se combinent. Contenu concurrent, ajout/suppression, casse ou préfixe fichier/dossier bloquent ; texte optionnel, [renommages pris en compte](doc:native-file-history#rename-merges) avec `--rename-similarity 50`. Un journal checkout/switch en attente bloque.
 
 Il faut tête et index. Un index préparé avant premier commit peut ensuite se rejouer sur une base vide ; aucune ascendance imposée à la nouvelle tête. Le CLI suit la branche choisie, --branch ne change pas HEAD.
 

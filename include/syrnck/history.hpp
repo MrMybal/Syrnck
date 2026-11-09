@@ -5,10 +5,16 @@ namespace syrnck {
 // additions/removals; unchanged copies are not presented as renames.
 Json native_diff_renames(const Store &, const std::optional<std::string> &source,
                          const std::optional<std::string> &target, OperationOptions = {});
+// Opt-in edited renames, using verified small-text spans and retained block
+// identities. All limits fail before returning a partial/guessed report.
+Json native_diff_renames(const Store &, const std::optional<std::string> &source,
+                         const std::optional<std::string> &target, const NativeRenameOptions &,
+                         OperationOptions);
 struct NativeFileHistoryOptions {
   std::size_t limit = 100;
   std::size_t max_revisions = 1000;
   bool follow_renames = true;
+  std::optional<NativeRenameOptions> renames{};
 };
 // First-parent file lineage. next_revision/next_path form an explicit cursor.
 Json native_file_history(const Store &, std::string_view revision, std::string_view path,
@@ -21,9 +27,10 @@ struct NativeBlameOptions {
   std::size_t max_input_bytes = 64 * 1024 * 1024;
   bool follow_renames = true;
   bool first_parent = false;
+  std::optional<NativeRenameOptions> renames{};
 };
 // Verified UTF-8 line attribution over ordered merge parents. Exact,
-// unambiguous renames can be followed; copies/edited renames are not guessed.
+// unambiguous renames can be followed; edited renames require explicit options.
 // All lines retain their exact terminators. Binary or limited reports contain
 // no partial attribution. Does not read or modify the working directory.
 Json native_blame(const Store &, std::string_view revision, std::string_view path,

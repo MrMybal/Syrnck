@@ -256,6 +256,29 @@ TextDiffOptions text_diff_options(Args &args) {
   limits.validate();
   return limits;
 }
+std::optional<NativeRenameOptions> rename_options(Args &args) {
+  const auto similarity = args.option("--rename-similarity");
+  NativeRenameOptions limits;
+  bool budgets = false;
+  auto budget = [&](std::string_view name, std::size_t &field) {
+    if (const auto value = args.option(name)) {
+      const auto count = integer(*value);
+      require(count <= std::numeric_limits<std::size_t>::max(), "rename budget exceeds platform size limit");
+      field = static_cast<std::size_t>(count);
+      budgets = true;
+    }
+  };
+  budget("--rename-max-candidates", limits.max_candidates);
+  budget("--rename-max-work", limits.max_work);
+  budget("--rename-max-input-bytes", limits.max_input_bytes);
+  require(similarity || !budgets, "rename budgets require --rename-similarity");
+  if (!similarity) return {};
+  const auto value = integer(*similarity);
+  require(value >= 1 && value <= 100, "rename similarity must be in 1..100");
+  limits.min_similarity = static_cast<std::uint32_t>(value);
+  limits.validate();
+  return limits;
+}
 net::TransferOptions transfer_options(Args &args) {
   net::TransferOptions limits;
   if (const auto path = args.option("--lock-claims")) {
@@ -487,6 +510,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   native bisect-good|bisect-bad|bisect-skip RÉVISION --expect-state ID
   native bisect-reset --expect-state ID   Archiver la recherche sans toucher aux fichiers
   native diff SOURCE CIBLE --renames     Détecter les renommages de contenu exact
+    --rename-similarity 50 active aussi les renommages modifiés (diff/log-file/blame/merge/replay/rebase/agent)
+    Budgets : --rename-max-candidates N, --rename-max-work N, --rename-max-input-bytes N
   native log-file RÉVISION CHEMIN [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame RÉVISION CHEMIN [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets : --max-input-bytes N et limites du diff textuel
@@ -706,6 +731,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   native bisect-good|bisect-bad|bisect-skip REVISION --expect-state ID
   native bisect-reset --expect-state ID   Archive the search without changing files
   native diff SOURCE TARGET --renames    Detect exact-content renames
+    --rename-similarity 50 also enables edited renames (diff/log-file/blame/merge/replay/rebase/agent)
+    Budgets: --rename-max-candidates N, --rename-max-work N, --rename-max-input-bytes N
   native log-file REVISION PATH [--limit 100] [--max-revisions 1000] [--no-follow]
   native blame REVISION PATH [--first-parent] [--no-follow] [--max-revisions 1000]
     Budgets: --max-input-bytes N and text diff limits
@@ -902,6 +929,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     request.commits_only = args.flag("--commits-only"); request.polling = args.flag("--polling");
     request.bidirectional = args.flag("--bidirectional");
     request.conflict_copies = args.flag("--conflict-copies");
+    request.renames = rename_options(args);
     request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
     request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
     request.audit_ms = integer(args.option("--audit-ms").value_or("300000"));
@@ -1662,6 +1690,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto expected_index = planning ? std::optional<std::string>{} : args.option("--expect-index");
       NativeStageRebaseOptions settings;
+      settings.renames = rename_options(args);
       settings.resolutions = resolutions_input();
       if (args.flag("--text-merge"))
         settings.text_merge = text_diff_options(args);
@@ -1886,12 +1915,15 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(report);
     } else if (sub == "diff") {
       const auto renames = args.flag("--renames");
+      const auto similarity = rename_options(args);
       args.count(2);
       const auto source = resolve(args.values[0]), target = resolve(args.values[1]);
-      print(renames ? native_diff_renames(store, source, target, {control->token(), observe})
+      print(similarity ? native_diff_renames(store, source, target, *similarity, {control->token(), observe})
+                    : renames ? native_diff_renames(store, source, target, {control->token(), observe})
                     : store.compare_revisions(source, target, {control->token(), observe}));
     } else if (sub == "blame") {
       NativeBlameOptions limits;
+      limits.renames = rename_options(args);
       limits.text = text_diff_options(args);
       limits.first_parent = args.flag("--first-parent");
       limits.follow_renames = !args.flag("--no-follow");
@@ -1909,6 +1941,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       return report["status"] == "complete" ? 0 : 1;
     } else if (sub == "log-file") {
       NativeFileHistoryOptions limits;
+      limits.renames = rename_options(args);
       const auto limit = integer(args.option("--limit").value_or("100"));
       const auto visited = integer(args.option("--max-revisions").value_or("1000"));
       require(limit >= 1 && limit <= 1000, "native file history page limit must be in 1..1000");
@@ -2018,6 +2051,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       require(planning || message.has_value(), "--message is required");
       NativeReplayOptions settings;
+      settings.renames = rename_options(args);
       settings.resolutions = resolutions_input();
       if (args.flag("--text-merge"))
         settings.text_merge = text_diff_options(args);
@@ -2047,6 +2081,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto expected = planning ? std::optional<std::string>{} : args.option("--expect");
       const auto message = planning ? std::optional<std::string>{} : args.option("--message", "-m");
       NativeMergeOptions settings;
+      settings.renames = rename_options(args);
       settings.conflict_copies = args.flag("--conflict-copies");
       settings.resolutions = resolutions_input();
       if (args.flag("--text-merge"))
@@ -2082,6 +2117,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
       const auto limit = integer(args.option("--max-commits").value_or("1000"));
       require(limit >= 1 && limit <= 100000, "native rebase commit limit must be in 1..100000");
       NativeRebaseOptions settings;
+      settings.renames = rename_options(args);
       if (const auto clock = args.option("--committer-time")) settings.committer_timestamp = integer(*clock);
       if (args.flag("--text-merge"))
         settings.text_merge = text_diff_options(args);

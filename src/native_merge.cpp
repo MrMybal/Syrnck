@@ -49,6 +49,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
     require(mode == "merge" || settings.resolutions->files.empty(), "native resolution path has no conflict");
   }
   NativeFileMergeResult combined;
+  std::optional<NativeRenameBatch> rename_batch;
+  if (settings.renames) rename_batch.emplace(store, *settings.renames);
   Json workspace;
   if (blockers.empty()) {
     const auto current = read_native_snapshot(store, plan.head, options);
@@ -61,7 +63,8 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
       combined = merge_native_files(store, original, current, incoming, options,
                                     settings.resolutions ? &*settings.resolutions : nullptr,
                                     settings.text_merge ? &*settings.text_merge : nullptr, nullptr,
-                                    settings.conflict_copies ? &copies : nullptr);
+                                    settings.conflict_copies ? &copies : nullptr,
+                                    !forward && rename_batch ? &*rename_batch : nullptr);
       // Fast-forward adopts the exact source revision, including its manifests.
       if (forward)
         combined.files = incoming;
@@ -101,6 +104,7 @@ NativeMergePlan prepare_native_merge(const Store &store, const fs::path &directo
                      {"conflicts", std::move(combined.conflicts)},
                      {"resolved", std::move(combined.resolved)},
                      {"text_merge", std::move(combined.text_merge)},
+                     {"renames", std::move(combined.renames)},
                      {"resolution_context", blockers.empty() ? context.json() : Json{}},
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};

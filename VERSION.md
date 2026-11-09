@@ -10,6 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- Bounded edited-rename detection across native history/blame, merge/replay/rebase/index and signed resident synchronization, with explicit structural conflicts and frozen checkout recovery.
 - Relocatable native CMake SDK with exported C++/C targets, bundled static dependencies and independent installed-consumer qualification.
 - Password-protected storage keys: bounded Argon2id envelopes, exclusive CLI key files and password changes, reusable C/Go native owners and cached resident-agent unlocking; standalone BEP key-file configuration with startup authentication; protected signing seeds remain unfinished.
 - C/Go handle-local native authors/signers and verified fresh revision preparation; required signatures block unsigned fallback while retained signed candidates recover without a private key.

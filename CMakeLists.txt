@@ -42,6 +42,8 @@ target_sources(syrnck_core PRIVATE src/native_workspace_archive.cpp src/native_w
 target_sources(syrnck_core PRIVATE src/native_directory_identity.cpp src/native_workspace_relocation.cpp)
 target_sources(syrnck_core PRIVATE src/signing.cpp)
 target_sources(syrnck_core PRIVATE src/keys.cpp)
+target_sources(syrnck_core PRIVATE src/native_renames.cpp)
+target_sources(syrnck_core PRIVATE src/native_rename_merge.cpp)
 target_sources(syrnck_core PRIVATE src/native_authorship.cpp)
 target_compile_features(syrnck_core PUBLIC cxx_std_20)
 target_sources(syrnck_core PRIVATE src/working_file_stamp.cpp src/working_index.cpp src/workspace_watcher.cpp)
@@ -155,6 +157,22 @@ if(SYRNCK_BUILD_TESTS)
     --generator "${CMAKE_GENERATOR}" --network "${SYRNCK_BUILD_NETWORK}"
     --c-compiler "${CMAKE_C_COMPILER}" --cxx-compiler "${CMAKE_CXX_COMPILER}")
   set_tests_properties(sdk_distribution PROPERTIES TIMEOUT 180 PROCESSORS 2 RESOURCE_LOCK install_distribution)
+  add_executable(syrnck_native_rename_tests tests/native_rename_tests.cpp)
+  target_include_directories(syrnck_native_rename_tests PRIVATE src tests)
+  target_link_libraries(syrnck_native_rename_tests PRIVATE syrnck_core)
+  add_test(NAME native_renames COMMAND syrnck_native_rename_tests)
+  set_tests_properties(native_renames PROPERTIES TIMEOUT 120)
+  add_executable(syrnck_native_rename_merge_tests tests/native_rename_merge_tests.cpp)
+  target_include_directories(syrnck_native_rename_merge_tests PRIVATE src tests)
+  target_link_libraries(syrnck_native_rename_merge_tests PRIVATE syrnck_core)
+  add_test(NAME native_rename_merges COMMAND syrnck_native_rename_merge_tests)
+  set_tests_properties(native_rename_merges PROPERTIES TIMEOUT 180)
+  if(SYRNCK_BUILD_CLI)
+    add_test(NAME native_renames_cli COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_renames.py" "$<TARGET_FILE:syrnck>"
+      "$<TARGET_FILE:syrnck_native_rename_merge_tests>")
+    set_tests_properties(native_renames_cli PROPERTIES TIMEOUT 180)
+  endif()
   # Keep complete scenarios together, with separately timed owned cleanup.
   # A metadata audit below checks the real CTest commands and every case union.
   function(syrnck_case_suite name target shards expected timeout)

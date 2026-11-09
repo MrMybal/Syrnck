@@ -1,5 +1,6 @@
 #include "native_merge.hpp"
 #include "native_conflict_copy.hpp"
+#include "native_rename_merge.hpp"
 namespace syrnck {
 namespace {
 const NativeSnapshotFile *lookup(const NativeSnapshot &files, const std::string &path) {
@@ -44,17 +45,20 @@ void namespace_conflicts(const NativeSnapshot &files, Json &conflicts, ReportBud
 void preserve_conflicts(NativeFileMergeResult &result, Json &conflicts, std::set<std::string> &paths,
                         const NativeSnapshot &original, const NativeSnapshot &current,
                         const NativeSnapshot &incoming, const NativeConflictCopyContext &context,
-                        ReportBudget &budget, const OperationOptions &options) {
+                        ReportBudget &budget, const OperationOptions &options,
+                        const NativeSnapshot *original_names) {
   // Reserve every file and directory in all inputs, including paths that the
   // merge would otherwise delete. Never claim an existing name as a new copy.
   std::set<std::string> names, files;
-  for (const auto *snapshot : {&original, &current, &incoming})
+  for (const auto *snapshot : {&original, &current, &incoming, original_names}) {
+    if (!snapshot) continue;
     for (const auto &[path, file] : *snapshot) {
       (void)file; throw_if_cancelled(options.stop);
       const auto fold = portable_fold(path);
       files.insert(fold); names.insert(fold);
       for (auto n = fold.find('/'); n != fold.npos; n = fold.find('/', n + 1)) names.insert(fold.substr(0, n));
     }
+  }
   Json remaining = Json::array();
   for (const auto &row : conflicts) {
     throw_if_cancelled(options.stop);
@@ -104,13 +108,23 @@ void require_native_resolution_context(const NativeResolutionSet &resolutions, s
               resolutions.base == base && resolutions.parent == parent,
           "native resolution context changed; refresh the plan");
 }
-NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapshot &original,
-                                         const NativeSnapshot &current, const NativeSnapshot &incoming,
+NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapshot &original_input,
+                                         const NativeSnapshot &current_input, const NativeSnapshot &incoming_input,
                                          OperationOptions options, const NativeResolutionSet *resolutions,
                                          const TextDiffOptions *text_limits,
                                          NativeTextMergeBatch *shared_batch,
-                                         const NativeConflictCopyContext *copies) {
+                                         const NativeConflictCopyContext *copies, NativeRenameBatch *renames,
+                                         bool preserve_incoming_representation) {
   NativeFileMergeResult result;
+  std::optional<NativeRenameAlignment> aligned;
+  if (renames) {
+    auto alignment = align_native_renames(original_input, current_input, incoming_input, *renames, options);
+    result.renames = std::move(alignment.report);
+    if (alignment.applied) aligned = std::move(alignment);
+  }
+  const auto &original = aligned ? aligned->base : original_input;
+  const auto &current = aligned ? aligned->current : current_input;
+  const auto &incoming = aligned ? aligned->incoming : incoming_input;
   std::set<std::string> paths;
   for (const auto *files : std::array<const NativeSnapshot *, 3>{&original, &incoming, &current})
     for (const auto &[path, entry] : *files) {
@@ -118,8 +132,16 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
       throw_if_cancelled(options.stop);
       paths.insert(path);
     }
+  if (aligned)
+    for (const auto &[path, file] : current_input) {
+      (void)file;
+      throw_if_cancelled(options.stop);
+      paths.insert(path);
+    }
   Json changes = Json::array(), conflicts = Json::array();
   ReportBudget budget;
+  if (aligned)
+    for (const auto &row : aligned->conflicts) budget.append(conflicts, row);
   std::uint64_t completed = 0;
   for (const auto &path : paths) {
     throw_if_cancelled(options.stop);
@@ -161,6 +183,19 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
       result.files.emplace_hint(result.files.end(), path, *chosen);
     if (++completed % 256 == 0)
       report_progress(options, {ProgressPhase::planning, path, completed, paths.size()});
+  }
+  if (preserve_incoming_representation) {
+    for (const auto &[path, file] : incoming) {
+      throw_if_cancelled(options.stop);
+      if (resolutions && resolutions->files.contains(path)) continue;
+      const auto old = original.find(path), upstream = current.find(path);
+      auto chosen = result.files.find(path);
+      if (old != original.end() && upstream != current.end() && chosen != result.files.end() &&
+          file.content == old->second.content && file.manifest != old->second.manifest &&
+          upstream->second.content == old->second.content && upstream->second.manifest == old->second.manifest &&
+          chosen->second.content == file.content)
+        chosen->second.manifest = file.manifest;
+    }
   }
   namespace_conflicts(result.files, conflicts, budget, options);
   Json final_conflicts = Json::array();
@@ -253,7 +288,8 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
       result.generated = std::move(batch.generated);
   }
   if (copies)
-    preserve_conflicts(result, final_conflicts, paths, original, current, incoming, *copies, final_budget, options);
+    preserve_conflicts(result, final_conflicts, paths, original, current, incoming, *copies, final_budget, options,
+                       aligned ? &original_input : nullptr);
   std::size_t snapshot_bytes = 2;
   for (const auto &[path, entry] : result.files) {
     throw_if_cancelled(options.stop);
@@ -264,7 +300,7 @@ NativeFileMergeResult merge_native_files(const Store &store, const NativeSnapsho
   }
   for (const auto &path : paths) {
     throw_if_cancelled(options.stop);
-    const auto *ours = lookup(current, path), *chosen = lookup(result.files, path);
+    const auto *ours = lookup(current_input, path), *chosen = lookup(result.files, path);
     if (!equal(ours, chosen))
       final_budget.append(changes, Json{{"path", path},
                                         {"action", !ours     ? "create"

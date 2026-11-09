@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 6
+revision: 7
 ---
 
 ## Run continuously {#run}
@@ -213,3 +213,13 @@ Repeated captures reuse unchanged session-ingested manifests using strong local
 file stamps. Selected paths are still enumerated and the complete immutable
 closure verified. Tick reports include `capture` source I/O counters. See
 [performance and conservative fallback](doc:performance#incremental-capture).
+
+## Edited renames during automatic merges {#edited-renames}
+
+`agent run URL --bidirectional --rename-similarity 50` enables
+[rename-aware merging](doc:native-file-history#rename-merges) after divergent
+native history is fetched. The `--rename-max-*` budgets apply. C++ sessions set
+`NativeSyncOptions.renames`. These options require bidirectional merges.
+Compatible text edits follow the destination; structural conflicts stay blocked.
+Identity, signature, branch and path checks still govern publication. An owned
+prepared checkout resumes its frozen target if a later process omits the option.

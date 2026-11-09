@@ -1,6 +1,7 @@
 #pragma once
 #include "native_workspace.hpp"
 #include "native_text_merge.hpp"
+#include "native_renames.hpp"
 namespace syrnck {
 struct NativeFileMergeResult {
   NativeSnapshot files;
@@ -9,6 +10,7 @@ struct NativeFileMergeResult {
   std::vector<ObjectKey> extra_roots;
   NativeGeneratedText generated{};
   Json text_merge;
+  Json renames;
   std::size_t processed = 0, paths = 0;
 };
 struct NativeConflictCopyContext { std::string current, incoming; };
@@ -20,7 +22,8 @@ NativeFileMergeResult merge_native_files(const Store &, const NativeSnapshot &ba
                                          const NativeSnapshot &current, const NativeSnapshot &incoming,
                                          OperationOptions, const NativeResolutionSet * = nullptr,
                                          const TextDiffOptions * = nullptr, NativeTextMergeBatch * = nullptr,
-                                         const NativeConflictCopyContext * = nullptr);
+                                         const NativeConflictCopyContext * = nullptr,
+                                         NativeRenameBatch * = nullptr, bool preserve_incoming_representation = false);
 struct NativeMergePlan {
   std::string head;
   std::optional<std::string> base;

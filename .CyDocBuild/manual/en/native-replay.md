@@ -5,7 +5,7 @@ description: Native cherry-pick and revert guide.
 section: Version control
 order: 330
 parent: native-history
-revision: 1
+revision: 2
 ---
 
 # Native cherry-pick and revert {#native-cherry-pick-and-revert}
@@ -219,3 +219,9 @@ aborted, unpublished candidate may be collected after its temporary pins are
 removed. Checkout archives and receipts have no automatic expiry. Private
 prepared files and backups are plaintext even with encrypted object storage;
 see [checkout recovery and data limits](doc:native-checkout).
+
+## Rename-aware planning {#renames}
+
+`--rename-similarity 50` enables [rename alignment](doc:native-file-history#rename-merges).
+Use the same options on plan and apply. Structural choices remain explicit;
+`--text-merge` composes compatible text after alignment.

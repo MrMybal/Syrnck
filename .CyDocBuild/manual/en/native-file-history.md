@@ -1,19 +1,16 @@
 ---
 id: native-file-history
-title: Exact renames and first-parent file history
-description: Exact renames and first-parent file history guide.
+title: Renames and first-parent file history
+description: Exact and edited renames, file lineage and rename-aware merging.
 section: Version control
 order: 250
 parent: native-history
-revision: 1
+revision: 2
 ---
 
-# Exact renames and first-parent file history {#exact-renames-and-first-parent-file-history}
+# Renames and first-parent file history {#exact-renames-and-first-parent-file-history}
 
-The C++ APIs in `syrnck/history.hpp` add metadata-only exact rename comparison
-and file-history inspection. Neither API reads working files, changes references
-nor reconstructs asset payloads. Their content comparisons use verified
-manifest metadata; they do not replace a complete file-integrity audit.
+The C++ APIs in `syrnck/history.hpp` provide exact comparison and file history from verified manifest metadata. Default queries do not reconstruct payloads. Explicit similarity options add edited renames and may read small files. Queries never read working files or publish references. Metadata-only comparison does not replace a complete integrity audit.
 
 ```text
 syrnck native diff SOURCE TARGET --renames
@@ -38,8 +35,8 @@ The ordinary diff command keeps its existing addition/removal behavior.
 If identical removed/added contents have several possible pairings, the result
 keeps the additions/removals, sets `rename_ambiguous` on the affected rows and
 reports ambiguity counts. Existing unchanged copies do not become renames.
-Edited renames, similarity heuristics, copy detection, swaps between existing
-paths and rename-aware merge/rebase conflict resolution are not inferred.
+Copies and swaps between existing paths are not inferred. Edited renames and
+rename-aware replay require the explicit options below.
 Report serialization is bounded at 16 MiB.
 
 ## Follow a file lineage {#follow-a-file-lineage}
@@ -71,3 +68,78 @@ changed by a rename. `complete` and `stop_reason` distinguish `added`,
 `ambiguous_rename`, `root`, `page_limit` and `traversal_limit`. Read-only queries
 do not pin their versions; normal retained roots must still protect them from
 an intervening administrative retirement/GC.
+
+## Edited renames and similarity {#edited-renames}
+
+```text
+syrnck native diff BASE HEAD --rename-similarity 50
+syrnck native log-file HEAD Source/New.cpp --rename-similarity 50
+syrnck native blame HEAD Source/New.cpp --rename-similarity 50
+```
+
+The five-argument `native_diff_renames` overload takes `NativeRenameOptions`
+and `OperationOptions`. File-history/blame options expose optional `renames`.
+Defaults stay exact-only; `--rename-similarity N` opts into similarity.
+
+Unique whole-file matches are paired first. Identical-content ambiguities are
+not rescored. Remaining removed/added paths use common native block identities,
+weighted by their byte counts. Verified UTF-8 candidates up to 256 KiB also use
+line-delimited spans of at most 64 bytes, recognizing edits within a block.
+Larger files use blocks; changed chunking can reduce binary similarity. Small
+binary candidates may be read to determine whether they are text. Large
+payloads are not reconstructed for scoring.
+
+The score is common bytes divided by the larger file size, taking the greater
+of the block and text-span scores. Repetitions count only up to their weight on
+each side. An inverted index avoids unconditional all-pairs comparison; highly
+repetitive input can still exhaust work limits. Best fractions are compared
+exactly before rounding percentages. Only reciprocal unique best matches
+meeting N (1..100) are paired. Ties remain explicit ambiguities. This heuristic
+does not prove rename intent or preserve ordering: even 100 may accompany
+`content_changed: true`. Use exact-only `--renames` when identity is required.
+
+| Option | Default | Accepted range |
+| --- | --- | --- |
+| `--rename-max-candidates` | 4096 distinct candidate manifests | 1..16384 |
+| `--rename-max-work` | 1000000 feature/index visits | 1..16000000 |
+| `--rename-max-input-bytes` | 67108864 additional input bytes | 1024..268435456 |
+
+Budgets require `--rename-similarity`. They cover extra decoded manifests and
+reconstructed similarity inputs, not all allocations or ordinary snapshot reads.
+`rename_detection` exposes usage. History shares a cache/budget over its page;
+repeat similarity options with `next_revision`/`next_path`. `--no-follow` is
+incompatible. Blame charges these reads against its global input budget too.
+Limited diff/history queries fail; limited blame returns empty attribution.
+
+## Rename-aware merges and replay {#rename-merges}
+
+```text
+syrnck native merge-plan feature --rename-similarity 50 --text-merge
+syrnck native cherry-pick-plan COMMIT --rename-similarity 50 --text-merge
+syrnck native revert-plan COMMIT --rename-similarity 50 --text-merge
+syrnck native rebase-plan BASE --onto upstream --rename-similarity 50 --text-merge
+syrnck native rebase-index-plan --rename-similarity 50 --text-merge
+```
+
+Repeat the same options on apply. `NativeMergeOptions`, `NativeReplayOptions`,
+`NativeRebaseOptions` and `NativeStageRebaseOptions` have optional `renames`.
+A modification under an old name follows a unique rename, including mode changes.
+Two renames to the same destination use the same baseline. `--text-merge` composes
+compatible text edits; binary contents are selected as complete manifests or
+remain conflicts.
+
+Plans expose `renames` with original/current/incoming paths and similarity
+evidence. Different destinations (`rename_rename`), rename/deletion
+(`rename_delete`/`delete_rename`) and a newly occupied destination (`rename_add`)
+need explicit choices. Resolve every listed path with the usual resolution
+context; the original path is included so a base choice can restore it. Content choices at an aligned destination use its mapped descriptors.
+Case and file/directory guards stay active. Conflict copies preserve competing
+contents; they do not resolve structural rename choices or reuse original names.
+
+Rebase shares one cache/budget over the sequence, including virtual text; the
+second candidate-generation pass must reproduce the same target. Index rebase
+retains staged representations and archives its previous index without changing
+working files. Apply verifies complete histories and keeps signature/reference/
+checkout guards. A prepared checkout resumes its frozen target after process
+termination without inferring the rename again. GC is blocked while checkout is
+pending; retained roots still protect versions after recovery.

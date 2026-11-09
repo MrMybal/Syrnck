@@ -4,7 +4,7 @@ title: Architecture
 description: Guide : Architecture.
 section: Premiers pas
 order: 10
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Architecture de Syrnck {#architecture-de-syrnck}
@@ -58,7 +58,7 @@ Chaque manifeste complet passé dans le filtre est épinglé. Un pointeur canoni
 
 Le prototype offre la création de révisions, des branches nommées, un journal par premier parent et un export vers un nouveau dossier. Il permet aussi de détacher l'historique en gardant l'état courant et en archivant l'ancienne tête.
 
-Les [comparaisons natives](doc:native-comparison) ajoutent un `status` du dossier par hash complet et un `diff` des métadonnées de snapshots, sans import ni publication. Le [staging natif](doc:native-staging) conserve une sélection immuable sous `staging/BRANCHE`, protégée contre le GC avec sa base. Le commit préparé vérifie ses dépendances puis déplace la branche et consomme le staging en une transaction de références ; une base périmée est refusée. Les [patches](doc:text-patches), [merges à trois voies](doc:text-merge), [merge natif](doc:native-merge), [rebase linéaire/interactif](doc:native-rebase), [cherry-pick/revert](doc:native-replay), [stash](doc:native-stash), [blame et renommages exacts](doc:native-file-history), [bisect](doc:native-bisect) sont disponibles avec leurs limites documentées. Rebase préservant les merges, auteurs structurés et signatures restent à réaliser.
+Les [comparaisons natives](doc:native-comparison) ajoutent un `status` du dossier par hash complet et un `diff` des métadonnées de snapshots, sans import ni publication. Le [staging natif](doc:native-staging) conserve une sélection immuable sous `staging/BRANCHE`, protégée contre le GC avec sa base. Le commit préparé vérifie ses dépendances puis déplace la branche et consomme le staging en une transaction de références ; une base périmée est refusée. Les [patches](doc:text-patches), [merges à trois voies](doc:text-merge), [merge natif](doc:native-merge), [rebase linéaire/interactif](doc:native-rebase), [cherry-pick/revert](doc:native-replay), [stash](doc:native-stash), [blame et renommages exacts](doc:native-file-history), [bisect](doc:native-bisect) sont disponibles avec leurs limites documentées. Les [révisions avec auteurs/signatures](doc:native-authorship) et l’[alignement des renommages modifiés](doc:native-file-history#edited-renames) sont disponibles sur activation explicite. Le rebase préservant les merges reste à réaliser.
 
 L'[inspection du workspace](doc:native-workspace) combine base/index/dossier et prépare un plan de checkout sans écriture. Ce plan distingue contenu, mode et représentation, impose les fichiers suivis propres, et inventorie aussi les chemins ignorés pour détecter les collisions. Liens/jonctions, collisions ambiguës et répertoires protégés bloquent ; les [transitions propres de casse et fichier/dossier](doc:native-checkout#recoverable-namespace-transitions) sont journalisées. La vérification complète des objets cibles reste optionnelle pour le plan.
 
@@ -112,7 +112,7 @@ L'agent compare des identifiants d'objets, demande les absents puis transfère l
 
 Le serveur est mono-store avec jeton partagé historique ou [utilisateurs/permissions](doc:server-access) ; il sérialise les accès au stockage. Le GC et les autres processus locaux sont exclus pendant son exécution. Le réseau limite les corps à 16 Mio, les requêtes de présence à 4 096 objets et le pool serveur à 16 threads. L'agent peut chevaucher des requêtes d'objets avec des [plafonds de concurrence et de buffers](doc:parallel-transfers), tout en coordonnant les accès au Store.
 
-Un transfert de blocs ne règle pas les conflits entre deux modifications de fichiers. La synchronisation continue devra définir versions causales, suppressions, conflits, renommages et publication multi-fichier, indépendamment de l'algorithme de déduplication.
+Un transfert de blocs ne règle pas les conflits entre deux modifications de fichiers. L’[agent natif résident](doc:resident-agent) échange les révisions protégées et peut fusionner les historiques compatibles. Le [contrôleur BEP](doc:syncthing) retient vecteurs/tombstones et peut préserver les fichiers ordinaires concurrents. Publication multi-serveur, métadonnées de dossiers/liens et rétention distribuée restent à terminer.
 
 Les [baux de lecture persistants](doc:server-read-leases) protègent la racine exacte d'un pull contre le GC hors ligne tant qu'ils sont actifs, même après suppression de la référence source. Le client les renouvelle par une requête indépendante, puis les libère lorsque tous les objets sont locaux. Le GC protège sélectivement les fermetures complètes des lectures et sources locales, ainsi que les objets disponibles des pulls incomplets. Les [inventaires d'envoi](doc:upload-inventories) ajoutent les objets déclarés avant les demandes de présence, même sans manifeste ; leurs pages chaînées sont validées avant toute suppression. Les anciens baux d'envoi gardent une protection globale. Le GC distribué reste à développer. Voir la [rétention et la purge des reçus](doc:selective-retention).
 

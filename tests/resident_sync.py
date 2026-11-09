@@ -86,6 +86,40 @@ class ResidentSync(unittest.TestCase):
             self.cmd("gc", "--delete", store=target)
             self.cmd("fsck", store=target)
 
+    def test_offline_edited_rename_merges_signed_revisions_and_converges(self):
+        original = "".join(f"int value_{i} = {i};\n" for i in range(100)).encode()
+        initial = self.commit("Source/code.cpp", original)
+        peer, store = self.peer()
+        with self.serving(strict=True):
+            self.publish(initial, name="scratch")
+            with self.agent("--bidirectional", "--max-updates", "1", directory=peer, store=store) as right:
+                right.state("pulled", local_revision=initial)
+                self.assertEqual(right.process.wait(timeout=10), 0)
+        local_bytes = original.replace(b"= 20;", b"= 98;")
+        ours = self.commit("Source/code.cpp", local_bytes)
+        (peer / "Source/code.cpp").rename(peer / "Source/renamed.cpp")
+        theirs = self.peer_commit(peer, store, original.replace(b"= 70;", b"= 99;"), "Source/renamed.cpp")
+        with self.serving(strict=True):
+            self.publish(ours, name="scratch")
+            with self.agent("--bidirectional", "--commits-only", "--rename-similarity", "50", directory=peer, store=store) as right:
+                merged = right.state("pushed", merged=True)["local_revision"]
+                metadata = self.metadata(merged, store)
+                self.assertEqual(metadata["parents"], [theirs, ours])
+                self.assertIsNotNone(metadata["signature"])
+                right.state("synced", working_clean=True)
+                with self.agent("--bidirectional", "--commits-only") as left:
+                    left.state("pulled", local_revision=merged)
+                    left.state("synced", working_clean=True)
+                    for path in (peer, self.project):
+                        self.assertFalse((path / "Source/code.cpp").exists())
+                        self.assertEqual((path / "Source/renamed.cpp").read_bytes(), local_bytes.replace(b"= 70;", b"= 99;"))
+                    self.assertEqual(self.http("GET", "/v1/refs")["scratch"]["id"], merged)
+        for target in (self.local, store):
+            self.cmd("gc", "--delete", store=target)
+            self.cmd("fsck", store=target)
+        rejected = self.cmd("agent", "run", self.url, "--rename-similarity", 50, actor="alice", ok=False)
+        self.assertIn(b"rename detection requires --bidirectional", rejected.stderr)
+
     def test_binary_conflict_retains_both_histories_and_local_bytes(self):
         initial = self.commit("Source/asset.bin", b"\0base")
         peer, store = self.peer()

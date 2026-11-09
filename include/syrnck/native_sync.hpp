@@ -8,6 +8,7 @@ struct NativePushSyncOptions {
   bool receive_changes = false;
   bool merge_changes = false;
   bool conflict_copies = false;
+  std::optional<NativeRenameOptions> renames{};
 };
 // Session-local observation and durable acknowledged history. Each tick uses
 // the caller's currently locked Store; waiting between ticks needs no Store.

@@ -33,6 +33,8 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
   std::optional<NativeTextMergeBatch> text;
   if (settings.text_merge)
     text.emplace(store, *settings.text_merge);
+  std::optional<NativeRenameBatch> renames;
+  if (settings.renames) renames.emplace(store, *settings.renames, text ? &text->generated : nullptr);
   require(settings.max_commits >= 1 && settings.max_commits <= 100000,
           "native rebase commit limit must be in 1..100000");
   validate_id(base);
@@ -163,7 +165,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
           }
         }
         auto combined = merge_native_files(store, original, current, incoming, options, resolution, nullptr,
-                                           text ? &*text : nullptr);
+                                           text ? &*text : nullptr, nullptr, renames ? &*renames : nullptr);
         extra_roots.insert(combined.extra_roots.begin(), combined.extra_roots.end());
         Json row{{"source", source},
                  {"action", todo.action},
@@ -176,6 +178,8 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                  {"resolution_context", step_context.json()}};
         if (text)
           row["text_merge"] = std::move(combined.text_merge);
+        if (renames)
+          row["renames"] = std::move(combined.renames);
         if (row["conflicts"].empty()) {
           const bool fold = todo.action == "squash" || todo.action == "fixup";
           auto metadata = revision;
@@ -261,6 +265,7 @@ NativeRebasePlan prepare_native_rebase(const Store &store, const fs::path &direc
                      {"blockers", std::move(blockers)},
                      {"workspace", std::move(workspace)}};
   if (clock) plan.report["committer_timestamp"] = *clock;
+  if (renames) plan.report["rename_detection"] = renames->report();
   if (text) {
     plan.report["text_merge"] = text->summary();
     plan.generated = std::move(text->generated);

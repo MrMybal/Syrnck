@@ -12,5 +12,6 @@ NativeReplayPlan prepare_native_replay(const Store &, const fs::path &, std::str
                                        std::string_view source, NativeReplayKind,
                                        std::optional<std::uint32_t> mainline, bool verify_objects,
                                        OperationOptions, const NativeResolutionSet * = nullptr,
-                                       const TextDiffOptions * = nullptr);
+                                       const TextDiffOptions * = nullptr,
+                                       const NativeRenameOptions * = nullptr);
 } // namespace syrnck

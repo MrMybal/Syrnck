@@ -1,6 +1,7 @@
 #include "text_edits.hpp"
 #include <syrnck/history.hpp>
 #include "native_authorship.hpp"
+#include "native_renames.hpp"
 #include <algorithm>
 #include <limits>
 #include <sstream>
@@ -26,11 +27,16 @@ class Attribution {
   const OperationOptions &options_;
   std::map<ObjectKey, Json> metadata_;
   std::map<std::string, Content> contents_;
+  std::optional<NativeRenameBatch> renames_;
 public:
   std::size_t revisions = 0, input_bytes = 0;
   text_detail::Work work;
   Attribution(const Store &store, const NativeBlameOptions &limits, const OperationOptions &options)
-      : store_(store), limits_(limits), options_(options), work{limits.text.max_work, options} {}
+      : store_(store), limits_(limits), options_(options), work{limits.text.max_work, options} {
+    if (limits.renames)
+      renames_.emplace(store, *limits.renames, nullptr, [this](std::size_t bytes) { input(bytes); });
+  }
+  Json rename_report() const { return renames_ ? renames_->report() : Json{}; }
   void input(std::size_t bytes) {
     if (bytes > limits_.max_input_bytes - input_bytes)
       throw Limited{"input_limit"};
@@ -79,6 +85,27 @@ public:
       return path;
     if (!limits_.follow_renames)
       return {};
+    if (renames_) {
+      NativeSnapshot removed, added;
+      const auto decode = [&](const Json &entry) {
+        const auto &value = manifest(entry);
+        return NativeSnapshotFile{entry["manifest"].get<std::string>(),
+          {value["size"].get<std::uint64_t>(), value["file_hash"].get<std::string>()},
+          entry["executable"].get<bool>()};
+      };
+      for (const auto &[name, entry] : parent["files"].items()) {
+        work.use();
+        if (!current["files"].contains(name)) removed.emplace(name, decode(entry));
+      }
+      for (const auto &[name, entry] : current["files"].items()) {
+        work.use();
+        if (!parent["files"].contains(name)) added.emplace(name, decode(entry));
+      }
+      const auto matches = match_native_renames(removed, added, &*renames_, options_);
+      for (const auto &[old, match] : matches.matches)
+        if (match.target == path) return old;
+      return {};
+    }
     const auto &file = current["files"][path];
     std::optional<std::string> candidate;
     for (const auto &[name, entry] : parent["files"].items()) {
@@ -162,6 +189,7 @@ Json native_blame(const Store &store, std::string_view revision, std::string_vie
   validate_id(revision);
   validate_path(path);
   limits.text.validate();
+  require(limits.follow_renames || !limits.renames, "rename similarity requires rename following");
   require(limits.max_revisions >= 1 && limits.max_revisions <= 10000,
           "native blame traversal limit must be in 1..10000");
   require(limits.max_input_bytes >= 1 && limits.max_input_bytes <= 256 * 1024 * 1024,
@@ -209,12 +237,18 @@ Json native_blame(const Store &store, std::string_view revision, std::string_vie
         report["lines"].push_back(std::move(row));
       }
     }
+  } catch (const NativeRenameLimit &) {
+    report["status"] = "limited";
+    report["reason"] = "rename_limit";
+    report["lines"] = Json::array();
+    report["commits"] = Json::object();
   } catch (const Limited &limit) {
     report["status"] = "limited";
     report["reason"] = limit.reason;
     report["lines"] = Json::array();
     report["commits"] = Json::object();
   }
+  if (limits.renames) report["rename_detection"] = analysis.rename_report();
   report["visited_revisions"] = analysis.revisions;
   report["input_bytes"] = analysis.input_bytes;
   report["work"] = limits.text.max_work - analysis.work.remaining;

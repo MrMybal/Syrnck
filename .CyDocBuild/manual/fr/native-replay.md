@@ -5,7 +5,7 @@ description: Guide : Cherry-pick et revert.
 section: Versionnage
 order: 330
 parent: native-history
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Cherry-pick et revert natifs {#native-cherry-pick-and-revert}
@@ -25,7 +25,7 @@ syrnck native revert-plan MERGE_ID --mainline 2
 
 Base, branche actuelle et entrant sont comparés par hash complet/taille/mode. Rechunking seul n’est pas une édition. Changements identiques ou entrant inchangé gardent le manifeste actuel ; un seul côté changé est retenu ; contenu et mode indépendants d’un même fichier peuvent se combiner.
 
-Conflits : content, add_add, delete_modify, modify_delete ; choix explicites via --resolutions, composition textuelle optionnelle. La fusion des renommages reste hors de ces règles. Les ajouts indépendants sont contrôlés ensemble pour case_collision et file_directory_collision.
+Conflits : content, add_add, delete_modify, modify_delete ; choix explicites via --resolutions, composition textuelle optionnelle. Le [rejeu avec renommages](doc:native-file-history#rename-merges) demande `--rename-similarity 50`. Les ajouts indépendants sont contrôlés ensemble pour case_collision et file_directory_collision.
 
 Rapport : operation, branch, head attendue, source, parent/mainline, ready, empty, objects_verified, result_files, changes, conflicts, resolved, resolution_context. Résumés complets manifeste/hash/taille/mode ; conflits avec les trois côtés, namespace avec chemin opposé. Un seul conflit bloque tout.
 
@@ -117,3 +117,9 @@ syrnck native checkout-recover
 # Or, before branch publication:
 syrnck native checkout-recover --abort
 ```
+
+## Plans tenant compte des renommages {#renames}
+
+`--rename-similarity 50` active l'[alignement](doc:native-file-history#rename-merges).
+Répéter les options pour planifier et appliquer. Les choix structurels restent
+explicites ; `--text-merge` compose le texte compatible après alignement.

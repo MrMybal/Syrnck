@@ -184,6 +184,15 @@ struct NativeResolutionSet {
   // Bounded, duplicate-key rejecting decoder for editable JSON documents.
   static NativeResolutionSet decode(std::span<const std::uint8_t>);
 };
+struct NativeRenameOptions {
+  // Content similarity is a heuristic. Exact unambiguous matches are preferred;
+  // equal best scores remain explicit ambiguities rather than guessed ancestry.
+  std::uint32_t min_similarity = 50;
+  std::size_t max_candidates = 4096;
+  std::size_t max_work = 1000000;
+  std::size_t max_input_bytes = 64 * 1024 * 1024;
+  void validate() const;
+};
 struct NativeMergeOptions {
   std::optional<std::string> base{};
   bool allow_unrelated_histories = false;
@@ -200,6 +209,7 @@ struct NativeMergeOptions {
   // Preserve unresolved file content as deterministic sibling copies. Modified
   // files survive a concurrent deletion; namespace/topology conflicts still block.
   bool conflict_copies = false;
+  std::optional<NativeRenameOptions> renames{};
 };
 struct NativeRebaseResolutionSet {
   std::string head, base, onto;
@@ -214,6 +224,7 @@ struct NativeReplayOptions {
   std::optional<std::uint32_t> mainline{};
   std::optional<NativeResolutionSet> resolutions{};
   std::optional<TextDiffOptions> text_merge{};
+  std::optional<NativeRenameOptions> renames{};
 };
 struct NativeRebaseTodoStep {
   std::string source, action = "pick";
@@ -236,10 +247,12 @@ struct NativeRebaseOptions {
   std::optional<NativeRebaseTodo> todo{};
   // Freeze the committer clock across both candidate-generation passes.
   std::optional<std::uint64_t> committer_timestamp{};
+  std::optional<NativeRenameOptions> renames{};
 };
 struct NativeStageRebaseOptions {
   std::optional<NativeResolutionSet> resolutions{};
   std::optional<TextDiffOptions> text_merge{};
+  std::optional<NativeRenameOptions> renames{};
 };
 struct IngestOptions {
   // One worker keeps the sequential path; 2..64 enables the bounded pipeline.

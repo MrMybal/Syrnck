@@ -5,7 +5,7 @@ description: Guide : Fusion de branches.
 section: Versionnage
 order: 300
 parent: native-history
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Fusion native {#native-merge}
@@ -143,3 +143,9 @@ syrnck native checkout-recover --abort
 auto applied = store.merge_directory(project, "main", expected_id, source_id,
                                       "Merge feature", settings, operation);
 ```
+
+## Plans tenant compte des renommages {#renames}
+
+`--rename-similarity 50` active l'[alignement](doc:native-file-history#rename-merges).
+Répéter les options pour planifier et appliquer. Les choix structurels restent
+explicites ; `--text-merge` compose le texte compatible après alignement.

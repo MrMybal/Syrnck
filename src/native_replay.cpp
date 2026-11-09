@@ -5,7 +5,7 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
                                        std::string_view source_id, NativeReplayKind kind,
                                        std::optional<std::uint32_t> mainline, bool verify_objects,
                                        OperationOptions options, const NativeResolutionSet *resolutions,
-                                       const TextDiffOptions *text_limits) {
+                                       const TextDiffOptions *text_limits, const NativeRenameOptions *rename_limits) {
   throw_if_cancelled(options.stop);
   if (text_limits)
     text_limits->validate();
@@ -44,7 +44,10 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
     original.swap(incoming);
   const auto current = read_native_snapshot(store, head->second.id, options);
   NativeReplayPlan plan{head->second.id, {}, {}};
-  auto combined = merge_native_files(store, original, current, incoming, options, resolutions, text_limits);
+  std::optional<NativeRenameBatch> rename_batch;
+  if (rename_limits) rename_batch.emplace(store, *rename_limits);
+  auto combined = merge_native_files(store, original, current, incoming, options, resolutions, text_limits,
+                                     nullptr, nullptr, rename_batch ? &*rename_batch : nullptr);
   plan.files = std::move(combined.files);
   plan.generated = std::move(combined.generated);
   auto &conflicts = combined.conflicts;
@@ -74,6 +77,7 @@ NativeReplayPlan prepare_native_replay(const Store &store, const fs::path &direc
                      {"conflicts", std::move(conflicts)},
                      {"resolved", std::move(combined.resolved)},
                      {"text_merge", std::move(combined.text_merge)},
+                     {"renames", std::move(combined.renames)},
                      {"resolution_context", context.json()},
                      {"workspace", std::move(workspace)}};
   require(plan.report.dump().size() <= max_object_size, "native replay report exceeds 16 MiB");
@@ -100,7 +104,8 @@ Json Store::plan_replay_with_options(const fs::path &directory, std::string_view
                                      OperationOptions options) const {
   return prepare_native_replay(*this, directory, branch, source, kind, settings.mainline, verify_objects,
                                options, settings.resolutions ? &*settings.resolutions : nullptr,
-                               settings.text_merge ? &*settings.text_merge : nullptr)
+                               settings.text_merge ? &*settings.text_merge : nullptr,
+                               settings.renames ? &*settings.renames : nullptr)
       .report;
 }
 } // namespace syrnck

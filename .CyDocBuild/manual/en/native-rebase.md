@@ -5,7 +5,7 @@ description: Native linear rebase guide.
 section: Version control
 order: 310
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 # Native linear rebase {#native-linear-rebase}
@@ -36,7 +36,7 @@ parent is the baseline, the previous virtual result is current, and the original
 commit is incoming. Independent file/content/mode changes combine. Content,
 add/delete and portable namespace conflicts stop planning at the first conflicted
 commit. No later commit is treated as applied. Optional text composition is
-described below; rename detection remains future work.
+described below; [rename-aware replay](doc:native-file-history#rename-merges) is enabled with `--rename-similarity 50`.
 
 A merge inside the selected range is a `merge_in_range` blocker; a merge at the
 excluded boundary is allowed. Reaching a root before BASE gives

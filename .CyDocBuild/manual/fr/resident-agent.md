@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 ## Fonctionnement continu {#run}
@@ -220,3 +220,14 @@ Les captures répétées réutilisent les manifestes de session inchangés grâc
 empreintes fiables des fichiers locaux. Inventaire sélectionné et vérification
 de toute la fermeture restent requis. Le rapport de tick expose les compteurs
 sources `capture`. Voir [performance et repli](doc:performance#incremental-capture).
+
+## Renommages modifiés dans les fusions automatiques {#edited-renames}
+
+`agent run URL --bidirectional --rename-similarity 50` active la
+[fusion avec renommages](doc:native-file-history#rename-merges) après récupération
+de l'historique divergent. Les budgets `--rename-max-*` s'appliquent. Les sessions
+C++ règlent `NativeSyncOptions.renames` ; les fusions bidirectionnelles sont
+requises. Le texte compatible suit la destination ; les conflits structurels
+restent bloqués. Identité, signatures, branches et chemins gardent leurs
+contrôles. Un checkout préparé reprend sa cible figée même si le processus
+suivant omet l'option.

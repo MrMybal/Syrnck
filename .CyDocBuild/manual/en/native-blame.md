@@ -1,11 +1,11 @@
 ---
 id: native-blame
 title: Native line attribution
-description: Verified blame through merge parents and exact renames.
+description: Verified blame through merge parents and optional edited renames.
 section: Version control
 order: 251
 parent: native-history
-revision: 2
+revision: 3
 ---
 
 ## Attribute lines {#usage}
@@ -41,7 +41,7 @@ valid alignments. No whitespace normalization is applied.
 Unique exact-content renames are followed in either chunk representation, using
 the complete-file hash and size. Executable-mode changes do not create new text
 origins. Multiple possible removed sources or added destinations stop following;
-edited renames and copies are not inferred. `--no-follow` treats a newly named
+copies are not inferred. Edited renames require the explicit option below. `--no-follow` treats a newly named
 file as an addition. A binary parent cannot supply textual line origins.
 
 ## Budgets and errors {#limits}
@@ -64,3 +64,11 @@ and exit 1. An exhausted revision/input/file/line/work/trace/output budget retur
 Missing paths, corrupt/missing objects, invalid arguments and cancellation fail
 the command with no partial report. Progress and diagnostics use the selected
 interface language.
+
+## Follow an edited rename {#edited-renames}
+
+`--rename-similarity 50` or `NativeBlameOptions.renames` enables
+[bounded similarity](doc:native-file-history#edited-renames). Unchanged lines
+keep their earlier revision/path; edited lines originate at the later revision.
+Ambiguities stay at the new-name boundary. Similarity reads count in the global
+input budget. `rename_limit`/`input_limit` returns `limited` with empty `lines`/`commits`.
