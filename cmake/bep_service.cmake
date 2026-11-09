@@ -50,6 +50,6 @@ if(SYRNCK_BUILD_BEP_SERVICE)
       --cmake "${CMAKE_COMMAND}" --build "${CMAKE_CURRENT_BINARY_DIR}" --config "$<CONFIG>"
       --bindir "${CMAKE_INSTALL_BINDIR}" --licenses "${SYRNCK_LICENSE_DIR}/bep"
       --executable "syrnck-bep${CMAKE_EXECUTABLE_SUFFIX}")
-    set_tests_properties(bep_distribution PROPERTIES TIMEOUT 90)
+    set_tests_properties(bep_distribution PROPERTIES TIMEOUT 90 RESOURCE_LOCK install_distribution)
   endif()
 endif()

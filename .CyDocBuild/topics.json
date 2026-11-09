@@ -1225,6 +1225,7 @@
   "reference-tables#measured-cli-listing-windows-x64-4-november-2026": "reference-tables",
   "refs": "storage",
   "repair": "repair-copy",
+  "sdk": "integrations#cpp",
   "selective-retention#validation": "selective-retention",
   "serve": "server-access",
   "server-read-leases#validation": "server-read-leases",

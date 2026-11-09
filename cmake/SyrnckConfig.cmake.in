@@ -1,0 +1,17 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+if(@SYRNCK_BUILD_NETWORK@ AND NOT WIN32)
+  find_dependency(OpenSSL 3...<4 COMPONENTS SSL Crypto)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/SyrnckTargets.cmake")
+
+set(Syrnck_Core_FOUND TRUE)
+set(Syrnck_Git_FOUND TRUE)
+set(Syrnck_C_FOUND TRUE)
+set(Syrnck_Network_FOUND @SYRNCK_BUILD_NETWORK@)
+if(Syrnck_FIND_REQUIRED_Network AND NOT Syrnck_Network_FOUND)
+  set(Syrnck_NOT_FOUND_MESSAGE "This Syrnck SDK was built without network support")
+endif()
+check_required_components(Syrnck)

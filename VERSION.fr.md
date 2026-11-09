@@ -10,6 +10,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- SDK CMake natif déplaçable : cibles C++/C exportées, dépendances statiques distribuées et qualification de consommateurs installés indépendants.
 - Clés de stockage protégées par mot de passe : enveloppes Argon2id bornées, fichiers CLI exclusifs et changement de mot de passe, propriétaires natifs C/Go réutilisables et déverrouillage en cache pour l’agent résident ; fichier de clé BEP autonome authentifié au démarrage ; graines de signature protégées encore à réaliser.
 - Auteurs/signataires natifs locaux aux handles C/Go et préparation vérifiée des révisions neuves ; signatures exigées sans repli non signé, reprise des candidats signés retenus sans clé privée.
 - Staging BEP persistant facultatif : reprise des plages vérifiées après déconnexion/arrêt de processus, verrou OS distinct et retrait après rétention du catalogue ; le staging en clair demande une activation explicite.

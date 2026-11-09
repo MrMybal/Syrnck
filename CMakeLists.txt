@@ -25,12 +25,13 @@ if(SYRNCK_BUILD_CLI AND NOT SYRNCK_BUILD_NETWORK)
 endif()
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+include(GNUInstallDirs)
 add_subdirectory(third_party/blake3 EXCLUDE_FROM_ALL)
 add_library(monocypher STATIC third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c)
-target_include_directories(monocypher PUBLIC third_party/monocypher)
+target_include_directories(monocypher PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/monocypher>)
 add_library(utf8proc STATIC third_party/utf8proc/utf8proc.c)
 target_compile_definitions(utf8proc PUBLIC UTF8PROC_STATIC)
-target_include_directories(utf8proc PUBLIC third_party/utf8proc)
+target_include_directories(utf8proc PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/utf8proc>)
 include(cmake/dependencies.cmake)
 find_package(Threads REQUIRED)
 
@@ -50,7 +51,11 @@ target_sources(syrnck_core PRIVATE src/watch_directories.cpp)
 target_sources(syrnck_core PRIVATE src/native_blame.cpp)
 target_sources(syrnck_core PRIVATE src/native_context.cpp)
 target_sources(syrnck_core PRIVATE src/native_materialization.cpp)
-target_include_directories(syrnck_core PUBLIC include third_party PRIVATE src third_party/fastcdc)
+target_include_directories(syrnck_core PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE src third_party/fastcdc)
 target_link_libraries(syrnck_core PRIVATE BLAKE3::blake3 monocypher utf8proc libzstd_static Threads::Threads)
 if(WIN32)
   target_link_libraries(syrnck_core PRIVATE bcrypt)
@@ -70,11 +75,15 @@ if(SYRNCK_BUILD_NETWORK)
   endif()
 endif()
 add_library(syrnck_ffi SHARED src/ffi.cpp)
-target_include_directories(syrnck_ffi PUBLIC include)
+target_include_directories(syrnck_ffi PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_compile_definitions(syrnck_ffi PRIVATE SYRNCK_EXPORTS)
 target_link_libraries(syrnck_ffi PRIVATE syrnck_core)
 add_library(syrnck_ffi_static STATIC src/ffi.cpp)
-target_include_directories(syrnck_ffi_static PUBLIC include)
+target_include_directories(syrnck_ffi_static PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_compile_definitions(syrnck_ffi_static PUBLIC SYRNCK_STATIC)
 target_link_libraries(syrnck_ffi_static PRIVATE syrnck_core)
 if(SYRNCK_BUILD_CLI)
@@ -103,10 +112,8 @@ foreach(target ${SYRNCK_TARGETS})
     endif()
   endif()
 endforeach()
-include(GNUInstallDirs)
 include(cmake/documentation.cmake)
-install(TARGETS ${SYRNCK_TARGETS}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+include(cmake/sdk.cmake)
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES third_party/nlohmann/json.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nlohmann)
 set(SYRNCK_LICENSE_DIR "${CMAKE_INSTALL_DATADIR}/licenses/Syrnck")
@@ -141,6 +148,13 @@ endif()
 if(SYRNCK_BUILD_TESTS)
   enable_testing()
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME sdk_distribution COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/sdk_distribution.py"
+    --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"
+    --build "${CMAKE_CURRENT_BINARY_DIR}" --config "$<CONFIG>"
+    --generator "${CMAKE_GENERATOR}" --network "${SYRNCK_BUILD_NETWORK}"
+    --c-compiler "${CMAKE_C_COMPILER}" --cxx-compiler "${CMAKE_CXX_COMPILER}")
+  set_tests_properties(sdk_distribution PROPERTIES TIMEOUT 180 PROCESSORS 2 RESOURCE_LOCK install_distribution)
   # Keep complete scenarios together, with separately timed owned cleanup.
   # A metadata audit below checks the real CTest commands and every case union.
   function(syrnck_case_suite name target shards expected timeout)
