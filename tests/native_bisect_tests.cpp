@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include <syrnck/bisect.hpp>
 #include <iostream>
 using namespace native_test;
@@ -143,6 +144,7 @@ void corrupt(const fs::path &root) {
 }
 void limits(const fs::path &root) {
   Fixture f(root);
+  const auto prepared = std::chrono::steady_clock::now();
   std::string first, last;
   for (unsigned n = 0; n < 4098; ++n) {
     const auto id = f.revision(Json::object(), last.empty() ? Json::array() : Json::array({last}));
@@ -150,30 +152,30 @@ void limits(const fs::path &root) {
       first = id;
     last = id;
   }
+  std::cout << Json{{"phase","bisect-limit-fixture"},{"revisions",4098},
+      {"elapsed_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-prepared).count()}}.dump() << std::endl;
   const auto refs = f.store.refs();
   const auto objects = f.store.objects();
+  const auto checked = std::chrono::steady_clock::now();
   fails([&] { NativeBisect(f.store).start(first, last); });
+  std::cout << Json{{"phase","bisect-limit-check"},
+      {"elapsed_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-checked).count()}}.dump() << std::endl;
   require(f.store.refs() == refs && f.store.objects() == objects, "limited bisect wrote session metadata");
 }
 } // namespace
-int main() {
+int main(int argc,char **argv) {
   Temporary temporary;
   try {
-    for (bool encrypted : {false, true})
-      for (unsigned layout = 0; layout < 3; ++layout) {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc,argv));
+    for(bool encrypted:{false,true})for(unsigned layout=0;layout<3;++layout)
+      cases.add("histories-"+std::to_string(encrypted)+'-'+std::to_string(layout),[encrypted,layout](const fs::path &root) {
         std::optional<Key> key;
-        if (encrypted) {
-          key.emplace();
-          key->fill(67);
-        }
-        histories(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
-      }
-    skip_and_cancel(temporary.path / "skip");
-    corrupt(temporary.path / "corrupt");
-    limits(temporary.path / "limits");
-    std::cout << "Persistent merge-DAG bisection, skipped ambiguity, state fencing and retained history\n";
-  } catch (const std::exception &error) {
-    std::cerr << error.what() << '\n';
-    return 1;
-  }
+        if(encrypted){key.emplace();key->fill(67);}
+        histories(root,key,layout);
+      });
+    cases.add("skip-and-cancel",[](const fs::path &root){skip_and_cancel(root);});
+    cases.add("corrupt",[](const fs::path &root){corrupt(root);});
+    cases.add("limits",[](const fs::path &root){limits(root);});
+    return cases.run(temporary.path);
+  } catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

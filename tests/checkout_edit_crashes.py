@@ -3,19 +3,25 @@ import json
 import queue
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 import authorship_crashes as base
+from fixture_timing import case_directory
+
+
+def preservation_scenarios():
+    return [(encrypted, scope, transition) for encrypted in (False, True)
+            for scope in ("primary", "partial") for transition in (False, True)]
 
 
 class CheckoutEditCrashes(unittest.TestCase):
     command = base.AuthorshipCrashes.command
 
     def scenarios(self):
-        return [(encrypted, scope, transition) for encrypted in (False, True)
-                for scope in ("primary", "partial") for transition in (False, True)]
+        return preservation_scenarios()
 
     def kill_at(self, root, event):
         process = subprocess.Popen([base.PROBE, "run", str(root), event["phase"], event["kind"],
@@ -42,6 +48,7 @@ class CheckoutEditCrashes(unittest.TestCase):
 
     def test_all_durable_boundaries(self):
         verified = 0
+        count = 0
         with tempfile.TemporaryDirectory(prefix="syrnck-checkout-edits-") as temporary:
             parent = Path(temporary)
             for encrypted, scope, transition in base.SHARD.select(self.scenarios()):
@@ -55,8 +62,8 @@ class CheckoutEditCrashes(unittest.TestCase):
                 for phase in ("checkout-edit.prepared", "checkout-edit.moved", "checkout-edit.restored"):
                     self.assertTrue(any(row["phase"] == phase for row in events), phase)
                 for event in events:
-                    with self.subTest(scenario=label, event=event):
-                        root = parent / f"case-{verified}"
+                    with self.subTest(scenario=label, event=event), case_directory(parent, f"case-{count}") as root:
+                        count += 1
                         shutil.copytree(seed, root)
                         self.kill_at(root, event)
                         untouched = base.snapshot(root)
@@ -66,7 +73,7 @@ class CheckoutEditCrashes(unittest.TestCase):
                         self.assertTrue(result["verified"])
                         self.assertEqual(result["copies"], 2)
                         verified += 1
-            print(f"{verified}/{verified} preservation termination points resumed keylessly with two exact copies", flush=True)
+            print(f"{verified}/{count} preservation termination points resumed keylessly with two exact copies", flush=True)
 
     def test_namespace_relocation_boundaries(self):
         if (True, "partial", False) not in list(base.SHARD.select(self.scenarios())):
@@ -115,4 +122,7 @@ class CheckoutEditCrashes(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if "--list-scenarios" in sys.argv:
+        print(json.dumps({"version":1,"index":base.SHARD.index,"count":base.SHARD.count,"scenarios":base.SHARD.select(preservation_scenarios())}))
+    else:
+        unittest.main()

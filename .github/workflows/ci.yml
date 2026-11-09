@@ -47,6 +47,16 @@ jobs:
           SYRNCK_SYNCTHING_BINARY: ${{ github.workspace }}/build/qualification/syncthing${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: Install distribution
         run: cmake --install build --config Release --prefix dist
+      - name: Retain test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: syrnck-tests-${{ matrix.os }}
+          path: |
+            build/Testing/Temporary/**
+            build/test-case-plan-*.json
+            .scratch/stash-crash-failures/**
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: syrnck-${{ matrix.os }}
@@ -72,3 +82,13 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - name: Retain sanitizer test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: syrnck-tests-sanitizers
+          path: |
+            build-asan/Testing/Temporary/**
+            build-asan/test-case-plan-*.json
+            .scratch/stash-crash-failures/**
+          if-no-files-found: ignore

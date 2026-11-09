@@ -1,4 +1,5 @@
 #include "pack_storage.hpp"
+#include "test_cases.hpp"
 #include <iostream>
 #include <sstream>
 using namespace syrnck;
@@ -62,26 +63,16 @@ void pack_unchecked(const Store &store) {
     fs::remove(loose(store, key));
 }
 } // namespace
-int main() {
-  auto root = fs::temp_directory_path() / path_from_utf8("syrnck-audit-" + hex(random_bytes(16)));
-  fs::create_directory(root);
+int main(int argc,char **argv) {
+  const auto base = fs::temp_directory_path() / path_from_utf8("syrnck-audit-" + hex(random_bytes(16)));
   struct Cleanup {
     fs::path path;
-    ~Cleanup() {
-      std::error_code ec;
-      fs::remove_all(path, ec);
-    }
-  } cleanup{root};
-  std::size_t count = 0;
-  auto test = [&](std::string_view name, auto function) {
-    function();
-    ++count;
-    std::cout << "PASS " << name << '\n';
-  };
+    ~Cleanup(){std::error_code error;fs::remove_all(path,error);}
+  } cleanup{base};
   try {
-    test("loose, packed and mixed audits include unreachable graphs and count duplicates once", [&] {
-      for (bool encrypted : {false, true})
-        for (int layout = 0; layout < 3; ++layout) {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc,argv));
+    for(bool encrypted:{false,true})for(int layout=0;layout<3;++layout)
+      cases.add("layout-"+std::to_string(encrypted)+'-'+std::to_string(layout),[encrypted,layout](const fs::path &root){
           std::optional<Key> secret;
           if (encrypted) {
             secret.emplace();
@@ -115,11 +106,9 @@ int main() {
           store.remove_ref("main");
           check(store.fsck() == expected); // No retention roots must still audit every object.
           (void)c;
-        }
-    });
-    test("unreachable metadata still verifies file hashes and missing dependencies", [&] {
-      for (bool packed : {false, true})
-        for (int fault = 0; fault < 3; ++fault) {
+      });
+    for(bool packed:{false,true})for(int fault=0;fault<3;++fault)
+      cases.add("fault-"+std::to_string(packed)+'-'+std::to_string(fault),[packed,fault](const fs::path &root){
           Store store(root / ("fault-" + std::to_string(packed) + "-" + std::to_string(fault)), {}, true);
           auto manifest = ingest(store, 71);
           auto j = store.metadata(Kind::manifest, manifest.id);
@@ -136,9 +125,8 @@ int main() {
           auto before = files(store.root());
           fails([&] { store.fsck(); });
           check(files(store.root()) == before);
-        }
-    });
-    test("dangling references and invalid loose trees fail without modifying the store", [&] {
+      });
+    cases.add("inventory",[](const fs::path &root){
       Store store(root / "inventory", {}, true);
       check(store.fsck() == 0);
       auto manifest = ingest(store, 64);
@@ -159,8 +147,8 @@ int main() {
       store.reconstruct(manifest.id, output);
       check(store.fsck() == store.objects().size());
     });
-    test("both physical copies are checked and cache mode survives audit failures", [&] {
-      for (bool encrypted : {false, true}) {
+    for(bool encrypted:{false,true})
+      cases.add("duplicates-"+std::to_string(encrypted),[encrypted](const fs::path &root){
         std::optional<Key> secret;
         if (encrypted) {
           secret.emplace();
@@ -193,11 +181,7 @@ int main() {
         fails([&] { store.fsck(); });
         atomic_write(loose(store, object), envelope, true);
         check(store.fsck() == 1);
-      }
-    });
-    std::cout << count << " streaming audit scenarios passed\n";
-  } catch (const std::exception &error) {
-    std::cerr << "FAIL: " << error.what() << '\n';
-    return 1;
-  }
+      });
+    return cases.run(base);
+  } catch(const std::exception &error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}
 }

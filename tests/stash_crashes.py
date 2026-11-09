@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from crash_shard import CrashShard
+from fixture_timing import case_directory
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
 SPARSE = "--sparse" in sys.argv
@@ -22,16 +23,33 @@ ENV = {key: value for key, value in os.environ.items() if key.upper() not in
        ("SYRNCK_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 
 
+def scenarios():
+    return [(encrypted, action, operation) for encrypted in (False, True)
+            for action, operation in (("save", "apply"), ("save", "abort"),
+                                      ("apply", "apply"), ("apply", "abort"),
+                                      ("pop", "apply"), ("pop", "abort"))]
+
+
 def snapshot(root):
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in root.rglob("*") if p.is_file() and p.name != "store.lock"}
+
+
+def preserve_failure(root):
+    preserved = Path(__file__).resolve().parents[1] / ".scratch" / "stash-crash-failures" / str(time.time_ns())
+    try:
+        shutil.copytree(root, preserved, symlinks=True)
+        return str(preserved)
+    except OSError as error:
+        return "copy failed: " + str(error)
 
 
 class StashCrashes(unittest.TestCase):
     def command(self, executable, mode, root, *arguments):
         result = subprocess.run([executable, mode, str(root), *map(str, arguments)], env=ENV,
                                 capture_output=True, timeout=20)
-        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        if result.returncode:
+            self.fail(result.stderr.decode("utf-8", "replace") + "; fixture=" + preserve_failure(root))
         return json.loads(result.stdout) if result.stdout else None
 
     def test_all_observed_boundaries(self):
@@ -39,11 +57,7 @@ class StashCrashes(unittest.TestCase):
             parent = Path(temporary)
             count = 0
             verified = 0
-            scenarios = [(encrypted, action, operation) for encrypted in (False, True)
-                         for action, operation in (("save", "apply"), ("save", "abort"),
-                                                   ("apply", "apply"), ("apply", "abort"),
-                                                   ("pop", "apply"), ("pop", "abort"))]
-            for encrypted, action, operation in SHARD.select(scenarios):
+            for encrypted, action, operation in SHARD.select(scenarios()):
                 seed = parent / f"seed-{encrypted}-{action}-{operation}"
                 self.command(READER, "prepare", seed, "encrypted" if encrypted else "plain", action, operation,
                              *(["sparse"] if SPARSE else []))
@@ -58,8 +72,7 @@ class StashCrashes(unittest.TestCase):
                 self.assertEqual(len(coordinates), len(events))
                 self.assertTrue(any(e["phase"] == "checkout.cleaned" for e in events))
                 for event in events:
-                    with self.subTest(encrypted=encrypted, action=action, operation=operation, event=event):
-                        root = parent / f"case-{count}"
+                    with self.subTest(encrypted=encrypted, action=action, operation=operation, event=event), case_directory(parent, f"case-{count}") as root:
                         count += 1
                         shutil.copytree(seed, root)
                         self.command(READER, "bind", root)
@@ -73,14 +86,8 @@ class StashCrashes(unittest.TestCase):
                             line = lines.get(timeout=15)
                             if not line:
                                 _, error = process.communicate(timeout=8)
-                                preserved = Path(__file__).resolve().parents[1] / ".scratch" / "stash-crash-failures" / str(time.time_ns())
-                                try:
-                                    shutil.copytree(root, preserved)
-                                    saved = str(preserved)
-                                except OSError as copy_error:
-                                    saved = "copy failed: " + str(copy_error)
                                 self.fail("stash probe missed checkpoint: exit=" + str(process.returncode) +
-                                          "; " + error.decode("utf-8", "replace") + "; fixture=" + saved)
+                                          "; " + error.decode("utf-8", "replace") + "; fixture=" + preserve_failure(root))
                             self.assertEqual(json.loads(line), event)
                             self.assertIsNone(process.poll())
                             process.kill()
@@ -100,4 +107,7 @@ class StashCrashes(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if "--list-scenarios" in sys.argv:
+        print(json.dumps({"version":1,"index":SHARD.index,"count":SHARD.count,"scenarios":SHARD.select(scenarios())}))
+    else:
+        unittest.main()

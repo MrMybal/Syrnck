@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include "native_target.hpp"
 #include <syrnck/stash.hpp>
 #include <syrnck/workspace.hpp>
@@ -445,38 +446,33 @@ void io_checkpoint(std::string_view phase, const fs::path &target) {
     hook(phase, target);
 }
 } // namespace syrnck::testing
-int main() {
+int main(int argc,char **argv) {
   Temporary temporary;
   try {
-    for (bool encrypted : {false, true})
-      for (unsigned layout = 0; layout < 3; ++layout) {
-        std::optional<Key> key;
-        if (encrypted) {
-          key.emplace();
-          key->fill(76);
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc,argv));
+    for(bool encrypted:{false,true})for(unsigned layout=0;layout<3;++layout) {
+      for(bool sparse:{false,true})
+        cases.add(std::string(sparse?"partial-":"workflow-")+std::to_string(encrypted)+'-'+std::to_string(layout),
+            [encrypted,layout,sparse](const fs::path &root) {
+          std::optional<Key> key;
+          if(encrypted){key.emplace();key->fill(76);}
+          if(sparse)partial(root,key,layout);else workflow(root,key,layout);
+        });
+    }
+    cases.add("stale-index-text",[](const fs::path &root){stale_index_and_text(root);});
+    cases.add("scanner",[](const fs::path &root){scanner_bounds(root);});
+    cases.add("conflicts",[](const fs::path &root){history_and_conflict(root);});
+    cases.add("registry",[](const fs::path &root){default_untracked_and_registry(root);});
+    cases.add("empty-partial",[](const fs::path &root){empty_partial_detached(root);});
+    for(const bool sparse:{true,false})
+      for(const auto phase:{"checkout.prepared","checkout.evacuated","checkout.applied","checkout.committed"})
+        for(const bool abort:{false,true}) {
+          if(abort&&std::string_view(phase)=="checkout.committed")continue;
+          const auto label=std::string(sparse?"partial-":"full-")+std::string(phase).substr(9)+(abort?"-abort":"-resume");
+          cases.add(label,[sparse,phase,abort](const fs::path &root) {
+            if(sparse)partial(root,{},0,phase,abort);else recovery(root,phase,abort);
+          });
         }
-        workflow(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
-        partial(temporary.path / ("partial-" + std::to_string(encrypted) + '-' + std::to_string(layout)), key, layout);
-      }
-    stale_index_and_text(temporary.path / "stale-index-text");
-    scanner_bounds(temporary.path / "scanner");
-    history_and_conflict(temporary.path / "conflicts");
-    default_untracked_and_registry(temporary.path / "registry");
-    empty_partial_detached(temporary.path / "empty-partial");
-    for (const auto phase : {"checkout.prepared", "checkout.evacuated", "checkout.applied", "checkout.committed"}) {
-      partial(temporary.path / ("partial-" + std::string(phase) + "-resume"), {}, 0, phase);
-      if (phase != std::string_view("checkout.committed"))
-        partial(temporary.path / ("partial-" + std::string(phase) + "-abort"), {}, 0, phase, true);
-    }
-    for (const auto phase :
-         {"checkout.prepared", "checkout.evacuated", "checkout.applied", "checkout.committed"}) {
-      recovery(temporary.path / (std::string(phase) + "-resume"), phase, false);
-      if (phase != std::string_view("checkout.committed"))
-        recovery(temporary.path / (std::string(phase) + "-abort"), phase, true);
-    }
-    std::cout << "Native stash tests passed\n";
-  } catch (const std::exception &error) {
-    std::cerr << error.what() << '\n';
-    return 1;
-  }
+    return cases.run(temporary.path);
+  } catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

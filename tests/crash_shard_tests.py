@@ -9,7 +9,7 @@ class CrashShardTests(unittest.TestCase):
     def test_every_case_is_selected_once_in_original_order(self):
         for length in (0, 1, 2, 3, 7, 8, 9, 127, 1025, 4096):
             cases = list(range(length))
-            for count in (1, 2, 4, 8, 64):
+            for count in (1, 2, 4, 8, 9, 12, 64):
                 with self.subTest(length=length, count=count):
                     shards = [CrashShard(f"{index}/{count}").select(cases) for index in range(count)]
                     self.assertEqual([case for shard in shards for case in shard], cases)

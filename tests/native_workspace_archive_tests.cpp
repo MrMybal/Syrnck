@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include "native_target.hpp"
 #include "native_workspace_archive.hpp"
 #include <syrnck/workspace.hpp>
@@ -255,21 +256,25 @@ void foreign_bindings(const fs::path &base) {
   }
 }
 }
-int main() {
+int main(int argc, char **argv) {
   Temporary temporary;
   try {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc,argv));
     for (unsigned physical = 0; physical < 3; ++physical)
-      for (bool encrypted : {false, true})
-        for (bool partial : {false, true})
-          for (bool detached : {false, true}) {
-            std::optional<Key> key;
-            if (encrypted) { key.emplace(); key->fill(81); }
-            scenario(temporary.path / (std::to_string(physical) + '-' + std::to_string(encrypted) + '-' +
-                std::to_string(partial) + '-' + std::to_string(detached)), key, physical, partial, detached);
+      for (bool encrypted : {false,true})
+        for (bool partial : {false,true})
+          for (bool detached : {false,true}) {
+            const auto name = "archive-"+std::to_string(physical)+'-'+std::to_string(encrypted)+'-'+
+                std::to_string(partial)+'-'+std::to_string(detached);
+            cases.add(name,[physical,encrypted,partial,detached](const fs::path &root) {
+              std::optional<Key> key;
+              if(encrypted){key.emplace();key->fill(81);}
+              scenario(root,key,physical,partial,detached);
+            });
           }
-    refusals(temporary.path / "refusals");
-    stale_index(temporary.path / "stale-index");
-    foreign_bindings(temporary.path / "foreign-bindings");
-    std::cout << "Workspace archives preserve working bytes, frozen indexes and complete retained roots\n";
-  } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
+    cases.add("refusals",[](const fs::path &root){refusals(root);});
+    cases.add("stale-index",[](const fs::path &root){stale_index(root);});
+    cases.add("foreign-bindings",[](const fs::path &root){foreign_bindings(root);});
+    return cases.run(temporary.path);
+  } catch (const std::exception &error) {std::cerr<<error.what()<<'\n';return 1;}
 }

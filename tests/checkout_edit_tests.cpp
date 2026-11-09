@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include <syrnck/backup.hpp>
 #include <iostream>
 using namespace native_test;
@@ -122,7 +123,7 @@ void scenario(const fs::path &root, bool encrypted, const std::string &scope, un
 }
 int main(int argc, char **argv) {
  try {
-  if (argc != 1) {
+  if (argc > 1 && std::string_view(argv[1]) == "interrupt-folder") {
     require(argc == 9 && std::string_view(argv[1]) == "interrupt-folder", "invalid checkout edit test helper arguments");
     const auto directory=path_from_utf8(argv[2]), storage=path_from_utf8(argv[3]);
     const std::string branch=argv[4], candidate=argv[5], service=argv[6], relative=argv[7];
@@ -142,13 +143,12 @@ int main(int argc, char **argv) {
     throw Error("test helper checkout accepted concurrent edit");
   }
   Temporary temporary;
-  unsigned count=0;
+  fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc,argv));
   for(bool encrypted:{false,true})for(const auto *scope:{"primary","linked","partial","detached","partial-detached"})
-   for(unsigned transition=0;transition!=4;++transition)for(unsigned phase=0;phase!=3;++phase) {
-    const auto label=std::to_string(encrypted)+'-'+scope+'-'+std::to_string(transition)+'-'+std::to_string(phase);
-    try{scenario(temporary.path/label,encrypted,scope,transition,phase);++count;}
-    catch(const std::exception &error){throw Error(label+": "+error.what());}
-   }
-  std::cout<<count<<" signed keyless owned edit preservation scenarios passed\n";
- } catch(const std::exception &error) {std::cerr<<error.what()<<'\n';return 1;}
+    for(unsigned transition=0;transition!=4;++transition)for(unsigned phase=0;phase!=3;++phase) {
+      const auto label=std::to_string(encrypted)+'-'+scope+'-'+std::to_string(transition)+'-'+std::to_string(phase);
+      cases.add(label,[encrypted,scope,transition,phase](const fs::path &root){scenario(root,encrypted,scope,transition,phase);});
+    }
+  return cases.run(temporary.path);
+ } catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }
