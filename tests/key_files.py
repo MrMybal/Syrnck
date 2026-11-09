@@ -28,6 +28,17 @@ class KeyFiles(unittest.TestCase):
         self.assertNotIn(b"ab" * 32, result.stdout + result.stderr)
         return result
 
+    def test_empty_key_environment_is_rejected_with_the_specific_diagnostic(self):
+        self.env["SYRNCK_KEY"] = ""
+        result = self.cli("init", "--encrypted", ok=False)
+        self.assertIn(b"SYRNCK_KEY must encode exactly 32 bytes", result.stderr)
+        self.assertFalse((self.root / ".syrnck").exists())
+        self.env.pop("SYRNCK_KEY")
+        self.env["SYRNCK_KEY_FILE"] = ""
+        result = self.cli("init", "--encrypted", ok=False)
+        self.assertIn(b"SYRNCK_KEY_FILE must name a protected key file", result.stderr)
+        self.assertFalse((self.root / ".syrnck").exists())
+
     def test_create_unlock_rewrap_preserves_store_and_old_envelope(self):
         key_file = self.root / "clé protégée.bin"
         result=json.loads(self.cli("key","create",key_file,"--memory-mib","65","--passes","4").stdout)

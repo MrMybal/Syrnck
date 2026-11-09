@@ -33,8 +33,10 @@ std::optional<Bytes> environment_value(const std::string &name, std::size_t limi
   struct WipeWide { std::vector<wchar_t> &value; ~WipeWide() {
     wipe_secret({reinterpret_cast<std::uint8_t *>(value.data()), value.size() * sizeof(wchar_t)});
   } } wipe_wide{wide};
+  SetLastError(ERROR_SUCCESS);
   const auto length = GetEnvironmentVariableW(wide_name.c_str(), wide.data(), required);
-  require(length && length < required, "cannot read key environment");
+  require(length < required && (length || GetLastError() == ERROR_SUCCESS), "cannot read key environment");
+  if (!length) return Bytes{};
   const auto size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), static_cast<int>(length), nullptr, 0, nullptr, nullptr);
   require(size > 0 && static_cast<std::size_t>(size) <= limit, "key environment value exceeds its limit");
   Bytes result(static_cast<std::size_t>(size));
