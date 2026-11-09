@@ -1189,3 +1189,11 @@ SYRNCK_MESSAGE("owned checkout edit recurred; inspect retained conflict copy", "
 SYRNCK_MESSAGE("owned checkout conflict copy path already exists", "le chemin de copie de conflit du checkout existe déjà")
 
 SYRNCK_MESSAGE("owned checkout edits keep changing; retry recovery", "les éditions de checkout continuent à changer ; réessayer la reprise")
+SYRNCK_MESSAGE("key password must contain 1..4096 bytes", "le mot de passe de clé doit contenir de 1 à 4096 octets")
+SYRNCK_MESSAGE("password KDF memory must be 64..256 whole MiB", "la mémoire de dérivation du mot de passe doit être de 64 à 256 Mio entiers")
+SYRNCK_MESSAGE("password KDF passes must be in 3..10", "le nombre de passes de dérivation du mot de passe doit être compris entre 3 et 10")
+SYRNCK_MESSAGE("secret key must contain exactly 32 bytes", "la clé secrète doit contenir exactement 32 octets")
+SYRNCK_MESSAGE("password KDF salt must contain exactly 16 bytes", "le sel de dérivation du mot de passe doit contenir exactement 16 octets")
+SYRNCK_MESSAGE("secret key has been moved", "la clé secrète a été déplacée")
+SYRNCK_MESSAGE("invalid protected key envelope", "enveloppe de clé protégée invalide")
+SYRNCK_MESSAGE("protected key authentication failed", "échec d’authentification de la clé protégée")

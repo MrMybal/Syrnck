@@ -10,6 +10,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- C++ password-protected keys: bounded Argon2id derivation, authenticated envelopes and password changes preserving the underlying key and KDF costs; CLI/C/Go providers remain unfinished.
 - C/Go handle-local native authors/signers and verified fresh revision preparation; required signatures block unsigned fallback while retained signed candidates recover without a private key.
 - Optional persistent BEP staging resumes verified ranges after connection/process loss, with an independent OS lease and completed-staging cleanup after catalog retention; plaintext staging requires explicit opt-in.
 - Optional standalone `syrnck-bep` with strict local configuration, EN/FR help, explicit device pinning, offline capture, process-restart qualification and packaged runtime source/license notices.

@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 22
+sourceRevision: 23
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -21,7 +21,7 @@ L’adaptateur Syncthing traite index/requêtes/réponses de blocs de fichiers o
 
 ## Sécurité, rétention et récupération {#security}
 
-Les objets peuvent être chiffrés au repos, avec clés indépendantes pour sauvegardes/restaurations. Les serveurs de confiance reçoivent les objets en clair dans le transport sécurisé. Chiffrement de bout en bout, dérivation de mot de passe, coffres système, rotation/révocation distribuée, réparation automatique de répliques et GC distribué restent à développer.
+Les objets peuvent être chiffrés au repos, avec clés indépendantes pour sauvegardes/restaurations. L’[API C++ de protection des clés par mot de passe](doc:api-password-keys) fournit une dérivation Argon2id bornée et des enveloppes de clés authentifiées avec changement de mot de passe. Les fournisseurs de clés par mot de passe CLI/C/Go et la persistance des enveloppes restent à réaliser. Les serveurs de confiance reçoivent les objets en clair dans le transport sécurisé. Chiffrement de bout en bout, coffres système, rotation/révocation distribuée, réparation automatique de répliques et GC distribué restent inachevés.
 
 La rétention est explicite. Les archives conservent les versions tant que leurs racines restent présentes ; une sauvegarde vérifiée peut protéger le retrait manuel, sans politique automatique par âge/release. Arrêt de processus et panne d’alimentation sont des garanties différentes. Aucune opération n’établit une sûreté universelle après coupure électrique, sur stockage réseau ou face à un écrivain externe hostile.
 

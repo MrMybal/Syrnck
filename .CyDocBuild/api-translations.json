@@ -4,5 +4,8 @@
   },
   "store": {
     "englishSha256": "14995bd6ba7df6651831f0ff47edfe60fc672269d7f0087494b9371ca7e62b74"
+  },
+  "password-keys": {
+    "englishSha256": "5ff3391de31decc4e59c22d879da84e566d7fb07ffc925e6f1fd62ac532bc21a"
   }
 }

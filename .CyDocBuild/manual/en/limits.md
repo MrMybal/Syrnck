@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 22
+revision: 23
 ---
 
 ## Workspace and versioning {#workspace}
@@ -21,7 +21,7 @@ The Syncthing adapter handles regular-file block indexes/requests/responses and 
 
 ## Security, retention and recovery {#security}
 
-Objects can be encrypted at rest, with separately keyed backups/restores. Trusted servers receive plaintext objects over the secured transport. End-to-end encryption, password-based keys, system key vaults, distributed rotation/revocation, automatic replica repair and distributed GC remain separate work.
+Objects can be encrypted at rest, with separately keyed backups/restores. The C++ [password-protected key API](doc:api-password-keys) provides bounded Argon2id derivation and authenticated key envelopes with password changes. CLI/C/Go password-key providers and envelope persistence remain separate work. Trusted servers receive plaintext objects over the secured transport. End-to-end encryption, system key vaults, distributed rotation/revocation, automatic replica repair and distributed GC remain unfinished.
 
 Retention is explicit. Archives preserve versions until their protecting roots are retired; a verified backup can protect manual retirement, but automatic age/release policies are not implemented. Process interruption and power-loss durability are different guarantees. No operation establishes universal power-loss, network-filesystem or hostile external-writer safety.
 
