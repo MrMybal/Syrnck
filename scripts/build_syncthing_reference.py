@@ -42,6 +42,12 @@ env.update(GOTOOLCHAIN="local", GOWORK="off", GOPATH=str(root / ".tools/go-path"
 adapter_root = root / "bindings/syncthing"
 adapter_before = {name: (adapter_root / name).read_bytes() for name in ("go.mod", "go.sum")}
 adapter_env = dict(env, CGO_ENABLED="0" if os.name == "nt" else "1")
+# go mod verify traverses the complete module graph, including requirements
+# excluded by the current platform. Prime that graph while downloads are
+# authorized; the standalone packaging build deliberately runs offline.
+subprocess.run([go, "mod", "download"], cwd=adapter_root, env=adapter_env, check=True)
+subprocess.run([go, "mod", "verify"], cwd=adapter_root, env=adapter_env, check=True,
+               stdout=subprocess.DEVNULL)
 subprocess.run([go, "list", "-mod=readonly", "-buildvcs=false", "-deps", "-test", "./..."],
                cwd=adapter_root, env=adapter_env, check=True, stdout=subprocess.DEVNULL)
 if any((adapter_root / name).read_bytes() != content for name, content in adapter_before.items()):

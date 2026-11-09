@@ -69,6 +69,9 @@ def main():
     command = "./cmd/syrnck-bep"
     def capture(*arguments):
         return subprocess.check_output([go, *arguments], cwd=module, env=env, text=True, encoding="utf-8")
+    # Verification needs graph metadata for every required module, including
+    # platform-excluded dependencies. Only --download permits fetching it.
+    subprocess.run([go, "mod", "download"], cwd=module, env=env, check=True)
     packages = documents(capture("list", "-mod=readonly", "-buildvcs=false", "-deps", "-json", command))
     runtime = {}
     for package in packages:
