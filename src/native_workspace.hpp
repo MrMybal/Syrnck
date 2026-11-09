@@ -52,6 +52,10 @@ std::string visit_native_scope(const fs::path &directory, const Store &store, st
 std::optional<NativeFile> inspect_native_file(const fs::path &directory, const Store &store,
                                               std::string_view path, OperationOptions);
 Json ingest_native_file(const Store &, const NativeFile &, IngestOptions, std::string_view changed_message);
+// Shared conservative publication path. Selection, author/signature, complete
+// closure verification and exact reference/materialization guards stay here.
+std::string commit_native_directory(const Store &, const fs::path &, std::string_view branch,
+    std::string_view message, IngestOptions, const std::function<Json(const NativeFile &)> &);
 Json compare_native_snapshots(const Store &, const std::optional<std::string> &source,
                               const std::optional<std::string> &target, OperationOptions);
 Json compare_native_file_maps(const NativeSnapshot &, const NativeSnapshot &, OperationOptions);

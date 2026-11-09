@@ -59,6 +59,27 @@ class ResidentAgent(unittest.TestCase):
     save_policy = signed.ServerSignatures.save_policy
     metadata = signed.ServerSignatures.metadata
 
+    def test_repeated_capture_reuses_assets_and_complete_observation(self):
+        self.write("Content/large.bin", b"a" * (8 * 1024 * 1024))
+        self.write("Source/code.cpp", b"first\n")
+        with self.serving(strict=True), self.agent() as agent:
+            first = agent.state("pushed")
+            self.assertEqual(first["capture"]["reused_files"], 0)
+            self.assertGreaterEqual(first["capture"]["source_bytes_read"], 8 * 1024 * 1024)
+            agent.state("synced", working_clean=True)
+            time.sleep(3.1)
+            self.write("Source/code.cpp", b"second\n")
+            second = agent.state("pushed")
+            self.assertNotEqual(first["local_revision"], second["local_revision"])
+            capture = second["capture"]
+            self.assertEqual(capture["source_bytes_read"] + capture["source_bytes_reused"], 8 * 1024 * 1024 + 7)
+            if capture["reused_files"]:
+                self.assertEqual(capture["source_bytes_read"], 7)
+                self.assertEqual(capture["source_bytes_reused"], 8 * 1024 * 1024)
+            self.assertFalse(second["full_scan"], "capture forced a redundant complete observer audit")
+            agent.state("synced", working_clean=True)
+        self.cmd("fsck")
+
     def cmd(self, *arguments, actor=None, store=None, key=False, ok=True):
         env = dict(self.env)
         if actor:

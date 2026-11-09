@@ -112,17 +112,40 @@ func (w *Workspace) Capture(store *Store, expected NativeExpectation, message st
 // authored-commit and detached-HEAD rules. It refuses stale target/revision state
 // and existing checkout/staging work. Any error may follow publication: reload.
 func (w *Workspace) CaptureContext(ctx context.Context, store *Store, expected NativeExpectation, message string) (string, error) {
+	result, err := w.CaptureReportContext(ctx, store, expected, message)
+	return result.Revision, err
+}
+
+// CaptureReport distinguishes working-file reads from immutable manifest reuse.
+// These counters do not include object closure verification or metadata I/O.
+type CaptureReport struct {
+	Version  uint32       `json:"version"`
+	Revision string       `json:"revision"`
+	Capture  CaptureStats `json:"capture"`
+}
+
+// CaptureStats counts source content, independently of immutable object I/O.
+type CaptureStats struct {
+	Version           uint32 `json:"version"`
+	IngestedFiles     uint64 `json:"ingested_files"`
+	ReusedFiles       uint64 `json:"reused_files"`
+	SourceBytesRead   uint64 `json:"source_bytes_read"`
+	SourceBytesReused uint64 `json:"source_bytes_reused"`
+}
+
+// CaptureReportContext uses the same guarded publication as CaptureContext and
+// exposes source I/O counters. Reuse is local to this Workspace handle, never a
+// persisted advisory index. A restart or an explicit invalidation clears it.
+func (w *Workspace) CaptureReportContext(ctx context.Context, store *Store, expected NativeExpectation, message string) (CaptureReport, error) {
 	data, err := w.nativeCall(ctx, store, 1, expected, "", "", message)
 	if err != nil {
-		return "", err
+		return CaptureReport{}, err
 	}
-	var result struct {
-		Revision string `json:"revision"`
-	}
+	var result CaptureReport
 	if err := json.Unmarshal(data, &result); err != nil {
-		return "", err
+		return CaptureReport{}, err
 	}
-	return result.Revision, nil
+	return result, nil
 }
 
 func (w *Workspace) PlanCheckout(store *Store, expected NativeExpectation, candidate string) (json.RawMessage, error) {

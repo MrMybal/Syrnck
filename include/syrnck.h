@@ -53,12 +53,15 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * Capture and checkout require the exact SyrnckNativeExpected target/revision/policy object.
  * Capture retains local working changes; plan is read-only; checkout_owned uses the existing native
  * journal and refuses dirty work. recover_owned requires the exact persisted owner and candidate.
+ * Capture reports source reads/manifest reuse; session-only strong stamps never trust status indexes.
+ * Full object closure verification remains required; see [capture](doc:performance#incremental-capture).
  * checkout_status_json_ex reads an exact core journal/receipt without applying it. Completed receipts
  * prove past application with owner/source/target evidence; subsequent local edits remain separate.
  * recover_owned_preserving_json_ex explicitly archives regular-file edits and creates exclusive
  * conflict copies before ordinary strict recovery. Default recover_owned stays strict.
  * A session is bound to one Store path, registered context and working directory. Mutations
- * invalidate observation continuity. On error reload state: publication may already have completed.
+ * invalidate observation continuity; successful capture seeds its complete inventory instead.
+ * On error reload state: publication may already have completed.
  * See [native actions](doc:workspace-abi#native-workspace-actions) for recovery and locking contracts.
  *
  * ## Observation and cancellation {#operations}
@@ -105,12 +108,15 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * Capture et checkout exigent la cible/révision/objet de sélection exacts dans SyrnckNativeExpected.
  * Capture conserve le travail local ; plan est consultatif ; checkout_owned utilise le journal
  * natif et refuse le travail modifié. recover_owned exige propriétaire et candidat persistés exacts.
+ * Capture expose lectures/réutilisations ; les empreintes de session ne prennent pas l’index pour preuve.
+ * La fermeture complète reste vérifiée ; voir [capture](doc:performance#incremental-capture).
  * checkout_status_json_ex lit journal/reçu exact par le cœur sans application. Un reçu terminé prouve
  * l’application passée par propriétaire/source/cible ; une édition ultérieure reste du travail séparé.
  * recover_owned_preserving_json_ex archive explicitement les éditions ordinaires et crée des copies
  * exclusives avant reprise stricte ; recover_owned par défaut garde ses contrôles stricts.
  * Une session est liée à un chemin de Store, contexte enregistré et dossier de travail. Les mutations
- * invalident la continuité d’observation. En erreur, recharger : la publication peut être terminée.
+ * invalident la continuité ; une capture réussie initialise plutôt l’inventaire complet.
+ * En erreur, recharger : la publication peut être terminée.
  * Voir les [actions natives](doc:workspace-abi#native-workspace-actions) pour reprise et verrouillage.
  *
  * ## Observation et annulation {#operations}
@@ -338,7 +344,11 @@ SYRNCK_API int syrnck_workspace_checkout_status_json_ex(SyrnckWorkspace *, Syrnc
     const char *transaction, const SyrnckOperation *, char **out, size_t *length);
 /* Capture selected working files into a retained native revision. Existing
  * native ignore/partial/detached/authorship rules apply. Message <=64 KiB.
- * Output {version,revision}; existing pending/staging work is never taken over. */
+ * Output {version,revision,capture:{version,ingested_files,reused_files,
+ * source_bytes_read,source_bytes_reused}}. Counters describe working-file I/O;
+ * complete object closure verification still runs. Reuse is session-local,
+ * requires unchanged strong local filesystem stamps and never trusts a status
+ * index. Invalidation/failure discards it. Pending/staging work is never taken over. */
 SYRNCK_API int syrnck_workspace_capture_json_ex(SyrnckWorkspace *, SyrnckStore *,
     const SyrnckNativeExpected *, const char *message, const SyrnckOperation *, char **out, size_t *length);
 /* Plan verifies the candidate closure without changing working files or refs.

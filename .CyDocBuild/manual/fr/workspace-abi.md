@@ -5,7 +5,7 @@ description: Guide : Observation embarquée en C et Go.
 section: API
 order: 640
 parent: integrations
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 # Observation embarquée en C et Go {#embedded-workspace-observation-through-c-and-go}
@@ -199,3 +199,11 @@ reste stricte. Go expose `RecoverOwnedPreserving` et
 `preserved_edits` : chemin source, chemin de copie et ID de révision archivée.
 En erreur de publication, relire état natif et descripteurs conservés. Voir la
 [politique et ses limites](doc:syncthing#active-checkout-edits).
+
+## Réutilisation des captures de session {#incremental-capture}
+
+Les captures répétées réutilisent leurs manifestes à empreintes locales fiables
+inchangées, avec inventaire complet et vérification de toute la fermeture. Le
+JSON ajoute les compteurs sources. Redémarrage, invalidation et échec natif
+effacent cette preuve ; l’index jetable de statut ne la remplace jamais. Voir
+[capture et repli](doc:performance#incremental-capture).

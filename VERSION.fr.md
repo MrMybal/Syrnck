@@ -10,6 +10,8 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Réutilisation des manifestes de session pour les captures des agents et C/Go, avec empreintes fiables, inventaire/vérification complète et compteurs sources séparés.
+
 - La reprise explicite à propriétaire conserve les éditions ordinaires pendant le checkout par archives natives et copies exclusives, sans réécrire les cibles entrantes signées.
 
 - Capture, planification de checkout et reprise native contrôlée exposées en C/Go, avec attentes exactes de révision/sélection et liaison Store/contexte.

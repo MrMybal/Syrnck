@@ -1,6 +1,31 @@
 #pragma once
 #include <syrnck/core.hpp>
 namespace syrnck {
+class WorkspaceObservation;
+// Session-local manifest reuse for repeated captures. Each capture enumerates
+// the complete selected tree; only files ingested by this session, still in its
+// last published revision, and protected by unchanged strong local filesystem
+// stamps can avoid source reads. Persistent advisory indexes are never trusted.
+// Unsupported filesystems, recent/actively written files and invalidation use
+// ordinary ingestion. Publication still verifies the complete object closure.
+// Single caller; Store handles may be reopened between calls.
+class WorkspaceCapture {
+public:
+  WorkspaceCapture(const fs::path &directory, const fs::path &store);
+  ~WorkspaceCapture();
+  WorkspaceCapture(WorkspaceCapture &&) noexcept;
+  WorkspaceCapture &operator=(WorkspaceCapture &&) noexcept;
+  WorkspaceCapture(const WorkspaceCapture &) = delete;
+  WorkspaceCapture &operator=(const WorkspaceCapture &) = delete;
+  // An optional bound observer receives the completely captured inventory
+  // after publication, avoiding a redundant full source audit on the next tick.
+  Json capture(const Store &, std::string_view branch, std::string_view message, IngestOptions,
+               WorkspaceObservation * = nullptr);
+  void invalidate();
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
 // A hard reset captures tracked work, staged data and obstructing untracked
 // regular files before replacing them. Unrelated untracked files stay in place.
 // Application is fenced by the exact read-only plan and original branch head.

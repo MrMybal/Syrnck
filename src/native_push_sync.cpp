@@ -1,6 +1,7 @@
 #include "native_context.hpp"
 #include "native_workspace.hpp"
 #include <syrnck/native_sync.hpp>
+#include <syrnck/workspace.hpp>
 namespace syrnck::net {
 namespace {
 std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
@@ -72,13 +73,14 @@ struct NativePushSync::Impl {
   std::string workspace, target;
   NativePushSyncOptions settings;
   WorkspaceObservation observation;
+  WorkspaceCapture capture;
   std::optional<ObjectKey> observed_head;
   std::optional<std::string> endpoint;
   bool rescan = true;
   std::optional<bool> clean;
   Impl(const Store &store, const fs::path &path, NativePushSyncOptions options)
       : storage(fs::canonical(store.root())), directory(fs::canonical(path)), workspace(store.native_workspace_name()),
-        target(store.native_target()), settings(std::move(options)), observation(directory, storage) {
+        target(store.native_target()), settings(std::move(options)), observation(directory, storage), capture(directory, storage) {
     validate_ref(settings.remote_branch);
     require(settings.remote_branch.find('/') == settings.remote_branch.npos && settings.remote_branch.size() <= 64,
         "native remote names must be single components of at most 64 bytes");
@@ -93,7 +95,7 @@ NativePushSync::NativePushSync(const Store &store, const fs::path &directory, Na
 NativePushSync::~NativePushSync() = default;
 NativePushSync::NativePushSync(NativePushSync &&) noexcept = default;
 NativePushSync &NativePushSync::operator=(NativePushSync &&) noexcept = default;
-void NativePushSync::invalidate() { impl_->rescan = true; impl_->observation.invalidate(); }
+void NativePushSync::invalidate() { impl_->rescan = true; impl_->observation.invalidate(); impl_->capture.invalidate(); }
 Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceChanges &hints,
                          OperationOptions options, TransferOptions transfer) {
   auto &state = *impl_;
@@ -176,11 +178,13 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
     result["full_scan"] = status["observation"]["full_scan"];
     if (!*state.clean && state.settings.capture_changes) {
       auto ingest = store.settings().ingest_options(); ingest.stop = options.stop; ingest.progress = options.progress;
-      head = ObjectKey{Kind::revision, store.commit_directory(state.directory, state.target,
-          "Syrnck automatic workspace snapshot", ingest)};
+      const auto captured = state.capture.capture(store, state.target, "Syrnck automatic workspace snapshot", ingest,
+                                                &state.observation);
+      head = ObjectKey{Kind::revision, captured.at("revision").get<std::string>()};
+      result["capture"] = captured.at("capture");
       result["committed"] = true; result["local_revision"] = head->id;
-      state.clean.reset(); result["working_clean"] = Json{};
-      state.observed_head = head; state.observation.invalidate(); state.rescan = true;
+      state.clean = true; result["working_clean"] = true;
+      state.observed_head = head; state.rescan = false;
     }
   }
   if (head || state.settings.receive_changes) store.require_features({"resident-sync-v1"}, options);

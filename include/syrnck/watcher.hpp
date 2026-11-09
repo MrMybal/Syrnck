@@ -55,6 +55,9 @@ public:
                         OperationOptions = {});
   void invalidate();
 private:
+  friend class WorkspaceCapture;
+  // Only a successfully published complete capture may seed observation.
+  void adopt_capture(const Store &, const fs::path &, std::string_view revision);
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

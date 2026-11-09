@@ -5,6 +5,7 @@
 #include <syrnck.h>
 #include <syrnck/core.hpp>
 #include <syrnck/watcher.hpp>
+#include <syrnck/workspace.hpp>
 #include "native_workspace.hpp"
 struct SyrnckStore {
   syrnck::Store store;
@@ -17,14 +18,16 @@ struct SyrnckWorkspace {
   std::string context;
   syrnck::WorkspaceWatcher watcher;
   syrnck::WorkspaceObservation observation;
+  syrnck::WorkspaceCapture capture;
   syrnck::WorkspaceChanges pending;
   std::size_t max_paths;
   SyrnckWorkspace(const syrnck::fs::path &root, const syrnck::fs::path &storage,
                   syrnck::WorkspaceWatchOptions options, std::stop_token stop, std::string name = {})
       : directory(syrnck::fs::canonical(root)), storage(syrnck::fs::canonical(storage)), context(std::move(name)), watcher(directory, storage, options, stop),
-        observation(directory, storage), max_paths(options.max_paths) { invalidate(); }
+        observation(directory, storage), capture(directory, storage), max_paths(options.max_paths) { invalidate(); }
   void invalidate() {
     observation.invalidate();
+    capture.invalidate();
     pending.full_scan = true;
   }
 };
@@ -615,11 +618,15 @@ int syrnck_workspace_capture_json_ex(SyrnckWorkspace *workspace, SyrnckStore *ha
     syrnck::require(std::strlen(text) <= 65536, "native capture message exceeds 64 KiB");
     auto ingest = store.settings().ingest_options();
     ingest.stop = options.stop; ingest.progress = options.progress;
-    session.invalidate();
-    const auto id = store.commit_directory(session.directory, target, text, ingest);
+    // Consume pre-capture hints before the complete inventory; notifications
+    // arriving during/after capture remain queued for the next observation.
+    session.pending.merge(session.watcher.wait(std::chrono::milliseconds(0), options.stop), session.max_paths);
+    session.observation.invalidate();
+    const auto report = session.capture.capture(store, target, text, ingest, &session.observation);
     // A completed native publication wins late cancellation. Output allocation
     // can still fail: callers must reload state on every nonzero status.
-    json_output(syrnck::Json{{"version", 1}, {"revision", id}}, out, length, {});
+    json_output(report, out, length, {});
+    session.pending = {};
   });
 }
 int syrnck_workspace_checkout_plan_json_ex(SyrnckWorkspace *workspace, SyrnckStore *handle,

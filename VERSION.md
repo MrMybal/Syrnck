@@ -10,6 +10,8 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 
 ## Changes in the current checkout
 
+- Session-local manifest reuse for resident-agent and C/Go captures, with strong filesystem stamps, complete inventory/object verification and separate source I/O counters.
+
 - Explicit owned recovery preserves regular-file edits made during checkout through native archives and exclusive conflict copies, without rewriting signed incoming candidates.
 
 - Guarded native workspace capture, checkout planning and owned recovery through C/Go, including exact revision/materialization expectations and Store/context binding.

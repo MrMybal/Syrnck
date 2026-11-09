@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 7
+sourceRevision: 8
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -171,3 +171,10 @@ ne prétend pas que le workspace est encore propre.
 ordinaires et crée des copies exclusives avant reprise du journal natif exact.
 Respecter le [contrat des éditions actives](doc:workspace-abi#active-checkout-edits) ;
 `RecoverOwned` reste strict et toute erreur de mutation exige une relecture.
+
+## Rapport des E/S de capture {#incremental-capture}
+
+`CaptureReportContext` retourne révision et compteurs sources de lecture et
+réutilisation. `CaptureContext` conserve son résultat limité à l’ID. Les
+manifestes de session peuvent survivre à la réouverture du Store, avec inventaire
+et vérification complète. Voir les [limites](doc:performance#incremental-capture).

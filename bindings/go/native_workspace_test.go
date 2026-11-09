@@ -12,7 +12,91 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func TestCaptureReportReopenedStoreAndStrongStamps(t *testing.T) {
+	for _, encrypted := range []bool{false, true} {
+		t.Run(fmt.Sprint(encrypted), func(t *testing.T) {
+			root := tempDirectory(t)
+			storage := filepath.Join(root, ".syrnck")
+			var key []byte
+			if encrypted {
+				key = bytes.Repeat([]byte{89}, 32)
+			}
+			store := openTest(t, storage, key)
+			workspace := openWorkspaceTest(t, root, storage, WorkspaceOptions{Polling: true})
+			asset := filepath.Join(root, "asset.bin")
+			writeTest(t, asset, bytes.Repeat([]byte{'a'}, 1024*1024))
+			writeTest(t, filepath.Join(root, "code.cpp"), []byte("first"))
+			state, err := workspace.NativeState(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			first, err := workspace.CaptureReportContext(context.Background(), store, state.Expected(), "first")
+			if err != nil || first.Capture.SourceBytesRead != 1024*1024+5 || first.Capture.ReusedFiles != 0 {
+				t.Fatal("incorrect first capture", first, err)
+			}
+			store.Close()
+			time.Sleep(3100 * time.Millisecond)
+			store, err = Open(storage, Options{Key: key})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			state, err = workspace.NativeState(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeTest(t, filepath.Join(root, "code.cpp"), []byte("other"))
+			report, err := workspace.CaptureReportContext(context.Background(), store, state.Expected(), "small change")
+			if err != nil || report.Capture.SourceBytesRead+report.Capture.SourceBytesReused != 1024*1024+5 || report.Capture.IngestedFiles+report.Capture.ReusedFiles != 2 {
+				t.Fatal("incorrect second capture counters", report, err)
+			}
+			if report.Capture.ReusedFiles != 0 && (report.Capture.SourceBytesRead != 5 || report.Capture.ReusedFiles != 1) {
+				t.Fatal("unchanged asset was reread", report)
+			}
+			if report.Capture.ReusedFiles == 0 {
+				t.Log("strong local file stamps unavailable; conservative ingestion verified")
+			}
+			before, err := os.Stat(asset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := os.OpenFile(asset, os.O_WRONLY, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, writeErr := file.WriteAt([]byte("z"), 0)
+			closeErr := file.Close()
+			if writeErr != nil || closeErr != nil {
+				t.Fatal(writeErr, closeErr)
+			}
+			if err := os.Chtimes(asset, before.ModTime(), before.ModTime()); err != nil {
+				t.Fatal(err)
+			}
+			state, err = workspace.NativeState(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err = workspace.CaptureReportContext(context.Background(), store, state.Expected(), "restored timestamp")
+			if err != nil || report.Capture.SourceBytesRead < 1024*1024 {
+				t.Fatal("same-time change missed", report, err)
+			}
+			if err := workspace.Invalidate(); err != nil {
+				t.Fatal(err)
+			}
+			state, err = workspace.NativeState(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err = workspace.CaptureReportContext(context.Background(), store, state.Expected(), "explicit audit")
+			if err != nil || report.Capture.ReusedFiles != 0 || report.Capture.SourceBytesRead != 1024*1024+5 {
+				t.Fatal("invalidation retained source proofs", report, err)
+			}
+		})
+	}
+}
 
 func TestNativeWorkspaceCapturePlanAndOwnedCheckout(t *testing.T) {
 	for _, encrypted := range []bool{false, true} {

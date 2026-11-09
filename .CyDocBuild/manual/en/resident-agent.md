@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 5
+revision: 6
 ---
 
 ## Run continuously {#run}
@@ -206,3 +206,10 @@ target. Normal later capture records the additional working files. Without that
 policy, recovery remains strict. Missing files, directory/symlink obstructions
 and ambiguous namespace changes still require resolution. See the shared
 [archive and replay contract](doc:syncthing#active-checkout-edits).
+
+## Capture source I/O {#incremental-capture}
+
+Repeated captures reuse unchanged session-ingested manifests using strong local
+file stamps. Selected paths are still enumerated and the complete immutable
+closure verified. Tick reports include `capture` source I/O counters. See
+[performance and conservative fallback](doc:performance#incremental-capture).

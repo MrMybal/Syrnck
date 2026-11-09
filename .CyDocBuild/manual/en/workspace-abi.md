@@ -5,7 +5,7 @@ description: Embedded workspace observation through C and Go guide.
 section: API
 order: 640
 parent: integrations
-revision: 6
+revision: 7
 ---
 
 # Embedded workspace observation through C and Go {#embedded-workspace-observation-through-c-and-go}
@@ -314,3 +314,11 @@ uses `Store::recover_checkout_owned_preserving_files`. The JSON report adds
 `preserved_edits` with source path, copy path and archived revision ID. Publication
 errors still require reloading native state and retained descriptors. See the
 [policy and remaining limits](doc:syncthing#active-checkout-edits).
+
+## Session capture reuse {#incremental-capture}
+
+Repeated captures reuse session-ingested manifests with unchanged strong local
+file stamps, while enumerating the full selection and verifying the complete
+object closure. Capture JSON adds source read/reuse counters. Restart,
+invalidation and failed native calls discard reuse; the disposable status index
+never becomes mutation proof. See [capture and fallback](doc:performance#incremental-capture).

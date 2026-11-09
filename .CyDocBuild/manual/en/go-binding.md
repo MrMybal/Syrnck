@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 7
+revision: 8
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -158,3 +158,10 @@ edited the working file since; it does not assert that the workspace is clean.
 creates exclusive conflict copies before resuming the exact owned native journal.
 Use the [active-edit contract](doc:workspace-abi#active-checkout-edits); ordinary
 `RecoverOwned` remains strict, and every mutation error requires reloading state.
+
+## Capture I/O report {#incremental-capture}
+
+`CaptureReportContext` returns the revision and source read/reuse counters.
+`CaptureContext` keeps its revision-only result. Session manifests can survive
+Store reopens, with complete enumeration and object verification. See
+[capture boundaries](doc:performance#incremental-capture).

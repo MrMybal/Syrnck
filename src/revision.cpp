@@ -357,14 +357,20 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
 }
 std::string Store::commit_directory(const fs::path &directory, std::string_view branch,
                                     std::string_view message, IngestOptions options) const {
+  return commit_native_directory(*this, directory, branch, message, options, [&](const NativeFile &file) {
+    return ingest_native_file(*this, file, options, "file changed during ingestion; retry commit");
+  });
+}
+std::string commit_native_directory(const Store &store, const fs::path &directory, std::string_view branch,
+    std::string_view message, IngestOptions options, const std::function<Json(const NativeFile &)> &capture) {
   throw_if_cancelled(options.stop);
   validate_native_target(branch);
-  require_native_branch_available(*this, branch);
-  require_no_native_checkout(*this);
-  const auto original = refs();
-  const auto materialization = read_native_materialization(*this, native_workspace_name(), original);
-  const auto name = native_revision_reference(*this, std::string(branch));
-  const auto stage_name = native_staging_reference(*this, std::string(branch));
+  require_native_branch_available(store, branch);
+  require_no_native_checkout(store);
+  const auto original = store.refs();
+  const auto materialization = read_native_materialization(store, store.native_workspace_name(), original);
+  const auto name = native_revision_reference(store, std::string(branch));
+  const auto stage_name = native_staging_reference(store, std::string(branch));
   const auto found = original.find(name);
   const auto previous = found == original.end() ? std::optional<ObjectKey>{} : std::optional{found->second};
   require(!previous || previous->kind == Kind::revision, "branch must point to a revision");
@@ -373,15 +379,13 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
           "native staging exists; commit with --staged or reset the staging index");
   std::map<std::string, Json> files;
   if (previous && !materialization.policy.complete()) {
-    const auto baseline = metadata(Kind::revision, previous->id);
+    const auto baseline = store.metadata(Kind::revision, previous->id);
     for (const auto &[path, entry] : baseline["files"].items())
       if (!materialization.policy.includes(path)) files.emplace(path, entry);
   }
-  visit_native_files(directory, *this,
+  visit_native_files(directory, store,
                      [&](const NativeFile &file) {
-                       files.emplace(file.relative,
-                                     ingest_native_file(*this, file, options,
-                                                        "file changed during ingestion; retry commit"));
+                       files.emplace(file.relative, capture(file));
                      },
                      {options.stop, options.progress});
   Json entries = Json::object();
@@ -398,14 +402,14 @@ std::string Store::commit_directory(const fs::path &directory, std::string_view 
       {"timestamp", now()},
       {"files",
        entries}};
-  auto value = native_commit_metadata(std::move(revision)).dump();
+  auto value = store.native_commit_metadata(std::move(revision)).dump();
   if (options.progress)
     invoke_progress(options.progress, {ProgressPhase::publishing, branch});
   throw_if_cancelled(options.stop);
-  auto key = put(Kind::revision, bytes(value)).first;
-  require(compare_update_refs({{name, previous, key}, {stage_name, {}, {}},
+  auto key = store.put(Kind::revision, bytes(value)).first;
+  require(store.compare_update_refs({{name, previous, key}, {stage_name, {}, {}},
                                {materialization.reference, materialization.root, materialization.root}},
-                              {options.stop}), "native commit references changed; retry operation");
+                              {options.stop, options.progress}), "native commit references changed; retry operation");
   return key.id;
 }
 std::string Store::detach_history(std::string_view branch, std::string_view message) const {

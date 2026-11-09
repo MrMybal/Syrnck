@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 ## Fonctionnement continu {#run}
@@ -213,3 +213,10 @@ signée préparée. La capture locale suivante enregistre les fichiers ajoutés.
 Sans cette politique, la reprise reste stricte. Fichiers manquants, obstructions
 de dossiers/liens et structures ambiguës demandent encore une résolution. Voir le
 [contrat partagé d’archive et de reprise](doc:syncthing#active-checkout-edits).
+
+## E/S sources des captures {#incremental-capture}
+
+Les captures répétées réutilisent les manifestes de session inchangés grâce aux
+empreintes fiables des fichiers locaux. Inventaire sélectionné et vérification
+de toute la fermeture restent requis. Le rapport de tick expose les compteurs
+sources `capture`. Voir [performance et repli](doc:performance#incremental-capture).

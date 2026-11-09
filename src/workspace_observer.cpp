@@ -152,6 +152,18 @@ WorkspaceObservation::~WorkspaceObservation() = default;
 WorkspaceObservation::WorkspaceObservation(WorkspaceObservation &&) noexcept = default;
 WorkspaceObservation &WorkspaceObservation::operator=(WorkspaceObservation &&) noexcept = default;
 void WorkspaceObservation::invalidate() { impl_->ready = false; }
+void WorkspaceObservation::adopt_capture(const Store &store, const fs::path &directory, std::string_view revision) {
+  auto &state = *impl_;
+  state.ready = false;
+  require(store.root() == state.storage && directory == state.directory,
+          "workspace observation belongs to another store");
+  const auto materialization = read_native_materialization(store).policy;
+  auto captured = read_native_materialized_snapshot(store, revision, materialization, {});
+  for (auto &[path, file] : captured) { (void)path; file.manifest.clear(); }
+  state.current = std::move(captured);
+  state.materialization_epoch = materialization.identity();
+  state.ready = true;
+}
 Json WorkspaceObservation::status(const Store &store, const std::optional<std::string> &revision,
                                   const WorkspaceChanges &changes, OperationOptions options) {
   try { return impl_->observe(store, revision, changes, options); }

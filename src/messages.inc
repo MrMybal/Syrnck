@@ -663,6 +663,7 @@ SYRNCK_MESSAGE("working index exceeds 16 MiB", "l'index de travail dépasse 16 M
 SYRNCK_MESSAGE("working index changed; retry operation", "l'index de travail a changé ; relancez l'opération")
 SYRNCK_MESSAGE("cannot clear working index", "impossible de vider l'index de travail")
 SYRNCK_MESSAGE("workspace observation belongs to another store", "l'observation du dossier de travail appartient à un autre stockage")
+SYRNCK_MESSAGE("workspace capture belongs to another store or context", "la capture du dossier de travail appartient à un autre stockage ou contexte")
 SYRNCK_MESSAGE("workspace observation paths exceed 1 MiB", "les chemins de l'observation du dossier de travail dépassent 1 Mio")
 SYRNCK_MESSAGE("native workspace scope exceeds 16 MiB", "le périmètre de l'analyse native dépasse 16 Mio")
 SYRNCK_MESSAGE("native workspace scope spelling differs from workspace", "la casse du périmètre de l'analyse native diffère de celle du dossier de travail")
