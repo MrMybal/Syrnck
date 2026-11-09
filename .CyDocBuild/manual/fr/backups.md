@@ -5,7 +5,7 @@ description: Guide : Sauvegardes, restauration et réparation.
 section: Stockage
 order: 50
 parent: storage
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 # Sauvegardes vérifiées et restauration {#verified-offline-backups-restore-and-missing-object-repair}
@@ -31,7 +31,7 @@ syrnck --store /existing-parent/recovered-store native export heads/main /existi
 
 Le descripteur canonique `backup.json` enregistre les hashes des références et préférences, le nombre d’objets, les octets décodés, la date et les références omises. `backup verify` contrôle ce reçu, toutes les dépendances, tous les hashes de fichiers et l’inventaire complet. Changer références/préférences ou ajouter un objet non référencé invalide le contrôle. Le reçu n’est ni signé ni authentifié par une autorité externe : protéger les sauvegardes contre les modifications.
 
-`SYRNCK_KEY` ouvre le Store principal ; `SYRNCK_BACKUP_KEY` choisit éventuellement la clé de destination de create/restore. Sans cette dernière, le CLI conserve la clé d’une source chiffrée ; une source en clair reste en clair. L’API C++ exige une clé de destination pour une source chiffrée. Les IDs restent identiques après rechiffrement ; changer de clé ne révoque pas les anciennes copies et ne masque pas les égalités entre IDs.
+`SYRNCK_KEY` ou le [fournisseur de fichier de clé protégée](doc:key-files#providers) ouvre le Store principal ; `SYRNCK_BACKUP_KEY` choisit éventuellement la clé de destination de create/restore. Sans cette dernière, le CLI conserve la clé d’une source chiffrée ; une source en clair reste en clair. L’API C++ exige une clé de destination pour une source chiffrée. Les IDs restent identiques après rechiffrement ; changer de clé ne révoque pas les anciennes copies et ne masque pas les égalités entre IDs.
 
 Pour vérifier une sauvegarde, fournir sa propre clé dans `SYRNCK_KEY`. Pour la restaurer avec une autre clé, fournir cette dernière dans `SYRNCK_BACKUP_KEY`. Une clé contient 32 octets, encodés en 64 caractères hexadécimaux ; la conserver hors de Git et des chemins de sauvegarde. Descripteur et références restent visibles. Il ne s’agit ni de chiffrement de bout en bout, ni de dérivation de mot de passe, ni de coffre système ou rotation distribuée.
 

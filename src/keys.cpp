@@ -87,12 +87,17 @@ Bytes protect_secret_key(const SecretKey &secret, std::span<const std::uint8_t> 
       result.data() + 32, result.data(), header_size, plain.data(), plain.size());
   return result;
 }
-SecretKey open_secret_key(std::span<const std::uint8_t> envelope,
-    std::span<const std::uint8_t> password) {
+PasswordKdfOptions protected_key_options(std::span<const std::uint8_t> envelope) {
   require(envelope.size() == envelope_size && std::equal(magic.begin(), magic.end(), envelope.begin()),
       "invalid protected key envelope");
   const PasswordKdfOptions options{number(envelope.subspan(8, 4)), number(envelope.subspan(12, 4))};
-  options.validate(); password_size(password);
+  options.validate();
+  return options;
+}
+SecretKey open_secret_key(std::span<const std::uint8_t> envelope,
+    std::span<const std::uint8_t> password) {
+  const auto options = protected_key_options(envelope);
+  password_size(password);
   const auto key = SecretKey::from_password(password, envelope.subspan(16, 16), options);
   Key plain{}; Wipe wipe{plain};
   require(crypto_aead_unlock(plain.data(), envelope.data() + 88, key.view().data(),

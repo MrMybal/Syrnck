@@ -4,13 +4,18 @@
 #include <streambuf>
 #include <syrnck.h>
 #include <syrnck/core.hpp>
+#include <syrnck/keys.hpp>
 #include <syrnck/watcher.hpp>
 #include <syrnck/workspace.hpp>
 #include "native_workspace.hpp"
 struct SyrnckStore {
   syrnck::Store store;
-  SyrnckStore(const syrnck::fs::path &p, std::optional<syrnck::Key> key, bool create)
+  SyrnckStore(const syrnck::fs::path &p, const std::optional<syrnck::Key> &key, bool create)
       : store(p, key, create) {}
+};
+struct SyrnckSecretKey {
+  syrnck::SecretKey key;
+  explicit SyrnckSecretKey(syrnck::SecretKey value) : key(std::move(value)) {}
 };
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
@@ -59,6 +64,32 @@ template <class Operation> int boundary(const Operation &operation) noexcept {
 const char *checked(const char *s) {
   syrnck::require(s != nullptr, "null string");
   return s;
+}
+std::span<const std::uint8_t> key_password(const unsigned char *value, std::size_t length) {
+  syrnck::require(value != nullptr && length >= 1 && length <= 4096, "key password must contain 1..4096 bytes");
+  return {value, length};
+}
+syrnck::PasswordKdfOptions key_costs(const SyrnckPasswordKdf *options, syrnck::PasswordKdfOptions result = {}) {
+  if (options) {
+    if (options->memory_kib) result.memory_kib = options->memory_kib;
+    if (options->passes) result.passes = options->passes;
+  }
+  result.validate();
+  return result;
+}
+std::span<const std::uint8_t> key_envelope(const unsigned char *value, std::size_t length) {
+  syrnck::require(value != nullptr && length == SYRNCK_PROTECTED_KEY_SIZE, "invalid protected key envelope");
+  const std::span<const std::uint8_t> result{value, length};
+  (void)syrnck::protected_key_options(result);
+  return result;
+}
+bool key_output(unsigned char *out, std::size_t capacity, std::size_t *length) {
+  syrnck::require(length != nullptr, "null size output");
+  *length = SYRNCK_PROTECTED_KEY_SIZE;
+  if (!out && capacity == 0) return false;
+  syrnck::require(out && capacity >= SYRNCK_PROTECTED_KEY_SIZE, "insufficient output capacity");
+  *length = 0;
+  return true;
 }
 syrnck::Store &checked(SyrnckStore *p) {
   syrnck::require(p != nullptr, "null store handle");
@@ -231,12 +262,66 @@ int syrnck_store_open(const char *path, bool create, const unsigned char *key, s
     syrnck::require(out != nullptr, "null output handle");
     *out = nullptr;
     std::optional<syrnck::Key> secret;
+    struct Wipe { std::optional<syrnck::Key> &value; ~Wipe() { if (value) syrnck::wipe_secret(*value); } } wipe{secret};
     if (length) {
       syrnck::require(length == 32 && key != nullptr, "key_len must be 0 or 32 with a valid key");
       secret.emplace();
       std::copy_n(key, 32, secret->begin());
     }
     *out = new SyrnckStore(syrnck::path_from_utf8(checked(path)), secret, create);
+  });
+}
+int syrnck_key_protect(const unsigned char *key, std::size_t key_length,
+    const unsigned char *password, std::size_t password_length, const SyrnckPasswordKdf *options,
+    unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length) *length = 0;
+  return boundary([&] {
+    const auto cost = key_costs(options);
+    const auto pass = key_password(password, password_length);
+    syrnck::require((!key && key_length == 0) || (key && key_length == 32), "secret key length must be zero or 32 with a valid key");
+    if (!key_output(out, capacity, length)) return;
+    const auto secret = key_length ? syrnck::SecretKey::from_bytes({key, key_length}) : syrnck::SecretKey::generate();
+    const auto envelope = syrnck::protect_secret_key(secret, pass, cost);
+    std::memcpy(out, envelope.data(), envelope.size());
+    *length = envelope.size();
+  });
+}
+int syrnck_key_change_password(const unsigned char *envelope, std::size_t envelope_length,
+    const unsigned char *old_password, std::size_t old_length, const unsigned char *new_password,
+    std::size_t new_length, const SyrnckPasswordKdf *options,
+    unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length) *length = 0;
+  return boundary([&] {
+    const auto input = key_envelope(envelope, envelope_length);
+    const auto before = key_password(old_password, old_length), after = key_password(new_password, new_length);
+    std::optional<syrnck::PasswordKdfOptions> costs;
+    if (options) costs = key_costs(options, syrnck::protected_key_options(input));
+    if (!key_output(out, capacity, length)) return;
+    const auto result = syrnck::change_secret_key_password(input, before, after, costs);
+    std::memcpy(out, result.data(), result.size());
+    *length = result.size();
+  });
+}
+int syrnck_secret_key_open(const unsigned char *envelope, std::size_t envelope_length,
+    const unsigned char *password, std::size_t password_length, SyrnckSecretKey **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    const auto input = key_envelope(envelope, envelope_length), pass = key_password(password, password_length);
+    *out = new SyrnckSecretKey(syrnck::open_secret_key(input, pass));
+  });
+}
+int syrnck_secret_key_close(SyrnckSecretKey *key) { return boundary([&] { delete key; }); }
+int syrnck_store_open_secret(const char *path, bool create, const SyrnckSecretKey *key, SyrnckStore **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    const auto directory = syrnck::path_from_utf8(checked(path));
+    syrnck::require(key != nullptr, "null secret key handle");
+    std::optional<syrnck::Key> secret{std::in_place};
+    struct Wipe { syrnck::Key &value; ~Wipe() { syrnck::wipe_secret(value); } } wipe{*secret};
+    std::copy(key->key.view().begin(), key->key.view().end(), secret->begin());
+    *out = new SyrnckStore(directory, secret, create);
   });
 }
 int syrnck_store_close(SyrnckStore *store) {

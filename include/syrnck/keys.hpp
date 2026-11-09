@@ -8,8 +8,8 @@ namespace syrnck {
  * @title Password-protected key API
  * @section API
  * @symbol syrnck::SecretKey
- * Include `<syrnck/keys.hpp>` and link `Syrnck::core`. This API is currently C++ only;
- * CLI, C and Go password-key providers remain separate work.
+ * Include `<syrnck/keys.hpp>` and link `Syrnck::core`. The [CLI key files](doc:key-files)
+ * and [C/Go owners](doc:go-binding#protected-keys) use this same native envelope format.
  *
  * ## Ownership and derivation {#ownership}
  * `SecretKey::generate()` creates a random 32-byte secret. `from_bytes` copies exactly 32 bytes.
@@ -28,6 +28,7 @@ namespace syrnck {
  * ## Protection and password changes {#protection}
  * `protect_secret_key(secret, password, options)` returns an authenticated 104-byte envelope.
  * `open_secret_key(envelope, password)` authenticates before returning secret bytes.
+ * `protected_key_options(envelope)` reads validated public costs without authenticating the envelope.
  * `change_secret_key_password(envelope, oldPassword, newPassword, optionalCosts)` rewraps the same key,
  * preserving costs unless explicitly overridden. Every protection uses a fresh random salt and nonce.
  * An old envelope remains usable with its old password; changing the password does not rotate Store objects
@@ -39,7 +40,7 @@ namespace syrnck {
  * versions and out-of-range costs fail before derivation; wrong passwords or tampering fail authentication.
  *
  * This API does not save envelopes or change the Store format. Preserve envelopes and passwords outside Git
- * and working files. Existing [backup commands](doc:backups) still use their documented raw-key providers.
+ * and working files. [Backup commands](doc:backups) retain their own destination-key selection contract.
  * See [storage](doc:storage) and [remaining security work](doc:limits#security).
  */
 /**
@@ -48,8 +49,8 @@ namespace syrnck {
  * @title API de protection des clés par mot de passe
  * @section API
  * @symbol syrnck::SecretKey
- * Inclure `<syrnck/keys.hpp>` et lier `Syrnck::core`. Cette API est actuellement réservée au C++ ;
- * les fournisseurs de clés par mot de passe de la CLI, du C et de Go restent à réaliser.
+ * Inclure `<syrnck/keys.hpp>` et lier `Syrnck::core`. Les [fichiers de clés CLI](doc:key-files)
+ * et les [propriétaires C/Go](doc:go-binding#protected-keys) utilisent ce même format natif d'enveloppe.
  *
  * ## Propriété et dérivation {#ownership}
  * `SecretKey::generate()` crée un secret aléatoire de 32 octets. `from_bytes` copie exactement 32 octets.
@@ -68,6 +69,7 @@ namespace syrnck {
  * ## Protection et changement de mot de passe {#protection}
  * `protect_secret_key(secret, password, options)` renvoie une enveloppe authentifiée de 104 octets.
  * `open_secret_key(envelope, password)` authentifie l'enveloppe avant de restituer les octets secrets.
+ * `protected_key_options(envelope)` lit les coûts publics validés sans authentifier l'enveloppe.
  * `change_secret_key_password(envelope, oldPassword, newPassword, optionalCosts)` protège de nouveau la même clé,
  * en conservant les coûts sauf remplacement explicite. Chaque protection utilise un nouveau sel et un nouveau nonce aléatoires.
  * Une ancienne enveloppe reste utilisable avec son ancien mot de passe ; changer le mot de passe ne renouvelle pas les objets du Store
@@ -79,7 +81,7 @@ namespace syrnck {
  * versions et coûts hors limites sont refusés avant dérivation ; un mauvais mot de passe ou une altération échoue à l'authentification.
  *
  * Cette API n'enregistre pas les enveloppes et ne modifie pas le format du Store. Conserver enveloppes et mots de passe hors de Git
- * et des fichiers de travail. Les [commandes de sauvegarde](doc:backups) utilisent toujours leurs fournisseurs de clés brutes documentés.
+ * et des fichiers de travail. Les [commandes de sauvegarde](doc:backups) gardent leur contrat de sélection de clé de destination.
  * Voir le [stockage](doc:storage) et les [travaux de sécurité restants](doc:limits#security).
  */
 // Argon2id v1.3, one lane, 32 output bytes. Values are checked before allocation:
@@ -122,6 +124,8 @@ void wipe_secret(std::span<std::uint8_t>) noexcept;
 // uses a fresh OS-random salt and nonce. Malformed/costly headers fail before KDF.
 Bytes protect_secret_key(const SecretKey &, std::span<const std::uint8_t> password,
     PasswordKdfOptions = {});
+// Parse public header/costs only. This does not authenticate the envelope.
+PasswordKdfOptions protected_key_options(std::span<const std::uint8_t> envelope);
 SecretKey open_secret_key(std::span<const std::uint8_t> envelope,
     std::span<const std::uint8_t> password);
 // Rewraps the same key with fresh salt/nonce, preserving costs unless overridden.

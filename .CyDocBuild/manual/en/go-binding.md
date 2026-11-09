@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 10
+revision: 11
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -204,3 +204,22 @@ this context for local captures and synthesized incoming native revisions;
 author and a separate signing-key environment variable. Signatures are local
 claims, not BEP device identity or server permission. Server publication still
 uses its own approved-key/identity policy. OS vault integration remains separate.
+
+## Protected native key owners {#protected-keys}
+
+`ProtectKey(key, password, PasswordKdfOptions{})` returns a 104-byte authenticated envelope; an empty key generates a new random storage key. Input key/password buffers remain caller-owned. `ChangeKeyPassword` preserves the storage key and unspecified costs; old envelopes are not revoked. Zero fields select 64 MiB/three passes during protection and preserve existing costs during password changes.
+
+`OpenProtectedKey(envelope, password)` authenticates once into a native owner. It exposes no plaintext export. Reuse `owner.Open(path, create)` for resident services and close the owner explicitly. Calls and Close are serialized; an owner must not be copied. Each Store retains its own key, so owner closure does not revoke or close existing Stores.
+
+```go
+func openProtectedStore(path string, envelope, password []byte) (*syrnck.Store, error) {
+    owner, err := syrnck.OpenProtectedKey(envelope, password)
+    if err != nil { return nil, err }
+    defer owner.Close()
+    return owner.Open(path, false)
+}
+```
+
+`OpenProtected(path, envelope, password, create)` provides that one-shot convenience. For service callbacks, keep one owner alive until all service workers join, and open short Store sessions from it. Derivation is synchronous and bounded; passwords contain 1..4096 exact bytes, including NUL for SDK calls. Clear caller-owned input buffers when no longer needed. Authentication failure does not create a Store directory.
+
+[CLI key files](doc:key-files) use the same envelope. Pair this binding with the matching native library; ABI 1 has additive key entry points.

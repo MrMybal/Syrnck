@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -216,3 +216,22 @@ entrantes synthétisées ; sa [configuration autonome](doc:syncthing#native-auth
 accepte auteur explicite et variable de graine distincte. Une signature locale
 n’est ni identité d’appareil BEP ni permission serveur. La publication serveur
 garde sa politique de clés/identités autorisées. Le coffre OS reste à développer.
+
+## Propriétaires natifs de clés protégées {#protected-keys}
+
+`ProtectKey(key, password, PasswordKdfOptions{})` renvoie une enveloppe authentifiée de 104 octets ; une clé vide génère une nouvelle clé de stockage aléatoire. Les buffers de clé/mot de passe appartiennent à l'appelant. `ChangeKeyPassword` conserve la clé de stockage et les coûts non précisés ; les anciennes enveloppes ne sont pas révoquées. Les champs nuls choisissent 64 Mio/trois passes pour la protection et conservent les coûts existants lors du changement de mot de passe.
+
+`OpenProtectedKey(envelope, password)` authentifie une fois dans un propriétaire natif, sans export en clair. Réutiliser `owner.Open(path, create)` pour les services résidents et fermer explicitement le propriétaire. Appels et Close sont sérialisés ; ne pas copier le propriétaire. Chaque Store garde sa propre clé : fermer le propriétaire ne révoque ni ne ferme les Stores ouverts.
+
+```go
+func openProtectedStore(path string, envelope, password []byte) (*syrnck.Store, error) {
+    owner, err := syrnck.OpenProtectedKey(envelope, password)
+    if err != nil { return nil, err }
+    defer owner.Close()
+    return owner.Open(path, false)
+}
+```
+
+`OpenProtected(path, envelope, password, create)` fournit ce raccourci ponctuel. Pour les callbacks de service, garder un propriétaire vivant jusqu'à la jonction de tous les workers, et ouvrir des sessions Store courtes depuis celui-ci. La dérivation est synchrone et bornée ; les mots de passe contiennent de 1 à 4096 octets exacts, NUL compris pour le SDK. Effacer les buffers de l'appelant lorsqu'ils ne sont plus nécessaires. Un échec d'authentification ne crée pas de dossier Store.
+
+Les [fichiers de clés CLI](doc:key-files) utilisent la même enveloppe. Associer ce binding à la bibliothèque native correspondante ; l'ABI 1 reçoit les nouveaux points d'entrée de clés.

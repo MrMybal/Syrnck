@@ -15,7 +15,9 @@ parser.add_argument("--benchmark", action="store_true")
 args = parser.parse_args()
 library = args.library.resolve(strict=True)
 go = args.go or str(root / ".tools/go/bin" / ("go.exe" if os.name == "nt" else "go"))
-env = os.environ.copy()
+provider_names = {"SYRNCK_KEY_FILE", "SYRNCK_KEY_PASSWORD", "SYRNCK_NEW_KEY_PASSWORD"}
+# Environment names are case insensitive on Windows.
+env = {name: value for name, value in os.environ.items() if name.upper() not in provider_names}
 env["GOTOOLCHAIN"] = "local"
 env["GOCACHE"] = str(root / ".tools/go-cache")
 env["GOPATH"] = str(root / ".tools/go-path")

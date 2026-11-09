@@ -1259,5 +1259,11 @@
   "native identity": "native-authorship#identity",
   "native-authorship": "native-authorship",
   "server-signatures": "server-signatures",
-  "serve signing": "server-signatures#configuration"
+  "serve signing": "server-signatures#configuration",
+  "key": "key-files",
+  "key create": "key-files#create",
+  "key protect": "key-files#existing",
+  "key rewrap": "key-files#password-change",
+  "key inspect": "key-files#create",
+  "key verify": "key-files#create"
 }

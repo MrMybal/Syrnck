@@ -5,7 +5,7 @@ description: Verified offline backups, restore and missing-object repair guide.
 section: Storage
 order: 50
 parent: storage
-revision: 3
+revision: 4
 ---
 
 # Verified offline backups, restore and missing-object repair {#verified-offline-backups-restore-and-missing-object-repair}
@@ -58,7 +58,7 @@ inventory. Changing backup references/settings or adding an unreferenced object
 invalidates verification. The descriptor is an integrity receipt, not a signed
 or externally authenticated root. Keep backups protected from modification.
 
-Primary Store encryption uses `SYRNCK_KEY`. For create/restore, optional
+Primary Store encryption uses `SYRNCK_KEY` or the [protected key-file provider](doc:key-files#providers). For create/restore, optional
 `SYRNCK_BACKUP_KEY` selects the destination key. If omitted, an encrypted source
 keeps the current key; a plaintext source produces a plaintext destination.
 The C++ API requires a destination key for encrypted sources and refuses a

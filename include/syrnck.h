@@ -16,6 +16,7 @@ extern "C" {
 typedef struct SyrnckStore SyrnckStore;
 typedef struct SyrnckWorkspace SyrnckWorkspace;
 typedef struct SyrnckCancellation SyrnckCancellation;
+typedef struct SyrnckSecretKey SyrnckSecretKey;
 /**
  * @doc api-c-abi
  * @locale en
@@ -47,6 +48,16 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * A false comparison is not permission to retarget an old plan. On nonzero status the reset applied
  * output proves nothing: an IO error can follow atomic publication, so reload and establish its outcome.
  * See [catalog transactions](doc:go-binding#catalog-transactions) for ownership and an example.
+ *
+ * ## Protected storage keys {#protected-keys}
+ * key_protect seals a supplied 32-byte key or generates one when key=NULL/key_len=0.
+ * key_change_password rewraps the same key; zero cost fields preserve previous costs.
+ * Binary outputs contain 104 bytes. Size queries validate metadata only; they do not authenticate.
+ * secret_key_open authenticates into an opaque native owner without plaintext export.
+ * Serialize owner calls/close and wipe caller-owned password buffers after use.
+ * store_open_secret borrows the owner during construction; the Store keeps its own key.
+ * Closing an owner does not close/revoke existing Stores. KDF calls are synchronous.
+ * See [key files](doc:key-files) and [Go owners](doc:go-binding#protected-keys).
  *
  * ## Native authors and signatures {#authorship}
  * store_use_native_identity selects a handle-local author and optional Ed25519 seed. No secret is
@@ -114,6 +125,16 @@ typedef struct SyrnckCancellation SyrnckCancellation;
  * une erreur IO peut suivre la publication atomique ; relire et établir son résultat avant de réessayer.
  * Voir les [transactions de catalogue](doc:go-binding#catalog-transactions) pour les règles et l'exemple.
  *
+ * ## Clés de stockage protégées {#protected-keys}
+ * key_protect protège une clé fournie de 32 octets ou en génère une si key=NULL/key_len=0.
+ * key_change_password protège de nouveau la même clé ; les coûts nuls conservent les coûts précédents.
+ * Les sorties binaires contiennent 104 octets. Les requêtes de taille valident seulement les métadonnées, sans authentification.
+ * secret_key_open authentifie dans un propriétaire natif opaque, sans export en clair.
+ * Sérialiser appels/fermeture du propriétaire et effacer les buffers de mots de passe de l'appelant après usage.
+ * store_open_secret emprunte le propriétaire pendant la construction ; le Store garde sa propre clé.
+ * Fermer le propriétaire ne ferme ni ne révoque les Stores ouverts. La dérivation est synchrone.
+ * Voir les [fichiers de clés](doc:key-files) et les [propriétaires Go](doc:go-binding#protected-keys).
+ *
  * ## Auteurs natifs et signatures {#authorship}
  * store_use_native_identity choisit un auteur local au handle et une graine Ed25519 facultative.
  * Aucun secret n'est persisté ni exporté ; l'appelant possède sa graine, et la clé native disparaît
@@ -163,6 +184,33 @@ SYRNCK_API const char *syrnck_last_error(void);
 SYRNCK_API int syrnck_error_copy(char *out, size_t capacity, size_t *required);
 SYRNCK_API int syrnck_store_open(const char *path, bool create, const unsigned char *key, size_t key_len,
                                  SyrnckStore **out);
+/* Additive ABI 1 password-key support. Passwords are borrowed exact bytes
+ * (1..4096), never retained. Output envelopes are always 104 bytes. NULL options
+ * or zero fields select 64 MiB/3 passes for protect; change_password preserves
+ * existing costs for NULL options or zero fields.
+ * Costs are checked before allocation: 64..256 whole MiB, 3..10 passes. */
+#define SYRNCK_PROTECTED_KEY_SIZE 104u
+typedef struct SyrnckPasswordKdf { uint32_t memory_kib, passes; } SyrnckPasswordKdf;
+/* key=NULL/key_len=0 generates a new secret; otherwise exactly 32 key bytes.
+ * Query with out=NULL/capacity=0. A query validates sizes/header/costs only,
+ * never generates a key or authenticates a password. Insufficient capacity
+ * reports 104 without writing. Other failures reset length to zero. */
+SYRNCK_API int syrnck_key_protect(const unsigned char *key, size_t key_len,
+    const unsigned char *password, size_t password_len, const SyrnckPasswordKdf *options,
+    unsigned char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_key_change_password(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *old_password, size_t old_password_len,
+    const unsigned char *new_password, size_t new_password_len, const SyrnckPasswordKdf *options,
+    unsigned char *out, size_t capacity, size_t *length);
+/* Authenticate once and keep the unwrapped secret in native move-only ownership.
+ * Serialize key operations and close, and close exactly once. No plaintext key
+ * export exists. Output resets to NULL on failure. KDF calls are synchronous. */
+SYRNCK_API int syrnck_secret_key_open(const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *password, size_t password_len, SyrnckSecretKey **out);
+SYRNCK_API int syrnck_secret_key_close(SyrnckSecretKey *);
+/* Borrows the native secret only while opening. The Store retains its own key;
+ * closing the secret does not close or revoke already opened Stores. */
+SYRNCK_API int syrnck_store_open_secret(const char *path, bool create, const SyrnckSecretKey *, SyrnckStore **out);
 /* Handle-local native workspace selection. NULL/empty selects primary. Named
  * contexts must already be registered; failure preserves the old selection. */
 SYRNCK_API int syrnck_store_use_workspace(SyrnckStore *store, const char *name);

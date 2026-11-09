@@ -5,6 +5,7 @@
 #include "cli_help.hpp"
 #include "cli_text_diff.hpp"
 #include "cli_identity.hpp"
+#include "cli_keys.hpp"
 #include "native_authorship.hpp"
 #include <algorithm>
 #include <fstream>
@@ -108,14 +109,7 @@ std::optional<std::string> environment(const char *name) {
   return std::string(value);
 }
 std::optional<Key> read_key() {
-  auto value = environment("SYRNCK_KEY");
-  if (!value)
-    return {};
-  auto data = unhex(*value);
-  require(data.size() == 32, "SYRNCK_KEY must encode exactly 32 bytes");
-  Key key{};
-  std::copy(data.begin(), data.end(), key.begin());
-  return key;
+  return cli::encryption_key_environment();
 }
 void print(const Json &j) {
   std::cout << j.dump(2) << '\n';
@@ -318,6 +312,10 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
                                      Ouvrir le manuel local complet
   init [--encrypted]                 Créer un stockage de blocs
   keygen                             Afficher une clé aléatoire de 256 bits
+  key create|protect SORTIE          Créer ou protéger une clé par mot de passe
+  key rewrap ENTREE SORTIE           Changer le mot de passe vers un nouveau fichier
+  key inspect|verify FICHIER         Lire l’en-tête public ou authentifier la clé
+    [--password-env NOM] [--new-password-env NOM] [--memory-mib 64..256] [--passes 3..10]
   put FICHIER [--fixed-size OCTETS] [--workers 1..64] [--buffer-mib 32]
                                      Importer et conserver un fichier complet
   get MANIFESTE NOUVEAU_FICHIER [--offset N --length N]   Reconstruire un fichier ou une plage
@@ -521,7 +519,8 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
-Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_TOKEN (32 caractères minimum).
+Secrets : SYRNCK_KEY (64 caractères hexadécimaux) ou SYRNCK_KEY_FILE avec SYRNCK_KEY_PASSWORD.
+          SYRNCK_TOKEN (32 caractères minimum). Nouveau mot de passe : SYRNCK_NEW_KEY_PASSWORD.
 Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
 )";
     return;
@@ -533,6 +532,10 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
                                      Open the complete local manual
   init [--encrypted]                 Create a new block store
   keygen                             Print a random 256-bit key
+  key create|protect OUTPUT          Create or password-protect a key
+  key rewrap INPUT OUTPUT            Change its password into a new file
+  key inspect|verify FILE            Read the public header or authenticate the key
+    [--password-env NAME] [--new-password-env NAME] [--memory-mib 64..256] [--passes 3..10]
   put FILE [--fixed-size BYTES] [--workers 1..64] [--buffer-mib 32]
                                      Ingest and retain a complete file
   get MANIFEST NEW_FILE [--offset N --length N]   Reconstruct a file or byte range
@@ -735,7 +738,8 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
-Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_TOKEN (at least 32 characters).
+Secrets: SYRNCK_KEY (64 hex characters) or SYRNCK_KEY_FILE with SYRNCK_KEY_PASSWORD.
+         SYRNCK_TOKEN (at least 32 characters). New password: SYRNCK_NEW_KEY_PASSWORD.
 Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
 )";
 }
@@ -815,6 +819,32 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "keygen") {
     args.count(0);
     std::cout << hex(random_bytes(32)) << '\n';
+    return 0;
+  }
+  if (command == "key") {
+    cli::KeyCommand request;
+    request.action = args.pop();
+    if (request.action != "inspect") {
+      if (auto name = args.option("--password-env")) request.password_env = *name;
+      if (request.action == "rewrap")
+        if (auto name = args.option("--new-password-env")) request.new_password_env = *name;
+      if (request.action != "verify") if (auto value = args.option("--memory-mib")) {
+        const auto parsed = integer(*value);
+        require(parsed >= 64 && parsed <= 256, "password KDF memory must be 64..256 whole MiB");
+        request.memory_mib = static_cast<std::uint32_t>(parsed);
+      }
+      if (request.action != "verify") if (auto value = args.option("--passes")) {
+        const auto parsed = integer(*value);
+        require(parsed >= 3 && parsed <= 10, "password KDF passes must be in 3..10");
+        request.passes = static_cast<std::uint32_t>(parsed);
+      }
+    }
+    args.paths();
+    const auto expected = request.action == "rewrap" ? 2U : 1U;
+    require(args.values.size() == expected, "unexpected or missing arguments; use --help");
+    if (request.action == "rewrap" || request.action == "inspect" || request.action == "verify") request.input = args.values.front();
+    if (request.action != "inspect" && request.action != "verify") request.output = args.values.back();
+    print(cli::run_key_command(request));
     return 0;
   }
   if (command == "token-hash") {
@@ -968,7 +998,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     auto key = read_key();
     auto encrypted = args.flag("--encrypted");
     args.count(0);
-    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, or omit both");
+    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY or SYRNCK_KEY_FILE, or omit both");
     Store store(root, key, true, store_options);
     std::cout << localize("Initialized ", language) << utf8(store.root())
               << localize(" (encrypted: ", language)
@@ -978,7 +1008,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "git" && sub == "install") {
     auto key = read_key();
     auto encrypted = args.flag("--encrypted");
-    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, or omit both");
+    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY or SYRNCK_KEY_FILE, or omit both");
     auto directory = args.values.empty() ? fs::path(".") : path_from_utf8(args.pop());
     args.count(0);
     auto common = git::common_store(directory);
