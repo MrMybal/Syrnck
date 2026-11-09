@@ -133,18 +133,18 @@ template <class Loader> std::map<ObjectKey, bool> audit(const Refs &roots, Budge
     pending.pop_back();
     if (known.at(key))
       continue;
-    const auto data = load(key);
+    const Bytes data = load(key);
     known.at(key) = true;
     for (const auto &child : dependencies(key.kind, data))
       enqueue(child);
     if (key.kind == Kind::manifest) {
-      const auto manifest = parse_json(data);
+      const Json manifest = parse_json(data);
       blake3_hasher whole;
       blake3_hasher_init(&whole);
       for (const auto &entry : manifest["blocks"]) {
         budget.work();
         const ObjectKey block{Kind::chunk, entry["id"].get<std::string>()};
-        const auto payload = load(block);
+        const Bytes payload = load(block);
         known.at(block) = true;
         require(payload.size() == entry["size"].get<std::uint64_t>(), "sealed file block size mismatch");
         blake3_hasher_update(&whole, payload.data(), payload.size());
