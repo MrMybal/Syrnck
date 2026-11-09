@@ -33,6 +33,12 @@ if(SYRNCK_BUILD_BEP_SERVICE)
   endif()
   if(TARGET syrnck_documentation)
     add_dependencies(syrnck_bep_service syrnck_documentation)
+    # Both executables normally share one runtime directory. Order the copies
+    # so Ninja cannot replace the same documentation files concurrently. Keep
+    # the BEP copy for builds with a separately placed native CLI as well.
+    if(TARGET syrnck_documentation_copy)
+      add_dependencies(syrnck_bep_service syrnck_documentation_copy)
+    endif()
     add_custom_command(TARGET syrnck_bep_service POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_directory
       "${SYRNCK_DOC_OUTPUT}" "${SYRNCK_BEP_BUILD_DIR}/Documentation" VERBATIM)
   endif()
