@@ -3,50 +3,40 @@
 package syrnck
 
 import (
+	"errors"
 	"runtime"
 	"unsafe"
 )
 
 func nativeWorkspaceNative(h nativeWorkspaceHandle, store nativeHandle, mode uint32, arguments [6][]byte, cancellation nativeCancellationHandle) ([]byte, error) {
-	var pointers [6]uintptr
-	for i, data := range arguments {
-		pointers[i] = uintptr(unsafe.Pointer(unsafe.SliceData(data)))
-	}
-	expected := [3]uintptr{pointers[0], pointers[1], pointers[5]}
+	// Keep actual pointers in the expected-state struct so Go tracks its inputs.
+	// Convert output/operation addresses inside each Proc.Call expression: storing
+	// uintptr addresses in an argument slice hides them from stack relocation.
+	// See https://pkg.go.dev/unsafe#Pointer, syscall conversion rule (4).
+	expected := [3]*byte{unsafe.SliceData(arguments[0]), unsafe.SliceData(arguments[1]), unsafe.SliceData(arguments[5])}
 	operation := [3]uintptr{uintptr(cancellation), 0, 0}
 	var ptr, length uintptr
-	base := []uintptr{uintptr(h), uintptr(store)}
-	op := uintptr(unsafe.Pointer(&operation))
-	out := uintptr(unsafe.Pointer(&ptr))
-	size := uintptr(unsafe.Pointer(&length))
-	var name string
-	var args []uintptr
+	var code uintptr
 	switch mode {
 	case 0:
-		name = "workspace_native_state_json_ex"
-		args = append(base, op, out, size)
+		code, _, _ = library.functions["workspace_native_state_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 1:
-		name = "workspace_capture_json_ex"
-		args = append(base, uintptr(unsafe.Pointer(&expected)), pointers[4], op, out, size)
+		code, _, _ = library.functions["workspace_capture_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(&expected)), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[4]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 2:
-		name = "workspace_checkout_plan_json_ex"
-		args = append(base, uintptr(unsafe.Pointer(&expected)), pointers[2], op, out, size)
+		code, _, _ = library.functions["workspace_checkout_plan_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(&expected)), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[2]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 3:
-		name = "workspace_checkout_owned_json_ex"
-		args = append(base, uintptr(unsafe.Pointer(&expected)), pointers[2], pointers[3], op, out, size)
+		code, _, _ = library.functions["workspace_checkout_owned_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(&expected)), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[2]))), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[3]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 4:
-		name = "workspace_recover_owned_json_ex"
-		args = append(base, pointers[0], pointers[2], pointers[3], op, out, size)
+		code, _, _ = library.functions["workspace_recover_owned_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[0]))), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[2]))), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[3]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 6:
-		name = "workspace_recover_owned_preserving_json_ex"
-		args = append(base, pointers[0], pointers[2], pointers[3], op, out, size)
+		code, _, _ = library.functions["workspace_recover_owned_preserving_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[0]))), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[2]))), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[3]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
 	case 5:
-		name = "workspace_checkout_status_json_ex"
-		args = append(base, pointers[2], op, out, size)
+		code, _, _ = library.functions["workspace_checkout_status_json_ex"].Call(uintptr(h), uintptr(store), uintptr(unsafe.Pointer(unsafe.SliceData(arguments[2]))), uintptr(unsafe.Pointer(&operation)), uintptr(unsafe.Pointer(&ptr)), uintptr(unsafe.Pointer(&length)))
+	default:
+		return nil, errors.New("invalid native workspace operation")
 	}
-	r, _, _ := library.functions[name].Call(args...)
 	runtime.KeepAlive(arguments)
 	runtime.KeepAlive(expected)
 	runtime.KeepAlive(operation)
-	return workspaceJSONResult(int(r), ptr, length)
+	return workspaceJSONResult(int(code), ptr, length)
 }
