@@ -1,6 +1,7 @@
 #include "cli_keys.hpp"
 #include "native_workspace.hpp"
 #include <syrnck/keys.hpp>
+#include <syrnck/key_vault.hpp>
 #include <syrnck/signing_keys.hpp>
 #include <syrnck/sealed.hpp>
 #include <algorithm>
@@ -11,7 +12,7 @@
 #endif
 namespace syrnck::cli {
 namespace {
-struct WipeBytes { Bytes &value; ~WipeBytes() { wipe_secret(value); } };
+struct WipeBytes { Bytes &value; bool active = true; ~WipeBytes() { if (active) wipe_secret(value); } };
 void environment_name(std::string_view name) {
   require(!name.empty() && name.size() <= 128 &&
       ((name.front() >= 'A' && name.front() <= 'Z') || name.front() == '_') &&
@@ -45,6 +46,9 @@ std::optional<Bytes> environment_value(const std::string &name, std::size_t limi
   WipeBytes wipe{result};
   require(WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), static_cast<int>(length),
       reinterpret_cast<char *>(result.data()), size, nullptr, nullptr) == size, "cannot read key environment");
+  // Transfer success to Environment's wiping owner. Wiping a named return
+  // value here would also wipe the caller's bytes when NRVO is enabled.
+  wipe.active = false;
   return result;
 #else
   const auto value = std::getenv(name.c_str());
@@ -94,9 +98,97 @@ Json metadata(PasswordKdfOptions options, bool signing = false, bool sealed = fa
       {"memory_kib",options.memory_kib},{"passes",options.passes},{"lanes",1},
       {"cipher","xchacha20-poly1305"},{"authenticated",false}};
 }
+VaultKeyPurpose vault_purpose(std::string_view value) {
+  if (value == "storage") return VaultKeyPurpose::storage;
+  if (value == "signing") return VaultKeyPurpose::signing;
+  if (value == "sealed") return VaultKeyPurpose::sealed;
+  throw Error("vault purpose must be storage, signing or sealed");
+}
+void prepare_vault_cli() {
+  // This executable is a headless host. Configure its process policy before
+  // Keychain workers, only when an OS vault is actually selected.
+  static std::once_flag prepared;
+  std::call_once(prepared, [] { SystemKeyVault::disable_macos_interaction(); });
+}
+std::optional<fs::path> vault_keychain_environment() {
+  Environment path("SYRNCK_VAULT_KEYCHAIN", 32768);
+  if (!path.value) return {};
+  require(!path.value->empty(), "SYRNCK_VAULT_KEYCHAIN must name an absolute macOS keychain");
+  return path_from_utf8(text(*path.value));
+}
+VaultKeyReference environment_reference(const Bytes &value, VaultKeyPurpose purpose) {
+  const auto ref = VaultKeyReference::parse(text(value));
+  require(ref.purpose == purpose, "vault environment reference has another key purpose");
+  return ref;
+}
+SecretKey vault_storage_environment(const Bytes &value) {
+  const auto ref = environment_reference(value, VaultKeyPurpose::storage);
+  const auto keychain = vault_keychain_environment();
+  const SystemKeyVault vault(keychain);
+  prepare_vault_cli();
+  struct Cached { std::string reference; std::optional<fs::path> keychain; SecretKey secret; };
+  struct Cache { std::mutex mutex; std::optional<Cached> entry; };
+  static Cache cache;
+  const std::lock_guard lock(cache.mutex);
+  const auto encoded = ref.encode();
+  if (!cache.entry || cache.entry->reference != encoded || cache.entry->keychain != keychain)
+    cache.entry.emplace(Cached{encoded, keychain, vault.open_secret(ref)});
+  // The immutable reference selects a retained native owner. Removing the OS
+  // entry does not revoke it; restart the process to discard cached owners.
+  return SecretKey::from_bytes(cache.entry->secret.view());
+}
+SigningKey vault_signing_environment(const Bytes &value) {
+  const auto ref = environment_reference(value, VaultKeyPurpose::signing);
+  const auto keychain = vault_keychain_environment();
+  const SystemKeyVault vault(keychain);
+  prepare_vault_cli();
+  struct Cached { std::string reference; std::optional<fs::path> keychain; SigningKey key; };
+  struct Cache { std::mutex mutex; std::optional<Cached> entry; };
+  static Cache cache;
+  const std::lock_guard lock(cache.mutex);
+  const auto encoded = ref.encode();
+  if (!cache.entry || cache.entry->reference != encoded || cache.entry->keychain != keychain)
+    cache.entry.emplace(Cached{encoded, keychain, vault.open_signer(ref)});
+  return cache.entry->key.clone();
+}
+struct VaultReceipt { VaultKeyReference reference; std::optional<fs::path> keychain; };
+VaultReceipt vault_receipt(const std::string &input) {
+  const auto path = path_from_utf8(input);
+  const auto status = fs::symlink_status(path);
+  require(fs::is_regular_file(status) && !native_link_like(path, status), "vault reference must be a regular non-linked file");
+  const auto value = parse_unique_json(read_bytes(path, 16384));
+  require(value.is_object() && (value.size() == 4 || value.size() == 5) &&
+      value.contains("version") && value.at("version").is_number_integer() && value.at("version") == 1 &&
+      value.contains("type") && value.at("type").is_string() && value.at("type") == "system-vault-reference" &&
+      value.contains("provider") && value.at("provider").is_string() &&
+      value.contains("reference") && value.at("reference").is_string() &&
+      (value.size() == 4 || (value.contains("keychain") && value.at("keychain").is_string())), "invalid vault reference file");
+  require(value.at("provider").get<std::string>() == SystemKeyVault::provider(), "vault reference belongs to another system provider");
+  std::optional<fs::path> keychain;
+  if (value.contains("keychain")) keychain = path_from_utf8(value.at("keychain").get<std::string>());
+  return {VaultKeyReference::parse(value.at("reference").get<std::string>()), std::move(keychain)};
+}
+fs::path vault_reference_output(const std::string &name) {
+  require(!name.empty(), "invalid vault reference output path");
+  const auto supplied = fs::absolute(path_from_utf8(name)).lexically_normal();
+  require(!supplied.filename().empty(), "invalid vault reference output path");
+  const auto parent = fs::canonical(supplied.parent_path());
+  require(fs::is_directory(parent), "vault reference output parent must exist");
+  const auto output = parent / supplied.filename();
+  require(fs::symlink_status(output).type() == fs::file_type::not_found, "vault reference output already exists");
+  return output;
+}
 }
 std::optional<Key> encryption_key_environment() {
   Environment file("SYRNCK_KEY_FILE", 32768);
+  Environment reference("SYRNCK_KEY_VAULT", 96);
+  if (reference.value) {
+    Environment raw("SYRNCK_KEY", 64);
+    require(!raw.value && !file.value, "choose only one of SYRNCK_KEY, SYRNCK_KEY_FILE or SYRNCK_KEY_VAULT");
+    const auto owner = vault_storage_environment(*reference.value);
+    Key result; std::copy(owner.view().begin(), owner.view().end(), result.begin());
+    return result;
+  }
   if (!file.value) {
     auto secret = raw_key();
     if (!secret) return {};
@@ -132,6 +224,12 @@ std::optional<Key> encryption_key_environment() {
 }
 std::optional<SigningKey> protected_signing_key_environment() {
   Environment file("SYRNCK_SIGNING_KEY_FILE", 32768);
+  Environment reference("SYRNCK_SIGNING_KEY_VAULT", 96);
+  if (reference.value) {
+    Environment raw("SYRNCK_SIGNING_SEED", 64);
+    require(!raw.value && !file.value, "choose only one of SYRNCK_SIGNING_SEED, SYRNCK_SIGNING_KEY_FILE or SYRNCK_SIGNING_KEY_VAULT");
+    return vault_signing_environment(*reference.value);
+  }
   if (!file.value) return {};
   Environment raw("SYRNCK_SIGNING_SEED", 64);
   require(!raw.value, "choose either SYRNCK_SIGNING_SEED or SYRNCK_SIGNING_KEY_FILE");
@@ -142,7 +240,7 @@ std::optional<SigningKey> protected_signing_key_environment() {
   return open_protected_signing_key(envelope, *password.value);
 }
 void discard_sealed_key_environment() {
-  for (const auto *name : {"SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD", "SYRNCK_NEW_SEALED_KEY_PASSWORD"}) {
+  for (const auto *name : {"SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_VAULT", "SYRNCK_SEALED_KEY_PASSWORD", "SYRNCK_NEW_SEALED_KEY_PASSWORD"}) {
 #ifdef _WIN32
     const std::wstring wide(name, name + std::char_traits<char>::length(name));
     SetLastError(ERROR_SUCCESS);
@@ -157,6 +255,15 @@ void discard_sealed_key_environment() {
 std::optional<SecretKey> sealed_key_environment() {
   const auto read = []() -> std::optional<SecretKey> {
     Environment file("SYRNCK_SEALED_KEY_FILE", 32768);
+    Environment reference("SYRNCK_SEALED_KEY_VAULT", 96);
+    if (reference.value) {
+      Environment raw("SYRNCK_SEALED_KEY", 64);
+      require(!raw.value && !file.value, "choose only one of SYRNCK_SEALED_KEY, SYRNCK_SEALED_KEY_FILE or SYRNCK_SEALED_KEY_VAULT");
+      const auto ref = environment_reference(*reference.value, VaultKeyPurpose::sealed);
+      const SystemKeyVault vault(vault_keychain_environment());
+      prepare_vault_cli();
+      return vault.open_secret(ref);
+    }
     if (!file.value) return raw_key(false, true);
     Environment raw("SYRNCK_SEALED_KEY", 64);
     require(!raw.value, "choose either SYRNCK_SEALED_KEY or SYRNCK_SEALED_KEY_FILE");
@@ -167,6 +274,75 @@ std::optional<SecretKey> sealed_key_environment() {
   };
   try { auto key = read(); discard_sealed_key_environment(); return key; }
   catch (...) { discard_sealed_key_environment(); throw; }
+}
+Json run_vault_command(const VaultCommand &request) {
+  if (request.action == "provider")
+    return Json{{"version", 1}, {"provider", SystemKeyVault::provider()}, {"available", SystemKeyVault::provider() != "unavailable"}};
+  if (request.action == "create" || request.action == "import") {
+    const auto purpose = vault_purpose(request.purpose);
+    const auto output = vault_reference_output(request.output);
+    std::optional<fs::path> keychain;
+    if (request.keychain) keychain = path_from_utf8(*request.keychain);
+    const SystemKeyVault vault(keychain);
+    Bytes envelope;
+    std::optional<Environment> password;
+    if (request.action == "import") {
+      envelope = key_file(path_from_utf8(request.input), purpose == VaultKeyPurpose::signing, purpose == VaultKeyPurpose::sealed);
+      password.emplace(request.password_env, 4096);
+      require(password->value && !password->value->empty(), "set the selected key password environment variable");
+    }
+    prepare_vault_cli();
+    const auto ref = request.action == "create" ? vault.generate(purpose) : vault.import_protected(envelope, *password->value, purpose);
+    Json receipt;
+    try {
+      receipt = Json{{"version", 1}, {"type", "system-vault-reference"}, {"provider", SystemKeyVault::provider()}, {"reference", ref.encode()}};
+      if (keychain) receipt["keychain"] = utf8(*keychain);
+      atomic_write(output, bytes(receipt.dump()), false);
+    }
+    catch (const std::exception &error) {
+      // OS and filesystem publication are separate. Never revoke a key whose
+      // reference file may already be visible after a durability error.
+      const auto detail = ref.encode() + "; " + error.what();
+      throw Error("vault entry retained after reference publication error: " + detail);
+    }
+    receipt["path"] = utf8(output);
+    return receipt;
+  }
+  require(request.action == "inspect" || request.action == "export" || request.action == "erase", "unknown vault command; use provider, create, import, inspect, export or erase");
+  const auto receipt = vault_receipt(request.input);
+  const SystemKeyVault vault(receipt.keychain);
+  std::optional<fs::path> output;
+  PasswordKdfOptions options;
+  std::optional<Environment> password;
+  if (request.action == "export") {
+    output = output_path(request.output);
+    if (request.memory_mib) {
+      require(*request.memory_mib >= 64 && *request.memory_mib <= 256, "password KDF memory must be 64..256 whole MiB");
+      options.memory_kib = *request.memory_mib * 1024;
+    }
+    if (request.passes) options.passes = *request.passes;
+    options.validate();
+    password.emplace(request.password_env, 4096);
+    require(password->value && !password->value->empty(), "set the selected key password environment variable");
+  }
+  prepare_vault_cli();
+  Json result{{"version", 1}, {"provider", SystemKeyVault::provider()}, {"reference", receipt.reference.encode()}};
+  if (request.action == "erase") { result["removed"] = vault.erase(receipt.reference); return result; }
+  if (request.action == "export") {
+    const auto envelope = vault.export_protected(receipt.reference, *password->value, options);
+    atomic_write(*output, envelope, false);
+    result["path"] = utf8(*output); result["bytes"] = envelope.size();
+    return result;
+  }
+  if (receipt.reference.purpose == VaultKeyPurpose::signing) {
+    const auto signer = vault.open_signer(receipt.reference);
+    result["public_key"] = hex(signer.public_key()); result["key_id"] = signing_key_id(signer.public_key());
+  } else {
+    const auto key = vault.open_secret(receipt.reference);
+    if (receipt.reference.purpose == VaultKeyPurpose::sealed) result["realm"] = sealed_realm_id(key);
+  }
+  result["authenticated"] = true;
+  return result;
 }
 Json run_key_command(const KeyCommand &request) {
   require(!request.signing || !request.sealed, "invalid protected key purpose");

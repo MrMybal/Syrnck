@@ -4,7 +4,7 @@ title: Architecture
 description: Guide : Architecture.
 section: Premiers pas
 order: 10
-sourceRevision: 8
+sourceRevision: 9
 ---
 
 # Architecture de Syrnck {#architecture-de-syrnck}
@@ -122,7 +122,7 @@ L'interface C expose l'ingestion, la reconstruction, la présence/lecture/import
 
 Le prototype compresse puis chiffre chaque objet au repos avec XChaCha20-Poly1305, une clé aléatoire de 256 bits et un nonce aléatoire de 192 bits. L'identifiant et le type de l'objet sont authentifiés comme données associées. Les manifestes et révisions sont aussi chiffrés ; la configuration et les noms de références restent visibles. Les identifiants de contenu et tailles stockées ne sont pas masqués.
 
-Le CLI choisit `SYRNCK_KEY` ou un [fichier de clé protégé par mot de passe](doc:key-files#providers), pas une clé dans la configuration du Store. Les hôtes C++/C/Go peuvent utiliser séparément l'[API de coffre système](doc:key-files#system-vault) ; sa sélection CLI/BEP autonome reste à terminer. Rotation en place/distribuée et récupération demandent encore du travail. Le détenteur des droits sur le processus et son environnement reste un acteur de confiance.
+Le CLI choisit `SYRNCK_KEY` ou un [fichier de clé protégé par mot de passe](doc:key-files#providers), pas une clé dans la configuration du Store. Les hôtes C++/C/Go, le CLI et le service BEP autonome utilisent les [propriétaires des coffres système](doc:system-vaults) avec des usages stockage/signature/clé scellée indépendants. Rotation en place/distribuée et récupération demandent encore du travail. Le détenteur des droits sur le processus et son environnement reste un acteur de confiance.
 
 La [compression réseau négociée](doc:network-compression) utilise Zstandard niveau 1 sur les objets logiques, avec repli brut si le gain ou le budget ne suffit pas. Le décodage vérifie la trame avant import et écrit directement dans le buffer réservé. Les compteurs et cibles de débit réseau incluent les tentatives répétées ; les octets logiques réussis gardent leur compteur distinct.
 

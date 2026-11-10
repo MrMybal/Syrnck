@@ -22,28 +22,41 @@ jobs:
           cache: false
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - name: Isolated Secret Service dependencies
         if: runner.os == 'Linux' && matrix.provider == 'ON'
         run: sudo apt-get install -y libsecret-1-dev gnome-keyring dbus-x11
       - name: macOS build dependencies
         if: runner.os == 'macOS'
         run: brew install ninja
+      - name: macOS CLI TLS dependencies
+        if: runner.os == 'macOS' && matrix.provider == 'ON'
+        run: |
+          brew install openssl@3
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Fetch verified dependency archives
         run: python scripts/fetch_dependencies.py
+      - name: Prepare pinned BEP test dependencies
+        if: matrix.provider == 'ON'
+        run: python scripts/build_syncthing_reference.py --download --dependencies-only
       - name: Configure native vault qualification
         run: >-
           python scripts/build.py configure
-          -DSYRNCK_BUILD_NETWORK=OFF -DSYRNCK_BUILD_CLI=OFF
+          -DSYRNCK_BUILD_NETWORK=${{ matrix.provider }} -DSYRNCK_BUILD_CLI=${{ matrix.provider }}
+          -DSYRNCK_BUILD_BEP_SERVICE=OFF
           -DSYRNCK_BUILD_DOCUMENTATION=OFF -DSYRNCK_BUILD_BENCHMARKS=OFF
           -DSYRNCK_TEST_GO=OFF -DSYRNCK_TEST_SYNCTHING=OFF
           -DSYRNCK_SYSTEM_KEY_VAULT=${{ matrix.provider }}
           -DSYRNCK_TEST_SYSTEM_VAULT=${{ matrix.provider }}
           -DSYRNCK_TEST_SYSTEM_VAULT_GO=${{ matrix.provider }}
+          -DSYRNCK_TEST_SYSTEM_VAULT_BEP=${{ matrix.provider }}
       - name: Build native API and installed SDK targets
         run: python scripts/build.py build --target syrnck_key_vault_tests syrnck_vault_shared_abi_tests syrnck_vault_static_abi_tests syrnck_git syrnck_ffi syrnck_ffi_static
+      - name: Build vault CLI
+        if: matrix.provider == 'ON'
+        run: python scripts/build.py build --target syrnck
       - name: Test actual vaults and relocated SDK consumers
-        run: python scripts/build.py test --output-on-failure -R "^(key_vault_references|key_vault_shared_abi|key_vault_static_abi|key_vault_system|sdk_distribution)$"
+        run: python scripts/build.py test --output-on-failure -R "^(key_vault_references|key_vault_shared_abi|key_vault_static_abi|key_vault_system|key_vault_cli|sdk_distribution)$"
       - name: Retain diagnostics
         if: always()
         uses: actions/upload-artifact@v4

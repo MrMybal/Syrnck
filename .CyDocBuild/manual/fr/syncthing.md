@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 15
+sourceRevision: 16
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -555,6 +555,9 @@ Aide et diagnostics propres au CLI sont anglais/français ; `--lang` prime sur
 Le CLI principal ouvre cette page par `syrnck --lang fr help syncthing --section standalone-service`.
 Installation de service OS, orchestration de plusieurs pairs et sémantique
 complète des dossiers/liens restent à terminer.
+
+
+Pour un fournisseur du compte OS, utiliser `key_vault` et éventuellement `signing_key_vault` à la place des fichiers protégés. Voir les [paramètres de service des coffres système](doc:system-vaults#services) pour les usages exacts, exclusions, prérequis de trousseau/confiance macOS et règles de sauvegarde/suppression. Ces paramètres ne déplacent pas le PEM d’appareil TLS ou le mot de passe de dossier Syncthing dans un coffre.
 
 ## Construire et distribuer l’exécutable {#build-standalone-service}
 

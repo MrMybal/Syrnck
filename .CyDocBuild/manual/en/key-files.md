@@ -5,7 +5,7 @@ description: Create, verify and rewrap key files; unlock native Stores without e
 section: Storage
 parent: storage
 order: 55
-revision: 6
+revision: 7
 ---
 
 ## Create a key file {#create}
@@ -63,7 +63,7 @@ The [C++ API](doc:api-password-keys) owns secret bytes through move-only `Secret
 
 ## System key vaults {#system-vault}
 
-The [native C++ vault API](doc:api-system-key-vault) can keep independent storage keys, signing keys and sealed master keys in the current OS account. [C owners](doc:api-c-abi#system-vaults) and the [Go binding](doc:go-binding#system-vaults) open these entries without exporting plaintext. It is separate from the password-file providers above. CLI environment selection and standalone BEP configuration do not yet select this provider.
+The [native C++ vault API](doc:api-system-key-vault) can keep independent storage keys, signing keys and sealed master keys in the current OS account. [C owners](doc:api-c-abi#system-vaults) and the [Go binding](doc:go-binding#system-vaults) open these entries without exporting plaintext. It is separate from the password-file providers above. The [CLI and standalone BEP service](doc:system-vaults) select the same native owners with public purpose-separated references.
 
 ```cpp
 #include <syrnck/key_vault.hpp>
@@ -93,4 +93,4 @@ Deleting an entry does not invalidate existing native owners, rotate repository 
 
 ## Remaining security work {#limits}
 
-The password-file providers unlock existing at-rest encryption. The explicit [sealed workflow](doc:sealed-repositories) uses an independent master key and a distinct protected-key purpose for opaque transport. System vault owners do not yet integrate CLI/standalone BEP configuration or distributed key rotation/revocation. Revision signing uses [separate protected signers](doc:signing-keys). Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).
+The password-file providers unlock existing at-rest encryption. The explicit [sealed workflow](doc:sealed-repositories) uses an independent master key and a distinct protected-key purpose for opaque transport. System vault owners integrate CLI/standalone BEP configuration; distributed key rotation/revocation remains separate work. Revision signing uses [separate protected signers](doc:signing-keys). Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).

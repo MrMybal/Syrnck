@@ -5,7 +5,7 @@ description: Clés clientes séparées, snapshots opaques au serveur, transferts
 section: Storage
 parent: storage
 order: 57
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Ce que le serveur voit {#threat-model}
@@ -29,6 +29,9 @@ syrnck sealed-key verify private-keys/team.syreakey
 Définir `SYRNCK_SEALED_KEY_FILE` avec son chemin absolu et garder `SYRNCK_SEALED_KEY_PASSWORD` disponible au client. Sinon, définir `SYRNCK_SEALED_KEY` avec une clé existante de 32 octets encodée en 64 caractères hexadécimaux. Deux fournisseurs simultanés, un fournisseur vide ou des identifiants invalides/incorrects sont refusés. Le CLI vide ces variables de son propre environnement après chargement et avant qu'une commande sans rapport puisse lancer des enfants. L'environnement du lanceur reste inchangé.
 
 `sealed-key protect FICHIER` protège la clé brute exacte. `sealed-key rewrap SOURCE CIBLE` utilise l'ancien mot de passe et `SYRNCK_NEW_SEALED_KEY_PASSWORD`, vers une nouvelle destination. Clé maîtresse et domaine public restent identiques. Les cinq actions acceptent les contrôles de variables de mot de passe/KDF applicables aux [clés du stockage](doc:key-files). L'enveloppe authentifiée de 104 octets possède une finalité distincte : les enveloppes de clés au repos ou de graines de signature sont refusées. Changer le mot de passe ne révoque pas les anciennes copies et ne rechiffre pas les objets. Les sauvegardes de Store n'incluent pas automatiquement les fichiers de clés externes.
+
+
+Autre possibilité : choisir une maîtresse indépendante avec `SYRNCK_SEALED_KEY_VAULT` et éventuellement `SYRNCK_VAULT_KEYCHAIN`. Les fournisseurs bruts, fichiers et coffres s’excluent ; une référence de stockage ou de signature est refusée. Voir les [fournisseurs des coffres système et la récupération](doc:system-vaults).
 
 ## Préparer, inspecter et restaurer localement {#local}
 

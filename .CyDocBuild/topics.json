@@ -1296,5 +1296,12 @@
   "syncthing-receiver": "syncthing#opaque-receiver",
   "system-key-vault": "key-files#system-vault",
   "system-vault-c": "api-c-abi#system-vaults",
-  "system-vault-go": "go-binding#system-vaults"
+  "system-vault-go": "go-binding#system-vaults",
+  "vault": "system-vaults",
+  "vault provider": "system-vaults#commands",
+  "vault create": "system-vaults#commands",
+  "vault import": "system-vaults#recovery",
+  "vault export": "system-vaults#recovery",
+  "vault inspect": "system-vaults#references",
+  "vault erase": "system-vaults#recovery"
 }

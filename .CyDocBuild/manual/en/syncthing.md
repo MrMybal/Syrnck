@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 15
+revision: 16
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -598,6 +598,9 @@ Human help and CLI-owned diagnostics use English/French; `--lang` overrides
 The main CLI opens this page with `syrnck help syncthing --section standalone-service`.
 OS service installation, multiple-peer orchestration and full directory/symlink
 semantics remain unfinished.
+
+
+For an OS-account provider, use `key_vault` and optional `signing_key_vault` instead of password files. See [system vault service settings](doc:system-vaults#services) for exact reference purposes, exclusions, macOS keychain/trust requirements and backup/erasure semantics. These settings do not move the TLS device PEM or Syncthing folder password into a vault.
 
 ## Build and distribute the executable {#build-standalone-service}
 

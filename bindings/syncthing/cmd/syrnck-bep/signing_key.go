@@ -9,6 +9,21 @@ import (
 // Authenticate before workers/listeners. The typed native owner is shared only
 // for synchronous identity attachment; each Store gets independent signing state.
 func loadSigningKey(config configuration, directory, storage string) (*syrnck.SigningKey, error) {
+	if config.SigningKeyVault != "" {
+		if err := validateVaultConfiguration(config); err != nil {
+			return nil, err
+		}
+		ref, err := selectedVaultReference(config.SigningKeyVault, syrnck.VaultSigningKey)
+		if err != nil {
+			return nil, err
+		}
+		vault, err := openSelectedVault(config)
+		if err != nil {
+			return nil, err
+		}
+		defer vault.Close()
+		return vault.OpenSigner(ref)
+	}
 	if config.SigningKeyFile == "" {
 		return nil, nil
 	}

@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 14
+revision: 15
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -286,4 +286,4 @@ func openVaultStore(encoded, path string) (*syrnck.Store, error) {
 
 `OpenSecret` accepts storage references, `OpenSigner` signing references and `OpenSealed` independent master references. Each returns the existing opaque native owner. Storage/seed/master bytes never enter Go. Configure a signer through `NativeIdentityOptions.Signer`; closing the provider or signer does not invalidate Store-owned signing state. A master works with `SealSnapshot`/`OpenSnapshot`. `Erase` removes the exact OS entry and returns false if absent; it does not revoke opened owners or exported backups. `Close` is idempotent and serialized with calls; later calls return `ErrSystemKeyVaultClosed`.
 
-The standalone BEP configuration and native CLI environment do not yet select vault references. Library hosts can reuse the returned owner in `OpenStore` callbacks. The opt-in `key_vault_system` CTest fixture builds a Go probe with strict pointer checks and executes create/verify/erase in separate processes alongside the C++ and C shared/static probes. It checks real encrypted Store use, signed revisions, protected backups and sealed reconstruction; macOS also checks locked keychain refusal.
+The [standalone BEP configuration and native CLI environment](doc:system-vaults) can select vault references. Library hosts can reuse the returned owner in `OpenStore` callbacks. The opt-in `key_vault_system` CTest fixture builds a Go probe with strict pointer checks and executes create/verify/erase in separate processes alongside the C++ and C shared/static probes. It checks real encrypted Store use, signed revisions, protected backups and sealed reconstruction; macOS also checks locked keychain refusal.

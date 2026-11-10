@@ -14,7 +14,7 @@ func validateReceiverConfiguration(config configuration) error {
 	if config.Directory != "" || config.Workspace != "" || config.UsePermissions || config.PreserveCheckoutEdits || config.ConflictCopies || config.ResumeDownloads {
 		return errors.New("receive_encrypted cannot use workspace, directory or plaintext working-file options")
 	}
-	if config.UntrustedPeer || config.FolderPasswordEnv != "" || config.Author != nil || config.SigningKeyEnv != "" || config.SigningKeyFile != "" || config.SigningKeyPasswordEnv != "" {
+	if config.UntrustedPeer || config.FolderPasswordEnv != "" || config.Author != nil || config.SigningKeyEnv != "" || config.SigningKeyFile != "" || config.SigningKeyVault != "" || config.SigningKeyPasswordEnv != "" {
 		return errors.New("receive_encrypted cannot use a folder password, untrusted_peer or revision author/signing keys")
 	}
 	return nil

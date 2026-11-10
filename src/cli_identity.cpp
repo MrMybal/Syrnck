@@ -85,7 +85,7 @@ std::optional<SigningKey> signing_key_environment() {
   return SigningKey::from_seed(seed);
 }
 void discard_signing_seed_environment() {
-  for (const auto *name : {"SYRNCK_SIGNING_SEED", "SYRNCK_SIGNING_KEY_FILE", "SYRNCK_SIGNING_KEY_PASSWORD", "SYRNCK_NEW_SIGNING_KEY_PASSWORD"}) {
+  for (const auto *name : {"SYRNCK_SIGNING_SEED", "SYRNCK_SIGNING_KEY_FILE", "SYRNCK_SIGNING_KEY_VAULT", "SYRNCK_SIGNING_KEY_PASSWORD", "SYRNCK_NEW_SIGNING_KEY_PASSWORD"}) {
 #ifdef _WIN32
     const std::wstring wide(name, name + std::char_traits<char>::length(name));
     SetLastError(ERROR_SUCCESS);

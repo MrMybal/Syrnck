@@ -53,7 +53,7 @@ func TestProtectedSigningConfiguration(t *testing.T) {
 }
 
 func TestProtectedSigningStartupAndNativeOwnership(t *testing.T) {
-	root := t.TempDir()
+	root := testDirectory(t)
 	directory := filepath.Join(root, "work")
 	storage := filepath.Join(directory, ".syrnck")
 	if err := os.Mkdir(directory, 0700); err != nil {

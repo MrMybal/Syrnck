@@ -24,6 +24,28 @@ func validEnvironmentName(name string) bool {
 // The native owner is unlocked once before any Folder workers start, and closed
 // after they have stopped. No plaintext storage key crosses the Go ABI.
 func loadStorageKey(config configuration, directory, storage string) (*syrnck.SecretKey, error) {
+	if config.KeyVault != "" {
+		if err := validateVaultConfiguration(config); err != nil {
+			return nil, err
+		}
+		name := config.KeyEnv
+		if name == "" {
+			name = "SYRNCK_KEY"
+		}
+		if os.Getenv(name) != "" {
+			return nil, errors.New("key_vault conflicts with a nonempty raw storage key environment variable")
+		}
+		ref, err := selectedVaultReference(config.KeyVault, syrnck.VaultStorageKey)
+		if err != nil {
+			return nil, err
+		}
+		vault, err := openSelectedVault(config)
+		if err != nil {
+			return nil, err
+		}
+		defer vault.Close()
+		return vault.OpenSecret(ref)
+	}
 	if config.KeyFile == "" {
 		return nil, nil
 	}

@@ -28,6 +28,7 @@ def run(command, timeout_seconds=60, **kwargs):
 class Probe:
     executable: str
     go: bool = False
+    cli: bool = False
 
 
 def go_environment(library):
@@ -52,16 +53,21 @@ def go_environment(library):
     return environment
 
 
-def build_go_probe(go, library, root):
-    executable = root / ("vault-go-probe.exe" if os.name == "nt" else "vault-go-probe")
+def build_go_probe(go, library, root, bep=False):
+    name = "vault-bep-go-probe" if bep else "vault-go-probe"
+    executable = root / (name + (".exe" if os.name == "nt" else ""))
     environment = go_environment(library)
     source = Path(__file__).resolve().parent.parent
-    run([str(go), "test", "-mod=readonly", "-c", "-gcflags=all=-d=checkptr=2", "-o", str(executable), "."],
-        cwd=source / "bindings/go", env=environment, timeout_seconds=120)
+    run([str(go), "test", "-mod=readonly", "-c", "-gcflags=all=-d=checkptr=2", "-o", str(executable),
+         "./cmd/syrnck-bep" if bep else "."],
+        cwd=source / ("bindings/syncthing" if bep else "bindings/go"), env=environment, timeout_seconds=120)
     return executable
 
 
 def probe_run(probe, mode, root, keychain, library):
+    if probe.cli:
+        return run([sys.executable, str(Path(__file__).with_name("vault_cli.py")), probe.executable,
+                    "--system", mode, str(root), *([str(keychain)] if keychain else [])])
     if probe.go:
         command = [probe.executable, "-test.run=^TestSystemVaultRealProvider$", "-test.v",
                    "-syrnck-vault-mode=" + mode, "-syrnck-vault-root=" + str(root),
@@ -89,7 +95,7 @@ def exercise_all(probes, root, keychain=None, keychain_password=None, library=No
         fixture = root / ("probe-" + str(index))
         fixture.mkdir(mode=0o700)
         def locked_check(probe=probe, fixture=fixture):
-            if not probe.go:
+            if not probe.go and not probe.cli:
                 print(probe_run(probe, "policy-required", fixture, keychain, library), end="", flush=True)
             run(["security", "lock-keychain", str(keychain)])
             try:
@@ -169,16 +175,20 @@ def main():
     parser.add_argument("--inside-linux", type=Path)
     go_selection = parser.add_mutually_exclusive_group()
     go_selection.add_argument("--go", type=Path)
-    go_selection.add_argument("--go-probe", type=Path)
+    go_selection.add_argument("--go-probe", type=Path, action="append", default=[])
+    parser.add_argument("--bep-go", type=Path)
     parser.add_argument("--library", type=Path)
+    parser.add_argument("--cli", type=Path)
     args = parser.parse_args()
     executables = [str(path.resolve()) for path in args.executable]
     library = args.library.resolve(strict=True) if args.library else None
-    if (args.go or args.go_probe) and library is None:
+    if (args.go or args.go_probe or args.bep_go) and library is None:
         parser.error("the Go fixture requires --library")
     probes = [Probe(path) for path in executables]
-    if args.go_probe:
-        probes.append(Probe(str(args.go_probe.resolve(strict=True)), True))
+    if args.cli:
+        probes.append(Probe(str(args.cli.resolve(strict=True)), cli=True))
+    for probe in args.go_probe:
+        probes.append(Probe(str(probe.resolve(strict=True)), True))
     if args.inside_linux:
         linux_session(probes, args.inside_linux.resolve(), library)
         return
@@ -186,6 +196,8 @@ def main():
     try:
         if args.go:
             probes.append(Probe(str(build_go_probe(args.go.resolve(strict=True), library, root)), True))
+        if args.bep_go:
+            probes.append(Probe(str(build_go_probe(args.bep_go.resolve(strict=True), library, root, bep=True)), True))
         if sys.platform == "linux":
             for tool in ("dbus-run-session", "gnome-keyring-daemon", "gdbus"):
                 if not shutil.which(tool):
@@ -194,6 +206,8 @@ def main():
                        *executables, "--inside-linux", str(root)]
             if library:
                 command.extend(["--library", str(library)])
+            if args.cli:
+                command.extend(["--cli", str(args.cli.resolve(strict=True))])
             for probe in probes:
                 if probe.go:
                     command.extend(["--go-probe", probe.executable])

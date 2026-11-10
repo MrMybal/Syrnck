@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--go", default=shutil.which("go"))
 parser.add_argument("--output", type=Path, default=root / "build/qualification/syncthing")
 parser.add_argument("--download", action="store_true", help="allow verified public module downloads")
+parser.add_argument("--dependencies-only", action="store_true", help="prepare the pinned adapter graph without building a reference daemon")
 args = parser.parse_args()
 go = args.go or str(root / ".tools/go/bin" / ("go.exe" if os.name == "nt" else "go"))
 fixture = root / "tests/syncthing-reference"
@@ -52,6 +53,9 @@ subprocess.run([go, "list", "-mod=readonly", "-buildvcs=false", "-deps", "-test"
                cwd=adapter_root, env=adapter_env, check=True, stdout=subprocess.DEVNULL)
 if any((adapter_root / name).read_bytes() != content for name, content in adapter_before.items()):
     raise SystemExit("adapter dependency preparation modified its pinned manifests")
+if args.dependencies_only:
+    print(json.dumps({"dependencies": "syncthing-adapter", "module": module, "version": expected[1], "verified": True}))
+    raise SystemExit(0)
 subprocess.run([go, "build", "-mod=readonly", "-tags=noassets", "-o", str(output),
                 module + "/cmd/syncthing"], cwd=fixture, env=env, check=True)
 if any((fixture / name).read_bytes() != content for name, content in before.items()):

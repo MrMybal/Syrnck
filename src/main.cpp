@@ -371,6 +371,13 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
     [--password-env NOM] [--new-password-env NOM] [--memory-mib 64..256] [--passes 3..10]
   signing-key create|protect|rewrap|inspect|verify
                                       Protéger les graines de signature Ed25519
+  vault provider                     Afficher le fournisseur de coffre système
+  vault create TYPE REFERENCE        Créer une clé storage|signing|sealed
+  vault import TYPE ENVELOPPE REFERENCE  Importer une sauvegarde protégée
+    [--keychain CHEMIN_ABSOLU]        Sélectionner un trousseau macOS
+  vault inspect|erase REFERENCE      Vérifier ou supprimer l’entrée exacte
+  vault export REFERENCE ENVELOPPE   Sauvegarder avec un mot de passe
+    [--password-env NOM] [--memory-mib 64..256] [--passes 3..10]
   put FICHIER [--fixed-size OCTETS] [--workers 1..64] [--buffer-mib 32]
                                      Importer et conserver un fichier complet
   get MANIFESTE NOUVEAU_FICHIER [--offset N --length N]   Reconstruire un fichier ou une plage
@@ -594,7 +601,8 @@ Progression : --progress ou --progress-json sur stderr pour put, get, compare, p
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
               git lfs-preview/migrate-lfs/retention-scan/retention et agent push/pull/resume/prune.
               Ctrl+C annule (code 130) avant le point de publication.
-Secrets : SYRNCK_KEY (64 caractères hexadécimaux) ou SYRNCK_KEY_FILE avec SYRNCK_KEY_PASSWORD.
+Secrets : SYRNCK_KEY (64 caractères hexadécimaux), SYRNCK_KEY_FILE avec SYRNCK_KEY_PASSWORD,
+          ou SYRNCK_KEY_VAULT (référence publique). SYRNCK_VAULT_KEYCHAIN sélectionne un trousseau macOS.
           SYRNCK_TOKEN (32 caractères minimum). Nouveau mot de passe : SYRNCK_NEW_KEY_PASSWORD.
 Checkout : local par défaut ; SYRNCK_SKIP_SMUDGE=1 conserve les pointeurs sans store.
 )";
@@ -613,6 +621,13 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
     [--password-env NAME] [--new-password-env NAME] [--memory-mib 64..256] [--passes 3..10]
   signing-key create|protect|rewrap|inspect|verify
                                       Protect Ed25519 revision signing seeds
+  vault provider                     Show the compiled system vault provider
+  vault create PURPOSE REFERENCE     Generate a storage|signing|sealed key
+  vault import PURPOSE ENVELOPE REFERENCE  Import a protected backup
+    [--keychain ABSOLUTE_PATH]        Select a macOS keychain
+  vault inspect|erase REFERENCE      Authenticate or erase the exact entry
+  vault export REFERENCE ENVELOPE    Create a password-protected backup
+    [--password-env NAME] [--memory-mib 64..256] [--passes 3..10]
   put FILE [--fixed-size BYTES] [--workers 1..64] [--buffer-mib 32]
                                      Ingest and retain a complete file
   get MANIFEST NEW_FILE [--offset N --length N]   Reconstruct a file or byte range
@@ -835,7 +850,8 @@ Progress: --progress or --progress-json on stderr for put, get, compare, pack, g
               native rebase-plan/rebase/rebase-index-plan/rebase-index,
               git lfs-preview/migrate-lfs/retention-scan/retention and agent push/pull/resume/prune.
           Ctrl+C cancels (exit 130) before the publication commit point.
-Secrets: SYRNCK_KEY (64 hex characters) or SYRNCK_KEY_FILE with SYRNCK_KEY_PASSWORD.
+Secrets: SYRNCK_KEY (64 hex characters), SYRNCK_KEY_FILE with SYRNCK_KEY_PASSWORD,
+         or SYRNCK_KEY_VAULT (public reference). SYRNCK_VAULT_KEYCHAIN selects a macOS keychain.
          SYRNCK_TOKEN (at least 32 characters). New password: SYRNCK_NEW_KEY_PASSWORD.
 Checkout: local by default; SYRNCK_SKIP_SMUDGE=1 preserves pointers without a store.
 )";
@@ -956,6 +972,36 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     if (request.action == "rewrap" || request.action == "inspect" || request.action == "verify") request.input = args.values.front();
     if (request.action != "inspect" && request.action != "verify") request.output = args.values.back();
     print(cli::run_key_command(request));
+    return 0;
+  }
+  if (command == "vault") {
+    cli::VaultCommand request;
+    request.action = args.pop();
+    if (request.action == "create" || request.action == "import") {
+      if (auto path = args.option("--keychain")) request.keychain = *path;
+    }
+    if (request.action == "import" || request.action == "export")
+      if (auto name = args.option("--password-env")) request.password_env = *name;
+    if (request.action == "export") {
+      if (auto value = args.option("--memory-mib")) {
+        const auto parsed = integer(*value);
+        require(parsed >= 64 && parsed <= 256, "password KDF memory must be 64..256 whole MiB");
+        request.memory_mib = static_cast<std::uint32_t>(parsed);
+      }
+      if (auto value = args.option("--passes")) {
+        const auto parsed = integer(*value);
+        require(parsed >= 3 && parsed <= 10, "password KDF passes must be in 3..10");
+        request.passes = static_cast<std::uint32_t>(parsed);
+      }
+    }
+    args.paths();
+    if (request.action == "provider") args.count(0);
+    else if (request.action == "create") { args.count(2); request.purpose = args.values[0]; request.output = args.values[1]; }
+    else if (request.action == "import") { args.count(3); request.purpose = args.values[0]; request.input = args.values[1]; request.output = args.values[2]; }
+    else if (request.action == "export") { args.count(2); request.input = args.values[0]; request.output = args.values[1]; }
+    else if (request.action == "inspect" || request.action == "erase") { args.count(1); request.input = args.values[0]; }
+    else throw Error("unknown vault command; use provider, create, import, inspect, export or erase");
+    print(cli::run_vault_command(request));
     return 0;
   }
   if (command == "token-hash") {
@@ -1118,7 +1164,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     auto key = read_key();
     auto encrypted = args.flag("--encrypted");
     args.count(0);
-    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY or SYRNCK_KEY_FILE, or omit both");
+    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, SYRNCK_KEY_FILE or SYRNCK_KEY_VAULT, or omit both");
     Store store(root, key, true, store_options);
     std::cout << localize("Initialized ", language) << utf8(store.root())
               << localize(" (encrypted: ", language)
@@ -1128,7 +1174,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   if (command == "git" && sub == "install") {
     auto key = read_key();
     auto encrypted = args.flag("--encrypted");
-    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY or SYRNCK_KEY_FILE, or omit both");
+    require(encrypted == key.has_value(), "use --encrypted with SYRNCK_KEY, SYRNCK_KEY_FILE or SYRNCK_KEY_VAULT, or omit both");
     auto directory = args.values.empty() ? fs::path(".") : path_from_utf8(args.pop());
     args.count(0);
     auto common = git::common_store(directory);

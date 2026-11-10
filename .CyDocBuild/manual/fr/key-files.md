@@ -5,7 +5,7 @@ description: Créer, vérifier et reprotéger les fichiers de clés ; ouvrir les
 section: Storage
 parent: storage
 order: 55
-sourceRevision: 6
+sourceRevision: 7
 ---
 
 ## Créer un fichier de clé {#create}
@@ -63,7 +63,7 @@ L'[API C++](doc:api-password-keys) détient les octets secrets dans `SecretKey`,
 
 ## Coffres de clés système {#system-vault}
 
-L'[API C++ native des coffres](doc:api-system-key-vault) conserve des clés de stockage, de signature et des clés maîtresses scellées indépendantes dans le compte système courant. Les [propriétaires C](doc:api-c-abi#system-vaults) et le [binding Go](doc:go-binding#system-vaults) ouvrent ces entrées sans export en clair. Elle est distincte des fournisseurs de fichiers protégés ci-dessus. La sélection par environnement CLI et la configuration BEP autonome ne choisissent pas encore ce fournisseur.
+L'[API C++ native des coffres](doc:api-system-key-vault) conserve des clés de stockage, de signature et des clés maîtresses scellées indépendantes dans le compte système courant. Les [propriétaires C](doc:api-c-abi#system-vaults) et le [binding Go](doc:go-binding#system-vaults) ouvrent ces entrées sans export en clair. Elle est distincte des fournisseurs de fichiers protégés ci-dessus. Le [CLI et le service BEP autonome](doc:system-vaults) choisissent les mêmes propriétaires natifs avec des références publiques distinctes par usage.
 
 ```cpp
 #include <syrnck/key_vault.hpp>
@@ -93,4 +93,4 @@ Supprimer une entrée n'invalide pas les propriétaires natifs existants, ne ren
 
 ## Travaux de sécurité restants {#limits}
 
-Les fournisseurs de fichiers protégés ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Les propriétaires des coffres système n'intègrent pas encore la configuration CLI/BEP autonome ni la rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).
+Les fournisseurs de fichiers protégés ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Les propriétaires des coffres système intègrent la configuration CLI/BEP autonome ; la rotation/révocation distribuée reste un travail distinct. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).

@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 14
+sourceRevision: 15
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -215,7 +215,7 @@ Syncthing utilise ce contexte pour captures locales et révisions natives
 entrantes synthétisées ; sa [configuration autonome](doc:syncthing#native-authorship)
 accepte auteur explicite et variable de graine distincte. Une signature locale
 n’est ni identité d’appareil BEP ni permission serveur. La publication serveur
-garde sa politique de clés/identités autorisées. Le coffre OS reste à développer.
+garde sa politique de clés/identités autorisées. Les propriétaires natifs peuvent aussi provenir du [coffre système](doc:system-vaults).
 
 ## Propriétaires natifs de clés protégées {#protected-keys}
 
@@ -298,4 +298,4 @@ func openVaultStore(encoded, path string) (*syrnck.Store, error) {
 
 `OpenSecret` accepte les références de stockage, `OpenSigner` celles de signature et `OpenSealed` les maîtresses indépendantes. Chacun rend le propriétaire natif opaque existant. Les octets de stockage/graine/maîtresse n'entrent jamais dans Go. Configurer un signataire avec `NativeIdentityOptions.Signer` ; fermer fournisseur ou signataire n'invalide pas la signature détenue par les Stores. Une maîtresse sert à `SealSnapshot`/`OpenSnapshot`. `Erase` retire l'entrée OS exacte et renvoie false si absente ; cela ne révoque ni propriétaires ouverts ni sauvegardes exportées. `Close` est idempotent et sérialisé avec les appels ; les appels suivants renvoient `ErrSystemKeyVaultClosed`.
 
-La configuration BEP autonome et l'environnement du CLI natif ne choisissent pas encore les références de coffre. Les hôtes de bibliothèque réutilisent le propriétaire retourné dans les callbacks `OpenStore`. La fixture CTest optionnelle `key_vault_system` construit une sonde Go avec contrôle strict des pointeurs et exécute création/vérification/suppression dans des processus distincts avec les sondes C++ et C partagé/statique. Elle vérifie vrais Stores chiffrés, révisions signées, sauvegardes protégées et reconstruction scellée ; macOS vérifie aussi le refus du trousseau verrouillé.
+La [configuration BEP autonome et l'environnement du CLI natif](doc:system-vaults) choisissent les références de coffre. Les hôtes de bibliothèque réutilisent le propriétaire retourné dans les callbacks `OpenStore`. La fixture CTest optionnelle `key_vault_system` construit une sonde Go avec contrôle strict des pointeurs et exécute création/vérification/suppression dans des processus distincts avec les sondes C++ et C partagé/statique. Elle vérifie vrais Stores chiffrés, révisions signées, sauvegardes protégées et reconstruction scellée ; macOS vérifie aussi le refus du trousseau verrouillé.

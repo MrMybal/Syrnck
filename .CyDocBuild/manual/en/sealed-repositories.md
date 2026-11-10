@@ -5,7 +5,7 @@ description: Separate client keys, opaque server snapshots, differential transfe
 section: Storage
 parent: storage
 order: 57
-revision: 4
+revision: 5
 ---
 
 ## What the server can see {#threat-model}
@@ -29,6 +29,9 @@ syrnck sealed-key verify private-keys/team.syreakey
 Set `SYRNCK_SEALED_KEY_FILE` to that absolute path and keep `SYRNCK_SEALED_KEY_PASSWORD` available to the client. Alternatively set `SYRNCK_SEALED_KEY` to an existing 32-byte key encoded as 64 hex characters. Both providers together, an empty provider or invalid/wrong credentials are refused. The CLI clears these variables from its own process environment after loading, and before unrelated commands can launch children. The launching process's environment is unchanged.
 
 `sealed-key protect FILE` wraps the exact raw sealed key. `sealed-key rewrap SOURCE TARGET` uses the old password and `SYRNCK_NEW_SEALED_KEY_PASSWORD`, with a new destination. The master key and public realm remain unchanged. All five key-file actions accept the same applicable password-variable/KDF controls as [storage key files](doc:key-files). The 104-byte authenticated envelope has a distinct sealed-key purpose: storage-key and signing-seed envelopes are refused. Rewrapping does not revoke old key copies or rotate encrypted objects. Store backups do not automatically include external key files.
+
+
+Alternatively, select an independent master with `SYRNCK_SEALED_KEY_VAULT` and optional `SYRNCK_VAULT_KEYCHAIN`. Raw, file and vault providers are mutually exclusive; a storage or signing reference is refused. See [system vault providers and recovery](doc:system-vaults).
 
 ## Prepare, inspect and restore locally {#local}
 

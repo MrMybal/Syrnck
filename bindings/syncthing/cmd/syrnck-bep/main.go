@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -41,6 +42,8 @@ type configuration struct {
 	Address               string                 `json:"address"`
 	KeyEnv                string                 `json:"key_env"`
 	KeyFile               string                 `json:"key_file,omitempty"`
+	KeyVault              string                 `json:"key_vault,omitempty"`
+	VaultKeychain         string                 `json:"vault_keychain,omitempty"`
 	KeyPasswordEnv        string                 `json:"key_password_env,omitempty"`
 	UsePermissions        bool                   `json:"use_permissions"`
 	PreserveCheckoutEdits bool                   `json:"preserve_checkout_edits"`
@@ -52,6 +55,7 @@ type configuration struct {
 	Author                *syrnck.NativeIdentity `json:"author,omitempty"`
 	SigningKeyEnv         string                 `json:"signing_key_env,omitempty"`
 	SigningKeyFile        string                 `json:"signing_key_file,omitempty"`
+	SigningKeyVault       string                 `json:"signing_key_vault,omitempty"`
 	SigningKeyPasswordEnv string                 `json:"signing_key_password_env,omitempty"`
 	PollMilliseconds      uint32                 `json:"poll_ms"`
 	RetryMinMilliseconds  uint32                 `json:"retry_min_ms"`
@@ -139,10 +143,30 @@ func loadConfiguration(path string) (configuration, error) {
 	if err := decoder.Decode(&config); err != nil {
 		return config, err
 	}
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(data, &members); err != nil {
+		return config, err
+	}
+	for _, name := range []string{"key_vault", "signing_key_vault", "vault_keychain"} {
+		for supplied := range members {
+			if supplied != name && strings.EqualFold(supplied, name) {
+				return config, errors.New("vault configuration members must use canonical lowercase names")
+			}
+		}
+		if raw, exists := members[name]; exists {
+			var selected string
+			if err := json.Unmarshal(raw, &selected); err != nil || selected == "" {
+				return config, errors.New("vault configuration selectors must be nonempty strings")
+			}
+		}
+	}
 	if config.Version != 1 || (!config.ReceiveEncrypted && config.Directory == "") || config.Folder == "" || config.Certificate == "" || config.PrivateKey == "" {
 		return config, errors.New("configuration version 1, directory, folder, certificate and private_key are required")
 	}
 	if err := validateReceiverConfiguration(config); err != nil {
+		return config, err
+	}
+	if err := validateVaultConfiguration(config); err != nil {
 		return config, err
 	}
 	if config.Mode == "" {
@@ -231,7 +255,8 @@ func loadConfiguration(path string) (configuration, error) {
 			return config, errors.New("invalid folder password environment variable name")
 		}
 		for _, name := range []string{config.KeyEnv, config.KeyPasswordEnv, config.SigningKeyEnv, config.SigningKeyPasswordEnv,
-			"SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD"} {
+			"SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD",
+			"SYRNCK_KEY_VAULT", "SYRNCK_SIGNING_KEY_VAULT", "SYRNCK_SEALED_KEY_VAULT", "SYRNCK_VAULT_KEYCHAIN"} {
 			if config.FolderPasswordEnv == name {
 				return config, errors.New("folder password requires a separate environment variable")
 			}
@@ -300,6 +325,9 @@ func certificateID(path string) (string, error) {
 
 func runService(ctx context.Context, config configuration, output io.Writer) (result error) {
 	if err := validateReceiverConfiguration(config); err != nil {
+		return err
+	}
+	if err := validateVaultConfiguration(config); err != nil {
 		return err
 	}
 	// Device signing material must never enter ordinary source snapshots.
@@ -417,7 +445,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 			return nil, err
 		}
 		if config.Author != nil {
-			if err := store.ConfigureNativeIdentity(*config.Author, syrnck.NativeIdentityOptions{Seed: signingSeed, Signer: protectedSigner, RequireSignature: config.SigningKeyEnv != "" || config.SigningKeyFile != ""}); err != nil {
+			if err := store.ConfigureNativeIdentity(*config.Author, syrnck.NativeIdentityOptions{Seed: signingSeed, Signer: protectedSigner, RequireSignature: config.SigningKeyEnv != "" || config.SigningKeyFile != "" || config.SigningKeyVault != ""}); err != nil {
 				store.Close()
 				return nil, err
 			}

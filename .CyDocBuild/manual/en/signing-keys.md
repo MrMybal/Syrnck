@@ -5,7 +5,7 @@ description: Protect Ed25519 seeds, configure native signers and retain one auth
 section: Security
 parent: native-authorship
 order: 80
-revision: 1
+revision: 2
 ---
 
 ## Create a protected signer {#create}
@@ -129,6 +129,9 @@ inside its protected Store. Authentication finishes before folder workers or TCP
 listeners start. The service removes the password variable after authentication,
 retains a native owner until workers stop and requires signed fresh revisions.
 Changed credentials require restart.
+
+
+The CLI also accepts `SYRNCK_SIGNING_KEY_VAULT`, and the standalone service accepts `signing_key_vault`, through the [system vault workflow](doc:system-vaults#services). These exclude raw/file signers, require an author and retain typed native owners until shutdown. They do not store TLS device private keys.
 
 ## Format and limits {#format}
 

@@ -81,6 +81,24 @@ int main() {
     environment("SYRNCK_SEALED_KEY", hex(next));
     fails([&] { cli::sealed_key_environment(); });
     require(!cli::sealed_key_environment(), "ambiguous sealed providers retained credentials");
+    const auto storage_ref = "syrnck-vault:1:storage:" + std::string(64, '0');
+    const auto signing_ref = "syrnck-vault:1:signing:" + std::string(64, '1');
+    environment("SYRNCK_KEY_VAULT", storage_ref);
+    fails([&] { cli::encryption_key_environment(); }); // Raw + vault, before OS access.
+    environment("SYRNCK_KEY", {});
+    environment("SYRNCK_KEY_VAULT", signing_ref);
+    fails([&] { cli::encryption_key_environment(); });
+    environment("SYRNCK_KEY_VAULT", {});
+    environment("SYRNCK_SIGNING_KEY_VAULT", storage_ref);
+    fails([&] { cli::protected_signing_key_environment(); });
+    environment("SYRNCK_SIGNING_KEY_VAULT", signing_ref);
+    environment("SYRNCK_SIGNING_KEY_FILE", utf8(path));
+    fails([&] { cli::protected_signing_key_environment(); });
+    environment("SYRNCK_SIGNING_KEY_VAULT", {});
+    environment("SYRNCK_SIGNING_KEY_FILE", {});
+    environment("SYRNCK_SEALED_KEY_VAULT", storage_ref);
+    fails([&] { cli::sealed_key_environment(); });
+    require(!cli::sealed_key_environment(), "wrong-purpose sealed vault reference was retained");
     std::cout<<"Native key-file provider cache, changed credentials and content refresh verified\n";
   } catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

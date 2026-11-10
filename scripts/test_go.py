@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+from go_test_shards import listed_cases, plan
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
@@ -16,6 +18,7 @@ args = parser.parse_args()
 library = args.library.resolve(strict=True)
 go = args.go or str(root / ".tools/go/bin" / ("go.exe" if os.name == "nt" else "go"))
 provider_names = {"SYRNCK_KEY_FILE", "SYRNCK_KEY_PASSWORD", "SYRNCK_NEW_KEY_PASSWORD",
+                  "SYRNCK_KEY_VAULT", "SYRNCK_SIGNING_KEY_VAULT", "SYRNCK_SEALED_KEY_VAULT", "SYRNCK_VAULT_KEYCHAIN",
                   "SYRNCK_BEP_FOLDER_PASSWORD",
                   "SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD", "SYRNCK_NEW_SEALED_KEY_PASSWORD",
                   "SYRNCK_SIGNING_KEY_FILE", "SYRNCK_SIGNING_KEY_PASSWORD", "SYRNCK_NEW_SIGNING_KEY_PASSWORD"}
@@ -60,6 +63,22 @@ if args.benchmark:
     command.extend(["-run", "^$", "-bench", ".", "-benchmem", "-benchtime=300ms"])
 if args.check_pointers:
     command.append("-gcflags=all=-d=checkptr=2")
-command.append("./...")
 directory = root / "bindings" / ("go" if args.module == "core" else "syncthing")
-raise SystemExit(subprocess.call(command, cwd=directory, env=env))
+if args.module == "syncthing" and not args.benchmark:
+    # Keep scenario deadlines and the 150s Go-process alarm unchanged. Discover
+    # every registered name instead of maintaining a selective test allowlist.
+    listing = subprocess.run([*command, "-list", "^(Test|Example|Fuzz)", "-json", "./..."],
+                             cwd=directory, env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    if listing.returncode:
+        print(listing.stdout, end="")
+        print(listing.stderr, end="", file=sys.stderr)
+        raise SystemExit(listing.returncode)
+    cases = listed_cases(listing.stdout)
+    groups = plan(cases)
+    result = 0
+    for index, (pattern, count) in enumerate(groups):
+        print(f"Go test shard {index + 1}/{len(groups)}: {count} package cases; {len(cases)} total", flush=True)
+        status = subprocess.call([*command, "-run", pattern, "./..."], cwd=directory, env=env)
+        if status and not result: result = status
+    raise SystemExit(result)
+raise SystemExit(subprocess.call([*command, "./..."], cwd=directory, env=env))

@@ -5,7 +5,7 @@ description: Protéger les graines Ed25519 et conserver un propriétaire natif a
 section: Sécurité
 parent: native-authorship
 order: 80
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Créer un signataire protégé {#create}
@@ -129,6 +129,9 @@ workspace ou dans son Store protégé. L’authentification précède les worker
 dossier et l’écoute TCP. Le service efface la variable de mot de passe après
 authentification, conserve le propriétaire jusqu’à l’arrêt des workers et impose
 la signature des nouvelles révisions. Redémarrer pour changer les identifiants.
+
+
+Le CLI accepte aussi `SYRNCK_SIGNING_KEY_VAULT`, et le service autonome `signing_key_vault`, via le [workflow des coffres système](doc:system-vaults#services). Ces fournisseurs excluent les signataires bruts/fichiers, exigent un auteur et conservent des propriétaires natifs typés jusqu’à l’arrêt. Ils ne stockent pas les clés privées d’appareil TLS.
 
 ## Format et limites {#format}
 
