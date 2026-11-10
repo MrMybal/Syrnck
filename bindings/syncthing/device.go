@@ -28,6 +28,7 @@ type DeviceOptions struct {
 	Hello            protocol.Hello
 	Compression      protocol.Compression
 	HandshakeTimeout time.Duration // zero selects 20 seconds; range 100ms..1min
+	keyGenerator     *protocol.KeyGenerator
 }
 
 // DeviceConnection is authenticated but not started. Call Start, then send the
@@ -198,8 +199,12 @@ func OpenDeviceConnection(ctx context.Context, transport net.Conn, options Devic
 		return nil, err
 	}
 	info := deviceConnectionInfo{secured, time.Now(), hex.EncodeToString(id[:]), options.Server}
+	keyGenerator := options.keyGenerator
+	if keyGenerator == nil {
+		keyGenerator = protocol.NewKeyGenerator()
+	}
 	connection := protocol.NewConnection(options.RemoteDevice, secured, secured, secured, model, info,
-		options.Compression, protocol.NewKeyGenerator())
+		options.Compression, keyGenerator)
 	result := &DeviceConnection{Connection: connection, LocalDevice: local, PeerHello: remoteHello, transport: transport}
 	go func() {
 		select {

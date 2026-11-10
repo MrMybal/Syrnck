@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 13
+revision: 14
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -197,7 +197,7 @@ The application supplies certificate storage/rotation, trusted Device IDs and
 connection scheduling. The low-level connection accepts an application model;
 `FolderSession` supplies the regular-file controller described below. Transport encryption authenticates and protects this peer
 connection; it does not make an ordinary receiving daemon an untrusted encrypted
-backup. The complete untrusted-device encryption workflow remains to be integrated.
+backup. The optional [untrusted-device workflow](doc:syncthing#untrusted) adds end-to-end encryption for a receive-encrypted peer.
 
 ## Qualify against the reference daemon {#reference-daemon}
 
@@ -400,7 +400,7 @@ The embedding application supplies listening/dialing, certificate/key storage
 and OS lifecycle. The [resident service](doc:syncthing#folder-service) provides
 reconnect backoff and independent offline capture. This module is optional; the CMake BEP target packages the standalone executable. The controller currently applies regular files
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
-platform ownership/xattrs or receive-encrypted folders. It retains incoming
+platform ownership/xattrs or operating as a receive-encrypted endpoint itself. It retains incoming
 metadata but does not claim these paths have been applied. It also lacks
 automatic membership
 changes/history retirement. Large-project performance and power-loss durability
@@ -628,3 +628,31 @@ both old and new native versions. Linux/macOS executable and relocation checks
 remain subject to their CI results; the source configuration alone is not proof.
 
 The standalone service also supports [protected native signing keys](doc:signing-keys#services) through `signing_key_file` and `signing_key_password_env`. Authentication precedes workers/listeners and uses a typed native owner shared across short Store sessions.
+
+## Untrusted encrypted devices {#untrusted}
+
+The trusted Syrnck endpoint can exchange encrypted files with a real Syncthing **Receive Encrypted** daemon. It uses the pinned upstream codec and password-token negotiation, without modifying Syncthing or implementing a second crypto format. This is distinct from [sealed Syrnck revision snapshots](doc:sealed-repositories): it carries Syncthing file metadata/blocks, not the native commit graph. Syrnck does not itself act as an opaque receive-encrypted BEP endpoint.
+
+Copy the installed `share/Syrnck/examples/bep-untrusted-service.json`, or add these settings to an existing standalone configuration:
+
+```json
+{
+  "untrusted_peer": true,
+  "folder_password_env": "SYRNCK_BEP_FOLDER_PASSWORD"
+}
+```
+
+Set that variable through a trusted launcher to the same nonempty folder password on each trusted endpoint. Configure the peer's folder as `receiveencrypted`; use the same folder ID. The CLI reads 1..4096 UTF-8 bytes once before capture/listening and removes the variable from its own environment on success or error. It never falls back when the configured password is absent. The provider name must differ from storage/signing/other key providers. Passwords do not belong in JSON or arguments. The launching process is unchanged. This secret is separate from a Store key, signing seed, device certificate or sealed master; it is not opened by the native sealed-key API.
+
+Library callers set `FolderSessionOptions{Untrusted: true, EncryptionPassword: password}` for a session or its service. Leave both fields unset for ordinary trusted-peer transfer. `FolderService` reuses its codec/key derivation across reconnects, including recovery from temporary upstream enrollment failures. A direct `FolderSession` caller owns its reconnect loop. The upstream Go implementation retains password strings and derived-key caches; it does not provide the native key owners' explicit memory-wiping mechanisms. Protect the trusted process and use a strong independent password. A matching public token is required before authorizing indexes or requests; missing, wrong or conflicting tokens are refused. Initial empty configurations from a new upstream encrypted folder are allowed while it learns the token, with no data authorization. Authorization waits until local codec keys are installed.
+
+The endpoint stores a canonical peer/folder encryption policy and a hash of its password token in an immutable chunk referenced by `ffi/bep/…/workspace/encryption/PEER_HASH`. Startup binds the selected mode/password before opening the connection, even if the peer is offline. Reconnects are idempotent. An explicit initial plaintext-to-encrypted upgrade is allowed; after encryption is selected, removing it or changing the password is refused before dialing. Preserve this checkpoint in backups. Correct a provisioning mistake through explicit migration/reprovisioning; deleting a catalog/checkpoint to bypass it is not automatic key rotation. Distributed password rotation/revocation and protection against an older application that ignores this policy are not provided.
+
+
+For a password change or provisioning correction, stop the affected services, retain a verified Store backup, then provision a new shared folder ID and matching independent password on the trusted endpoints and a fresh receive-encrypted folder. The native Store/history can be retained; the new folder ID creates a separate causal/encryption context and uploads its current data again. Verify restoration before explicitly retiring the old remote folder. This does not revoke old password/data copies. Enabling encryption cannot hide data already sent to a previously trusted peer.
+
+Encrypted indexes are authenticated/decrypted before entering the causal catalog; tampered or plaintext metadata closes the connection. Block responses are decrypted/authenticated by the upstream codec and then verified against the original SHA-256 descriptors before native ingestion. Short final and empty blocks use Syncthing's padding, while the engine reads only the exact original advertised range. Existing native history, guarded application, conflict copies and restart recovery continue to apply. Resume staging and working files remain plaintext on the trusted endpoint under their existing protection rules.
+
+The untrusted device sees the folder ID/label, approximate sizes, update timing, encrypted history and equality at the same filename/offset. Paths, file metadata and contents remain encrypted. Syncthing derives file keys from the filename and encrypts block-hash tokens with their offsets: changing a filename or moving content to another offset can require retransmission. An unchanged block at the same offset can be reused. Refer to the [upstream protocol](https://docs.syncthing.net/specs/untrusted.html) and [user guide](https://docs.syncthing.net/users/untrusted.html) for its threat model and current upstream status. Authentication is not proof that a withholding peer is current; retain trusted causal state. Initial-root trust/gossip and distributed retention remain separate work.
+
+Windows qualification uses the unmodified pinned daemon: a trusted source, an independent receiver, a same-offset block delta, reconnects, then a fresh trusted device restoring with both previous clients disconnected. It also checks empty/short-tail blocks, opaque on-disk names/data, actual standalone process restart, token disagreement, persisted downgrade refusal and plaintext/tampered metadata over pinned TLS. The synthetic 384 KiB file test changes one 128 KiB block; measured protocol output is approximately 129 KiB. This is not an Unreal-scale throughput/RSS claim. Current Linux/macOS execution still depends on CI results.

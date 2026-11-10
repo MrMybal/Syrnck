@@ -24,9 +24,10 @@ def main():
     parser.add_argument("--config", default="Release")
     parser.add_argument("--bindir", default="bin")
     parser.add_argument("--licenses", default="share/licenses/Syrnck/bep")
+    parser.add_argument("--examples", default="share/Syrnck/examples")
     parser.add_argument("--executable", default="syrnck-bep.exe" if os.name == "nt" else "syrnck-bep")
     args = parser.parse_args()
-    for relative in (args.bindir, args.licenses, args.executable):
+    for relative in (args.bindir, args.licenses, args.executable, args.examples):
         if Path(relative).is_absolute() or ".." in Path(relative).parts:
             parser.error("qualification requires relative install destinations")
     with tempfile.TemporaryDirectory(prefix="syrnck-bep-distribution-") as temporary:
@@ -36,6 +37,11 @@ def main():
         if installation.returncode:
             raise RuntimeError(installation.stdout + installation.stderr)
         executable = prefix / args.bindir / args.executable
+        example = prefix / args.examples / "bep-untrusted-service.json"
+        configuration = json.loads(example.read_text(encoding="utf-8"))
+        assert configuration["untrusted_peer"] is True
+        assert configuration["folder_password_env"] != configuration["key_env"]
+        assert "password" not in configuration and "encryption_password" not in configuration
         licenses = prefix / args.licenses
         manifest = json.loads((licenses / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["version"] == 1 and manifest["binary"] == executable.name

@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 13
+sourceRevision: 14
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -167,8 +167,7 @@ L’application fournit stockage/rotation des certificats, Device ID de confianc
 planification, transactions du catalogue, reprise du workspace et résolution
 des conflits. Le chiffrement du transport protège et
 authentifie ce pair ; un daemon recevant des données ordinaires ne devient pas
-une sauvegarde chiffrée non fiable. Le parcours complet de chiffrement vers un
-appareil non fiable reste à intégrer.
+une sauvegarde chiffrée non fiable. Le [mode facultatif pour appareil non fiable](doc:syncthing#untrusted) ajoute le chiffrement de bout en bout vers un pair receive-encrypted.
 
 ## Vérifier avec le daemon de référence {#reference-daemon}
 
@@ -350,7 +349,7 @@ L’application fournit écoute/connexion, certificats/clés et cycle de vie OS.
 Le [service résident](doc:syncthing#folder-service) gère attente de reconnexion
 et capture hors ligne indépendante. Ce module est optionnel ; la cible BEP CMake distribue l’exécutable autonome. Le contrôleur applique les fichiers ordinaires et
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
-vides, propriétaires/xattrs ni dossiers receive-encrypted. Les métadonnées
+vides, propriétaires/xattrs ni le rôle de récepteur opaque receive-encrypted lui-même. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
 Gestion automatique
 des membres/retrait d’historique reste à réaliser. Performances à grande échelle et
@@ -587,3 +586,31 @@ des anciennes/nouvelles versions. Exécution et déplacement de distribution
 Linux/macOS dépendent encore de leur CI ; la configuration ne les prouve pas.
 
 Le service autonome accepte aussi les [clés de signature natives protégées](doc:signing-keys#services), avec `signing_key_file` et `signing_key_password_env`. L’authentification précède workers/écoute et utilise un propriétaire natif dédié entre sessions courtes.
+
+## Appareils non fiables chiffrés {#untrusted}
+
+Le client Syrnck de confiance peut échanger des fichiers chiffrés avec un véritable daemon Syncthing **Receive Encrypted**. Il utilise le codec amont figé et sa négociation par preuve de mot de passe, sans modifier Syncthing ni réimplémenter son format cryptographique. Ce mode est distinct des [snapshots de révisions Syrnck chiffrés](doc:sealed-repositories) : il transporte métadonnées/blocs de fichiers Syncthing, pas le graphe de commits natif. Syrnck n’assure pas lui-même le rôle de récepteur BEP opaque receive-encrypted.
+
+Copier l’exemple installé `share/Syrnck/examples/bep-untrusted-service.json`, ou ajouter ces réglages à une configuration autonome existante :
+
+```json
+{
+  "untrusted_peer": true,
+  "folder_password_env": "SYRNCK_BEP_FOLDER_PASSWORD"
+}
+```
+
+Fournir cette variable via un lanceur de confiance avec le même mot de passe de dossier non vide sur chaque client de confiance. Configurer le dossier du pair en `receiveencrypted` et utiliser le même identifiant de dossier. Le CLI lit une seule fois 1 à 4096 octets UTF-8 avant capture/écoute, puis retire la variable de son propre environnement, en cas de succès ou d’erreur. Il ne revient jamais au clair si le mot de passe configuré manque. Le nom du fournisseur doit différer de ceux des clés de stockage/signature et autres clés. Aucun mot de passe dans le JSON ou les arguments. Le processus lanceur reste inchangé. Ce secret est distinct d’une clé de Store, graine de signature, certificat d’appareil ou clé maîtresse de snapshots ; l’API native des clés chiffrées ne l’ouvre pas.
+
+Les appelants du module définissent `FolderSessionOptions{Untrusted: true, EncryptionPassword: password}` pour la session ou son service. Laisser ces deux champs vides pour un pair de confiance ordinaire. `FolderService` réutilise son codec et la dérivation de clé après reconnexion, y compris après un échec temporaire de négociation initiale amont. L’appelant direct de `FolderSession` gère sa boucle de reconnexion. L’implémentation Go amont conserve des chaînes de mots de passe et des caches de clés dérivées ; elle n’offre pas les mécanismes d’effacement explicite des propriétaires natifs. Protéger le processus de confiance et choisir un mot de passe fort indépendant. Une preuve publique correspondante est exigée avant autorisation des index ou requêtes ; preuve absente, fausse ou contradictoire entraîne un refus. Une configuration initiale vide d’un nouveau dossier amont chiffré est acceptée pendant l’apprentissage de la preuve, sans autoriser les données. L’autorisation attend l’installation des clés du codec local.
+
+Le client conserve une politique canonique de chiffrement pair/dossier et le hash de sa preuve de mot de passe dans un bloc immuable référencé par `ffi/bep/…/workspace/encryption/PEER_HASH`. Le démarrage lie le mode et le mot de passe avant ouverture de connexion, même si le pair est hors ligne. Les reconnexions ne réécrivent pas ce contrôle. Une première transition explicite du clair vers le chiffré est autorisée ; ensuite, retirer le chiffrement ou changer le mot de passe est refusé avant connexion. Garder ce point de contrôle dans les sauvegardes. Corriger une erreur de configuration par migration/reprovisionnement explicite ; supprimer un catalogue/contrôle pour le contourner n’est pas une rotation automatique. Rotation/révocation distribuée et protection contre une ancienne application qui ignore cette politique ne sont pas fournies.
+
+
+Pour changer de mot de passe ou corriger son approvisionnement, arrêter les services concernés, conserver une sauvegarde vérifiée du Store, puis configurer un nouvel identifiant de dossier partagé et un mot de passe indépendant identique sur les clients de confiance et un dossier receive-encrypted neuf. Le Store/historique natif peut être gardé ; le nouvel identifiant crée un contexte causal/chiffré séparé et renvoie ses données courantes. Vérifier la restauration avant retrait explicite de l’ancien dossier distant. Cette procédure ne révoque pas les anciennes copies de mot de passe/données. Activer le chiffrement ne cache pas les données déjà envoyées à un ancien pair de confiance.
+
+Les index chiffrés sont authentifiés/déchiffrés avant entrée dans le catalogue causal ; métadonnées altérées ou en clair ferment la connexion. Le codec amont déchiffre/authentifie les blocs, puis les descripteurs SHA-256 originaux sont vérifiés avant ingestion native. Les derniers blocs courts et blocs vides utilisent le padding Syncthing, tandis que le moteur ne lit que la plage originale annoncée exacte. Historique natif, application contrôlée, copies de conflit et reprise restent actifs. Staging de reprise et fichiers de travail demeurent en clair sur le client de confiance, avec leurs protections existantes.
+
+Le pair non fiable voit identifiant/étiquette de dossier, tailles approximatives, horaires, historique chiffré et égalité au même nom/décalage. Chemins, métadonnées et contenus restent chiffrés. Syncthing dérive les clés de fichier du nom et chiffre les preuves de blocs avec leur décalage : changer de nom ou déplacer les octets peut exiger un nouvel envoi. Un bloc inchangé au même décalage peut être réutilisé. Consulter le [protocole amont](https://docs.syncthing.net/specs/untrusted.html) et le [guide utilisateur](https://docs.syncthing.net/users/untrusted.html) pour le modèle de menace et le statut actuel amont. L’authentification ne prouve pas qu’un pair qui retient les données est à jour ; conserver l’état causal de confiance. Confiance initiale/comparaison entre appareils et rétention distribuée restent distinctes.
+
+La qualification Windows utilise le daemon figé non modifié : source de confiance, récepteur indépendant, delta d’un bloc au même décalage, reconnexions, puis appareil de confiance neuf restauré sans les deux premiers clients connectés. Elle vérifie aussi fichiers vides/derniers blocs courts, noms/données opaques sur disque, redémarrage réel de l’exécutable autonome, désaccord de preuve, refus persistant du retour en clair et métadonnées en clair/altérées sur TLS épinglé. Le fichier synthétique de 384 Kio change un bloc de 128 Kio ; l’envoi protocolaire mesuré est d’environ 129 Kio. Ce n’est pas une mesure de débit/RAM à l’échelle Unreal. L’exécution Linux/macOS courante dépend encore de la CI.

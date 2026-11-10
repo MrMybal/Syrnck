@@ -44,11 +44,14 @@ if(SYRNCK_BUILD_BEP_SERVICE)
   endif()
   install(PROGRAMS "${SYRNCK_BEP_EXECUTABLE}" DESTINATION "${CMAKE_INSTALL_BINDIR}")
   install(DIRECTORY "${SYRNCK_BEP_BUILD_DIR}/bep-licenses/" DESTINATION "${SYRNCK_LICENSE_DIR}/bep")
-  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-service.json" DESTINATION "${CMAKE_INSTALL_DATADIR}/Syrnck/examples")
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-service.json"
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-untrusted-service.json"
+          DESTINATION "${CMAKE_INSTALL_DATADIR}/Syrnck/examples")
   if(SYRNCK_BUILD_TESTS)
     add_test(NAME bep_distribution COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bep_distribution.py"
       --cmake "${CMAKE_COMMAND}" --build "${CMAKE_CURRENT_BINARY_DIR}" --config "$<CONFIG>"
       --bindir "${CMAKE_INSTALL_BINDIR}" --licenses "${SYRNCK_LICENSE_DIR}/bep"
+      --examples "${CMAKE_INSTALL_DATADIR}/Syrnck/examples"
       --executable "syrnck-bep${CMAKE_EXECUTABLE_SUFFIX}")
     set_tests_properties(bep_distribution PROPERTIES TIMEOUT 90 RESOURCE_LOCK install_distribution)
   endif()

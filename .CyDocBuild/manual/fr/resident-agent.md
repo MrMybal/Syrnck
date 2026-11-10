@@ -5,7 +5,7 @@ description: Surveiller les workspaces, échanger les révisions protégées et 
 section: Transfers
 order: 405
 parent: transfers
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 ## Fonctionnement continu {#run}
@@ -235,4 +235,4 @@ Le [fournisseur de signature protégé](doc:signing-keys#services) authentifie u
 
 ## Transport chiffré de bout en bout {#sealed}
 
-Ajouter `--sealed --wire CHEMIN` pour activer la [synchronisation résidente chiffrée](doc:sealed-repositories#resident), avec le fournisseur de clé maîtresse séparé. Le moteur existant de capture, fusion et checkout contrôlé traite les révisions originales tandis que seul le chiffré atteint le serveur. Les journaux physiques de transfert sont dans le Store de transport séparé. Les revendications de verrous sur chemins en clair ne s’appliquent pas aux supports opaques. `--sealed-root heads/main` choisit un nom privé stable de révision. Garder les deux Stores pour une reprise exacte ; BEP Syncthing n’accepte pas encore ce transport.
+Ajouter `--sealed --wire CHEMIN` pour activer la [synchronisation résidente chiffrée](doc:sealed-repositories#resident), avec le fournisseur de clé maîtresse séparé. Le moteur existant de capture, fusion et checkout contrôlé traite les révisions originales tandis que seul le chiffré atteint le serveur. Les journaux physiques de transfert sont dans le Store de transport séparé. Les revendications de verrous sur chemins en clair ne s’appliquent pas aux supports opaques. `--sealed-root heads/main` choisit un nom privé stable de révision. Garder les deux Stores pour une reprise exacte ; BEP Syncthing utilise un [autre protocole pour appareils chiffrés](doc:syncthing#untrusted).

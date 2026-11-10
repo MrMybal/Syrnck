@@ -28,6 +28,7 @@ import (
 )
 
 type configuration struct {
+	language              string
 	Version               int                    `json:"version"`
 	Directory             string                 `json:"directory"`
 	Storage               string                 `json:"storage"`
@@ -45,6 +46,8 @@ type configuration struct {
 	PreserveCheckoutEdits bool                   `json:"preserve_checkout_edits"`
 	ConflictCopies        bool                   `json:"conflict_copies"`
 	ResumeDownloads       bool                   `json:"resume_downloads"`
+	UntrustedPeer         bool                   `json:"untrusted_peer"`
+	FolderPasswordEnv     string                 `json:"folder_password_env,omitempty"`
 	Author                *syrnck.NativeIdentity `json:"author,omitempty"`
 	SigningKeyEnv         string                 `json:"signing_key_env,omitempty"`
 	SigningKeyFile        string                 `json:"signing_key_file,omitempty"`
@@ -213,6 +216,23 @@ func loadConfiguration(path string) (configuration, error) {
 	if config.Author != nil && (config.Author.Name == "" || config.Author.Email == "" || config.Author.TimezoneOffset < -1439 || config.Author.TimezoneOffset > 1439) {
 		return config, errors.New("author requires name, email and a timezone offset in -1439..1439 minutes")
 	}
+	if config.FolderPasswordEnv != "" && !config.UntrustedPeer {
+		return config, errors.New("folder_password_env requires untrusted_peer")
+	}
+	if config.UntrustedPeer {
+		if config.FolderPasswordEnv == "" {
+			config.FolderPasswordEnv = "SYRNCK_BEP_FOLDER_PASSWORD"
+		}
+		if !validEnvironmentName(config.FolderPasswordEnv) {
+			return config, errors.New("invalid folder password environment variable name")
+		}
+		for _, name := range []string{config.KeyEnv, config.KeyPasswordEnv, config.SigningKeyEnv, config.SigningKeyPasswordEnv,
+			"SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD"} {
+			if config.FolderPasswordEnv == name {
+				return config, errors.New("folder password requires a separate environment variable")
+			}
+		}
+	}
 	if config.SigningKeyEnv != "" {
 		if config.Author == nil {
 			return config, errors.New("signing_key_env requires an explicit author")
@@ -339,6 +359,10 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 	if protectedSigner != nil {
 		defer func() { result = errors.Join(result, protectedSigner.Close()) }()
 	}
+	folderPassword, err := loadFolderPassword(config)
+	if err != nil {
+		return err
+	}
 	provider := func(ctx context.Context) (*syrnck.Store, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -412,7 +436,8 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 		}
 	}
 	service, err := bep.OpenFolderService(ctx, folder, bep.FolderServiceOptions{Connect: connect,
-		Session:  bep.FolderSessionOptions{Device: bep.DeviceOptions{Certificate: identity, RemoteDevice: peer, Server: config.Mode == "listen"}, PollInterval: time.Duration(config.PollMilliseconds) * time.Millisecond},
+		Session: bep.FolderSessionOptions{Device: bep.DeviceOptions{Certificate: identity, RemoteDevice: peer, Server: config.Mode == "listen"}, PollInterval: time.Duration(config.PollMilliseconds) * time.Millisecond,
+			Untrusted: config.UntrustedPeer, EncryptionPassword: folderPassword},
 		RetryMin: time.Duration(config.RetryMinMilliseconds) * time.Millisecond, RetryMax: time.Duration(config.RetryMaxMilliseconds) * time.Millisecond})
 	if err != nil {
 		return err
@@ -423,7 +448,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 	if listener != nil {
 		address = listener.Addr().String()
 	}
-	if err := encode.Encode(map[string]any{"event": "ready", "device_id": local.String(), "peer": peer.String(), "folder": config.Folder, "mode": config.Mode, "address": address}); err != nil {
+	if err := encode.Encode(map[string]any{"event": "ready", "device_id": local.String(), "peer": peer.String(), "folder": config.Folder, "mode": config.Mode, "address": address, "encrypted": config.UntrustedPeer}); err != nil {
 		return err
 	}
 	reports, failures, events := service.Reports(), service.Errors(), service.Events()
@@ -446,7 +471,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 				failures = nil
 				continue
 			}
-			if err := encode.Encode(map[string]any{"event": "error", "message": failure.Error()}); err != nil {
+			if err := encode.Encode(map[string]any{"event": "error", "message": humanError(config.language, failure)}); err != nil {
 				return err
 			}
 		case event, ok := <-events:
@@ -567,6 +592,7 @@ func execute(ctx context.Context, args []string, output, diagnostics io.Writer) 
 	if err != nil {
 		return fail(err)
 	}
+	config.language = *language
 	if err := runService(ctx, config, output); err != nil {
 		return fail(err)
 	}

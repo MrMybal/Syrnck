@@ -217,7 +217,8 @@ type referenceDaemon struct {
 func referenceEnvironment() []string {
 	var result []string
 	for _, value := range os.Environ() {
-		if !strings.HasPrefix(strings.ToUpper(strings.SplitN(value, "=", 2)[0]), "ST") {
+		name := strings.ToUpper(strings.SplitN(value, "=", 2)[0])
+		if !strings.HasPrefix(name, "ST") && !strings.HasPrefix(name, "SYRNCK_") {
 			result = append(result, value)
 		}
 	}
@@ -234,6 +235,10 @@ func freeAddress(t *testing.T) string {
 }
 func startReference(t *testing.T, ctx context.Context, binary string, peer protocol.DeviceID, name string, data []byte) *referenceDaemon {
 	t.Helper()
+	return startReferencePeers(t, ctx, binary, []protocol.DeviceID{peer}, name, data, false)
+}
+func startReferencePeers(t *testing.T, ctx context.Context, binary string, peers []protocol.DeviceID, name string, data []byte, encrypted bool) *referenceDaemon {
+	t.Helper()
 	root := tempDirectory(t)
 	home := filepath.Join(root, "home")
 	folder := filepath.Join(root, "folder")
@@ -242,8 +247,10 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(folder, filepath.FromSlash(name)), data, 0600); err != nil {
-		t.Fatal(err)
+	if name != "" {
+		if err := os.WriteFile(filepath.Join(folder, filepath.FromSlash(name)), data, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	generate := exec.CommandContext(ctx, binary, "generate", "--home", home, "--no-port-probing")
 	generate.Env = referenceEnvironment()
@@ -277,12 +284,21 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 	if err := xml.EscapeText(&escaped, []byte(folder)); err != nil {
 		t.Fatal(err)
 	}
+	folderType := "sendreceive"
+	if encrypted {
+		folderType = "receiveencrypted"
+	}
+	shared := fmt.Sprintf(`<device id="%s"/>`, ref.device)
+	devices := fmt.Sprintf(`<device id="%s" name="reference"><address>tcp://127.0.0.1:1</address></device>`, ref.device)
+	for _, peer := range peers {
+		shared += fmt.Sprintf(`<device id="%s"/>`, peer)
+		devices += fmt.Sprintf(`<device id="%s" name="syrnck"><address>tcp://127.0.0.1:1</address></device>`, peer)
+	}
 	configuration := fmt.Sprintf(`<configuration version="%d">
-<folder id="project" path="%s" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="false" ignorePerms="true"><device id="%s"/><device id="%s"/><markerName>.stfolder</markerName></folder>
-<device id="%s" name="reference"><address>tcp://127.0.0.1:1</address></device><device id="%s" name="syrnck"><address>tcp://127.0.0.1:1</address></device>
-<gui enabled="true" tls="false"><address>%s</address><apikey>%s</apikey></gui>
+<folder id="project" path="%s" type="%s" rescanIntervalS="3600" fsWatcherEnabled="false" ignorePerms="true">%s<markerName>.stfolder</markerName></folder>
+%s<gui enabled="true" tls="false"><address>%s</address><apikey>%s</apikey></gui>
 <options><listenAddress>tcp://%s</listenAddress><globalAnnounceEnabled>false</globalAnnounceEnabled><localAnnounceEnabled>false</localAnnounceEnabled><relaysEnabled>false</relaysEnabled><natEnabled>false</natEnabled><startBrowser>false</startBrowser><crashReportingEnabled>false</crashReportingEnabled><urAccepted>-1</urAccepted><autoUpgradeIntervalH>0</autoUpgradeIntervalH></options></configuration>`,
-		rootVersion.Version, escaped.String(), ref.device, peer, ref.device, peer, strings.TrimPrefix(ref.api, "http://"), ref.key, ref.bep)
+		rootVersion.Version, escaped.String(), folderType, shared, devices, strings.TrimPrefix(ref.api, "http://"), ref.key, ref.bep)
 	if err := os.WriteFile(filepath.Join(home, "config.xml"), []byte(configuration), 0600); err != nil {
 		t.Fatal(err)
 	}

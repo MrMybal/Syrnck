@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "directory": "../project",
+  "folder": "project",
+  "certificate": "device/cert.pem",
+  "private_key": "device/key.pem",
+  "peer": "REPLACE_WITH_PAIRED_DEVICE_ID",
+  "mode": "dial",
+  "address": "127.0.0.1:22000",
+  "key_env": "SYRNCK_KEY",
+  "preserve_checkout_edits": true,
+  "conflict_copies": true,
+  "resume_downloads": false,
+  "use_permissions": false,
+  "poll_ms": 250,
+  "retry_min_ms": 500,
+  "retry_max_ms": 30000,
+  "untrusted_peer": true,
+  "folder_password_env": "SYRNCK_BEP_FOLDER_PASSWORD"
+}

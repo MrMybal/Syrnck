@@ -16,6 +16,7 @@ args = parser.parse_args()
 library = args.library.resolve(strict=True)
 go = args.go or str(root / ".tools/go/bin" / ("go.exe" if os.name == "nt" else "go"))
 provider_names = {"SYRNCK_KEY_FILE", "SYRNCK_KEY_PASSWORD", "SYRNCK_NEW_KEY_PASSWORD",
+                  "SYRNCK_BEP_FOLDER_PASSWORD",
                   "SYRNCK_SEALED_KEY", "SYRNCK_SEALED_KEY_FILE", "SYRNCK_SEALED_KEY_PASSWORD", "SYRNCK_NEW_SEALED_KEY_PASSWORD",
                   "SYRNCK_SIGNING_KEY_FILE", "SYRNCK_SIGNING_KEY_PASSWORD", "SYRNCK_NEW_SIGNING_KEY_PASSWORD"}
 # Environment names are case insensitive on Windows.
@@ -46,7 +47,10 @@ else:
     env["CGO_LDFLAGS"] = env.get("CGO_LDFLAGS", "") + " " + quote + flag + quote
     for key in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         env[key] = str(library.parent) + os.pathsep + env.get(key, "")
-command = [go, "test", "-mod=readonly", "-v", "-count=1", "-timeout=90s"]
+# The adapter now includes several real-daemon enrollment/restart campaigns.
+# Individual scenario deadlines remain bounded; allow their aggregate Debug run.
+timeout = "150s" if args.module == "syncthing" else "90s"
+command = [go, "test", "-mod=readonly", "-v", "-count=1", "-timeout=" + timeout]
 if args.module == "syncthing":
     # Tests use the pinned module/sums and never fetch dependencies implicitly.
     env["GOPROXY"] = "off"

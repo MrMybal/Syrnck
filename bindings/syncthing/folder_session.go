@@ -16,6 +16,12 @@ type FolderSessionOptions struct {
 	Device       DeviceOptions
 	PollInterval time.Duration // default 250ms, range 50ms..one minute
 	QueueBytes   int64         // default 32 MiB, range 1..128 MiB including processing
+	// Untrusted requires the upstream encrypted-device protocol and a separate
+	// folder password. Passwords/derived keys live in the upstream Go codec;
+	// they are not native sealed-repository keys or exportable native owners.
+	Untrusted          bool
+	EncryptionPassword string `json:"-"`
+	encryption         *folderEncryption
 }
 
 type folderIndexFrame struct {
@@ -41,6 +47,7 @@ type FolderSession struct {
 	sentGeneration       uint64
 	sentSequence         int64
 	configured           chan struct{}
+	codecReady           chan struct{}
 	configureOnce        sync.Once
 	frames               chan folderIndexFrame
 	closed               chan struct{}
@@ -81,7 +88,7 @@ func prepareFolderSessionOptions(folder *Folder, options *FolderSessionOptions) 
 	if local != folder.options.Catalog.LocalDevice {
 		return errors.New("syrnck BEP: folder local certificate identity differs")
 	}
-	return nil
+	return prepareFolderEncryption(folder, options)
 }
 
 // OpenFolderSession owns transport even on failure. It checks the local
@@ -97,7 +104,13 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 	if ctx == nil || folder == nil || transport == nil {
 		return nil, errors.New("syrnck BEP: folder, context and connected transport required")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := prepareFolderSessionOptions(folder, &options); err != nil {
+		return nil, err
+	}
+	if err := folder.bindEncryption(ctx, options); err != nil {
 		return nil, err
 	}
 	if _, err := folder.Refresh(ctx); err != nil {
@@ -108,7 +121,7 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 		return nil, err
 	}
 	child, cancel := context.WithCancel(ctx)
-	session = &FolderSession{folder: folder, options: options, ctx: child, cancel: cancel, configured: make(chan struct{}), frames: make(chan folderIndexFrame, 256), closed: make(chan struct{}), done: make(chan struct{}), reports: make(chan FolderStatus, 16), errors: make(chan error, 16)}
+	session = &FolderSession{folder: folder, options: options, ctx: child, cancel: cancel, configured: make(chan struct{}), codecReady: make(chan struct{}), frames: make(chan folderIndexFrame, 256), closed: make(chan struct{}), done: make(chan struct{}), reports: make(chan FolderStatus, 16), errors: make(chan error, 16)}
 	connection, err := OpenDeviceConnection(child, transport, options.Device, session)
 	if err != nil {
 		cancel()
@@ -117,9 +130,16 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 	session.connection = connection
 	connection.Start()
 	peer := snapshot.Peers[options.Device.RemoteDevice]
+	var passwords map[string]string
+	var token []byte
+	if options.encryption != nil {
+		passwords = map[string]string{folder.options.Catalog.Folder: options.EncryptionPassword}
+		token = bytes.Clone(options.encryption.token)
+	}
 	connection.ClusterConfig(&protocol.ClusterConfig{Folders: []protocol.Folder{{ID: folder.options.Catalog.Folder, Type: protocol.FolderTypeSendReceive,
 		Devices: []protocol.Device{{ID: folder.options.Catalog.LocalDevice, IndexID: protocol.IndexID(snapshot.IndexID), MaxSequence: snapshot.Sequence},
-			{ID: options.Device.RemoteDevice, IndexID: protocol.IndexID(peer.IndexID), MaxSequence: peer.Sequence}}}}}, nil)
+			{ID: options.Device.RemoteDevice, IndexID: protocol.IndexID(peer.IndexID), MaxSequence: peer.Sequence, EncryptionPasswordToken: token}}}}}, passwords)
+	close(session.codecReady)
 	session.workers.Add(2)
 	go session.indexLoop()
 	go session.syncLoop()
@@ -168,6 +188,16 @@ func (s *FolderSession) ClusterConfig(connection protocol.Connection, configurat
 	if connection.DeviceID() != s.options.Device.RemoteDevice {
 		return errors.New("syrnck BEP: folder connection identity differs")
 	}
+	// Start must precede the upstream's unbuffered ClusterConfig send. A fast
+	// peer can already know the token and send its config first; do not authorize
+	// requests until our outgoing ClusterConfig has installed the codec keys.
+	if s.options.Untrusted && s.codecReady != nil {
+		select {
+		case <-s.codecReady:
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		}
+	}
 	var selected *protocol.Folder
 	for i := range configuration.Folders {
 		if configuration.Folders[i].ID == s.folder.options.Catalog.Folder {
@@ -177,7 +207,15 @@ func (s *FolderSession) ClusterConfig(connection protocol.Connection, configurat
 			selected = &configuration.Folders[i]
 		}
 	}
-	if selected == nil || !selected.IsRunning() || selected.Type == protocol.FolderTypeReceiveEncrypted {
+	// A new upstream receive-encrypted folder omits itself until it has learned
+	// our password token. No index/request is authorized while awaiting its echo.
+	s.mu.Lock()
+	authorized := s.authorized
+	s.mu.Unlock()
+	if selected == nil && s.options.Untrusted && !authorized {
+		return nil
+	}
+	if selected == nil || !selected.IsRunning() || (!s.options.Untrusted && selected.Type == protocol.FolderTypeReceiveEncrypted) {
 		return errors.New("syrnck BEP: folder not shared, paused or requires unsupported encrypted reception")
 	}
 	var own, remote *protocol.Device
@@ -196,8 +234,11 @@ func (s *FolderSession) ClusterConfig(connection protocol.Connection, configurat
 			remote = device
 		}
 	}
-	if own == nil || remote == nil || remote.IndexID == 0 || own.MaxSequence < 0 || remote.MaxSequence < 0 || len(own.EncryptionPasswordToken) != 0 || len(remote.EncryptionPasswordToken) != 0 {
+	if own == nil || remote == nil || remote.IndexID == 0 || own.MaxSequence < 0 || remote.MaxSequence < 0 {
 		return errors.New("syrnck BEP: invalid shared device generation or encryption agreement")
+	}
+	if err := checkFolderEncryption(s.options, own, remote); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -447,7 +488,11 @@ func (s *FolderSession) Request(connection protocol.Connection, request *protoco
 		return nil, protocol.ErrInvalid
 	}
 	for _, entry := range candidates {
-		data, err := s.folder.readEntry(s.ctx, entry, request)
+		adjusted := *request
+		if s.options.Untrusted {
+			clipEncryptedPadding(entry, &adjusted)
+		}
+		data, err := s.folder.readEntry(s.ctx, entry, &adjusted)
 		if err == nil {
 			return &folderBlockResponse{data: data, done: make(chan struct{})}, nil
 		}

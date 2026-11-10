@@ -5,7 +5,7 @@ description: Watch native workspaces, exchange guarded revisions and merge compa
 section: Transfers
 order: 405
 parent: transfers
-revision: 10
+revision: 11
 ---
 
 ## Run continuously {#run}
@@ -227,4 +227,4 @@ The [protected signing-file provider](doc:signing-keys#services) authenticates o
 
 ## End-to-end encrypted transport {#sealed}
 
-Add `--sealed --wire PATH` to opt into [encrypted resident synchronization](doc:sealed-repositories#resident), with the separate sealed master-key provider. The existing capture, merge and guarded checkout engine operates on original revisions while only ciphertext reaches the server. The physical transfer journals live in the separate wire Store. Plaintext-path lock claims cannot apply to opaque carriers. `--sealed-root heads/main` selects one stable private revision label. Preserve both Stores for exact recovery; Syncthing BEP does not yet support this transport.
+Add `--sealed --wire PATH` to opt into [encrypted resident synchronization](doc:sealed-repositories#resident), with the separate sealed master-key provider. The existing capture, merge and guarded checkout engine operates on original revisions while only ciphertext reaches the server. The physical transfer journals live in the separate wire Store. Plaintext-path lock claims cannot apply to opaque carriers. `--sealed-root heads/main` selects one stable private revision label. Preserve both Stores for exact recovery; Syncthing BEP uses a [different encrypted-device protocol](doc:syncthing#untrusted).

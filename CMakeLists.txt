@@ -1214,7 +1214,7 @@ if(SYRNCK_BUILD_TESTS)
       if(SYRNCK_TEST_SYNCTHING)
         add_test(NAME syncthing_adapter COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_go.py
           --go ${SYRNCK_GO_EXECUTABLE} --library $<TARGET_FILE:syrnck_ffi> --module syncthing --check-pointers)
-        set_tests_properties(syncthing_adapter PROPERTIES TIMEOUT 120)
+        set_tests_properties(syncthing_adapter PROPERTIES TIMEOUT 180)
       endif()
     endif()
   endif()

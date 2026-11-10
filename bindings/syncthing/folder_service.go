@@ -55,6 +55,9 @@ func OpenFolderService(ctx context.Context, folder *Folder, options FolderServic
 	if err := prepareFolderSessionOptions(folder, &options.Session); err != nil {
 		return nil, err
 	}
+	if err := folder.bindEncryption(ctx, options.Session); err != nil {
+		return nil, err
+	}
 	if freshHello {
 		options.Session.Device.Hello.Timestamp = 0
 	}

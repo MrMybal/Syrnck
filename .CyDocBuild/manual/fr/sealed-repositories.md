@@ -5,7 +5,7 @@ description: Clés clientes séparées, snapshots opaques au serveur, transferts
 section: Storage
 parent: storage
 order: 57
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Ce que le serveur voit {#threat-model}
@@ -14,7 +14,7 @@ Le workflow explicite `sealed` chiffre blocs, manifestes et révisions originaux
 
 Contenus, chemins originaux, messages de commit, noms des racines et IDs d'objets originaux sont chiffrés. La représentation de transport expose un canal public, des IDs opaques aléatoires/à clé, tailles/nombres d'objets, égalité des objets réutilisés, horaires de mise à jour et historique des supports. Les supports signés exposent aussi leurs auteurs/committeurs. Des objets typés originaux identiques partagent une adresse à clé dans un même domaine de clé maîtresse, y compris entre ses canaux. Utiliser des clés indépendantes pour des domaines de confidentialité indépendants. Il ne s'agit ni de résistance à l'analyse du trafic ni d'un système cryptographique audité extérieurement.
 
-Les transferts ordinaires `agent`, natifs et Git gardent leur protocole d'objets décodés. Choisir une clé au repos n'active pas ce workflow. L'agent natif résident active ce transport avec `--sealed --wire CHEMIN` ; le service BEP Syncthing ne consomme pas encore ces snapshots chiffrés.
+Les transferts ordinaires `agent`, natifs et Git gardent leur protocole d'objets décodés. Choisir une clé au repos n'active pas ce workflow. L'agent natif résident active ce transport avec `--sealed --wire CHEMIN` ; le service BEP Syncthing utilise son [format distinct pour appareils non fiables](doc:syncthing#untrusted), sans transporter ces snapshots de révisions.
 
 ## Créer et ouvrir une clé séparée {#key-files}
 
@@ -88,7 +88,7 @@ Les objets utilisent des nonces XChaCha20-Poly1305 aléatoires frais de 24 octet
 | `--sealed-new-index-bytes` | 67108864 | Nouvelles adresses comptées avant chiffrement |
 | `--sealed-max-history` | 100000 | Parcours des prédécesseurs du point accepté |
 
-Un nœud contient au plus 256 entrées de feuille ou 16 liens enfants. Ces bornes ne représentent pas la RAM totale. Préparation/vérification auditent encore fermetures et octets complets ; seuls génération du chiffré, changements Merkle et corps d'objets transférés sont différentiels. Performances sur gros projets et workflows hors Windows restent à qualifier. L'[API C++](doc:api-sealed-repositories), l'[ABI C](doc:api-c-abi#sealed-repositories) et le [binding Go](doc:go-binding#sealed-repositories) fournissent préparation/inspection/import locaux, avec propriétaires natifs de clés maîtresses distincts. Les wrappers réseau reprenables restent C++/CLI. Intégration chiffrée BEP, coffres OS, gestion des appareils, rotation/révocation distribuée, réparation automatique de répliques et rétention distribuée restent à terminer.
+Un nœud contient au plus 256 entrées de feuille ou 16 liens enfants. Ces bornes ne représentent pas la RAM totale. Préparation/vérification auditent encore fermetures et octets complets ; seuls génération du chiffré, changements Merkle et corps d'objets transférés sont différentiels. Performances sur gros projets et workflows hors Windows restent à qualifier. L'[API C++](doc:api-sealed-repositories), l'[ABI C](doc:api-c-abi#sealed-repositories) et le [binding Go](doc:go-binding#sealed-repositories) fournissent préparation/inspection/import locaux, avec propriétaires natifs de clés maîtresses distincts. Les wrappers réseau reprenables restent C++/CLI. Coffres OS, gestion des appareils, rotation/révocation distribuée, réparation automatique de répliques et rétention distribuée restent à terminer.
 
 ## Synchronisation résidente chiffrée {#resident}
 
@@ -104,4 +104,4 @@ La publication utilise le support public exact observé avant une fusion locale 
 
 Garder les deux Stores pour la reprise. L’identité du service lie serveur, domaine de clé maîtresse et nom de racine privée en plus du workspace et de la branche ordinaires. La clé maîtresse est ouverte une seule fois au démarrage et conservée par son propriétaire natif ; modifier/supprimer son fichier ne change pas le processus actif. Un redémarrage recharge les identifiants. Les verrous Store sont libérés entre les cycles. La reprise hors ligne d’un checkout propriétaire précède toujours le réseau, mais le démarrage chiffré exige sa clé maîtresse. Pins de candidats et imports historiques restent retenus ; retrait automatique et rotation des clés de domaine ne sont pas terminés.
 
-Les appelants C++ peuvent créer un adaptateur court `net::sealed_native_sync(wire, remote, key, channel, private_root, limits)` et le passer à `NativeSync::tick`. Store de transport, Remote et clé doivent lui survivre. Les API locales C/Go n’exposent pas cet adaptateur réseau. BEP Syncthing reste une intégration distincte.
+Les appelants C++ peuvent créer un adaptateur court `net::sealed_native_sync(wire, remote, key, channel, private_root, limits)` et le passer à `NativeSync::tick`. Store de transport, Remote et clé doivent lui survivre. Les API locales C/Go n’exposent pas cet adaptateur réseau. BEP Syncthing utilise son [parcours distinct pour appareils non fiables](doc:syncthing#untrusted) ; les deux formats chiffrés et leurs clés ne sont pas interchangeables.
