@@ -184,6 +184,12 @@ int main(int argc, char **argv) {
     if (mode == "create") create(vault, root);
     else if (mode == "verify") verify(vault, root);
     else if (mode == "erase") erase(vault, root);
+    else if (mode == "inaccessible") {
+      for (const auto &ref : read_refs(root)) {
+        if (ref.purpose == VaultKeyPurpose::signing) fails([&] { vault.open_signer(ref); });
+        else fails([&] { vault.open_secret(ref); });
+      }
+    }
     else if (mode == "cleanup") { for (const auto &ref : read_refs(root)) (void)vault.erase(ref); }
     else throw Error("unexpected vault test mode");
     std::cout << mode << " passed using " << SystemKeyVault::provider() << '\n';

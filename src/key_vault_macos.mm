@@ -1,6 +1,7 @@
 #include "key_vault_backend.hpp"
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
+#import <LocalAuthentication/LocalAuthentication.h>
 
 namespace syrnck::detail {
 namespace {
@@ -23,10 +24,18 @@ struct Query {
     CFDictionarySetValue(value.value, kSecClass, kSecClassGenericPassword);
     CFDictionarySetValue(value.value, kSecAttrService, CFSTR("org.syrnck.keys.v1"));
     CFDictionarySetValue(value.value, kSecAttrAccount, account.value);
-    CFDictionarySetValue(value.value, kSecUseAuthenticationUI, kSecUseAuthenticationUIFail);
+    LAContext *context = [[LAContext alloc] init];
+    context.interactionNotAllowed = YES;
+    CFDictionarySetValue(value.value, kSecUseAuthenticationContext, (__bridge CFTypeRef)context);
     if (keychain) {
       SecKeychainRef raw = nullptr;
+      // SecItem has no replacement for opening an explicitly selected
+      // file-based keychain (Apple TN3137). Keep only that compatibility call
+      // here; all item operations use SecItem and all other warnings stay on.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       const auto status = SecKeychainOpen(keychain->c_str(), &raw);
+#pragma clang diagnostic pop
       const CF<SecKeychainRef> selected{raw};
       if (status != errSecSuccess) throw Error("cannot open system key vault keychain: " + std::to_string(status));
       if (writing) CFDictionarySetValue(value.value, kSecUseKeychain, selected.value);
@@ -42,6 +51,7 @@ struct Query {
 }
 std::string_view vault_provider() noexcept { return "macos-keychain"; }
 std::optional<Bytes> vault_read(const std::optional<fs::path> &keychain, const VaultKeyReference &ref) {
+  @autoreleasepool {
   Query query(keychain, ref, false);
   CFDictionarySetValue(query.value.value, kSecReturnData, kCFBooleanTrue);
   CFDictionarySetValue(query.value.value, kSecMatchLimit, kSecMatchLimitOne);
@@ -55,9 +65,11 @@ std::optional<Bytes> vault_read(const std::optional<fs::path> &keychain, const V
   require(CFDataGetLength(data) == static_cast<CFIndex>(vault_record_size), "invalid system key vault record");
   const auto bytes = CFDataGetBytePtr(data);
   return Bytes(bytes, bytes + vault_record_size);
+  }
 }
 void vault_write(const std::optional<fs::path> &keychain, const VaultKeyReference &ref,
     std::span<const std::uint8_t> record) {
+  @autoreleasepool {
   Query query(keychain, ref, true);
   // Borrow our bounded buffer for this synchronous call; the caller wipes it.
   const CF<CFDataRef> data{CFDataCreateWithBytesNoCopy(nullptr, record.data(),
@@ -66,12 +78,15 @@ void vault_write(const std::optional<fs::path> &keychain, const VaultKeyReferenc
   CFDictionarySetValue(query.value.value, kSecValueData, data.value);
   const auto status = SecItemAdd(query.value.value, nullptr);
   if (status != errSecSuccess) throw Error("cannot write system key vault: " + std::to_string(status));
+  }
 }
 bool vault_erase(const std::optional<fs::path> &keychain, const VaultKeyReference &ref) {
+  @autoreleasepool {
   Query query(keychain, ref, false);
   const auto status = SecItemDelete(query.value.value);
   if (status == errSecItemNotFound) return false;
   if (status != errSecSuccess) throw Error("cannot erase system key vault entry: " + std::to_string(status));
   return true;
+  }
 }
 } // namespace syrnck::detail

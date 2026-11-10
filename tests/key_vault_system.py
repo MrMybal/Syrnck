@@ -20,11 +20,13 @@ def run(command, **kwargs):
     return result.stdout
 
 
-def exercise(executable, root, keychain=None):
+def exercise(executable, root, keychain=None, after_create=None):
     arguments = [str(root)] + ([str(keychain)] if keychain else [])
     try:
         for mode in ("create", "verify", "erase"):
             print(run([executable, mode, *arguments]), end="", flush=True)
+            if mode == "create" and after_create:
+                after_create()
     finally:
         if (root / "state.json").exists():
             run([executable, "cleanup", *arguments])
@@ -79,10 +81,16 @@ def linux_session(executable, root):
 def macos_session(executable, root):
     keychain = root / "qualification.keychain-db"
     password = secrets.token_hex(24)
+    def locked_check():
+        run(["security", "lock-keychain", str(keychain)])
+        try:
+            print(run([executable, "inaccessible", str(root), str(keychain)]), end="", flush=True)
+        finally:
+            run(["security", "unlock-keychain", "-p", password, str(keychain)])
     try:
         run(["security", "create-keychain", "-p", password, str(keychain)])
         run(["security", "unlock-keychain", "-p", password, str(keychain)])
-        exercise(executable, root, keychain)
+        exercise(executable, root, keychain, locked_check)
     finally:
         if keychain.exists():
             run(["security", "delete-keychain", str(keychain)])

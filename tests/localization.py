@@ -111,7 +111,7 @@ class Localization(unittest.TestCase):
         keys = {json.loads(match) for match in re.findall(r'SYRNCK_(?:MESSAGE|PREFIX)\((' + STRING + ')', catalog)}
         missing = set()
         for path in (ROOT / "src").iterdir():
-            if path.suffix in (".cpp", ".hpp"):
+            if path.suffix in (".cpp", ".hpp", ".mm"):
                 missing.update(set(diagnostic_keys(path.read_text(encoding="utf-8"))) - keys)
         self.assertEqual(sorted(missing), [], "Add translations for these owned English diagnostics")
 
