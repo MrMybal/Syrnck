@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include "native_target.hpp"
 #include <syrnck/workspace.hpp>
 #include <syrnck/backup.hpp>
@@ -306,9 +307,10 @@ void io_checkpoint(std::string_view phase, const fs::path &target) {
     hook(phase, target);
 }
 } // namespace syrnck::testing
-int main() {
+int main(int argc, char **argv) {
   Temporary temporary;
   try {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc, argv));
     for (bool encrypted : {false, true})
       for (unsigned physical = 0; physical < 3; ++physical) {
         std::optional<Key> key;
@@ -316,20 +318,22 @@ int main() {
           key.emplace();
           key->fill(74);
         }
-        workflow(temporary.path / (std::to_string(encrypted) + '-' + std::to_string(physical)), key,
-                 physical);
-        flat(temporary.path / ("flat-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
-             physical);
-        partial(temporary.path / ("partial-" + std::to_string(encrypted) + '-' + std::to_string(physical)), key,
-                physical);
+        const auto suffix = std::to_string(encrypted) + '-' + std::to_string(physical);
+        cases.add("workflow-" + suffix,
+                  [key, physical](const fs::path &path) { workflow(path, key, physical); });
+        cases.add("flat-" + suffix, [key, physical](const fs::path &path) { flat(path, key, physical); });
+        cases.add("partial-" + suffix,
+                  [key, physical](const fs::path &path) { partial(path, key, physical); });
       }
     for (const auto phase : {"checkout.evacuated", "checkout.applied", "checkout.committed"})
-      recovery(temporary.path / phase, phase);
+      cases.add("recovery-" + std::string(phase).substr(9),
+                [phase](const fs::path &path) { recovery(path, phase); });
     for (const auto phase : {"checkout.evacuated", "checkout.applied", "checkout.committed"})
-      partial(temporary.path / ("partial-" + std::string(phase)), {}, 0, phase);
-    empty_partial(temporary.path / "empty-partial");
-    protected_obstruction(temporary.path / "protected");
-    std::cout << "Hard reset captures dirty/staged/obstructing bytes and restores namespace on abort\n";
+      cases.add("partial-recovery-" + std::string(phase).substr(9),
+                [phase](const fs::path &path) { partial(path, {}, 0, phase); });
+    cases.add("empty-partial", [](const fs::path &path) { empty_partial(path); });
+    cases.add("protected-obstruction", [](const fs::path &path) { protected_obstruction(path); });
+    return cases.run(temporary.path);
   } catch (const std::exception &error) {
     hook = {};
     std::cerr << error.what() << '\n';

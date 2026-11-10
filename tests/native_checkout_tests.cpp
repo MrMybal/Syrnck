@@ -1,4 +1,5 @@
 #include "native_workspace.hpp"
+#include "test_cases.hpp"
 #include <fstream>
 #include <iostream>
 #include <source_location>
@@ -447,7 +448,7 @@ void io_checkpoint(std::string_view phase, const fs::path &path) {
     hook(phase, path);
 }
 } // namespace syrnck::testing
-int main() {
+int main(int argc, char **argv) {
   const auto root = fs::temp_directory_path() / ("syrnck-checkout-" + hex(random_bytes(16)));
   struct Cleanup {
     fs::path root;
@@ -457,6 +458,7 @@ int main() {
     }
   } cleanup{root};
   try {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc, argv));
     for (bool encrypted : {false, true})
       for (unsigned storage = 0; storage != 3; ++storage) {
         std::optional<Key> key;
@@ -464,13 +466,15 @@ int main() {
           key.emplace();
           key->fill(31);
         }
-        scenario(root / (std::to_string(encrypted) + '-' + std::to_string(storage)), key, storage);
-        switching(root / ("switch-" + std::to_string(encrypted) + '-' + std::to_string(storage)), key,
-                  storage);
+        const auto suffix = std::to_string(encrypted) + '-' + std::to_string(storage);
+        cases.add("checkout-" + suffix,
+                  [key, storage](const fs::path &path) { scenario(path, key, storage); });
+        cases.add("switch-" + suffix,
+                  [key, storage](const fs::path &path) { switching(path, key, storage); });
       }
-    missing_objects(root / "missing");
-    foreign_cleanup_entries(root / "foreign-cleanup");
-    std::cout << "native checkout, recovery, races and retention passed\n";
+    cases.add("missing-objects", [](const fs::path &path) { missing_objects(path); });
+    cases.add("foreign-cleanup", [](const fs::path &path) { foreign_cleanup_entries(path); });
+    return cases.run(root);
   } catch (const std::exception &error) {
     hook = {};
     std::cerr << error.what() << '\n';

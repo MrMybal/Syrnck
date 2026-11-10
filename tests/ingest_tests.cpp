@@ -1,5 +1,6 @@
 #include <syrnck/core.hpp>
 #include "../src/encode_pool.hpp"
+#include "test_cases.hpp"
 #include <algorithm>
 #include <atomic>
 #include <fstream>
@@ -48,58 +49,58 @@ struct ControlledInput : std::stringbuf {
 };
 } // namespace
 
-int main() {
-  auto root = fs::temp_directory_path() / path_from_utf8("syrnck-ingest-" + hex(random_bytes(16)));
-  fs::create_directory(root);
+int main(int argc, char **argv) {
+  auto base = fs::temp_directory_path() / path_from_utf8("syrnck-ingest-" + hex(random_bytes(16)));
   struct Cleanup {
     fs::path path;
     ~Cleanup() {
       std::error_code error;
       fs::remove_all(path, error);
     }
-  } cleanup{root};
-  std::size_t count = 0;
-  auto test = [&](std::string_view name, const auto &function) {
-    function();
-    ++count;
-    std::cout << "PASS " << name << '\n';
-  };
+  } cleanup{base};
   try {
-    auto data = sample(12 * 1024 * 1024 + 37);
-    test("parallel IDs, manifests and reconstruction match sequential ingestion", [&] {
-      for (bool encrypted : {false, true}) {
-        for (bool fixed : {false, true}) {
-          auto suffix = std::string(encrypted ? "encrypted-" : "plain-") + (fixed ? "fixed" : "cdc");
-          std::optional<Key> key;
-          if (encrypted) {
-            key.emplace();
-            key->fill(71);
-          }
-          Store sequential(root / (suffix + "-sequential"), key, true);
-          Store parallel(root / (suffix + "-parallel"), key, true);
-          auto chunking = fixed ? Chunking::fixed_size(65536) : Chunking{};
-          IngestOptions options;
-          options.workers = 4;
-          options.max_in_flight_bytes = 8 * 1024 * 1024;
-          std::istringstream first(data), second(data);
-          auto [expected, serial_stats] = sequential.ingest(first, chunking);
-          auto [actual, stats] = parallel.ingest(second, chunking, options);
-          check(expected == actual, "parallel ingestion changed object IDs");
-          check(sequential.metadata(Kind::manifest, expected) == parallel.metadata(Kind::manifest, actual));
-          check(stats.file_bytes == serial_stats.file_bytes && stats.new_bytes == serial_stats.new_bytes &&
-                stats.reused_bytes == serial_stats.reused_bytes && stats.blocks == serial_stats.blocks);
-          check(stats.peak_in_flight_bytes > 0 && stats.peak_in_flight_bytes <= options.max_in_flight_bytes);
-          std::ostringstream restored;
-          parallel.reconstruct(actual, restored);
-          check(restored.str() == data, "parallel reconstruction differs");
-          std::istringstream again(data);
-          auto [reused, repeated] = parallel.ingest(again, chunking, options);
-          check(reused == actual && repeated.new_bytes == 0 && repeated.reused_bytes == data.size());
-          check(repeated.peak_in_flight_bytes == 0, "existing data should not be recompressed");
-        }
+    const auto selection = fixture_test::CaseSelection::parse(argc, argv);
+    fixture_test::TestCases cases(selection);
+    auto data = selection.list ? std::string{} : sample(12 * 1024 * 1024 + 37);
+    for (bool encrypted : {false, true}) {
+      for (bool fixed : {false, true}) {
+        cases.add(
+            "parallel-" + std::to_string(encrypted) + '-' + std::to_string(fixed),
+            [encrypted, fixed, &data](const fs::path &root) {
+              auto suffix = std::string(encrypted ? "encrypted-" : "plain-") + (fixed ? "fixed" : "cdc");
+              std::optional<Key> key;
+              if (encrypted) {
+                key.emplace();
+                key->fill(71);
+              }
+              Store sequential(root / (suffix + "-sequential"), key, true);
+              Store parallel(root / (suffix + "-parallel"), key, true);
+              auto chunking = fixed ? Chunking::fixed_size(65536) : Chunking{};
+              IngestOptions options;
+              options.workers = 4;
+              options.max_in_flight_bytes = 8 * 1024 * 1024;
+              std::istringstream first(data), second(data);
+              auto [expected, serial_stats] = sequential.ingest(first, chunking);
+              auto [actual, stats] = parallel.ingest(second, chunking, options);
+              check(expected == actual, "parallel ingestion changed object IDs");
+              check(sequential.metadata(Kind::manifest, expected) ==
+                    parallel.metadata(Kind::manifest, actual));
+              check(stats.file_bytes == serial_stats.file_bytes &&
+                    stats.new_bytes == serial_stats.new_bytes &&
+                    stats.reused_bytes == serial_stats.reused_bytes && stats.blocks == serial_stats.blocks);
+              check(stats.peak_in_flight_bytes > 0 &&
+                    stats.peak_in_flight_bytes <= options.max_in_flight_bytes);
+              std::ostringstream restored;
+              parallel.reconstruct(actual, restored);
+              check(restored.str() == data, "parallel reconstruction differs");
+              std::istringstream again(data);
+              auto [reused, repeated] = parallel.ingest(again, chunking, options);
+              check(reused == actual && repeated.new_bytes == 0 && repeated.reused_bytes == data.size());
+              check(repeated.peak_in_flight_bytes == 0, "existing data should not be recompressed");
+            });
       }
-    });
-    test("repeated pending blocks are submitted and accounted once", [&] {
+    }
+    cases.add("pending-reuse", [&](const fs::path &root) {
       Store store(root / "repeated", {}, true);
       auto block = sample(65536);
       std::string repeated;
@@ -116,7 +117,7 @@ int main() {
       store.reconstruct(id, out);
       check(out.str() == repeated);
     });
-    test("queue budget smaller than the stream applies backpressure", [&] {
+    cases.add("backpressure", [&](const fs::path &root) {
       Store store(root / "bounded", {}, true);
       IngestOptions options;
       options.workers = 4;
@@ -129,7 +130,7 @@ int main() {
       store.reconstruct(id, out);
       check(out.str() == data);
     });
-    test("tiny chunks cannot create an unbounded number of queued tasks", [&] {
+    cases.add("tiny-chunks", [&](const fs::path &root) {
       Store store(root / "tiny", {}, true);
       std::string tiny;
       for (int i = 0; i < 256; ++i)
@@ -144,7 +145,7 @@ int main() {
       store.reconstruct(id, output);
       check(output.str() == tiny);
     });
-    test("read failure preserves refs and never publishes a manifest", [&] {
+    cases.add("read-failure", [&](const fs::path &root) {
       Store store(root / "read-failure", {}, true);
       std::istringstream prior("retained version");
       auto id = store.ingest(prior).first;
@@ -166,7 +167,7 @@ int main() {
       store.reconstruct(id, out);
       check(out.str() == "retained version");
     });
-    test("cancellation drains workers without publishing a manifest", [&] {
+    cases.add("cancellation", [&](const fs::path &root) {
       Store store(root / "cancelled", {}, true);
       std::stop_source stop;
       ControlledInput buffer(data, [&](std::size_t read) {
@@ -192,7 +193,7 @@ int main() {
       fails([&] { store.ingest(empty, {}, options); });
       check(store.objects().size() == before);
     });
-    test("publication failure joins workers and is recoverable", [&] {
+    cases.add("publication-failure", [&](const fs::path &root) {
       Store store(root / "write-failure", {}, true);
       auto blocked = store.root() / "objects/chunk";
       {
@@ -213,7 +214,7 @@ int main() {
       store.reconstruct(id, out);
       check(out.str() == data);
     });
-    test("worker exceptions are returned to the caller", [&] {
+    cases.add("worker-exceptions", [&](const fs::path &) {
       std::atomic<int> calls = 0;
       EncodePool pool(4, [&](ZSTD_CCtx *, const ObjectKey &, std::span<const std::uint8_t>) -> Bytes {
         ++calls;
@@ -233,7 +234,7 @@ int main() {
       }
       check(calls == 16);
     });
-    test("v1 metadata limit is enforced before consuming an overfragmented file", [&] {
+    cases.add("metadata-limit", [&](const fs::path &root) {
       Store store(root / "metadata-limit", {}, true);
       std::string fragmented(1024 * 1024, 'A');
       std::istringstream input(fragmented);
@@ -249,7 +250,7 @@ int main() {
       check(input.tellg() > 0 && input.tellg() < static_cast<std::streampos>(fragmented.size()));
       check(manifests(store) == 0 && store.refs().empty());
     });
-    test("empty files and invalid limits do not launch work", [&] {
+    cases.add("invalid-limits", [&](const fs::path &root) {
       Store store(root / "limits", {}, true);
       IngestOptions options;
       options.workers = 4;
@@ -271,8 +272,7 @@ int main() {
       }
       check(store.objects().size() == before);
     });
-    std::cout << count << " pipeline checks passed\n";
-    return 0;
+    return cases.run(base);
   } catch (const std::exception &e) {
     std::cerr << "FAIL " << e.what() << '\n';
     return 1;

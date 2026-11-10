@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--declarations", type=Path, required=True)
     parser.add_argument("--config", required=True)
+    parser.add_argument("--sanitizers", action="store_true")
     parser.add_argument("--suite", action="append", nargs=4, required=True, metavar=("NAME", "EXECUTABLE", "SHARDS", "CASES"))
     parser.add_argument("--campaign", action="append", nargs=3, default=[], metavar=("NAME", "SHARDS", "SCENARIOS"))
     args = parser.parse_args()
@@ -27,6 +28,12 @@ def main():
     assert snapshot["declarations_sha256"] == hashlib.sha256(args.declarations.read_bytes()).hexdigest(), "stale CTest case plan; rebuild test_case_plan"
     plan = snapshot["plan"]
     planned = {test["name"]: test for test in plan["tests"]}
+    exclusive = [name for name in ("go_binding", "syncthing_adapter") if name in planned]
+    if args.sanitizers:
+        exclusive += [name for name in ("reference_tables", "server_authentication", "documentation_help") if name in planned]
+    for name in exclusive:
+        properties = {item["name"]: item["value"] for item in planned[name].get("properties", [])}
+        assert properties.get("RUN_SERIAL") is True, (name, "load-sensitive test requires exclusive CTest scheduling")
     total = 0
     for name, executable, shards, expected in args.suite:
         shards, expected = int(shards), int(expected)

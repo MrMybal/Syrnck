@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include "native_materialization.hpp"
 #include <syrnck/workspace.hpp>
 #include <syrnck/watcher.hpp>
@@ -182,27 +183,42 @@ void recovery(const fs::path &base, std::string_view phase, bool abort, bool lin
 namespace syrnck::testing {
 void io_checkpoint(std::string_view phase, const fs::path &target) { if (hook) hook(phase, target); }
 }
-int main() {
+int main(int argc, char **argv) {
   Temporary temporary;
   try {
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc, argv));
     for (unsigned physical = 0; physical < 3; ++physical)
       for (bool encrypted : {false, true})
         for (bool linked : {false, true})
           for (bool detached : {false, true}) {
-          std::optional<Key> key;
-          if (encrypted) { key.emplace(); key->fill(79); }
-          workflow(temporary.path / (std::to_string(physical) + '-' + std::to_string(encrypted) + '-' +
-              std::to_string(linked) + '-' + std::to_string(detached)), key, physical, linked, detached);
-        }
-    refusals(temporary.path / "refusals");
+            std::optional<Key> key;
+            if (encrypted) {
+              key.emplace();
+              key->fill(79);
+            }
+            cases.add("workflow-" + std::to_string(physical) + '-' + std::to_string(encrypted) + '-' +
+                          std::to_string(linked) + '-' + std::to_string(detached),
+                      [key, physical, linked, detached](const fs::path &path) {
+                        workflow(path, key, physical, linked, detached);
+                      });
+          }
+    cases.add("refusals", [](const fs::path &path) { refusals(path); });
     for (bool linked : {false, true})
       for (bool detached : {false, true})
         for (const auto phase : {"checkout.prepared", "checkout.applied", "checkout.committed"})
           for (bool abort : {false, true}) {
-            if (abort && std::string_view(phase) == "checkout.committed") continue;
-            recovery(temporary.path / ("recovery-" + std::to_string(linked) + '-' + std::to_string(detached) + '-' +
-                phase + '-' + std::to_string(abort)), phase, abort, linked, detached);
+            if (abort && std::string_view(phase) == "checkout.committed")
+              continue;
+            cases.add("recovery-" + std::to_string(linked) + '-' + std::to_string(detached) + '-' +
+                          std::string(phase).substr(9) + '-' + std::to_string(abort),
+                      [phase, abort, linked, detached](const fs::path &path) {
+                        recovery(path, phase, abort, linked, detached);
+                      });
           }
-    std::cout << "Recoverable materialization transitions preserve complete history and independent workspaces\n";
-  } catch (const std::exception &error) { hook = {}; std::cerr << error.what() << '\n'; return 1; }
+    return cases.run(temporary.path);
+  } catch (const std::exception &error) {
+    hook = {};
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
 }

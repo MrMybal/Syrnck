@@ -119,6 +119,15 @@ class DocumentationHelp(unittest.TestCase):
         (broken / "DocData/help-topics.json").write_text("{}", encoding="utf-8")
         self.run_cli("help", "--directory", str(broken), "--print-url", ok=False)
 
+    def test_duplicate_aliases_are_rejected_before_routing(self):
+        broken = self.root / "ambiguous"
+        shutil.copytree(DOCS, broken)
+        for aliases in ('{"overview":"overview","overview":"licenses"}',
+                        '{"overview":"overview","\\u006fverview":"licenses"}'):
+            with self.subTest(aliases=aliases):
+                (broken / "DocData/help-topics.json").write_text(aliases, encoding="utf-8")
+                self.run_cli("help", "--directory", str(broken), "--print-url", ok=False)
+
 
 if __name__ == "__main__":
     unittest.main()

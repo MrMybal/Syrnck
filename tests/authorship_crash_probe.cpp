@@ -128,9 +128,17 @@ void io_checkpoint(std::string_view event, const fs::path &path) {
 int main(int argc, char **argv) {
   try {
     require(argc >= 3, "authorship probe expects mode and root");
-    const auto root = path_from_utf8(argv[2]); fixture_root = root; const std::string mode = argv[1];
+    const std::string mode = argv[1];
+    const auto supplied = path_from_utf8(argv[2]);
     if (mode == "prepare") {
       require(argc == 6, "authorship probe expects encryption scope action");
+      fs::create_directories(supplied);
+    }
+    // Store expands short/lexical aliases. Classify IO coordinates against the
+    // same physical root instead of merging object events into filesystem ones.
+    const auto root = fs::canonical(supplied);
+    fixture_root = root;
+    if (mode == "prepare") {
       prepare(root, std::string_view(argv[3]) == "encrypted", argv[4], argv[5]);
     } else {
       const auto info = parse_json(read_bytes(root / "fixture.json"));

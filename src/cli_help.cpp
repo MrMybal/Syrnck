@@ -86,7 +86,9 @@ std::string documentation_url(const fs::path &directory, Language language, std:
   const auto reader = directory / "Documentation.html";
   require(fs::is_regular_file(reader), "local documentation is not installed; rebuild or select --directory");
   const auto manifest = parse_json(read_bytes(directory / "DocData/manifest.json", max_object_size));
-  const auto topics = parse_json(read_bytes(directory / "DocData/help-topics.json", max_object_size));
+  // Generated topic names are unique. The SAX builder avoids a linear search
+  // for every inserted alias and refuses ambiguous duplicate names.
+  const auto topics = parse_unique_json(read_bytes(directory / "DocData/help-topics.json", max_object_size));
   require(manifest.is_object() && manifest.value("schemaVersion", 0) == 1 && manifest.contains("pages") &&
               manifest["pages"].is_array() && topics.is_object(),
           "invalid documentation catalog");

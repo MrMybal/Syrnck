@@ -1,4 +1,5 @@
 #include "native_history_fixture.hpp"
+#include "test_cases.hpp"
 #include "sealed_internal.hpp"
 #include <syrnck/sealed.hpp>
 #include <iostream>
@@ -266,19 +267,19 @@ void block_reuse(const fs::path &path) {
   wire.fsck();
 }
 } // namespace
-int main() {
+int main(int argc, char **argv) {
   Temporary temp;
   try {
-    independent_vectors();
-    block_reuse(temp.path / "blocks");
+    fixture_test::TestCases cases(fixture_test::CaseSelection::parse(argc, argv));
+    cases.add("independent-vectors", [](const fs::path &) { independent_vectors(); });
+    cases.add("block-reuse", [](const fs::path &path) { block_reuse(path); });
     for (bool encrypted : {false, true})
       for (unsigned layout = 0; layout < 3; ++layout)
-        scenario(temp.path / ("case-" + std::to_string(encrypted) + '-' + std::to_string(layout)), encrypted,
-                 layout);
-    refusals(temp.path / "refusals");
-    maximum_chunk(temp.path / "maximum");
-    std::cout << "Sealed repository confidentiality, differential Merkle updates, authentication and "
-                 "rollback checks passed\n";
+        cases.add("layout-" + std::to_string(encrypted) + '-' + std::to_string(layout),
+                  [encrypted, layout](const fs::path &path) { scenario(path, encrypted, layout); });
+    cases.add("refusals", [](const fs::path &path) { refusals(path); });
+    cases.add("maximum-chunk", [](const fs::path &path) { maximum_chunk(path); });
+    return cases.run(temp.path);
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
     return 1;

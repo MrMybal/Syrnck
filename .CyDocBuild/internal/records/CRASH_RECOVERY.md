@@ -242,3 +242,38 @@ held the Release executable. Its Debug build passed the same test in 1.13 second
 The final ten relevant Release suites passed in 7.61 seconds, including the expanded
 required-feature/copy-consistency cases, contexts, C/Go, help and translations.
 The original Release executable launch remains an environment limitation.
+
+
+## Hosted-runner execution and complete case coverage
+
+Native sealed snapshots, materialization changes, checkout, hard reset and
+parallel ingestion now use complete named cases with the shared `--list` and
+`--shard INDEX/COUNT` harness. Streaming audits use one whole case per CTest
+invocation. `test_case_partitions` compares the actual generated CTest commands
+with every case listing, rejecting missing/repeated/disabled cases. Per-case
+progress distinguishes execution from owned cleanup; assertions and input sizes
+are preserved. Run these families with a prefix regex, for example
+`ctest --test-dir build -C Release -R "^(sealed_snapshots_|native_checkout_)"`.
+
+The backup/restore/repair crash campaign has six key-mode/operation groups.
+Authored-publication crashes have 32 key-mode/scope/action groups. Each group
+retains all original durable IO boundaries and uses fresh process verification
+before resuming. Successful case directories are retired immediately after
+native children exit, with bounded Windows deletion handling. The existing
+8-group checkout-edit and 12-group partial-stash campaigns are also checked by
+the coverage audit. The total declared coverage is 310 native scenarios and
+58 crash groups; runtime boundary counts still depend on the traced operation
+and platform (including Unix link publication).
+
+Authorship and checkout-edit probes canonicalize their physical fixture root
+before categorizing object IO. Separate tests compare complete checkpoint
+sequences through canonical, lexical and available Windows short paths in plain
+and encrypted fixtures. A path alias must never collapse chunk/manifest events
+into unrelated filesystem occurrence counters.
+
+Native-backed Go suites use exclusive CTest scheduling because they run their
+own concurrent workers and child programs. Instrumented reference-table, HTTP
+authentication and help-routing tests also run without unrelated CTest load;
+their operation checks remain unchanged. This scheduling does not establish
+platform qualification: inspect each new CI result. Windows local checks cannot
+stand in for Linux/macOS/ASan or ARM64 execution.

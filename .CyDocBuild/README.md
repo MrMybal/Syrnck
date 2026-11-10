@@ -84,6 +84,11 @@ positions, themes and narrow touch layouts. Screenshots stay under ignored
 `.cache/screenshots`. An optional argument selects another exported folder.
 CTest includes the dependency-free Node/manual and native CLI routing tests.
 
+Generated help aliases must be unique, including JSON-escaped spellings of the
+same key. The native CLI rejects ambiguous catalogs before selecting a route.
+Its decoder builds this lookup table without repeated linear alias insertion.
+The reader/export format and normal page/section URLs remain unchanged.
+
 Windows x64 is the locally exercised platform. Linux/macOS CI runs build,
 manual, CLI routing and installation tests when dispatched; configuring that
 matrix is not evidence that those jobs have run. Native default-browser launch

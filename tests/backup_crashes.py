@@ -10,6 +10,8 @@ import sys
 import tempfile
 import threading
 import unittest
+from crash_shard import CrashShard
+from fixture_timing import case_directory
 
 PROBE, READER = [str(Path(sys.argv.pop(1)).resolve()) for _ in range(2)]
 BISECT_ONLY = "--bisect-only" in sys.argv
@@ -21,6 +23,20 @@ if REPAIR_COPY_ONLY:
 ENV = {k: v for k, v in os.environ.items() if k.upper() not in
        ("SYRNCK_KEY", "SYRNCK_BACKUP_KEY", "SYRNCK_TOKEN", "SYRNCK_LANG")}
 PHASES = ("atomic.temporary_opened", "atomic.writer_finished", "atomic.file_synced", "atomic.published", "atomic.durable")
+
+SHARD = CrashShard.from_argv()
+
+
+def scenarios():
+    operations = (("bisect-start", "bisect-mark", "bisect-reset") if BISECT_ONLY else
+                  ("repair-copy",) if REPAIR_COPY_ONLY else ("create", "restore", "repair"))
+    return [(encrypted, operation) for encrypted in (False, True) for operation in operations]
+
+
+if __name__ == "__main__" and "--list-scenarios" in sys.argv:
+    print(json.dumps({"version": 1, "index": SHARD.index, "count": SHARD.count,
+                      "scenarios": SHARD.select(scenarios())}))
+    raise SystemExit(0)
 
 
 def snapshot(root):
@@ -38,26 +54,24 @@ class BackupCrashes(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="syrnck-backup-crash-") as temporary:
             parent = Path(temporary)
             count = 0
-            for encrypted in (False, True):
-                for operation in (("bisect-start", "bisect-mark", "bisect-reset") if BISECT_ONLY else
-                                  ("repair-copy",) if REPAIR_COPY_ONLY else ("create", "restore", "repair")):
-                    seed = parent / f"seed-{encrypted}-{operation}"
-                    self.command("prepare", seed, "encrypted" if encrypted else "plain", operation)
-                    kinds = ("chunk", "manifest") if operation == "repair" else (
-                        "chunk", "manifest", "revision", "refs", "config", "settings")
-                    if operation == "create":
-                        kinds += ("descriptor",)
-                    if BISECT_ONLY:
-                        kinds = ("refs",) if operation == "bisect-reset" else ("chunk", "refs")
-                    cases = [(phase, kind, 2 if kind == "refs" and not BISECT_ONLY else 1) for kind in kinds for phase in PHASES]
-                    if os.name != "nt":
-                        cases += [("atomic.linked", kind, 1) for kind in kinds if kind != "refs"]
-                    if operation != "repair" and not BISECT_ONLY:
-                        cases += [(phase, "backup" if operation == "create" else "repaired" if operation == "repair-copy" else "restored", 1) for phase in
-                                  ("directory.created", "directory.writer_finished", "directory.synced", "directory.published", "directory.durable")]
-                    for phase, kind, occurrence in cases:
-                        with self.subTest(encrypted=encrypted, operation=operation, phase=phase, kind=kind):
-                            root = parent / f"case-{count}"
+            for encrypted, operation in SHARD.select(scenarios()):
+                seed = parent / f"seed-{encrypted}-{operation}"
+                self.command("prepare", seed, "encrypted" if encrypted else "plain", operation)
+                kinds = ("chunk", "manifest") if operation == "repair" else (
+                    "chunk", "manifest", "revision", "refs", "config", "settings")
+                if operation == "create":
+                    kinds += ("descriptor",)
+                if BISECT_ONLY:
+                    kinds = ("refs",) if operation == "bisect-reset" else ("chunk", "refs")
+                cases = [(phase, kind, 2 if kind == "refs" and not BISECT_ONLY else 1) for kind in kinds for phase in PHASES]
+                if os.name != "nt":
+                    cases += [("atomic.linked", kind, 1) for kind in kinds if kind != "refs"]
+                if operation != "repair" and not BISECT_ONLY:
+                    cases += [(phase, "backup" if operation == "create" else "repaired" if operation == "repair-copy" else "restored", 1) for phase in
+                              ("directory.created", "directory.writer_finished", "directory.synced", "directory.published", "directory.durable")]
+                for phase, kind, occurrence in cases:
+                    with self.subTest(encrypted=encrypted, operation=operation, phase=phase, kind=kind):
+                        with case_directory(parent, f"case-{count}") as root:
                             count += 1
                             shutil.copytree(seed, root)
                             process = subprocess.Popen([PROBE, "run", str(root), phase, kind, str(occurrence)],
