@@ -1,7 +1,10 @@
 #include "cli_agent.hpp"
 #include "cli_identity.hpp"
+#include "cli_keys.hpp"
 #include "native_context.hpp"
+#include "sealed_internal.hpp"
 #include "watch_journal.hpp"
+#include <syrnck/sealed_net.hpp>
 #include <algorithm>
 #include <iostream>
 #include <thread>
@@ -34,11 +37,20 @@ void AgentCommand::validate() const {
   require(!conflict_copies || bidirectional, "agent conflict copies require --bidirectional");
   require(!renames || bidirectional, "agent rename detection requires --bidirectional");
   if (renames) renames->validate();
+  require(sealed == wire.has_value(), "agent sealed mode requires --sealed and --wire together");
+  validate_ref(sealed_root);
+  sealed_limits.validate();
 }
 int run_agent(const fs::path &directory, const fs::path &storage, const AgentCommand &command,
               const net::Remote &remote, const std::function<std::unique_ptr<Store>()> &open_store,
               Language language, OperationOptions operation, net::TransferOptions transfer) {
   command.validate(); transfer.validate();
+  std::optional<SecretKey> sealed_key;
+  if (command.sealed) {
+    require(transfer.asset_locks.empty(), "sealed transfers cannot assert plaintext asset lock claims");
+    sealed_key = sealed_key_environment();
+    require(sealed_key.has_value(), "set SYRNCK_SEALED_KEY or SYRNCK_SEALED_KEY_FILE");
+  }
   const auto started = Clock::now();
   const auto deadline = command.duration_ms ? started + Milliseconds(command.duration_ms) : Clock::time_point::max();
   std::uint64_t sequence = 0, updates = 0;
@@ -62,6 +74,7 @@ int run_agent(const fs::path &directory, const fs::path &storage, const AgentCom
     }
   }
   if (!initial) return 1;
+  if (command.wire) sealed_detail::validate_wire_location(*initial, *command.wire, operation);
   require(!command.branch || *command.branch == initial->native_target(), "agent branch must match the selected HEAD");
   load_native_identity(*initial);
   auto identity = initial->take_native_identity();
@@ -99,7 +112,14 @@ int run_agent(const fs::path &directory, const fs::path &storage, const AgentCom
           store->use_native_identity(std::move(identity->identity), std::move(identity->signer), identity->require_signature);
           identity.reset(); attached = true;
         }
-        try { frame = sync.tick(*store, remote, changes, operation, transfer); }
+        try {
+          if (command.sealed) {
+            sealed_detail::validate_wire_location(*store, *command.wire, operation);
+            Store wire(*command.wire, {}, !fs::is_regular_file(*command.wire / "config.json"), command.wire_options);
+            auto transport = net::sealed_native_sync(wire, remote, *sealed_key, command.remote_branch, command.sealed_root, command.sealed_limits);
+            frame = sync.tick(*store, *transport, changes, operation, transfer);
+          } else frame = sync.tick(*store, remote, changes, operation, transfer);
+        }
         catch (...) { detach(); throw; }
         detach();
         exit_code = frame["state"] == "blocked" ? 2 : 0;

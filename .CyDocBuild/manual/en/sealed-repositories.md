@@ -5,7 +5,7 @@ description: Separate client keys, opaque server snapshots, differential transfe
 section: Storage
 parent: storage
 order: 57
-revision: 2
+revision: 3
 ---
 
 ## What the server can see {#threat-model}
@@ -14,7 +14,7 @@ The explicit `sealed` workflow encrypts original chunks, manifests and revisions
 
 File contents, original paths, commit messages, root names and original object IDs are encrypted. The wire representation exposes a public channel, random/keyed opaque IDs, object sizes/counts, reused-object equality, update timing and carrier history. Signed carriers also expose their author/committer identities. Equal original typed objects share a keyed address within one master-key realm, including across its channels. Use independent keys for independent privacy domains. This is not traffic-analysis resistance or an externally audited cryptographic system.
 
-Ordinary `agent`, native and Git transfers retain their existing decoded-object protocol. Selecting an at-rest key does not enable this workflow. The resident agent and Syncthing BEP service do not yet consume sealed snapshots.
+Ordinary `agent`, native and Git transfers retain their existing decoded-object protocol. Selecting an at-rest key does not enable this workflow. The native resident agent opts in with `--sealed --wire PATH`; the Syncthing BEP service does not yet consume sealed snapshots.
 
 ## Create and unlock a separate key {#key-files}
 
@@ -88,4 +88,20 @@ Objects use fresh random 24-byte XChaCha20-Poly1305 nonces. Keyed BLAKE3 derives
 | `--sealed-new-index-bytes` | 67108864 | Charged new address entries before encryption |
 | `--sealed-max-history` | 100000 | Accepted-checkpoint predecessor traversal |
 
-Nodes have at most 256 leaf entries or 16 child links. These bounds do not represent total RSS. Preparation/verification still audits full original closures and file bytes; only ciphertext generation, Merkle changes and transferred object bodies are differential. Large-project performance and non-Windows sealed workflows still need qualification. The [C++ API](doc:api-sealed-repositories), [C ABI](doc:api-c-abi#sealed-repositories) and [Go binding](doc:go-binding#sealed-repositories) provide local preparation/inspection/import, with purpose-separated native master owners. Resumable network wrappers remain C++/CLI. Resident/BEP integration, OS vaults, device membership, distributed key rotation/revocation, automatic replica repair and distributed retention remain unfinished.
+Nodes have at most 256 leaf entries or 16 child links. These bounds do not represent total RSS. Preparation/verification still audits full original closures and file bytes; only ciphertext generation, Merkle changes and transferred object bodies are differential. Large-project performance and non-Windows sealed workflows still need qualification. The [C++ API](doc:api-sealed-repositories), [C ABI](doc:api-c-abi#sealed-repositories) and [Go binding](doc:go-binding#sealed-repositories) provide local preparation/inspection/import, with purpose-separated native master owners. Resumable network wrappers remain C++/CLI. Sealed BEP integration, OS vaults, device membership, distributed key rotation/revocation, automatic replica repair and distributed retention remain unfinished.
+
+## Encrypted resident synchronization {#resident}
+
+```text
+syrnck --store project/.syrnck agent run https://blocks.example.invalid --directory project --sealed --wire private-cache/resident-wire --bidirectional --require-lease --require-read-lease
+```
+
+Use the separate master-key providers above and the same dedicated server-channel policy. `--remote-branch main` selects the public channel; `--sealed-root heads/main` is the stable private root label inside it, independent of the local branch name. Exactly one revision root with that label is required. A differently labelled or multi-root snapshot is refused before workspace application. The five sealed resource bounds also apply to `agent run --sealed`. Ordinary agent mode remains decoded-object transport.
+
+The existing watcher, offline capture, partial/detached workspace, merge, conflict-copy, rename and owned-checkout recovery policies apply to the original revisions. The adapter authenticates/imports an incoming snapshot before handing its original root to that state machine. The server receives only ciphertext carriers. A plain agent refuses to apply a recognized sealed carrier to an empty workspace. Unchanged accepted polls authenticate the cached root control without re-auditing/downloading the complete closure. Changed snapshots still receive the full verification described above.
+
+Publication uses the exact public carrier observed before a local merge; it never refreshes that expectation during publication. The wire journal keeps the physical root/session. The plaintext Store retains candidates under `sealed/agent-candidates/TRANSPORT/ID` before journal creation, then records the crypto checkpoint and logical observation before completing the wire journal. A lost reply is reconciled first even if local HEAD advanced. Surviving completed wire receipts can restore a missing initial local observation. A newer accepted checkpoint never rewinds for an older receipt. A valid old/forked carrier is blocked even if its original revision ID equals local HEAD.
+
+Keep both Stores for recovery. The service identity binds the endpoint, master-key realm and private root label as well as the ordinary workspace/branch binding. The master is opened once at process startup and held by its native owner; changing/removing its file does not alter a running process. Restarting reloads credentials. Store locks are released between ticks. Offline owned-checkout recovery still precedes network operations, but sealed startup requires its master. Original candidate pins and historical imports remain retained; automatic retirement and realm-key rotation are unfinished.
+
+C++ callers can create a short-lived `net::sealed_native_sync(wire, remote, key, channel, private_root, limits)` adapter and pass it to `NativeSync::tick`. The wire Store, Remote and key must outlive it. The C/Go local snapshot APIs do not expose this network adapter. Syncthing BEP remains a separate integration.

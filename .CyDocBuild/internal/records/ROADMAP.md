@@ -202,7 +202,8 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 
 - [x] Projection chiffrée C++/CLI : blocs/manifestes/révisions originaux opaques, index Merkle persistant, nonces frais et racines authentifiées ; transferts HTTP ordinaires, checkpoint local anti-retour, publications CAS et reprise après arrêts forcés.
 - [x] Bindings C/Go des snapshots chiffrés : propriétaires natifs opaques séparés, protecteurs de clé, préparation/inspection/import, contexte/annulation, ordre des verrous et rétention atomique ; bibliothèques partagée/statique et clients SDK installés.
-- [ ] Intégrer les snapshots chiffrés à l’agent résident et au service BEP ; échange initial des racines de confiance et comparaison entre appareils.
+- [x] Transport chiffré pour l’agent natif résident : même capture/fusion/checkout récupérable, CAS sur le support observé, journal physique distinct, rétention des originaux et observations crypto/natives avant clôture.
+- [ ] Intégrer les snapshots chiffrés au service BEP ; échange initial des racines de confiance et comparaison entre appareils.
 - [ ] Dérivation de clés, coffre système, rotation, révocation et récupération.
 - [x] Modèle explicite de fuite d’égalité/tailles/historique pour le transport chiffré ; adresses à clé bornées au domaine de clé maîtresse, sans chiffrement déterministe/convergent.
 - [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.

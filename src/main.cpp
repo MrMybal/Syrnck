@@ -295,6 +295,20 @@ NativeMergeBaseLimits merge_base_limits(Args &args, bool *used = nullptr) {
   read("--base-max-depth", limits.max_depth); read("--base-max-work", limits.max_work);
   read("--base-max-input-bytes", limits.max_input_bytes); limits.validate(); return limits;
 }
+SealedLimits sealed_limits(Args &args) {
+  SealedLimits bounds;
+  auto number = [&](std::string_view option, std::size_t &value) {
+    if (const auto raw = args.option(option)) {
+      const auto parsed = integer(*raw);
+      require(parsed <= std::numeric_limits<std::size_t>::max(), "sealed limit is too large");
+      value = static_cast<std::size_t>(parsed);
+    }
+  };
+  number("--sealed-max-objects", bounds.max_objects); number("--sealed-max-work", bounds.max_work);
+  number("--sealed-cache-bytes", bounds.max_index_cache_bytes); number("--sealed-new-index-bytes", bounds.max_new_index_bytes);
+  number("--sealed-max-history", bounds.max_history); bounds.validate();
+  return bounds;
+}
 net::TransferOptions transfer_options(Args &args) {
   net::TransferOptions limits;
   if (const auto path = args.option("--lock-claims")) {
@@ -551,6 +565,7 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
     Budgets : --sealed-max-objects N, --sealed-max-work N, --sealed-cache-bytes N,
               --sealed-new-index-bytes N, --sealed-max-history N ; progression et options de transfert.
   agent run URL [--directory DOSSIER] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
+             [--sealed --wire PATH] [--sealed-root heads/main]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Surveiller, créer des snapshots et publier en continu
@@ -791,6 +806,7 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
     Budgets: --sealed-max-objects N, --sealed-max-work N, --sealed-cache-bytes N,
              --sealed-new-index-bytes N, --sealed-max-history N; progress and transfer options.
   agent run URL [--directory DIR] [--remote-branch main] [--commits-only] [--bidirectional] [--conflict-copies]
+             [--sealed --wire PATH] [--sealed-root heads/main]
              [--polling] [--interval-ms 500] [--debounce-ms 75] [--audit-ms 300000]
              [--remote-poll-ms 5000] [--duration-ms 0] [--max-updates 0] [--max-paths 4096]
                                     Watch, snapshot and publish continuously
@@ -872,7 +888,8 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
   const bool sealed_writes = command == "sealed" && !args.values.empty() &&
       (args.values.front() == "snapshot" || args.values.front() == "push");
   if (command != "signing-key" && !agent_run && !sealed_writes && (command != "native" || args.values.empty() || !identity_subcommand(args.values.front()))) cli::discard_signing_seed_environment();
-  if (command != "sealed" && command != "sealed-key") cli::discard_sealed_key_environment();
+  const bool sealed_agent = agent_run && std::find(args.values.begin(), args.values.end(), "--sealed") != args.values.end();
+  if (command != "sealed" && command != "sealed-key" && !sealed_agent) cli::discard_sealed_key_environment();
   require(!native_workspace || command == "native" || command == "help" || agent_run,
       "workspace selection is only available for native commands and agent run");
   // Documentation is independent of repository state, encryption and credentials.
@@ -996,6 +1013,14 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     request.commits_only = args.flag("--commits-only"); request.polling = args.flag("--polling");
     request.bidirectional = args.flag("--bidirectional");
     request.conflict_copies = args.flag("--conflict-copies");
+    request.sealed = args.flag("--sealed");
+    if (const auto wire = args.option("--wire")) request.wire = path_from_utf8(*wire);
+    if (const auto label = args.option("--sealed-root")) {
+      require(request.sealed, "--sealed-root requires --sealed");
+      request.sealed_root = *label;
+    }
+    request.wire_options = store_options;
+    if (request.sealed) request.sealed_limits = sealed_limits(args);
     request.renames = rename_options(args);
     request.interval_ms = integer(args.option("--interval-ms").value_or("500"));
     request.debounce_ms = integer(args.option("--debounce-ms").value_or("75"));
@@ -1374,17 +1399,7 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
     require(location && !location->empty(), "sealed commands require a separate --wire store");
     const auto channel = args.option("--channel").value_or("main");
     sealed_detail::channel_name(channel);
-    SealedLimits bounds;
-    auto number = [&](std::string_view option, std::size_t &value) {
-      if (const auto raw = args.option(option)) {
-        const auto parsed = integer(*raw);
-        require(parsed <= std::numeric_limits<std::size_t>::max(), "sealed limit is too large");
-        value = static_cast<std::size_t>(parsed);
-      }
-    };
-    number("--sealed-max-objects", bounds.max_objects); number("--sealed-max-work", bounds.max_work);
-    number("--sealed-cache-bytes", bounds.max_index_cache_bytes); number("--sealed-new-index-bytes", bounds.max_new_index_bytes);
-    number("--sealed-max-history", bounds.max_history); bounds.validate();
+    const auto bounds = sealed_limits(args);
     const bool writing = sub == "snapshot" || sub == "push";
     const auto previous = sub == "snapshot" ? args.option("--previous") : std::optional<std::string>{};
     const auto checkpoint = sub == "open" ? args.option("--checkpoint") : std::optional<std::string>{};

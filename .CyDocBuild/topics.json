@@ -1290,5 +1290,6 @@
   "sealed-key rewrap": "sealed-repositories#key-files",
   "sealed-key verify": "sealed-repositories#key-files",
   "sealed-c-api": "api-c-abi#sealed-repositories",
-  "sealed-go": "go-binding#sealed-repositories"
+  "sealed-go": "go-binding#sealed-repositories",
+  "sealed-agent": "sealed-repositories#resident"
 }

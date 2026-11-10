@@ -1,5 +1,6 @@
 #include "sealed_internal.hpp"
 #include "native_graph.hpp"
+#include "sealed_publication.hpp"
 #include <syrnck/sealed_net.hpp>
 #include <algorithm>
 namespace syrnck::net {
@@ -50,8 +51,11 @@ void fast_forward(const Store &plain, const Refs &old, const Refs &next, const S
                 .source_is_ancestor,
             "sealed original history diverged; merge or explicitly allow a rewrite");
 }
-PublicationObserver observer(const Store &wire, const Store &plain, const SecretKey &key, std::string channel,
-                             std::string checkpoint, const SealedLimits &limits, ProgressCallback progress) {
+} // namespace
+PublicationObserver sealed_transfer_detail::observer(const Store &wire, const Store &plain,
+                                                     const SecretKey &key, std::string channel,
+                                                     std::string checkpoint, const SealedLimits &limits,
+                                                     ProgressCallback progress) {
   return [&, channel = std::move(channel), checkpoint = std::move(checkpoint),
           progress](const ObjectKey &root) {
     require(root.kind == Kind::revision, "invalid sealed publication root");
@@ -68,6 +72,7 @@ PublicationObserver observer(const Store &wire, const Store &plain, const Secret
     (void)open_sealed_snapshot(wire, plain, key, root.id, channel, checkpoint, limits, {{}, progress});
   };
 }
+namespace {
 std::string retained(const ObjectKey &root) { return "sealed/download/" + root.id; }
 } // namespace
 std::string sealed_remote_checkpoint(const Remote &remote, std::string_view channel) {
@@ -119,7 +124,8 @@ Json push_sealed_snapshot(const Store &source, const Store &wire, const Remote &
   }
   auto prepared = seal_snapshot(source, wire, key, channel, roots, previous, limits, options);
   const ObjectKey root{Kind::revision, prepared["snapshot"].get<std::string>()};
-  auto published = observer(wire, source, key, std::string(channel), checkpoint, limits, options.progress);
+  auto published = sealed_transfer_detail::observer(wire, source, key, std::string(channel), checkpoint,
+                                                    limits, options.progress);
   auto sent = remote.push_expected(wire, root, channel, expected, options, transfer, published);
   prepared["state"] = "pushed";
   prepared["checkpoint"] = checkpoint;
@@ -141,9 +147,9 @@ Json resume_sealed_transfer(const Store &wire, const Store &destination, const R
     push_identity(remote, options);
     // Authenticate even completed sessions before recording publication locally.
     (void)inspect_sealed_snapshot(wire, key, session->root.id, channel, limits, options);
-    sent = remote.resume(
-        wire, session_id, options, transfer,
-        observer(wire, destination, key, std::string(channel), checkpoint, limits, options.progress));
+    sent = remote.resume(wire, session_id, options, transfer,
+                         sealed_transfer_detail::observer(wire, destination, key, std::string(channel),
+                                                          checkpoint, limits, options.progress));
   } else {
     require(session->reference == retained(session->root), "invalid sealed download retention reference");
     sent = remote.resume(wire, session_id, options, transfer);

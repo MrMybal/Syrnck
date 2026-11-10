@@ -1,6 +1,7 @@
 #pragma once
 #include <syrnck/net.hpp>
 #include <syrnck/sealed.hpp>
+#include <syrnck/native_sync.hpp>
 namespace syrnck::net {
 // Each endpoint/channel has one protected local freshness checkpoint. Keep
 // wire separate from the plaintext Store and from application workspaces.
@@ -19,4 +20,13 @@ Json push_sealed_snapshot(const Store &source, const Store &wire, const Remote &
 Json resume_sealed_transfer(const Store &wire, const Store &destination, const Remote &, const SecretKey &,
                             std::string_view channel, std::string_view session, const SealedLimits & = {},
                             OperationOptions = {}, TransferOptions = {});
+// Adapt one channel containing exactly one private revision root to NativeSync.
+// wire, remote and key must outlive the adapter. Recreate it between ticks if
+// Store locks should be released while waiting. The adapter retains originals
+// before journalling a ciphertext publication and binds its service identity to
+// the endpoint, key realm and private root label. It never changes native HEAD.
+std::unique_ptr<NativeSyncRemote> sealed_native_sync(const Store &wire, const Remote &, const SecretKey &,
+                                                     std::string channel = "main",
+                                                     std::string private_root = "heads/main",
+                                                     const SealedLimits & = {});
 } // namespace syrnck::net

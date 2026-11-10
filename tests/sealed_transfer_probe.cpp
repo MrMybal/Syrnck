@@ -1,5 +1,6 @@
 #include "internal.hpp"
 #include <syrnck/sealed_net.hpp>
+#include <syrnck/native_sync.hpp>
 #include <cstdlib>
 #include <iostream>
 using namespace syrnck;
@@ -7,6 +8,7 @@ namespace {
 fs::path plain_path;
 std::string phase;
 bool armed = false;
+bool agent = false;
 void wait_for_parent() {
   armed = false;
   std::cout << "{\"paused\":true}" << std::endl;
@@ -33,6 +35,7 @@ int entry(int argc, char **argv) {
     require(token, "missing sealed probe token");
     const net::Remote remote(argv[4], token);
     phase = argv[5];
+    agent = std::string_view(argv[1]) == "agent";
     armed = true;
     OperationOptions options{{}, [&](const ProgressEvent &event) {
                                if (armed && phase == "transfer" &&
@@ -44,6 +47,10 @@ int entry(int argc, char **argv) {
       const auto root = plain.refs().at("heads/main");
       (void)net::push_sealed_snapshot(plain, wire, remote, key, "main", {{"heads/main", root}}, false, {},
                                       options);
+    } else if (agent) {
+      net::NativeSync sync(plain, fs::current_path());
+      auto transport = net::sealed_native_sync(wire, remote, key);
+      (void)sync.tick(plain, *transport, {}, options);
     } else {
       require(std::string_view(argv[1]) == "fetch", "invalid sealed probe operation");
       (void)net::fetch_sealed_snapshot(wire, plain, remote, key, "main", {}, options);
@@ -60,6 +67,22 @@ namespace syrnck::testing {
 void io_checkpoint(std::string_view event, const fs::path &target) {
   if (!armed || phase == "transfer" || target.filename() != "refs.json" || target.parent_path() != plain_path)
     return;
+  if (agent) {
+    if (event != "atomic.published")
+      return;
+    const auto refs = parse_refs(read_bytes(target, max_object_size), "invalid sealed probe refs");
+    bool sealed = false, native = false;
+    for (const auto &[name, unused] : refs) {
+      (void)unused;
+      sealed |= name.starts_with("sealed/checkpoints/") &&
+                !name.starts_with("sealed/checkpoints/agent-candidates/");
+      native |= name.ends_with("/observed");
+    }
+    if ((phase == "after-sealed-observation" && sealed && !native) ||
+        (phase == "after-native-observation" && native))
+      wait_for_parent();
+    return;
+  }
   if ((phase == "before-checkpoint" && event == "atomic.file_synced") ||
       (phase == "after-checkpoint" && event == "atomic.published"))
     wait_for_parent();

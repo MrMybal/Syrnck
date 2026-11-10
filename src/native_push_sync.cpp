@@ -8,6 +8,53 @@ std::optional<ObjectKey> lookup(const Refs &refs, const std::string &name) {
   const auto at = refs.find(name);
   return at == refs.end() ? std::optional<ObjectKey>{} : std::optional{at->second};
 }
+class PlainSyncRemote final : public NativeSyncRemote {
+public:
+  explicit PlainSyncRemote(const Remote &remote) : remote_(remote) {}
+  std::string endpoint_fingerprint() const override { return remote_.endpoint_fingerprint(); }
+  std::vector<NativeSyncSession> sessions(const Store &store, std::string_view branch,
+      bool include_completed, OperationOptions options, TransferOptions transfer) override {
+    (void)transfer;
+    const auto all = store.transfer_sessions(options.stop);
+    require(all.size() <= 65536, "native push transfer session limit exceeded");
+    std::vector<NativeSyncSession> result;
+    const auto endpoint = endpoint_fingerprint();
+    for (const auto &session : all) {
+      if (session.direction != "push" || session.endpoint != endpoint || session.reference != branch) continue;
+      if (session.state == "complete" &&
+          (!include_completed || session.root.kind != Kind::revision || !store.contains(session.root))) continue;
+      result.push_back({session.id, session.root, session.state});
+    }
+    return result;
+  }
+  NativeSyncObservation observe(const Store &, std::string_view branch, OperationOptions options,
+      TransferOptions transfer) override {
+    return {lookup(remote_.refs(options, transfer), std::string(branch)), {}};
+  }
+  Json fetch(const Store &store, std::string_view branch, std::string_view name,
+      OperationOptions options, TransferOptions transfer) override {
+    auto fetched = fetch_native_branch(store, remote_, branch, name, options, transfer);
+    const auto revision = store.metadata(Kind::revision, fetched["revision"].get<std::string>());
+    require(revision["message"] != "Syrnck sealed snapshot v1" || revision["files"].size() != 1 ||
+        !revision["files"].contains("sealed/root"), "sealed remote requires agent --sealed");
+    return fetched;
+  }
+  Json resume(const Store &store, std::string_view session, OperationOptions options,
+      TransferOptions transfer, const PublicationObserver &published) override {
+    return remote_.resume(store, session, options, transfer, published);
+  }
+  bool conflicted(const Store &store, const ObjectKey &root, std::string_view branch) const override {
+    const auto old = store.transfer_session(TransferSession::identity("push", endpoint_fingerprint(), root, branch));
+    return old && old->state == "conflict";
+  }
+  Json push_expected(const Store &store, const ObjectKey &root, std::string_view branch,
+      const std::optional<ObjectKey> &expected, OperationOptions options, TransferOptions transfer,
+      const PublicationObserver &published) override {
+    return remote_.push_expected(store, root, branch, expected, options, transfer, published);
+  }
+private:
+  const Remote &remote_;
+};
 Json identifier(const std::optional<ObjectKey> &key) { return key ? Json(key->id) : Json{}; }
 struct Checkpoint {
   std::optional<ObjectKey> descriptor, baseline;
@@ -101,6 +148,11 @@ NativePushSync &NativePushSync::operator=(NativePushSync &&) noexcept = default;
 void NativePushSync::invalidate() { impl_->rescan = true; impl_->observation.invalidate(); impl_->capture.invalidate(); }
 Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceChanges &hints,
                          OperationOptions options, TransferOptions transfer) {
+  PlainSyncRemote transport(remote);
+  return tick(store, transport, hints, options, transfer);
+}
+Json NativePushSync::tick(Store &store, NativeSyncRemote &remote, const WorkspaceChanges &hints,
+                         OperationOptions options, TransferOptions transfer) {
   auto &state = *impl_;
   throw_if_cancelled(options.stop); transfer.validate();
   require(fs::canonical(store.root()) == state.storage && store.native_workspace_name() == state.workspace,
@@ -193,15 +245,14 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
   if (head || state.settings.receive_changes) store.require_features({"resident-sync-v1"}, options);
   auto push_limits = transfer; push_limits.require_read_lease = false;
   // A new local root must not bypass an unknown publication of a previous root.
-  const auto sessions = store.transfer_sessions(options.stop);
-  require(sessions.size() <= 65536, "native push transfer session limit exceeded");
   // Upgrade a service's first durable frontier from surviving one-shot/older
   // completed receipts. Subsequent ticks need no repeated ancestry walks over
   // completed history: the publication observer advances the frontier first.
   const bool import_completed = !last_observed && !saved.baseline;
+  const auto sessions = remote.sessions(store, state.settings.remote_branch, import_completed, options, transfer);
+  require(sessions.size() <= 65536, "native push transfer session limit exceeded");
   for (const auto &session : sessions) {
     throw_if_cancelled(options.stop);
-    if (session.direction != "push" || session.endpoint != endpoint || session.reference != state.settings.remote_branch) continue;
     if (session.state == "complete") {
       if (import_completed && session.root.kind == Kind::revision && store.contains(session.root)) published(session.root);
     } else if (session.state == "publishing" || session.state == "uncertain") {
@@ -209,8 +260,9 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
       (void)remote.resume(store, session.id, options, push_limits, published);
     }
   }
-  const auto incoming = remote.refs(options, transfer);
-  auto observed = lookup(incoming, state.settings.remote_branch);
+  const auto incoming = remote.observe(store, state.settings.remote_branch, options, transfer);
+  if (incoming.blocked_reason) return blocked(*incoming.blocked_reason);
+  auto observed = incoming.root;
   require(!observed || observed->kind == Kind::revision, "native push remote reference is not a revision");
   result["remote_revision"] = identifier(observed);
   if (!observed && (saved.baseline || last_observed)) return blocked("remote_deleted");
@@ -230,7 +282,7 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
     const auto tracking = lookup(store.refs(), "remotes/" + tracking_name + '/' + state.settings.remote_branch);
     if (tracking != observed && observed != saved.baseline) {
       auto pull_limits = transfer; pull_limits.require_upload_lease = false; pull_limits.asset_locks.clear();
-      const auto fetched = fetch_native_branch(store, remote, state.settings.remote_branch, tracking_name, options, pull_limits);
+      const auto fetched = remote.fetch(store, state.settings.remote_branch, tracking_name, options, pull_limits);
       observed = ObjectKey{Kind::revision, fetched["revision"].get<std::string>()};
       result["remote_revision"] = observed->id;
       result["transfer"] = fetched["transfer"];
@@ -272,8 +324,7 @@ Json NativePushSync::tick(Store &store, const Remote &remote, const WorkspaceCha
         store.native_ancestry(observed->id, saved.baseline->id, {}, options)["source_is_ancestor"].get<bool>())
       return blocked("remote_history_rewritten");
   }
-  const auto session_id = TransferSession::identity("push", endpoint, *head, state.settings.remote_branch);
-  if (const auto old = store.transfer_session(session_id); old && old->state == "conflict")
+  if (remote.conflicted(store, *head, state.settings.remote_branch))
     return blocked("transfer_conflict");
   result["transfer"] = remote.push_expected(store, *head, state.settings.remote_branch, observed, options, push_limits, published);
   acknowledge(store, saved, state_ref, base_ref, binding, *head, head_ref, service, options);
