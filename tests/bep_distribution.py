@@ -42,6 +42,10 @@ def main():
         assert configuration["untrusted_peer"] is True
         assert configuration["folder_password_env"] != configuration["key_env"]
         assert "password" not in configuration and "encryption_password" not in configuration
+        receiver = json.loads((prefix / args.examples / "bep-encrypted-receiver.json").read_text(encoding="utf-8"))
+        assert receiver["receive_encrypted"] is True and receiver["storage"]
+        assert all(name not in receiver for name in
+                   ("directory", "workspace", "untrusted_peer", "folder_password_env", "author", "signing_key_file"))
         licenses = prefix / args.licenses
         manifest = json.loads((licenses / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["version"] == 1 and manifest["binary"] == executable.name

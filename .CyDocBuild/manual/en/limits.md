@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 33
+revision: 34
 ---
 
 ## Workspace and versioning {#workspace}
@@ -30,3 +30,5 @@ archives regular-file contents before conflict-copy moves and resumes the strict
 owned journal. Missing-file/deletion intent and ambiguous namespace changes still
 need resolution. The retained edit archive groups currently require manual
 retention management; automatic age/backup-based retirement remains unfinished.
+
+The separate [opaque BEP receiver](doc:syncthing#opaque-receiver) now retains encrypted metadata/blocks without a folder password and resumes complete block receipts. Its standalone role serves one configured peer; multi-peer CLI orchestration, incomplete-receipt retirement and private conflict resolution remain separate work.

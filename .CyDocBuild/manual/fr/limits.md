@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 33
+sourceRevision: 34
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -30,3 +30,5 @@ archive les contenus ordinaires avant copie de conflit et reprend le journal
 strict à propriétaire. Intentions de suppression/fichiers manquants et structures
 ambiguës restent à résoudre. Les groupes d’archives d’édition demandent encore
 une gestion manuelle ; leur retrait automatique selon âge/sauvegarde reste à finir.
+
+Le [récepteur BEP opaque](doc:syncthing#opaque-receiver) distinct conserve maintenant métadonnées/blocs chiffrés sans mot de passe de dossier et reprend les reçus de blocs terminés. Son rôle autonome sert un pair configuré ; orchestration CLI multipair, retrait des reçus incomplets et résolution des conflits privés restent distincts.

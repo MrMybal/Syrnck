@@ -37,8 +37,10 @@ type CatalogOptions struct {
 // may be announced before its data is downloaded. Directories, symlinks and
 // tombstones have no manifest. No working path is interpreted by this catalog.
 type CatalogEntry struct {
-	Info     protocol.FileInfo `json:"info"`
-	Manifest string            `json:"manifest"`
+	Info         protocol.FileInfo `json:"info"`
+	Manifest     string            `json:"manifest"`
+	CipherBlocks []CipherBlock     `json:"cipher_blocks,omitempty"`
+	Origin       string            `json:"origin,omitempty"`
 }
 
 type catalogPeer struct {
@@ -49,13 +51,14 @@ type catalogPeer struct {
 }
 
 type catalogState struct {
-	Version  int            `json:"version"`
-	Folder   string         `json:"folder"`
-	Device   string         `json:"device"`
-	IndexID  uint64         `json:"index_id"`
-	Sequence int64          `json:"sequence"`
-	Files    []CatalogEntry `json:"files"`
-	Peers    []catalogPeer  `json:"peers"`
+	Version       int            `json:"version"`
+	Folder        string         `json:"folder"`
+	Device        string         `json:"device"`
+	IndexID       uint64         `json:"index_id"`
+	Sequence      int64          `json:"sequence"`
+	Files         []CatalogEntry `json:"files"`
+	Peers         []catalogPeer  `json:"peers"`
+	PasswordToken []byte         `json:"password_token,omitempty"`
 }
 
 // Catalog is a caller-serialized draft. It holds no native handle or network
@@ -142,7 +145,19 @@ type catalogRevision struct {
 // empty draft. Device membership must exactly match the caller's trusted config.
 // A fresh nonzero local IndexID is published only by Commit.
 func OpenCatalog(ctx context.Context, store *syrnck.Store, options CatalogOptions) (*Catalog, error) {
+	return openCatalog(ctx, store, options, false)
+}
+
+// OpenEncryptedCatalog opens the distinct ciphertext-only BEP catalog. It has no
+// folder password, local scanner or workspace. Never pass plaintext FileInfo.
+func OpenEncryptedCatalog(ctx context.Context, store *syrnck.Store, options CatalogOptions) (*Catalog, error) {
+	return openCatalog(ctx, store, options, true)
+}
+func openCatalog(ctx context.Context, store *syrnck.Store, options CatalogOptions, encrypted bool) (*Catalog, error) {
 	configuration, err := catalogConfiguration(options)
+	if encrypted {
+		configuration.Version = 2
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +168,7 @@ func OpenCatalog(ctx context.Context, store *syrnck.Store, options CatalogOption
 	if err != nil {
 		return nil, err
 	}
-	tip, found := refs[catalogRef(configuration.Device, configuration.Folder)]
+	tip, found := refs[catalogStateRef(configuration)]
 	if !found {
 		var random [8]byte
 		for configuration.IndexID == 0 {
@@ -177,7 +192,7 @@ func OpenCatalog(ctx context.Context, store *syrnck.Store, options CatalogOption
 	if err := decoder.Decode(&revision); err != nil {
 		return nil, err
 	}
-	if revision.Version != 1 || revision.Message != "Syrnck BEP folder catalog v1" || revision.Timestamp != 0 || len(revision.Parents) > 1 {
+	if revision.Version != 1 || revision.Message != catalogMessage(configuration.Version) || revision.Timestamp != 0 || len(revision.Parents) > 1 {
 		return nil, errors.New("syrnck BEP: invalid catalog revision")
 	}
 	stateFile, found := revision.Files["catalog.json"]
@@ -208,7 +223,7 @@ func OpenCatalog(ctx context.Context, store *syrnck.Store, options CatalogOption
 	if err := strictCatalogJSON(data, &state); err != nil {
 		return nil, err
 	}
-	if state.Device != configuration.Device || state.Folder != configuration.Folder || len(state.Peers) != len(configuration.Peers) {
+	if state.Version != configuration.Version || state.Device != configuration.Device || state.Folder != configuration.Folder || len(state.Peers) != len(configuration.Peers) {
 		return nil, errors.New("syrnck BEP: catalog identity or membership differs")
 	}
 	for i := range state.Peers {
@@ -238,6 +253,11 @@ func catalogDataFiles(state catalogState) map[string]catalogRevisionFile {
 		for _, entry := range entries {
 			if entry.Manifest != "" {
 				files[catalogPath(device, entry.Info.Name)] = catalogRevisionFile{Manifest: entry.Manifest}
+			}
+			for number, block := range entry.CipherBlocks {
+				for part, manifest := range block.Parts {
+					files[catalogPath(device, fmt.Sprintf("%s/cipher/%d/%d", entry.Info.Name, number, part))] = catalogRevisionFile{Manifest: manifest}
+				}
 			}
 		}
 	}
@@ -281,8 +301,21 @@ func validateCatalogInfo(folder string, info protocol.FileInfo) error {
 }
 
 func validateCatalogState(state catalogState) error {
-	if state.Version != 1 || state.IndexID == 0 || state.Sequence < 0 || state.Files == nil || state.Peers == nil {
+	if (state.Version != 1 && state.Version != 2) || state.IndexID == 0 || state.Sequence < 0 || state.Files == nil || state.Peers == nil {
 		return errors.New("syrnck BEP: invalid catalog state")
+	}
+	if state.Version == 1 && len(state.PasswordToken) != 0 || state.Version == 2 && len(state.PasswordToken) != 0 && len(state.PasswordToken) != len(state.Folder)+25 {
+		return errors.New("syrnck BEP: invalid encrypted folder token")
+	}
+	if state.Version == 2 && len(state.PasswordToken) == 0 {
+		for _, peer := range state.Peers {
+			if len(peer.Files) != 0 {
+				return errors.New("syrnck BEP: encrypted folder token missing")
+			}
+		}
+		if len(state.Files) != 0 {
+			return errors.New("syrnck BEP: encrypted folder token missing")
+		}
 	}
 	count := 0
 	check := func(entries []CatalogEntry, sequence int64, local bool) error {
@@ -296,13 +329,10 @@ func validateCatalogState(state catalogState) error {
 				return errors.New("syrnck BEP: duplicate catalog name/sequence or size limit")
 			}
 			sequences[entry.Info.Sequence] = true
-			if err := validateCatalogInfo(state.Folder, entry.Info); err != nil {
+			if err := validateCatalogEntry(state, entry, local); err != nil {
 				return err
 			}
-			needsData := !entry.Info.Deleted && entry.Info.Type == protocol.FileInfoTypeFile
-			if entry.Manifest != "" && (!needsData || !validManifest(entry.Manifest)) || local && needsData && entry.Manifest == "" {
-				return errors.New("syrnck BEP: invalid catalog manifest binding")
-			}
+
 		}
 		return nil
 	}
@@ -327,10 +357,11 @@ func cloneCatalogState(state catalogState) catalogState {
 		}
 		output := make([]CatalogEntry, len(input))
 		for i, entry := range input {
-			output[i] = CatalogEntry{Info: copyInfo(entry.Info), Manifest: entry.Manifest}
+			output[i] = copyCatalogEntry(entry)
 		}
 		return output
 	}
+	state.PasswordToken = bytes.Clone(state.PasswordToken)
 	state.Files = cloneEntries(state.Files)
 	peers := make([]catalogPeer, len(state.Peers))
 	for i, peer := range state.Peers {
@@ -404,6 +435,9 @@ func (c *Catalog) RecordLocal(entry CatalogEntry) error {
 // one name sort, avoiding repeated insertion/copy work for a large folder scan.
 // A bad entry leaves the entire draft unchanged. Input order assigns sequences.
 func (c *Catalog) RecordLocalChanges(changes []CatalogEntry) error {
+	if c.state.Version != 1 {
+		return errors.New("syrnck BEP: encrypted receiver cannot create local metadata")
+	}
 	if len(changes) > MaxCatalogFiles {
 		return errors.New("syrnck BEP: local batch exceeds limit")
 	}
@@ -504,14 +538,24 @@ func (c *Catalog) ReceiveIndex(batch CatalogIndex) error {
 		}
 		previous = incoming.Sequence
 		seen[incoming.Name] = true
-		if err := validateCatalogInfo(state.Folder, incoming); err != nil {
+		if err := validateCatalogInfoMode(state, incoming); err != nil {
 			return err
 		}
 		incoming = copyInfo(incoming)
 		entry := CatalogEntry{Info: incoming}
+		if state.Version == 2 && incoming.Type == protocol.FileInfoTypeFile && !incoming.Deleted {
+			entry.CipherBlocks = make([]CipherBlock, len(incoming.Blocks))
+		}
 		if i, found := findCatalogEntry(old, incoming.Name); found {
 			prior := old[i]
-			if prior.Info.Version.Equal(incoming.Version) {
+			if state.Version == 2 {
+				reuseCipherBlocks(&entry, prior)
+				// Metadata uses fresh nonces on every announcement. Preserve an
+				// equivalent retained envelope instead of manufacturing new history.
+				if sameEncryptedPublicInfo(prior.Info, incoming) {
+					entry.Info.Encrypted = bytes.Clone(prior.Info.Encrypted)
+				}
+			} else if prior.Info.Version.Equal(incoming.Version) {
 				before, after := prior.Info, incoming
 				before.Sequence, after.Sequence = 0, 0
 				a, _ := json.Marshal(before)
@@ -556,7 +600,7 @@ func (c *Catalog) Attach(ctx context.Context, store *syrnck.Store, device protoc
 }
 
 func verifyCatalogData(ctx context.Context, store *syrnck.Store, folder string, info protocol.FileInfo, manifest string) error {
-	if store == nil || info.Deleted || info.Type != protocol.FileInfoTypeFile || !validManifest(manifest) {
+	if store == nil || info.Deleted || info.Type != protocol.FileInfoTypeFile || len(info.Encrypted) != 0 || !validManifest(manifest) {
 		return errors.New("syrnck BEP: invalid file data binding")
 	}
 	view, err := NewFile(ctx, store, manifest, folder, info.Name, info.BlockSize())
@@ -573,6 +617,9 @@ func verifyCatalogData(ctx context.Context, store *syrnck.Store, folder string, 
 // index, preserving its causal vector. Concurrent versions are reported without
 // choosing a winner or deleting either side. Working-file application is separate.
 func (c *Catalog) Adopt(device protocol.DeviceID, name string) error {
+	if c.state.Version != 1 {
+		return errors.New("syrnck BEP: use encrypted receiver reconciliation")
+	}
 	name = protocolName(name)
 	for _, peer := range c.state.Peers {
 		if peer.Device != device.String() {
@@ -635,7 +682,7 @@ func (c *Catalog) Commit(ctx context.Context, store *syrnck.Store) error {
 // catalog/data closure. The catalog reference itself cannot appear in updates.
 // On any error reload every affected root to establish the publication outcome.
 func (c *Catalog) CommitWithRefs(ctx context.Context, store *syrnck.Store, updates []syrnck.RefUpdate) error {
-	name := catalogRef(c.state.Device, c.state.Folder)
+	name := catalogStateRef(c.state)
 	for _, update := range updates {
 		if update.Name == name {
 			return errors.New("syrnck BEP: duplicate catalog publication root")
@@ -685,7 +732,7 @@ func (c *Catalog) prepare(ctx context.Context, store *syrnck.Store) (syrnck.Obje
 	if err != nil {
 		return syrnck.ObjectKey{}, nil, err
 	}
-	name := catalogRef(c.state.Device, c.state.Folder)
+	name := catalogStateRef(c.state)
 	current, present := refs[name]
 	if present != (c.tip.ID != "") || present && current != c.tip {
 		return syrnck.ObjectKey{}, nil, ErrCatalogStale
@@ -699,10 +746,8 @@ func (c *Catalog) prepare(ctx context.Context, store *syrnck.Store) (syrnck.Obje
 	}
 	for _, entries := range groups {
 		for _, entry := range entries {
-			if entry.Manifest != "" {
-				if err := verifyCatalogData(ctx, store, c.state.Folder, entry.Info, entry.Manifest); err != nil {
-					return syrnck.ObjectKey{}, nil, err
-				}
+			if err := verifyCatalogEntryData(ctx, store, c.state, entry); err != nil {
+				return syrnck.ObjectKey{}, nil, err
 			}
 		}
 	}
@@ -710,7 +755,7 @@ func (c *Catalog) prepare(ctx context.Context, store *syrnck.Store) (syrnck.Obje
 	if err != nil {
 		return syrnck.ObjectKey{}, nil, err
 	}
-	revision := catalogRevision{Version: 1, Parents: []string{}, Message: "Syrnck BEP folder catalog v1", Files: catalogDataFiles(c.state)}
+	revision := catalogRevision{Version: 1, Parents: []string{}, Message: catalogMessage(c.state.Version), Files: catalogDataFiles(c.state)}
 	if c.tip.ID != "" {
 		old := c.tip
 		revision.Parents = append(revision.Parents, old.ID)

@@ -34,6 +34,7 @@ type folderIndexFrame struct {
 // Folder remains caller-owned. Close the session and wait before closing Folder.
 type FolderSession struct {
 	folder               *Folder
+	receiver             *EncryptedReceiver
 	connection           *DeviceConnection
 	options              FolderSessionOptions
 	ctx                  context.Context
@@ -62,17 +63,8 @@ func prepareFolderSessionOptions(folder *Folder, options *FolderSessionOptions) 
 	if folder == nil {
 		return errors.New("syrnck BEP: folder required")
 	}
-	if options.PollInterval == 0 {
-		options.PollInterval = 250 * time.Millisecond
-	}
-	if options.PollInterval < 50*time.Millisecond || options.PollInterval > time.Minute {
-		return errors.New("syrnck BEP: invalid folder polling interval")
-	}
-	if options.QueueBytes == 0 {
-		options.QueueBytes = 32 * 1024 * 1024
-	}
-	if options.QueueBytes < 1024*1024 || options.QueueBytes > 128*1024*1024 {
-		return errors.New("syrnck BEP: invalid folder index queue budget")
+	if err := prepareSessionBounds(options); err != nil {
+		return err
 	}
 	paired := false
 	for _, peer := range folder.options.Catalog.Peers {
@@ -89,6 +81,22 @@ func prepareFolderSessionOptions(folder *Folder, options *FolderSessionOptions) 
 		return errors.New("syrnck BEP: folder local certificate identity differs")
 	}
 	return prepareFolderEncryption(folder, options)
+}
+
+func prepareSessionBounds(options *FolderSessionOptions) error {
+	if options.PollInterval == 0 {
+		options.PollInterval = 250 * time.Millisecond
+	}
+	if options.PollInterval < 50*time.Millisecond || options.PollInterval > time.Minute {
+		return errors.New("syrnck BEP: invalid folder polling interval")
+	}
+	if options.QueueBytes == 0 {
+		options.QueueBytes = 32 * 1024 * 1024
+	}
+	if options.QueueBytes < 1024*1024 || options.QueueBytes > 128*1024*1024 {
+		return errors.New("syrnck BEP: invalid folder index queue budget")
+	}
+	return nil
 }
 
 // OpenFolderSession owns transport even on failure. It checks the local
@@ -120,8 +128,22 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 	if err != nil {
 		return nil, err
 	}
+	session, err = startFolderSession(ctx, &FolderSession{folder: folder, options: options}, transport, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	accepted = true
+	return session, nil
+}
+
+func startFolderSession(ctx context.Context, session *FolderSession, transport net.Conn, snapshot FolderSnapshot) (*FolderSession, error) {
 	child, cancel := context.WithCancel(ctx)
-	session = &FolderSession{folder: folder, options: options, ctx: child, cancel: cancel, configured: make(chan struct{}), codecReady: make(chan struct{}), frames: make(chan folderIndexFrame, 256), closed: make(chan struct{}), done: make(chan struct{}), reports: make(chan FolderStatus, 16), errors: make(chan error, 16)}
+	session.ctx, session.cancel = child, cancel
+	session.configured, session.codecReady = make(chan struct{}), make(chan struct{})
+	session.frames = make(chan folderIndexFrame, 256)
+	session.closed, session.done = make(chan struct{}), make(chan struct{})
+	session.reports, session.errors = make(chan FolderStatus, 16), make(chan error, 16)
+	options := session.options
 	connection, err := OpenDeviceConnection(child, transport, options.Device, session)
 	if err != nil {
 		cancel()
@@ -129,22 +151,30 @@ func OpenFolderSession(ctx context.Context, folder *Folder, transport net.Conn, 
 	}
 	session.connection = connection
 	connection.Start()
-	peer := snapshot.Peers[options.Device.RemoteDevice]
-	var passwords map[string]string
-	var token []byte
-	if options.encryption != nil {
-		passwords = map[string]string{folder.options.Catalog.Folder: options.EncryptionPassword}
-		token = bytes.Clone(options.encryption.token)
+	if session.receiver != nil {
+		err = session.sendReceiverConfiguration()
+	} else {
+		peer := snapshot.Peers[options.Device.RemoteDevice]
+		var passwords map[string]string
+		var token []byte
+		if options.encryption != nil {
+			passwords = map[string]string{session.catalogOptions().Folder: options.EncryptionPassword}
+			token = bytes.Clone(options.encryption.token)
+		}
+		connection.ClusterConfig(&protocol.ClusterConfig{Folders: []protocol.Folder{{ID: session.catalogOptions().Folder, Type: protocol.FolderTypeSendReceive,
+			Devices: []protocol.Device{{ID: session.catalogOptions().LocalDevice, IndexID: protocol.IndexID(snapshot.IndexID), MaxSequence: snapshot.Sequence},
+				{ID: options.Device.RemoteDevice, IndexID: protocol.IndexID(peer.IndexID), MaxSequence: peer.Sequence, EncryptionPasswordToken: token}}}}}, passwords)
 	}
-	connection.ClusterConfig(&protocol.ClusterConfig{Folders: []protocol.Folder{{ID: folder.options.Catalog.Folder, Type: protocol.FolderTypeSendReceive,
-		Devices: []protocol.Device{{ID: folder.options.Catalog.LocalDevice, IndexID: protocol.IndexID(snapshot.IndexID), MaxSequence: snapshot.Sequence},
-			{ID: options.Device.RemoteDevice, IndexID: protocol.IndexID(peer.IndexID), MaxSequence: peer.Sequence, EncryptionPasswordToken: token}}}}}, passwords)
 	close(session.codecReady)
+	if err != nil {
+		cancel()
+		connection.Close(err)
+		return nil, err
+	}
 	session.workers.Add(2)
 	go session.indexLoop()
 	go session.syncLoop()
 	go func() { session.workers.Wait(); close(session.done) }()
-	accepted = true
 	return session, nil
 }
 
@@ -185,6 +215,9 @@ func (s *FolderSession) report(status FolderStatus, err error) {
 }
 
 func (s *FolderSession) ClusterConfig(connection protocol.Connection, configuration *protocol.ClusterConfig) error {
+	if s.receiver != nil {
+		return s.receiverClusterConfig(connection, configuration)
+	}
 	if connection.DeviceID() != s.options.Device.RemoteDevice {
 		return errors.New("syrnck BEP: folder connection identity differs")
 	}
@@ -260,16 +293,26 @@ func (s *FolderSession) IndexUpdate(connection protocol.Connection, index *proto
 }
 
 func indexFrameBytes(folder string, files []protocol.FileInfo) (int64, error) {
+	return indexFrameBytesMode(folder, files, false)
+}
+
+func indexFrameBytesMode(folder string, files []protocol.FileInfo, encrypted bool) (int64, error) {
 	if len(files) > MaxCatalogFiles {
 		return 0, errors.New("syrnck BEP: index frame entry limit exceeded")
 	}
 	size := int64(1024)
 	for _, info := range files {
 		info.Name = protocolName(info.Name)
-		if err := validateCatalogInfo(folder, info); err != nil {
+		var err error
+		if encrypted {
+			err = validateEncryptedInfo(info)
+		} else {
+			err = validateCatalogInfo(folder, info)
+		}
+		if err != nil {
 			return 0, err
 		}
-		size += 512 + 4*int64(len(info.Name)) + 128*int64(len(info.Blocks)) + 32*int64(len(info.Version.Counters)) + 2*int64(len(info.SymlinkTarget)+len(info.PreviousBlocksHash))
+		size += 512 + 4*int64(len(info.Name)) + 128*int64(len(info.Blocks)) + 32*int64(len(info.Version.Counters)) + 2*int64(len(info.SymlinkTarget)+len(info.PreviousBlocksHash)+len(info.Encrypted))
 		if info.Platform.Unix != nil {
 			size += 4 * int64(len(info.Platform.Unix.OwnerName)+len(info.Platform.Unix.GroupName))
 		}
@@ -294,10 +337,10 @@ func indexFrameBytes(folder string, files []protocol.FileInfo) (int64, error) {
 }
 
 func (s *FolderSession) enqueue(connection protocol.Connection, folder string, batch CatalogIndex) error {
-	if connection.DeviceID() != s.options.Device.RemoteDevice || folder != s.folder.options.Catalog.Folder {
+	if connection.DeviceID() != s.options.Device.RemoteDevice || folder != s.catalogOptions().Folder {
 		return protocol.ErrNoSuchFile
 	}
-	size, err := indexFrameBytes(folder, batch.Files)
+	size, err := indexFrameBytesMode(folder, batch.Files, s.receiver != nil)
 	if err != nil {
 		return err
 	}
@@ -334,7 +377,7 @@ func (s *FolderSession) indexLoop() {
 			return
 		case frame := <-s.frames:
 			for {
-				err := s.folder.ReceiveIndex(s.ctx, frame.batch)
+				err := s.receiveIndex(frame.batch)
 				if errors.Is(err, ErrFolderPending) {
 					_, recovery := s.folder.Refresh(s.ctx)
 					if recovery == nil {
@@ -368,6 +411,12 @@ func (s *FolderSession) syncLoop() {
 	case <-s.ctx.Done():
 		return
 	}
+	if s.receiver != nil {
+		if err := s.sendReceiverConfiguration(); err != nil {
+			s.fail(err)
+			return
+		}
+	}
 	if err := s.sendSnapshot(true); err != nil {
 		s.fail(err)
 		return
@@ -375,7 +424,7 @@ func (s *FolderSession) syncLoop() {
 	ticker := time.NewTicker(s.options.PollInterval)
 	defer ticker.Stop()
 	for {
-		status, err := s.folder.Step(s.ctx, func(device protocol.DeviceID) RequestFunc {
+		status, err := s.step(func(device protocol.DeviceID) RequestFunc {
 			if device == s.options.Device.RemoteDevice {
 				return s.connection.Request
 			}
@@ -395,7 +444,7 @@ func (s *FolderSession) syncLoop() {
 }
 
 func (s *FolderSession) sendSnapshot(initial bool) error {
-	snapshot, err := s.folder.Snapshot(s.ctx)
+	snapshot, err := s.snapshot()
 	if err != nil {
 		return err
 	}
@@ -434,9 +483,9 @@ func (s *FolderSession) sendSnapshot(initial bool) error {
 	s.advertised = advertised
 	s.mu.Unlock()
 	if full {
-		err = s.connection.Index(s.ctx, &protocol.Index{Folder: s.folder.options.Catalog.Folder, Files: files, LastSequence: snapshot.Sequence})
+		err = s.connection.Index(s.ctx, &protocol.Index{Folder: s.catalogOptions().Folder, Files: files, LastSequence: snapshot.Sequence})
 	} else if previous != snapshot.Sequence {
-		err = s.connection.IndexUpdate(s.ctx, &protocol.IndexUpdate{Folder: s.folder.options.Catalog.Folder, Files: files, PrevSequence: previous, LastSequence: snapshot.Sequence})
+		err = s.connection.IndexUpdate(s.ctx, &protocol.IndexUpdate{Folder: s.catalogOptions().Folder, Files: files, PrevSequence: previous, LastSequence: snapshot.Sequence})
 	}
 	if err != nil {
 		return err
@@ -465,7 +514,7 @@ func (r *folderBlockResponse) Close()       { r.once.Do(func() { close(r.done) }
 func (r *folderBlockResponse) Wait()        { <-r.done }
 
 func (s *FolderSession) Request(connection protocol.Connection, request *protocol.Request) (protocol.RequestResponse, error) {
-	if connection.DeviceID() != s.options.Device.RemoteDevice || request == nil || request.Folder != s.folder.options.Catalog.Folder {
+	if connection.DeviceID() != s.options.Device.RemoteDevice || request == nil || request.Folder != s.catalogOptions().Folder {
 		return nil, protocol.ErrNoSuchFile
 	}
 	name := protocolName(request.Name)
@@ -492,7 +541,7 @@ func (s *FolderSession) Request(connection protocol.Connection, request *protoco
 		if s.options.Untrusted {
 			clipEncryptedPadding(entry, &adjusted)
 		}
-		data, err := s.folder.readEntry(s.ctx, entry, &adjusted)
+		data, err := s.readEntry(entry, &adjusted)
 		if err == nil {
 			return &folderBlockResponse{data: data, done: make(chan struct{})}, nil
 		}

@@ -239,6 +239,10 @@ func startReference(t *testing.T, ctx context.Context, binary string, peer proto
 }
 func startReferencePeers(t *testing.T, ctx context.Context, binary string, peers []protocol.DeviceID, name string, data []byte, encrypted bool) *referenceDaemon {
 	t.Helper()
+	return startReferencePeersWithPasswords(t, ctx, binary, peers, name, data, encrypted, nil)
+}
+func startReferencePeersWithPasswords(t *testing.T, ctx context.Context, binary string, peers []protocol.DeviceID, name string, data []byte, encrypted bool, passwords map[protocol.DeviceID]string) *referenceDaemon {
+	t.Helper()
 	root := tempDirectory(t)
 	home := filepath.Join(root, "home")
 	folder := filepath.Join(root, "folder")
@@ -291,7 +295,11 @@ func startReferencePeers(t *testing.T, ctx context.Context, binary string, peers
 	shared := fmt.Sprintf(`<device id="%s"/>`, ref.device)
 	devices := fmt.Sprintf(`<device id="%s" name="reference"><address>tcp://127.0.0.1:1</address></device>`, ref.device)
 	for _, peer := range peers {
-		shared += fmt.Sprintf(`<device id="%s"/>`, peer)
+		var password bytes.Buffer
+		if err := xml.EscapeText(&password, []byte(passwords[peer])); err != nil {
+			t.Fatal(err)
+		}
+		shared += fmt.Sprintf(`<device id="%s"><encryptionPassword>%s</encryptionPassword></device>`, peer, password.String())
 		devices += fmt.Sprintf(`<device id="%s" name="syrnck"><address>tcp://127.0.0.1:1</address></device>`, peer)
 	}
 	configuration := fmt.Sprintf(`<configuration version="%d">

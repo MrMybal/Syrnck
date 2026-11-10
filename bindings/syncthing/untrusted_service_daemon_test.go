@@ -127,23 +127,27 @@ func TestReferenceUntrustedStandaloneRestart(t *testing.T) {
 	}
 	stop := launch("first")
 	second := createTestFolder(t, folderTestOptions(filepath.Join(root, "recipient"), remote, reference.device, false), nil)
-	stream, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", reference.bep)
+	// A first-enrollment ClusterConfig can be superseded while the upstream
+	// learns its token. Use the production reconnecting recipient, preserving
+	// the session's strict refusal of a revoked/missing post-authorization folder.
+	service, err := OpenFolderService(ctx, second, FolderServiceOptions{
+		Connect: func(ctx context.Context) (net.Conn, error) {
+			return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", reference.bep)
+		},
+		Session: FolderSessionOptions{Device: DeviceOptions{Certificate: recipient, RemoteDevice: reference.device},
+			Untrusted: true, EncryptionPassword: password, PollInterval: 100 * time.Millisecond},
+		RetryMin: 50 * time.Millisecond, RetryMax: 200 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := OpenFolderSession(ctx, second, stream, FolderSessionOptions{Device: DeviceOptions{Certificate: recipient, RemoteDevice: reference.device},
-		Untrusted: true, EncryptionPassword: password, PollInterval: 100 * time.Millisecond})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { session.Close() })
-	waitFolderApplication(t, ctx, second, name, before, session)
+	t.Cleanup(func() { service.Close() })
+	waitFolderApplication(t, ctx, second, name, before)
 	stop()
 	if err := os.WriteFile(filepath.Join(directory, name), after, 0600); err != nil {
 		t.Fatal(err)
 	}
 	stop = launch("restart")
-	waitFolderApplication(t, ctx, second, name, after, session)
+	waitFolderApplication(t, ctx, second, name, after)
 	stop()
 	for _, label := range []string{"first", "restart"} {
 		data, _ := os.ReadFile(filepath.Join(root, label+"-out.log"))

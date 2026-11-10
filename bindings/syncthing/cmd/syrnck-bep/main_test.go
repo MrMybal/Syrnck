@@ -269,7 +269,7 @@ func TestCLIListenCancellationRetainsPlainAndEncryptedOfflineSnapshot(t *testing
 	for _, provider := range []string{"plain", "encrypted", "protected"} {
 		t.Run(provider, func(t *testing.T) {
 			encrypted := provider != "plain"
-			root := t.TempDir()
+			root := testDirectory(t)
 			directory := filepath.Join(root, "work")
 			if err := os.Mkdir(directory, 0700); err != nil {
 				t.Fatal(err)

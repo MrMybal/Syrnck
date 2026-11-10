@@ -47,6 +47,7 @@ type configuration struct {
 	ConflictCopies        bool                   `json:"conflict_copies"`
 	ResumeDownloads       bool                   `json:"resume_downloads"`
 	UntrustedPeer         bool                   `json:"untrusted_peer"`
+	ReceiveEncrypted      bool                   `json:"receive_encrypted"`
 	FolderPasswordEnv     string                 `json:"folder_password_env,omitempty"`
 	Author                *syrnck.NativeIdentity `json:"author,omitempty"`
 	SigningKeyEnv         string                 `json:"signing_key_env,omitempty"`
@@ -138,8 +139,11 @@ func loadConfiguration(path string) (configuration, error) {
 	if err := decoder.Decode(&config); err != nil {
 		return config, err
 	}
-	if config.Version != 1 || config.Directory == "" || config.Folder == "" || config.Certificate == "" || config.PrivateKey == "" {
+	if config.Version != 1 || (!config.ReceiveEncrypted && config.Directory == "") || config.Folder == "" || config.Certificate == "" || config.PrivateKey == "" {
 		return config, errors.New("configuration version 1, directory, folder, certificate and private_key are required")
+	}
+	if err := validateReceiverConfiguration(config); err != nil {
+		return config, err
 	}
 	if config.Mode == "" {
 		config.Mode = "dial"
@@ -259,7 +263,9 @@ func loadConfiguration(path string) (configuration, error) {
 		}
 		return filepath.Join(filepath.Dir(absolute), path)
 	}
-	config.Directory = resolve(config.Directory)
+	if config.Directory != "" {
+		config.Directory = resolve(config.Directory)
+	}
 	if config.Storage == "" {
 		config.Storage = filepath.Join(config.Directory, ".syrnck")
 	} else {
@@ -293,14 +299,20 @@ func certificateID(path string) (string, error) {
 }
 
 func runService(ctx context.Context, config configuration, output io.Writer) (result error) {
-	// Device signing material must never enter ordinary source snapshots.
-	directory, err := canonicalExisting(config.Directory)
-	if err != nil {
-		return fmt.Errorf("resolve workspace directory: %w", err)
+	if err := validateReceiverConfiguration(config); err != nil {
+		return err
 	}
+	// Device signing material must never enter ordinary source snapshots.
 	storage, err := canonicalExisting(config.Storage)
 	if err != nil {
 		return fmt.Errorf("resolve Store directory: %w", err)
+	}
+	directory := storage
+	if !config.ReceiveEncrypted {
+		directory, err = canonicalExisting(config.Directory)
+		if err != nil {
+			return fmt.Errorf("resolve workspace directory: %w", err)
+		}
 	}
 	privatePath, err := canonicalExisting(config.PrivateKey)
 	if err != nil {
@@ -412,13 +424,23 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 		}
 		return store, nil
 	}
-	folder, err := bep.NewFolder(ctx, bep.FolderOptions{Directory: config.Directory, Storage: config.Storage, Workspace: config.Workspace,
-		Catalog:   bep.CatalogOptions{Folder: config.Folder, LocalDevice: local, Peers: []protocol.DeviceID{peer}},
-		OpenStore: provider, UsePermissions: config.UsePermissions, PreserveCheckoutEdits: config.PreserveCheckoutEdits, ConflictCopies: config.ConflictCopies, ResumeDownloads: config.ResumeDownloads})
-	if err != nil {
-		return err
+	var folder *bep.Folder
+	var receiver *bep.EncryptedReceiver
+	catalog := bep.CatalogOptions{Folder: config.Folder, LocalDevice: local, Peers: []protocol.DeviceID{peer}}
+	if config.ReceiveEncrypted {
+		receiver, err = bep.NewEncryptedReceiver(ctx, bep.EncryptedReceiverOptions{Storage: config.Storage, Catalog: catalog, OpenStore: provider})
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, receiver.Close()) }()
+	} else {
+		folder, err = bep.NewFolder(ctx, bep.FolderOptions{Directory: config.Directory, Storage: config.Storage, Workspace: config.Workspace,
+			Catalog: catalog, OpenStore: provider, UsePermissions: config.UsePermissions, PreserveCheckoutEdits: config.PreserveCheckoutEdits, ConflictCopies: config.ConflictCopies, ResumeDownloads: config.ResumeDownloads})
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, folder.Close()) }()
 	}
-	defer func() { result = errors.Join(result, folder.Close()) }()
 	var listener net.Listener
 	connect := func(ctx context.Context) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", config.Address)
@@ -435,10 +457,18 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 			return listener.Accept()
 		}
 	}
-	service, err := bep.OpenFolderService(ctx, folder, bep.FolderServiceOptions{Connect: connect,
-		Session: bep.FolderSessionOptions{Device: bep.DeviceOptions{Certificate: identity, RemoteDevice: peer, Server: config.Mode == "listen"}, PollInterval: time.Duration(config.PollMilliseconds) * time.Millisecond,
-			Untrusted: config.UntrustedPeer, EncryptionPassword: folderPassword},
-		RetryMin: time.Duration(config.RetryMinMilliseconds) * time.Millisecond, RetryMax: time.Duration(config.RetryMaxMilliseconds) * time.Millisecond})
+	device := bep.DeviceOptions{Certificate: identity, RemoteDevice: peer, Server: config.Mode == "listen"}
+	var service *bep.FolderService
+	if receiver != nil {
+		service, err = bep.OpenEncryptedReceiverService(ctx, receiver, bep.EncryptedReceiverServiceOptions{Connect: connect,
+			Session:  bep.EncryptedReceiverSessionOptions{Device: device, PollInterval: time.Duration(config.PollMilliseconds) * time.Millisecond},
+			RetryMin: time.Duration(config.RetryMinMilliseconds) * time.Millisecond, RetryMax: time.Duration(config.RetryMaxMilliseconds) * time.Millisecond})
+	} else {
+		service, err = bep.OpenFolderService(ctx, folder, bep.FolderServiceOptions{Connect: connect,
+			Session: bep.FolderSessionOptions{Device: device, PollInterval: time.Duration(config.PollMilliseconds) * time.Millisecond,
+				Untrusted: config.UntrustedPeer, EncryptionPassword: folderPassword},
+			RetryMin: time.Duration(config.RetryMinMilliseconds) * time.Millisecond, RetryMax: time.Duration(config.RetryMaxMilliseconds) * time.Millisecond})
+	}
 	if err != nil {
 		return err
 	}
@@ -448,7 +478,7 @@ func runService(ctx context.Context, config configuration, output io.Writer) (re
 	if listener != nil {
 		address = listener.Addr().String()
 	}
-	if err := encode.Encode(map[string]any{"event": "ready", "device_id": local.String(), "peer": peer.String(), "folder": config.Folder, "mode": config.Mode, "address": address, "encrypted": config.UntrustedPeer}); err != nil {
+	if err := encode.Encode(map[string]any{"event": "ready", "device_id": local.String(), "peer": peer.String(), "folder": config.Folder, "mode": config.Mode, "address": address, "encrypted": config.UntrustedPeer || config.ReceiveEncrypted, "receive_encrypted": config.ReceiveEncrypted}); err != nil {
 		return err
 	}
 	reports, failures, events := service.Reports(), service.Errors(), service.Events()

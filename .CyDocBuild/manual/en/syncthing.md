@@ -5,7 +5,7 @@ description: Syncthing fixed-block adapter guide.
 section: API
 order: 660
 parent: integrations
-revision: 14
+revision: 15
 ---
 
 # Syncthing fixed-block adapter {#syncthing-fixed-block-adapter}
@@ -400,7 +400,7 @@ The embedding application supplies listening/dialing, certificate/key storage
 and OS lifecycle. The [resident service](doc:syncthing#folder-service) provides
 reconnect backoff and independent offline capture. This module is optional; the CMake BEP target packages the standalone executable. The controller currently applies regular files
 and file tombstones, not directory/symlink metadata, empty-directory lifecycle,
-platform ownership/xattrs or operating as a receive-encrypted endpoint itself. It retains incoming
+platform ownership/xattrs. The separate [opaque receiver](doc:syncthing#opaque-receiver) retains encrypted metadata without applying it to a workspace. The controller retains incoming
 metadata but does not claim these paths have been applied. It also lacks
 automatic membership
 changes/history retirement. Large-project performance and power-loss durability
@@ -631,7 +631,7 @@ The standalone service also supports [protected native signing keys](doc:signing
 
 ## Untrusted encrypted devices {#untrusted}
 
-The trusted Syrnck endpoint can exchange encrypted files with a real Syncthing **Receive Encrypted** daemon. It uses the pinned upstream codec and password-token negotiation, without modifying Syncthing or implementing a second crypto format. This is distinct from [sealed Syrnck revision snapshots](doc:sealed-repositories): it carries Syncthing file metadata/blocks, not the native commit graph. Syrnck does not itself act as an opaque receive-encrypted BEP endpoint.
+The trusted Syrnck endpoint can exchange encrypted files with a real Syncthing **Receive Encrypted** daemon. It uses the pinned upstream codec and password-token negotiation, without modifying Syncthing or implementing a second crypto format. This is distinct from [sealed Syrnck revision snapshots](doc:sealed-repositories): it carries Syncthing file metadata/blocks, not the native commit graph. The separate [opaque receiver](doc:syncthing#opaque-receiver) provides the receive-encrypted role in Syrnck.
 
 Copy the installed `share/Syrnck/examples/bep-untrusted-service.json`, or add these settings to an existing standalone configuration:
 
@@ -656,3 +656,36 @@ Encrypted indexes are authenticated/decrypted before entering the causal catalog
 The untrusted device sees the folder ID/label, approximate sizes, update timing, encrypted history and equality at the same filename/offset. Paths, file metadata and contents remain encrypted. Syncthing derives file keys from the filename and encrypts block-hash tokens with their offsets: changing a filename or moving content to another offset can require retransmission. An unchanged block at the same offset can be reused. Refer to the [upstream protocol](https://docs.syncthing.net/specs/untrusted.html) and [user guide](https://docs.syncthing.net/users/untrusted.html) for its threat model and current upstream status. Authentication is not proof that a withholding peer is current; retain trusted causal state. Initial-root trust/gossip and distributed retention remain separate work.
 
 Windows qualification uses the unmodified pinned daemon: a trusted source, an independent receiver, a same-offset block delta, reconnects, then a fresh trusted device restoring with both previous clients disconnected. It also checks empty/short-tail blocks, opaque on-disk names/data, actual standalone process restart, token disagreement, persisted downgrade refusal and plaintext/tampered metadata over pinned TLS. The synthetic 384 KiB file test changes one 128 KiB block; measured protocol output is approximately 129 KiB. This is not an Unreal-scale throughput/RSS claim. Current Linux/macOS execution still depends on CI results.
+
+
+## Opaque encrypted receiver {#opaque-receiver}
+
+`EncryptedReceiver` stores the upstream encrypted file metadata and ciphertext blocks directly in native Syrnck storage. It has no folder password, scanner or working directory. Trusted peers hold the folder password; the receiver binds their public password token to its durable folder catalog before accepting data. Certificate pinning still determines membership. A changed token or plaintext/mixed role is refused. The first explicitly paired peer provisions this token; this is not independent first-contact trust or distributed key rotation.
+
+Use `NewEncryptedReceiver(ctx, EncryptedReceiverOptions{Catalog: catalog, Storage: storage})` with an initialized Store. An `OpenStore` provider can instead open short-lived Stores with a separate at-rest key. `OpenEncryptedReceiverSession` authenticates one paired transport; `OpenEncryptedReceiverService` adds reconnect/backoff and joined shutdown. Sessions return the same bounded `FolderSession` reports/errors. Several explicit peer services may share one receiver. Close all sessions/services before the receiver. No native Store remains open while awaiting network blocks.
+
+The standalone executable supports one configured peer in this role. Copy the installed `share/Syrnck/examples/bep-encrypted-receiver.json` and replace the identity, paths and peer ID. For example:
+
+```json
+{
+  "version": 1,
+  "receive_encrypted": true,
+  "storage": "opaque-store",
+  "folder": "project",
+  "certificate": "device-cert.pem",
+  "private_key": "device-key.pem",
+  "peer": "REPLACE_WITH_EXPLICIT_PAIRED_DEVICE_ID",
+  "mode": "listen",
+  "address": "127.0.0.1:22001"
+}
+```
+
+Initialize `storage` with the ordinary native CLI before starting the service. Paths resolve against the JSON file. Configure the trusted counterpart with its folder password for this receiver; Syrnck trusted clients use `untrusted_peer: true`. The receiver must omit `directory`, `workspace`, `untrusted_peer`, `folder_password_env`, author/signing fields and working-file policies. It cannot decrypt or make authored plaintext revisions. Optional storage `key_env`/`key_file` providers still protect its native physical objects independently. The `ready` event includes `receive_encrypted: true`; it is not a synchronization receipt.
+
+A distinct `ffi/bep-encrypted/…` catalog retains the public folder token, peer generations/indexes, original encrypted envelopes and complete per-block native manifest bindings. Completed block receipts under `ffi/bep-receipts/…` retain interrupted downloads through process restart and GC. Resume requests only missing token-bound blocks. Once a complete file is retained by the parent-linked catalog history, exact receipt roots are removed with a catalog-guarded compare-and-swap. Superseded incomplete receipts remain retained; automatic pruning is not implemented. Keep these references/history in backups, and never delete them solely because a working filename disappeared.
+
+The receiver compares opaque 48-byte block tokens; these are not hashes it can verify against plaintext. Native hashes verify stored ciphertext integrity; trusted clients authenticate/decrypt and verify the original data. Ciphertext for unchanged name/offset/token/size is reused. Maximum 16 MiB encrypted BEP blocks include 40 extra bytes and are split across two native manifests to preserve the native 16 MiB buffered-operation bound. Only complete files are advertised. Encrypted directory/symlink metadata is retained and forwarded without being materialized; trusted workspace application still has its documented metadata limits. No standard Syncthing encrypted filesystem tree/trailer export is produced.
+
+Opaque clocks conceal the private causal vectors. All peer versions and previous catalog roots remain retained; the advertised version uses the greatest opaque counter and a stable source-device tie break. This does not resolve plaintext conflicts. Trusted receivers decrypt the real vector and apply their existing conflict policy. There is no server-side proof that ciphertext from an authorized malicious peer decrypts, no freshness guarantee against withholding, automatic retention, key/password rotation or multi-peer CLI listener orchestration.
+
+Windows tests cover a real trusted Syncthing daemon uploading to this receiver, then a fresh trusted Syrnck client restoring after the source connection stops and native GC runs. Other tests cover tiny/empty files, same-offset delta reuse, historical restoration, bounded maximum blocks, interrupted-block resume in plain/encrypted native Stores, simultaneous peer services with actual stream loss, wrong tokens/roles, queue ownership/limits and actual standalone process termination/restart. These checks do not establish power-loss durability, ARM64 support or Unreal-scale performance; Linux/macOS execution remains subject to current CI results.

@@ -204,7 +204,8 @@ Critère de sortie : scénarios de travail complets comparés à Git, avec histo
 - [x] Bindings C/Go des snapshots chiffrés : propriétaires natifs opaques séparés, protecteurs de clé, préparation/inspection/import, contexte/annulation, ordre des verrous et rétention atomique ; bibliothèques partagée/statique et clients SDK installés.
 - [x] Transport chiffré pour l’agent natif résident : même capture/fusion/checkout récupérable, CAS sur le support observé, journal physique distinct, rétention des originaux et observations crypto/natives avant clôture.
 - [x] Transport BEP natif vers appareils Syncthing non fiables : codec amont, négociation sans repli en clair, mot de passe distinct, garde persistante, blocs courts/vides, delta et restauration via daemon réel sans clients sources connectés ; format distinct des snapshots Syrnck.
-- [ ] Échange initial des racines de confiance et comparaison entre appareils ; rôle de récepteur BEP opaque Syrnck et administration de ses clés restent distincts.
+- [x] Récepteur BEP opaque natif sans mot de passe de dossier : stockage de métadonnées/blocs chiffrés, reçus de reprise et historique retenus après GC, sessions/services associés et CLI monopair ; tests contre daemon réel et restauration après arrêt du processus.
+- [ ] Échange initial des racines de confiance, comparaison entre appareils, orchestration CLI multipair et administration des clés/reçus chiffrés.
 - [ ] Dérivation de clés, coffre système, rotation, révocation et récupération.
 - [x] Modèle explicite de fuite d’égalité/tailles/historique pour le transport chiffré ; adresses à clé bornées au domaine de clé maîtresse, sans chiffrement déterministe/convergent.
 - [ ] Rétention par durée/release, archives protégées, leases et GC distribué en deux phases.

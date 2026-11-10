@@ -5,7 +5,7 @@ description: Guide : Adaptateur de blocs Syncthing.
 section: API
 order: 660
 parent: integrations
-sourceRevision: 14
+sourceRevision: 15
 ---
 
 # Adaptateur Syncthing à blocs fixes {#syncthing-fixed-block-adapter}
@@ -349,7 +349,7 @@ L’application fournit écoute/connexion, certificats/clés et cycle de vie OS.
 Le [service résident](doc:syncthing#folder-service) gère attente de reconnexion
 et capture hors ligne indépendante. Ce module est optionnel ; la cible BEP CMake distribue l’exécutable autonome. Le contrôleur applique les fichiers ordinaires et
 leurs tombstones, pas les métadonnées de dossiers/liens symboliques, dossiers
-vides, propriétaires/xattrs ni le rôle de récepteur opaque receive-encrypted lui-même. Les métadonnées
+vides ni propriétaires/xattrs. Le [récepteur opaque](doc:syncthing#opaque-receiver) distinct conserve les métadonnées chiffrées sans les appliquer à un workspace. Les métadonnées
 entrantes sont conservées, sans prétendre que ces éléments ont été appliqués.
 Gestion automatique
 des membres/retrait d’historique reste à réaliser. Performances à grande échelle et
@@ -589,7 +589,7 @@ Le service autonome accepte aussi les [clés de signature natives protégées](d
 
 ## Appareils non fiables chiffrés {#untrusted}
 
-Le client Syrnck de confiance peut échanger des fichiers chiffrés avec un véritable daemon Syncthing **Receive Encrypted**. Il utilise le codec amont figé et sa négociation par preuve de mot de passe, sans modifier Syncthing ni réimplémenter son format cryptographique. Ce mode est distinct des [snapshots de révisions Syrnck chiffrés](doc:sealed-repositories) : il transporte métadonnées/blocs de fichiers Syncthing, pas le graphe de commits natif. Syrnck n’assure pas lui-même le rôle de récepteur BEP opaque receive-encrypted.
+Le client Syrnck de confiance peut échanger des fichiers chiffrés avec un véritable daemon Syncthing **Receive Encrypted**. Il utilise le codec amont figé et sa négociation par preuve de mot de passe, sans modifier Syncthing ni réimplémenter son format cryptographique. Ce mode est distinct des [snapshots de révisions Syrnck chiffrés](doc:sealed-repositories) : il transporte métadonnées/blocs de fichiers Syncthing, pas le graphe de commits natif. Le [récepteur opaque](doc:syncthing#opaque-receiver) distinct fournit le rôle receive-encrypted dans Syrnck.
 
 Copier l’exemple installé `share/Syrnck/examples/bep-untrusted-service.json`, ou ajouter ces réglages à une configuration autonome existante :
 
@@ -614,3 +614,36 @@ Les index chiffrés sont authentifiés/déchiffrés avant entrée dans le catalo
 Le pair non fiable voit identifiant/étiquette de dossier, tailles approximatives, horaires, historique chiffré et égalité au même nom/décalage. Chemins, métadonnées et contenus restent chiffrés. Syncthing dérive les clés de fichier du nom et chiffre les preuves de blocs avec leur décalage : changer de nom ou déplacer les octets peut exiger un nouvel envoi. Un bloc inchangé au même décalage peut être réutilisé. Consulter le [protocole amont](https://docs.syncthing.net/specs/untrusted.html) et le [guide utilisateur](https://docs.syncthing.net/users/untrusted.html) pour le modèle de menace et le statut actuel amont. L’authentification ne prouve pas qu’un pair qui retient les données est à jour ; conserver l’état causal de confiance. Confiance initiale/comparaison entre appareils et rétention distribuée restent distinctes.
 
 La qualification Windows utilise le daemon figé non modifié : source de confiance, récepteur indépendant, delta d’un bloc au même décalage, reconnexions, puis appareil de confiance neuf restauré sans les deux premiers clients connectés. Elle vérifie aussi fichiers vides/derniers blocs courts, noms/données opaques sur disque, redémarrage réel de l’exécutable autonome, désaccord de preuve, refus persistant du retour en clair et métadonnées en clair/altérées sur TLS épinglé. Le fichier synthétique de 384 Kio change un bloc de 128 Kio ; l’envoi protocolaire mesuré est d’environ 129 Kio. Ce n’est pas une mesure de débit/RAM à l’échelle Unreal. L’exécution Linux/macOS courante dépend encore de la CI.
+
+
+## Récepteur chiffré opaque {#opaque-receiver}
+
+`EncryptedReceiver` conserve directement les métadonnées et blocs chiffrés amont dans le stockage natif Syrnck. Il n’a ni mot de passe de dossier, ni scanner, ni dossier de travail. Les pairs de confiance possèdent ce mot de passe ; le récepteur lie leur preuve publique au catalogue durable avant d’accepter les données. L’appartenance reste définie par les certificats épinglés. Preuve différente et rôle clair/mixte sont refusés. Le premier pair explicitement associé fournit cette preuve ; ce n’est pas un échange initial de confiance indépendant ni une rotation distribuée.
+
+Utiliser `NewEncryptedReceiver(ctx, EncryptedReceiverOptions{Catalog: catalog, Storage: storage})` avec un Store initialisé. Un fournisseur `OpenStore` peut ouvrir des Stores courts avec une clé au repos distincte. `OpenEncryptedReceiverSession` authentifie un transport associé ; `OpenEncryptedReceiverService` ajoute reconnexion, attente progressive et arrêt joint. Les sessions renvoient les mêmes rapports/erreurs bornés de `FolderSession`. Plusieurs services de pairs explicites peuvent partager un récepteur. Fermer toutes les sessions/services avant celui-ci. Aucun Store natif ne reste ouvert pendant l’attente des blocs réseau.
+
+L’exécutable autonome accepte un seul pair configuré dans ce rôle. Copier l’exemple installé `share/Syrnck/examples/bep-encrypted-receiver.json`, puis remplacer identité, chemins et identifiant du pair. Par exemple :
+
+```json
+{
+  "version": 1,
+  "receive_encrypted": true,
+  "storage": "opaque-store",
+  "folder": "project",
+  "certificate": "device-cert.pem",
+  "private_key": "device-key.pem",
+  "peer": "REPLACE_WITH_EXPLICIT_PAIRED_DEVICE_ID",
+  "mode": "listen",
+  "address": "127.0.0.1:22001"
+}
+```
+
+Initialiser `storage` avec le CLI natif ordinaire avant lancement. Les chemins sont relatifs au fichier JSON. Configurer chez le pair de confiance le mot de passe du dossier pour ce récepteur ; les clients Syrnck de confiance utilisent `untrusted_peer: true`. Le récepteur doit omettre `directory`, `workspace`, `untrusted_peer`, `folder_password_env`, les champs d’auteur/signature et les politiques de fichiers de travail. Il ne déchiffre rien et ne crée pas de révisions en clair signées. Les fournisseurs de stockage `key_env`/`key_file` facultatifs protègent indépendamment ses objets physiques natifs. L’événement `ready` contient `receive_encrypted: true` ; ce n’est pas un reçu de synchronisation.
+
+Un catalogue distinct `ffi/bep-encrypted/…` retient preuve publique, générations/index des pairs, enveloppes chiffrées originales et liaisons complètes aux manifestes natifs de chaque bloc. Les reçus de blocs terminés sous `ffi/bep-receipts/…` protègent les téléchargements interrompus après redémarrage et GC. La reprise ne demande que les blocs manquants liés à leur preuve. Après rétention du fichier complet par l’historique parent du catalogue, les racines exactes des reçus sont retirées par comparaison atomique gardée par le catalogue. Les reçus incomplets dépassés restent conservés ; leur nettoyage automatique n’est pas implémenté. Garder ces références/historiques dans les sauvegardes, sans les supprimer au seul motif qu’un nom de travail a disparu.
+
+Le récepteur compare des preuves opaques de blocs de 48 octets ; il ne peut pas les vérifier comme des hashes du contenu en clair. Les hashes natifs vérifient l’intégrité du chiffré stocké ; les clients de confiance authentifient/déchiffrent puis vérifient les données originales. Le chiffré est réutilisé si nom/décalage/preuve/taille restent identiques. Les blocs BEP chiffrés maximaux de 16 Mio comportent 40 octets supplémentaires et utilisent deux manifestes natifs pour préserver la borne native de 16 Mio des opérations en mémoire. Seuls les fichiers complets sont annoncés. Les métadonnées chiffrées des dossiers/liens sont conservées et retransmises sans matérialisation ; l’application au workspace de confiance conserve ses limites documentées. Aucun export d’arbre de fichiers/trailers chiffrés Syncthing standard n’est produit.
+
+Les compteurs opaques cachent les vecteurs causaux privés. Toutes les versions de pairs et les anciennes racines du catalogue restent retenues ; la version annoncée utilise le plus grand compteur opaque puis l’identifiant d’appareil source pour départager les égalités de manière stable. Cela ne résout pas les conflits en clair. Les clients déchiffrent le vecteur réel et appliquent leur politique existante. Il n’y a ni preuve serveur qu’un chiffré fourni par un pair autorisé malveillant est déchiffrable, ni garantie de fraîcheur contre la rétention de données, rétention automatique, rotation de mot de passe/clé ou orchestration d’écoute CLI multipair.
+
+Les tests Windows couvrent l’envoi depuis un vrai daemon Syncthing de confiance vers ce récepteur, puis la restauration par un client Syrnck neuf après arrêt de la connexion source et GC natif. D’autres tests couvrent fichiers courts/vides, delta au même décalage, restauration historique, blocs maximaux bornés, reprise de blocs interrompus en Stores natifs clairs/chiffrés, services de pairs simultanés avec vraie perte de connexion, mauvaises preuves/rôles, possession/bornes de la file et arrêt brutal/redémarrage d’un vrai processus autonome. Cela ne prouve ni durabilité après coupure électrique, ni ARM64, ni performances à l’échelle Unreal ; Linux/macOS restent soumis aux résultats actuels de CI.

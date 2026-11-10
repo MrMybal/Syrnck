@@ -34,6 +34,7 @@ type FolderServiceEvent struct {
 // durable native/catalog state rather than treating event delivery as a receipt.
 type FolderService struct {
 	folder        *Folder
+	receiver      *EncryptedReceiver
 	options       FolderServiceOptions
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -61,6 +62,10 @@ func OpenFolderService(ctx context.Context, folder *Folder, options FolderServic
 	if freshHello {
 		options.Session.Device.Hello.Timestamp = 0
 	}
+	return startFolderService(ctx, &FolderService{folder: folder}, options)
+}
+
+func startFolderService(ctx context.Context, service *FolderService, options FolderServiceOptions) (*FolderService, error) {
 	if options.RetryMin == 0 {
 		options.RetryMin = 500 * time.Millisecond
 	}
@@ -79,8 +84,9 @@ func OpenFolderService(ctx context.Context, folder *Folder, options FolderServic
 	// Copy certificate bytes; the caller still owns and must not mutate its key.
 	options.Session.Device.Certificate.Certificate = [][]byte{append([]byte(nil), options.Session.Device.Certificate.Certificate[0]...)}
 	child, cancel := context.WithCancel(ctx)
-	service := &FolderService{folder: folder, options: options, ctx: child, cancel: cancel,
-		done: make(chan struct{}), reports: make(chan FolderStatus, 16), errors: make(chan error, 16), events: make(chan FolderServiceEvent, 16)}
+	service.options, service.ctx, service.cancel = options, child, cancel
+	service.done, service.reports = make(chan struct{}), make(chan FolderStatus, 16)
+	service.errors, service.events = make(chan error, 16), make(chan FolderServiceEvent, 16)
 	go service.run()
 	return service, nil
 }
@@ -192,7 +198,7 @@ func (s *FolderService) run() {
 				} else if stream == nil {
 					err = errors.New("syrnck BEP: transport factory returned nil")
 				} else {
-					connected, err = OpenFolderSession(attempt, s.folder, stream, s.options.Session)
+					connected, err = s.openSession(attempt, stream)
 				}
 				results <- opened{connected, err}
 			}()
@@ -221,7 +227,7 @@ func (s *FolderService) run() {
 			// Authentication alone does not prove the peer will send a folder
 			// configuration or make progress. Keep local capture independent of
 			// that peer, even while its session waits or downloads remote blocks.
-			status, err := s.folder.Refresh(s.ctx)
+			status, err := s.refresh()
 			if err != nil {
 				s.failure(err)
 				continue

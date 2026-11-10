@@ -10,6 +10,8 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 
 ## Changements des sources actuelles
 
+- Récepteur BEP chiffré opaque avec reçus/historique retenus, sessions résidentes associées et rôle autonome monopair ; envoi Syncthing réel, restauration neuve et redémarrage de processus vérifiés.
+
 - Snapshots C++/C/Go chiffrés de bout en bout et transferts opaques C++/CLI reprenables : clés protégées indépendantes, métadonnées opaques, réutilisation Merkle persistante et contrôles locaux des retours en arrière. Transport chiffré disponible dans l’agent natif résident ; Syncthing utilise son protocole distinct pour appareils chiffrés.
 - Rebase natif préservant les fusions avec rejeu du DAG ordonné, bases récursives et reprise figée ; durée de vie des pointeurs syscall Go Windows vérifiée avec GC et changements de piles.
 - Renommages modifiés bornés pour historique/blame, merge/rejeu/rebase/index et synchronisation résidente signée ; conflits structurels explicites et reprise de checkout figé.

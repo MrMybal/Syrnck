@@ -10,6 +10,32 @@ func humanError(language string, err error) string {
 		return value
 	}
 	messages := map[string]string{
+		"syrnck BEP: encrypted receiver requires paired peers":                  "syrnck BEP : le récepteur chiffré exige des pairs associés",
+		"syrnck BEP: encrypted receiver Store required":                         "syrnck BEP : un Store de récepteur chiffré est requis",
+		"syrnck BEP: encrypted receiver closed":                                 "syrnck BEP : le récepteur chiffré est fermé",
+		"syrnck BEP: receiver local certificate identity differs":               "syrnck BEP : l’identité du certificat local du récepteur diffère",
+		"syrnck BEP: receiver connection identity differs":                      "syrnck BEP : l’identité de connexion du récepteur diffère",
+		"syrnck BEP: encrypted receiver requires a running trusted peer folder": "syrnck BEP : le récepteur chiffré exige un dossier actif chez un pair de confiance",
+		"syrnck BEP: invalid encrypted receiver agreement":                      "syrnck BEP : accord de récepteur chiffré invalide",
+		"syrnck BEP: invalid encrypted file metadata":                           "syrnck BEP : métadonnées de fichier chiffré invalides",
+		"syrnck BEP: invalid encrypted file type":                               "syrnck BEP : type de fichier chiffré invalide",
+		"syrnck BEP: invalid encrypted metadata-only entry":                     "syrnck BEP : entrée de métadonnées chiffrées sans contenu invalide",
+		"syrnck BEP: invalid encrypted block layout":                            "syrnck BEP : agencement de blocs chiffrés invalide",
+		"syrnck BEP: invalid encrypted data binding":                            "syrnck BEP : liaison de données chiffrées invalide",
+		"syrnck BEP: invalid encrypted publication origin":                      "syrnck BEP : origine de publication chiffrée invalide",
+		"syrnck BEP: encrypted block manifest size differs":                     "syrnck BEP : la taille du manifeste de bloc chiffré diffère",
+		"syrnck BEP: invalid encrypted folder token":                            "syrnck BEP : preuve de dossier chiffré invalide",
+		"syrnck BEP: encrypted folder token missing":                            "syrnck BEP : la preuve de dossier chiffré est absente",
+		"syrnck BEP: encrypted receiver password token changed":                 "syrnck BEP : la preuve de mot de passe du récepteur chiffré a changé",
+		"syrnck BEP: invalid encrypted block receipt":                           "syrnck BEP : reçu de bloc chiffré invalide",
+		"syrnck BEP: encrypted block receipt binding differs":                   "syrnck BEP : la liaison du reçu de bloc chiffré diffère",
+		"syrnck BEP: encrypted receipt part size differs":                       "syrnck BEP : la taille d’une partie du reçu chiffré diffère",
+		"syrnck BEP: encrypted block length mismatch":                           "syrnck BEP : la longueur du bloc chiffré diffère",
+
+		"receive_encrypted requires an explicit initialized storage directory":                           "receive_encrypted requiert un dossier storage explicite et initialisé",
+		"receive_encrypted cannot use workspace, directory or plaintext working-file options":            "receive_encrypted ne peut pas utiliser workspace, directory ou les options de fichiers de travail en clair",
+		"receive_encrypted cannot use a folder password, untrusted_peer or revision author/signing keys": "receive_encrypted ne peut pas utiliser de mot de passe de dossier, untrusted_peer ou les options d’auteur et de signature des révisions",
+
 		"folder_password_env requires untrusted_peer":                                              "folder_password_env requiert untrusted_peer",
 		"invalid folder password environment variable name":                                        "nom de variable du mot de passe de dossier invalide",
 		"folder password requires a separate environment variable":                                 "le mot de passe de dossier requiert une variable distincte",

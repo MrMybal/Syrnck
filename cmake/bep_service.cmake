@@ -46,6 +46,7 @@ if(SYRNCK_BUILD_BEP_SERVICE)
   install(DIRECTORY "${SYRNCK_BEP_BUILD_DIR}/bep-licenses/" DESTINATION "${SYRNCK_LICENSE_DIR}/bep")
   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-service.json"
                 "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-untrusted-service.json"
+                "${CMAKE_CURRENT_SOURCE_DIR}/examples/bep-encrypted-receiver.json"
           DESTINATION "${CMAKE_INSTALL_DATADIR}/Syrnck/examples")
   if(SYRNCK_BUILD_TESTS)
     add_test(NAME bep_distribution COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bep_distribution.py"
