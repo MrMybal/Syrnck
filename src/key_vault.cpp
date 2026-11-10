@@ -54,15 +54,18 @@ std::string VaultKeyReference::encode() const {
 SystemKeyVault::SystemKeyVault(std::optional<fs::path> keychain) : keychain_(std::move(keychain)) {
   require(!keychain_ || (!keychain_->empty() && keychain_->is_absolute()),
           "system key vault keychain path must be absolute");
+  require(!keychain_ || keychain_->native().find(fs::path::value_type{}) == fs::path::string_type::npos,
+          "system key vault keychain path contains a null character");
 #ifndef __APPLE__
   require(!keychain_, "a keychain path is supported only on macOS");
 #endif
 }
 std::string_view SystemKeyVault::provider() noexcept { return detail::vault_provider(); }
+void SystemKeyVault::disable_macos_interaction() { detail::vault_disable_macos_interaction(); }
 VaultKeyReference SystemKeyVault::save(const SecretKey &secret, VaultKeyPurpose purpose) const {
   (void)purpose_name(purpose);
   const auto plain = secret.view();
-  const VaultKeyReference ref{purpose, hex(random_bytes(32))};
+  VaultKeyReference ref{purpose, hex(random_bytes(32))};
   auto existing = detail::vault_read(keychain_, ref);
   if (existing) { Wipe wipe{*existing}; throw Error("system key vault entry already exists"); }
   Bytes record; Wipe wipe{record};

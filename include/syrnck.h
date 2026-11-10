@@ -19,6 +19,7 @@ typedef struct SyrnckCancellation SyrnckCancellation;
 typedef struct SyrnckSecretKey SyrnckSecretKey;
 typedef struct SyrnckSigningKey SyrnckSigningKey;
 typedef struct SyrnckSealedKey SyrnckSealedKey;
+typedef struct SyrnckSystemVault SyrnckSystemVault;
 /**
  * @doc api-c-abi
  * @locale en
@@ -79,7 +80,7 @@ typedef struct SyrnckSealedKey SyrnckSealedKey;
  *
  * ## Native authors and signatures {#authorship}
  * Purpose-separated signing_key_protect/change_password/open/close and signing_key_public_json
- * own an authenticated Ed25519 seed without exporting it. store_use_native_signer borrows that
+ * own an authenticated Ed25519 signer without exporting secret material. store_use_native_signer borrows that
  * owner and installs independent Store state. See [protected signers](doc:signing-keys#services).
  *
  * store_use_native_identity selects a handle-local author and optional Ed25519 seed. No secret is
@@ -113,6 +114,19 @@ typedef struct SyrnckSealedKey SyrnckSealedKey;
  * The owning application must serialize destruction against users. A callback borrows its strings
  * only for its duration. Read [workspace sessions](doc:workspace-abi), [Go](doc:go-binding), and
  * [verified ranges](doc:file-ranges) for complete API contracts and examples.
+ *
+ * ## System key vaults {#system-vaults}
+ * `system_vault_open/close` owns provider configuration, not an unlocked account session.
+ * `system_vault_provider_json` reports compiled availability only. macOS file keychains require
+ * explicit `system_vault_disable_macos_interaction` before Keychain workers: this changes ALL
+ * Keychain interaction in the current process, never an OS-account preference. Do not re-enable
+ * interaction while vaults are in use. Ordinary vault calls refuse missing setup without changing it.
+ * Generate/import require a writable 97-byte reference buffer and length output, with no size query;
+ * capacity is checked before any OS write. Returned public references have distinct storage/signing/sealed
+ * purposes. Open exact-purpose secret/signer/sealed owners with the existing close/Store contracts.
+ * Protected export uses the existing 104-byte envelope/query rules. Erase affects only the selected
+ * OS entry; existing owners, Store keys, exported copies and server authorizations remain valid.
+ * See [platform requirements and recovery](doc:key-files#system-vault) and [Go](doc:go-binding#system-vaults).
  */
 /**
  * @doc api-c-abi
@@ -175,8 +189,8 @@ typedef struct SyrnckSealedKey SyrnckSealedKey;
  * Les wrappers réseau restent en C++/CLI.
  *
  * ## Auteurs natifs et signatures {#authorship}
- * signing_key_protect/change_password/open/close et signing_key_public_json conservent une graine
- * Ed25519 authentifiée sans l’exporter. store_use_native_signer emprunte ce propriétaire et installe
+ * signing_key_protect/change_password/open/close et signing_key_public_json conservent un signataire
+ * Ed25519 authentifié sans export secret. store_use_native_signer emprunte ce propriétaire et installe
  * un état indépendant dans le Store. Voir les [signataires protégés](doc:signing-keys#services).
  *
  * store_use_native_identity choisit un auteur local au handle et une graine Ed25519 facultative.
@@ -210,6 +224,19 @@ typedef struct SyrnckSealedKey SyrnckSealedKey;
  * un callback de progression. Sérialiser sa destruction avec ses utilisateurs. Les chaînes du
  * callback sont empruntées uniquement pendant l'appel. Voir les [sessions](doc:workspace-abi),
  * le [binding Go](doc:go-binding) et les [plages vérifiées](doc:file-ranges) pour les contrats et exemples.
+ *
+ * ## Coffres de clés système {#system-vaults}
+ * `system_vault_open/close` possède la configuration du fournisseur, pas une session de compte déverrouillée.
+ * `system_vault_provider_json` indique seulement la disponibilité compilée. Les trousseaux fichiers macOS exigent
+ * `system_vault_disable_macos_interaction` explicitement avant les workers Trousseau : cela change TOUTE
+ * interaction Trousseau du processus, pas une préférence du compte OS. Ne pas réactiver les interactions
+ * pendant l'usage des coffres. Les appels ordinaires refusent une configuration absente sans la modifier.
+ * Génération/import exigent un buffer de référence de 97 octets et une sortie de taille, sans requête de taille ;
+ * la capacité est vérifiée avant toute écriture OS. Les références publiques distinguent stockage/signature/clé scellée.
+ * Ouvrir les propriétaires secret/signer/sealed du bon usage avec les contrats existants de fermeture/Store.
+ * L'export protégé reprend les règles d'enveloppe/requête de 104 octets. La suppression touche seulement
+ * l'entrée OS choisie ; propriétaires, clés des Stores, copies exportées et autorisations serveur restent valides.
+ * Voir les [prérequis et la récupération](doc:key-files#system-vault) et [Go](doc:go-binding#system-vaults).
  */
 /* ABI 1: 0 = success; 1 = error; 2 = unknown C++ exception;
  * 3 = cooperative cancellation in *_ex calls with operation/cancellation input.
@@ -255,7 +282,7 @@ SYRNCK_API int syrnck_signing_key_change_password(const unsigned char *envelope,
     const unsigned char *old_password, size_t old_password_len,
     const unsigned char *new_password, size_t new_password_len, const SyrnckPasswordKdf *options,
     unsigned char *out, size_t capacity, size_t *length);
-/* Authenticate once; an opaque native owner retains/wipes the seed. Serialize
+/* Authenticate once; an opaque native owner retains/wipes the signing key. Serialize
  * calls and close. Output resets to NULL on failure. No raw export exists. */
 SYRNCK_API int syrnck_signing_key_open(const unsigned char *envelope, size_t envelope_len,
     const unsigned char *password, size_t password_len, SyrnckSigningKey **out);
@@ -288,6 +315,51 @@ SYRNCK_API int syrnck_sealed_key_public_json(const SyrnckSealedKey *, char **out
 SYRNCK_API int syrnck_secret_key_open(const unsigned char *envelope, size_t envelope_len,
     const unsigned char *password, size_t password_len, SyrnckSecretKey **out);
 SYRNCK_API int syrnck_secret_key_close(SyrnckSecretKey *);
+/* Additive ABI 1 system vaults. Opening creates a native configuration owner,
+ * not an unlocked OS session. NULL/empty keychain selects platform defaults;
+ * an explicit absolute keychain path is supported only on macOS.
+ * Serialize calls/close; NULL close is accepted. Opening resets *out on error.
+ * Provider JSON reports compiled provider/available only, without opening a vault.
+ * Missing/locked providers and entries fail without another provider fallback. */
+#define SYRNCK_VAULT_STORAGE 1u
+#define SYRNCK_VAULT_SIGNING 2u
+#define SYRNCK_VAULT_SEALED 3u
+#define SYRNCK_VAULT_REFERENCE_CAPACITY 97u
+SYRNCK_API int syrnck_system_vault_open(const char *macos_keychain, SyrnckSystemVault **out);
+SYRNCK_API int syrnck_system_vault_close(SyrnckSystemVault *);
+/* Explicit process-wide policy for macOS file keychains, no-op elsewhere.
+ * Call before worker threads; never re-enable interaction while vaults are in
+ * use. Other library calls in this process will also be noninteractive. Vault
+ * operations refuse if interaction remains enabled, without changing it. */
+SYRNCK_API int syrnck_system_vault_disable_macos_interaction(void);
+SYRNCK_API int syrnck_system_vault_provider_json(const SyrnckSystemVault *, char **out, size_t *length);
+/* Creation/import require out with capacity >=97 and length !=NULL; there is
+ * no size-query operation. Validate output capacity before touching the vault.
+ * On success: fresh public reference, NUL terminator, length excludes NUL.
+ * On error: length=0 and out[0]=0 when writable. No raw secret is returned.
+ * A platform write error can leave an entry committed; these operations do
+ * not promise transactional rollback of the OS provider. Caller passwords are
+ * borrowed synchronously, not retained/wiped. Import authenticates the exact
+ * 104-byte envelope matching the selected purpose before creating an entry. */
+SYRNCK_API int syrnck_system_vault_generate(SyrnckSystemVault *, uint32_t purpose,
+    char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_system_vault_import_protected(SyrnckSystemVault *, uint32_t purpose,
+    const unsigned char *envelope, size_t envelope_len,
+    const unsigned char *password, size_t password_len, char *out, size_t capacity, size_t *length);
+/* Opens exact-purpose native owners, reusable with existing Store/signing/sealed
+ * APIs. Closing the vault or erasing an entry does not invalidate these owners.
+ * Outputs reset to NULL on failure; no raw key or signing seed export exists. */
+SYRNCK_API int syrnck_system_vault_open_secret(SyrnckSystemVault *, const char *reference, SyrnckSecretKey **out);
+SYRNCK_API int syrnck_system_vault_open_signer(SyrnckSystemVault *, const char *reference, SyrnckSigningKey **out);
+SYRNCK_API int syrnck_system_vault_open_sealed(SyrnckSystemVault *, const char *reference, SyrnckSealedKey **out);
+/* Protected export follows key_protect's 104-byte output/query contract. Query
+ * validates public arguments only, without reading the vault/authenticating.
+ * Erase resets *removed=false on error and returns false for a missing entry.
+ * Erase does not revoke opened owners, exported copies or repository objects. */
+SYRNCK_API int syrnck_system_vault_export_protected(SyrnckSystemVault *, const char *reference,
+    const unsigned char *password, size_t password_len, const SyrnckPasswordKdf *,
+    unsigned char *out, size_t capacity, size_t *length);
+SYRNCK_API int syrnck_system_vault_erase(SyrnckSystemVault *, const char *reference, bool *removed);
 /* Borrows the native secret only while opening. The Store retains its own key;
  * closing the secret does not close or revoke already opened Stores. */
 SYRNCK_API int syrnck_store_open_secret(const char *path, bool create, const SyrnckSecretKey *, SyrnckStore **out);
@@ -303,7 +375,7 @@ SYRNCK_API int syrnck_store_close(SyrnckStore *store);
  * reading and recovery of already prepared signed revisions remain available. */
 SYRNCK_API int syrnck_store_use_native_identity(SyrnckStore *, const char *name, const char *email,
     int32_t timezone_offset, const unsigned char *seed, size_t seed_len, bool require_signature);
-/* Borrow a protected signer's native seed while installing independent expanded
+/* Borrow a protected native signer while installing independent expanded
  * Store-owned signing state. Closing the owner does not revoke that Store.
  * A NULL signer explicitly selects no key; require_signature can still be true.
  * Invalid identity/owner or Store state preserves the previous configuration. */

@@ -16,6 +16,7 @@ namespace syrnck {
  * `protect_signing_seed(seed, password, costs)` protects exactly 32 caller-owned seed bytes.
  * `open_protected_signing_key(envelope, password)` authenticates and returns a move-only `SigningKey`.
  * The caller owns/wipes password and seed inputs. No plaintext seed export exists.
+ * `SigningKey::clone()` explicitly creates an independent native signing owner; each owner wipes its material.
  *
  * ## Envelopes and passwords {#envelopes}
  * `protected_signing_key_options` inspects public costs only; it does not authenticate.
@@ -38,6 +39,7 @@ namespace syrnck {
  * `protect_signing_seed(seed, password, costs)` protège exactement 32 octets de graine de l’appelant.
  * `open_protected_signing_key(envelope, password)` authentifie et rend une `SigningKey` déplaçable.
  * L’appelant possède/efface mots de passe et graines. Aucun export de graine brute.
+ * `SigningKey::clone()` crée explicitement un propriétaire natif indépendant ; chacun efface son matériel secret.
  *
  * ## Enveloppes et mots de passe {#envelopes}
  * `protected_signing_key_options` lit les coûts publics sans authentification.

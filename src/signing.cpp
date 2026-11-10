@@ -69,6 +69,12 @@ SigningKey &SigningKey::operator=(SigningKey &&other) noexcept {
   return *this;
 }
 SigningKey::~SigningKey() { crypto_wipe(secret_.data(), secret_.size()); }
+SigningKey SigningKey::clone() const {
+  require(valid_, "signing key has been moved");
+  SigningKey result;
+  result.secret_ = secret_; result.public_ = public_; result.valid_ = true;
+  return result;
+}
 SigningPublicKey SigningKey::public_key() const { require(valid_, "signing key has been moved"); return public_; }
 Ed25519Signature SigningKey::sign(std::span<const std::uint8_t> message) const {
   require(valid_, "signing key has been moved");

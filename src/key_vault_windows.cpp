@@ -17,6 +17,7 @@ struct FreeCredential {
 };
 }
 std::string_view vault_provider() noexcept { return "windows-credential-manager"; }
+void vault_disable_macos_interaction() {}
 std::optional<Bytes> vault_read(const std::optional<fs::path> &, const VaultKeyReference &ref) {
   CREDENTIALW *raw = nullptr;
   if (!CredReadW(target(ref).c_str(), CRED_TYPE_GENERIC, 0, &raw)) {

@@ -1,6 +1,6 @@
 {
   "c-abi": {
-    "englishSha256": "b591f1ef9c772f8178bc95bbab16a451ae7c4b87a9faf67c08a7d406eb9b32a4"
+    "englishSha256": "67595f57fdd4707762297c55c8fcdfb4da796f14829cecb3c2b8d656cbf3a127"
   },
   "store": {
     "englishSha256": "14995bd6ba7df6651831f0ff47edfe60fc672269d7f0087494b9371ca7e62b74"
@@ -9,12 +9,12 @@
     "englishSha256": "6dd3a7146f560444d96cb4d66ff6d21c6023dcdfbe1d232730cbbf6ad1a1f333"
   },
   "signing-keys": {
-    "englishSha256": "dc78f27fa07e50cb23f90cff10116d65f3c9de698bca04b8fc85b9579c501816"
+    "englishSha256": "9248188859a2fa2ee76966669d930b81d9fdcd38fafe564d218a18914b20d627"
   },
   "sealed-repositories": {
     "englishSha256": "624d31c45637d6537c2f098efb642d74522272272b476c7f96084763a2032039"
   },
   "system-key-vault": {
-    "englishSha256": "f9f93b73512bf381e4d32381ef4e574a6038e30fdca1f3aa6dfc29ec672b6ce0"
+    "englishSha256": "fe2d7e42cfe2ca38d0118009f808912ed04e34c68f24cb078c60b328932f93eb"
   }
 }

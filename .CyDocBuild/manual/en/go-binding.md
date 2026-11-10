@@ -5,7 +5,7 @@ description: Go binding guide.
 section: API
 order: 10
 parent: integrations
-revision: 13
+revision: 14
 ---
 
 # Go binding for the C++ engine {#binding-go-du-moteur-c}
@@ -257,6 +257,33 @@ func restoreSealed(ctx context.Context, source, wire, destination *syrnck.Store,
 }
 ```
 
-Reports contain private original names/IDs and belong on the client. Transport only `ObjectKey{Kind: "revision", ID: report.Snapshot}` and its ordinary wire closure. The existing `CopyMissing` helper can exercise that opaque copy locally without a master key. Production resumable HTTP publication/fetch currently uses the C++/CLI [sealed transfer workflow](doc:sealed-repositories#remote); its remote-CAS/session wrappers are not part of this Go API. The resident agent and BEP folder service still need sealed integration.
+Reports contain private original names/IDs and belong on the client. Transport only `ObjectKey{Kind: "revision", ID: report.Snapshot}` and its ordinary wire closure. The existing `CopyMissing` helper can exercise that opaque copy locally without a master key. Production resumable HTTP publication/fetch currently uses the C++/CLI [sealed transfer workflow](doc:sealed-repositories#remote); its remote-CAS/session wrappers are not part of this Go API. The native resident agent supports [sealed transport](doc:sealed-repositories#resident). Syncthing/BEP uses its [independent encrypted-device format](doc:syncthing#untrusted), including the [opaque receiver](doc:syncthing#opaque-receiver).
 
-Go serializes the owner and all participating Stores, in consistent Store order, with context-aware lock waits. Concurrent Close waits for native use to finish. Context cancellation requests the native one-shot source and joins that request before release; successful publication wins a later stop request. An IO/output-allocation error can still follow publication, so reload refs and establish the outcome before retrying. These APIs do not add distributed key rotation/revocation, OS vaults or automatic encrypted-history retirement.
+Go serializes the owner and all participating Stores, in consistent Store order, with context-aware lock waits. Concurrent Close waits for native use to finish. Context cancellation requests the native one-shot source and joins that request before release; successful publication wins a later stop request. An IO/output-allocation error can still follow publication, so reload refs and establish the outcome before retrying. These sealed operations do not add distributed key rotation/revocation or automatic encrypted-history retirement. System vault configuration is separate below.
+
+## System key vault owners {#system-vaults}
+
+`OpenSystemKeyVault("")` owns native provider configuration, not an unlocked OS session. An absolute constructor path selects a macOS file keychain only. `Provider()` reports compiled support; it does not prove that account credentials are accessible. [Platform requirements](doc:key-files#system-vault) apply to Windows Credential Manager, macOS file Keychain and Linux Secret Service. No error falls back to a raw/file/plaintext provider.
+
+For macOS file keychains, a headless host must explicitly call `DisableMacOSKeychainInteraction()` once before Keychain workers. This changes **all Keychain interaction in the current process**, not the OS account or another application. It is a no-op on other platforms. Do not re-enable interaction while vaults are in use. Vault operations refuse missing setup without changing it; an interactive host must make that process-policy decision itself.
+
+`Generate(VaultStorageKey|VaultSigningKey|VaultSealedKey)` creates a fresh random native key and public `VaultReference`. Persist `ref.String()` as local configuration; `ParseVaultReference` validates the exact version/purpose/lowercase ID. `ImportProtected` authenticates a matching 104-byte password envelope and creates a different reference. `ExportProtected` returns only an authenticated password envelope; retain and verify that independent backup outside working files.
+
+```go
+func openVaultStore(encoded, path string) (*syrnck.Store, error) {
+    // The headless host chooses macOS process policy once, before workers.
+    vault, err := syrnck.OpenSystemKeyVault("")
+    if err != nil { return nil, err }
+    defer vault.Close()
+    ref, err := syrnck.ParseVaultReference(encoded)
+    if err != nil { return nil, err }
+    key, err := vault.OpenSecret(ref)
+    if err != nil { return nil, err }
+    defer key.Close()
+    return key.Open(path, false)
+}
+```
+
+`OpenSecret` accepts storage references, `OpenSigner` signing references and `OpenSealed` independent master references. Each returns the existing opaque native owner. Storage/seed/master bytes never enter Go. Configure a signer through `NativeIdentityOptions.Signer`; closing the provider or signer does not invalidate Store-owned signing state. A master works with `SealSnapshot`/`OpenSnapshot`. `Erase` removes the exact OS entry and returns false if absent; it does not revoke opened owners or exported backups. `Close` is idempotent and serialized with calls; later calls return `ErrSystemKeyVaultClosed`.
+
+The standalone BEP configuration and native CLI environment do not yet select vault references. Library hosts can reuse the returned owner in `OpenStore` callbacks. The opt-in `key_vault_system` CTest fixture builds a Go probe with strict pointer checks and executes create/verify/erase in separate processes alongside the C++ and C shared/static probes. It checks real encrypted Store use, signed revisions, protected backups and sealed reconstruction; macOS also checks locked keychain refusal.

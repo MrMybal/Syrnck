@@ -9,4 +9,5 @@ std::optional<Bytes> vault_read(const std::optional<fs::path> &, const VaultKeyR
 void vault_write(const std::optional<fs::path> &, const VaultKeyReference &, std::span<const std::uint8_t>);
 bool vault_erase(const std::optional<fs::path> &, const VaultKeyReference &);
 std::string_view vault_provider() noexcept;
+void vault_disable_macos_interaction();
 } // namespace syrnck::detail

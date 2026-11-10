@@ -397,7 +397,7 @@ func TestCLIListenCancellationRetainsPlainAndEncryptedOfflineSnapshot(t *testing
 }
 
 func TestPrivateSigningKeyInWorkingTreeRefusedBeforeCapture(t *testing.T) {
-	root := t.TempDir()
+	root := testDirectory(t)
 	directory := filepath.Join(root, "work")
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)

@@ -4,7 +4,7 @@ title: Architecture
 description: Architecture guide.
 section: Getting started
 order: 10
-revision: 7
+revision: 8
 ---
 
 # Syrnck architecture {#architecture-de-syrnck}
@@ -100,7 +100,7 @@ C/Go expose object IO, closures, pins and workspace observation. The [BEP adapte
 
 ## Encryption {#chiffrement}
 
-Objects are compressed then encrypted at rest with XChaCha20-Poly1305, random 256-bit key/192-bit nonce, typed ID authenticated as associated data. Manifests/revisions are encrypted; config, refs, IDs and stored sizes remain visible. The CLI selects `SYRNCK_KEY` or a [password-protected key file](doc:key-files#providers), not a key in Store config. C++ hosts can separately use the [system vault API](doc:key-files#system-vault); its CLI/C/Go provider selection remains unfinished. Process/environment owners are trusted. Backups can reencrypt to another key; in-place/distributed rotation and recovery still require additional work.
+Objects are compressed then encrypted at rest with XChaCha20-Poly1305, random 256-bit key/192-bit nonce, typed ID authenticated as associated data. Manifests/revisions are encrypted; config, refs, IDs and stored sizes remain visible. The CLI selects `SYRNCK_KEY` or a [password-protected key file](doc:key-files#providers), not a key in Store config. C++/C/Go hosts can separately use the [system vault API](doc:key-files#system-vault); CLI/standalone BEP provider selection remains unfinished. Process/environment owners are trusted. Backups can reencrypt to another key; in-place/distributed rotation and recovery still require additional work.
 
 [Network Zstd](doc:network-compression) level 1 negotiates logical frames, falling back to raw for poor gain/budget. Decoder validates before import; network counters/throttling include retries separately from successful logical bytes.
 

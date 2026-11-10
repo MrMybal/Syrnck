@@ -46,6 +46,13 @@ void reference_vectors() {
     fails([&] { moved.sign(message); });
     require(assigned.sign(message) == signature && signing_key_id(assigned.public_key()) == identifier,
         "moving a signing key changed its identity or signature");
+    auto cloned = assigned.clone();
+    assigned = SigningKey::generate();
+    require(cloned.sign(message) == signature && signing_key_id(cloned.public_key()) == identifier,
+        "independent native signing owner changed its identity");
+    auto retained_clone = std::move(cloned);
+    fails([&] { cloned.clone(); });
+    require(retained_clone.sign(message) == signature, "moved native clone changed signature");
   }
 }
 void malformed() {

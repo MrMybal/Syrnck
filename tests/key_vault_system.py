@@ -1,5 +1,6 @@
 """Qualify actual OS vaults with isolated, disposable credentials across processes."""
 import argparse
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import secrets
@@ -11,8 +12,11 @@ import tempfile
 import time
 
 
-def run(command, **kwargs):
-    result = subprocess.run(command, capture_output=True, text=True, timeout=60, **kwargs)
+def run(command, timeout_seconds=60, **kwargs):
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds, **kwargs)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("owned vault fixture subprocess exceeded " + str(timeout_seconds) + " seconds") from None
     if result.returncode:
         # Never echo commands: the temporary macOS keychain setup has an
         # ephemeral fixture password, not a deployment credential.
@@ -20,19 +24,82 @@ def run(command, **kwargs):
     return result.stdout
 
 
-def exercise(executable, root, keychain=None, after_create=None):
-    arguments = [str(root)] + ([str(keychain)] if keychain else [])
+@dataclass(frozen=True)
+class Probe:
+    executable: str
+    go: bool = False
+
+
+def go_environment(library):
+    environment = os.environ.copy()
+    environment["GOTOOLCHAIN"] = "local"
+    environment["GOPROXY"] = "off"
+    source = Path(__file__).resolve().parent.parent
+    environment["GOCACHE"] = str(source / ".tools/go-cache")
+    environment["GOPATH"] = str(source / ".tools/go-path")
+    if os.name == "nt":
+        environment["SYRNCK_LIBRARY"] = str(library)
+        environment["CGO_ENABLED"] = "0"
+    else:
+        environment["CGO_ENABLED"] = "1"
+        flag = "-L" + str(library.parent)
+        quote = "'" if "'" not in flag else '"'
+        if quote in flag:
+            raise RuntimeError("fixture cgo library path contains both quote styles")
+        environment["CGO_LDFLAGS"] = environment.get("CGO_LDFLAGS", "") + " " + quote + flag + quote
+        for name in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+            environment[name] = str(library.parent) + os.pathsep + environment.get(name, "")
+    return environment
+
+
+def build_go_probe(go, library, root):
+    executable = root / ("vault-go-probe.exe" if os.name == "nt" else "vault-go-probe")
+    environment = go_environment(library)
+    source = Path(__file__).resolve().parent.parent
+    run([str(go), "test", "-mod=readonly", "-c", "-gcflags=all=-d=checkptr=2", "-o", str(executable), "."],
+        cwd=source / "bindings/go", env=environment, timeout_seconds=120)
+    return executable
+
+
+def probe_run(probe, mode, root, keychain, library):
+    if probe.go:
+        command = [probe.executable, "-test.run=^TestSystemVaultRealProvider$", "-test.v",
+                   "-syrnck-vault-mode=" + mode, "-syrnck-vault-root=" + str(root),
+                   "-syrnck-vault-keychain=" + (str(keychain) if keychain else "")]
+        result = run(command, env=go_environment(library))
+        if "--- PASS: TestSystemVaultRealProvider" not in result or "--- SKIP:" in result:
+            raise RuntimeError("real Go vault fixture did not execute successfully")
+        return result
+    return run([probe.executable, mode, str(root), *([str(keychain)] if keychain else [])])
+
+
+def exercise(probe, root, keychain=None, after_create=None, library=None):
     try:
         for mode in ("create", "verify", "erase"):
-            print(run([executable, mode, *arguments]), end="", flush=True)
+            print(probe_run(probe, mode, root, keychain, library), end="", flush=True)
             if mode == "create" and after_create:
                 after_create()
     finally:
         if (root / "state.json").exists():
-            run([executable, "cleanup", *arguments])
+            probe_run(probe, "cleanup", root, keychain, library)
 
 
-def linux_session(executable, root):
+def exercise_all(probes, root, keychain=None, keychain_password=None, library=None):
+    for index, probe in enumerate(probes):
+        fixture = root / ("probe-" + str(index))
+        fixture.mkdir(mode=0o700)
+        def locked_check(probe=probe, fixture=fixture):
+            if not probe.go:
+                print(probe_run(probe, "policy-required", fixture, keychain, library), end="", flush=True)
+            run(["security", "lock-keychain", str(keychain)])
+            try:
+                print(probe_run(probe, "inaccessible", fixture, keychain, library), end="", flush=True)
+            finally:
+                run(["security", "unlock-keychain", "-p", keychain_password, str(keychain)])
+        exercise(probe, fixture, keychain, locked_check if keychain else None, library)
+
+
+def linux_session(probes, root, library):
     for name in ("HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR"):
         destination = root / name.lower()
         destination.mkdir(mode=0o700)
@@ -65,7 +132,7 @@ def linux_session(executable, root):
             if time.monotonic() >= deadline:
                 raise RuntimeError("isolated Secret Service did not expose its default collection")
             time.sleep(0.1)  # Fixture readiness only; engine operations are never retried.
-        exercise(executable, root)
+        exercise_all(probes, root, library=library)
     finally:
         if daemon.poll() is None:
             daemon.terminate()
@@ -78,19 +145,13 @@ def linux_session(executable, root):
         daemon.stderr.close()
 
 
-def macos_session(executable, root):
+def macos_session(probes, root, library):
     keychain = root / "qualification.keychain-db"
     password = secrets.token_hex(24)
-    def locked_check():
-        run(["security", "lock-keychain", str(keychain)])
-        try:
-            print(run([executable, "inaccessible", str(root), str(keychain)]), end="", flush=True)
-        finally:
-            run(["security", "unlock-keychain", "-p", password, str(keychain)])
     try:
         run(["security", "create-keychain", "-p", password, str(keychain)])
         run(["security", "unlock-keychain", "-p", password, str(keychain)])
-        exercise(executable, root, keychain, locked_check)
+        exercise_all(probes, root, keychain, password, library)
     finally:
         if keychain.exists():
             run(["security", "delete-keychain", str(keychain)])
@@ -104,25 +165,43 @@ def macos_session(executable, root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("executable", type=Path)
+    parser.add_argument("executable", type=Path, nargs="+")
     parser.add_argument("--inside-linux", type=Path)
+    go_selection = parser.add_mutually_exclusive_group()
+    go_selection.add_argument("--go", type=Path)
+    go_selection.add_argument("--go-probe", type=Path)
+    parser.add_argument("--library", type=Path)
     args = parser.parse_args()
-    executable = str(args.executable.resolve())
+    executables = [str(path.resolve()) for path in args.executable]
+    library = args.library.resolve(strict=True) if args.library else None
+    if (args.go or args.go_probe) and library is None:
+        parser.error("the Go fixture requires --library")
+    probes = [Probe(path) for path in executables]
+    if args.go_probe:
+        probes.append(Probe(str(args.go_probe.resolve(strict=True)), True))
     if args.inside_linux:
-        linux_session(executable, args.inside_linux.resolve())
+        linux_session(probes, args.inside_linux.resolve(), library)
         return
     root = Path(tempfile.mkdtemp(prefix="syrnck-vault-")).resolve()
     try:
+        if args.go:
+            probes.append(Probe(str(build_go_probe(args.go.resolve(strict=True), library, root)), True))
         if sys.platform == "linux":
             for tool in ("dbus-run-session", "gnome-keyring-daemon", "gdbus"):
                 if not shutil.which(tool):
                     raise RuntimeError("system vault qualification requires " + tool)
-            print(run(["dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
-                       executable, "--inside-linux", str(root)]), end="")
+            command = ["dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
+                       *executables, "--inside-linux", str(root)]
+            if library:
+                command.extend(["--library", str(library)])
+            for probe in probes:
+                if probe.go:
+                    command.extend(["--go-probe", probe.executable])
+            print(run(command, timeout_seconds=150), end="")
         elif sys.platform == "darwin":
-            macos_session(executable, root)
+            macos_session(probes, root, library)
         elif sys.platform == "win32":
-            exercise(executable, root)
+            exercise_all(probes, root, library=library)
         else:
             raise RuntimeError("no system vault qualification fixture for this platform")
     except BaseException:

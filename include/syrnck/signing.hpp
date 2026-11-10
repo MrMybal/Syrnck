@@ -17,6 +17,9 @@ public:
   SigningKey(SigningKey &&) noexcept;
   SigningKey &operator=(SigningKey &&) noexcept;
   ~SigningKey();
+  // Explicit independent native ownership, with no plaintext/seed export.
+  // Each clone must be destroyed separately; moved-from owners cannot clone.
+  SigningKey clone() const;
   SigningPublicKey public_key() const;
   Ed25519Signature sign(std::span<const std::uint8_t> message) const;
 private:

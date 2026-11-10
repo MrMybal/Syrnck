@@ -4,6 +4,9 @@
 #include <syrnck/sealed.hpp>
 #include <syrnck/signing_keys.hpp>
 #include <iostream>
+#ifdef __APPLE__
+#include <Security/Security.h>
+#endif
 using namespace native_test;
 namespace {
 constexpr VaultKeyPurpose purposes[]{VaultKeyPurpose::storage, VaultKeyPurpose::signing, VaultKeyPurpose::sealed};
@@ -50,8 +53,16 @@ void references() {
   fails([&] { vault.import_protected({}, password, VaultKeyPurpose::storage); });
   fails([&] { vault.export_protected({VaultKeyPurpose::storage, std::string(64, '0')}, {}); });
   fails([] { SystemKeyVault invalid(fs::path("relative.keychain")); });
+  fails([] {
+    auto path = fs::absolute("fixture.keychain").native();
+    path.push_back(fs::path::value_type{});
+    SystemKeyVault invalid{fs::path(path)};
+  });
   if (SystemKeyVault::provider() == "unavailable")
     fails([&] { vault.generate(VaultKeyPurpose::storage); });
+#ifdef __APPLE__
+  if (SystemKeyVault::provider() == "unavailable") fails([] { SystemKeyVault::disable_macos_interaction(); });
+#endif
   // Validate hostile record bytes through the same decoder used for real OS
   // results. The OS vault, not this framing, authenticates secret contents.
   for (auto purpose : purposes) {
@@ -179,8 +190,9 @@ int main(int argc, char **argv) {
     if (argc == 1) { references(); std::cout << "Vault reference checks passed\n"; return 0; }
     require(argc == 3 || argc == 4, "unexpected vault test arguments");
     const SystemKeyVault vault(argc == 4 ? std::optional<fs::path>{path_from_utf8(argv[3])} : std::nullopt);
-    const auto root = path_from_utf8(argv[2]);
     const std::string mode = argv[1];
+    if (mode != "policy-required") SystemKeyVault::disable_macos_interaction();
+    const auto root = path_from_utf8(argv[2]);
     if (mode == "create") create(vault, root);
     else if (mode == "verify") verify(vault, root);
     else if (mode == "erase") erase(vault, root);
@@ -189,6 +201,28 @@ int main(int argc, char **argv) {
         if (ref.purpose == VaultKeyPurpose::signing) fails([&] { vault.open_signer(ref); });
         else fails([&] { vault.open_secret(ref); });
       }
+    }
+    else if (mode == "policy-required") {
+#ifdef __APPLE__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      require(SecKeychainSetUserInteractionAllowed(true) == errSecSuccess, "cannot set private fixture interaction policy");
+#pragma clang diagnostic pop
+      for (const auto &ref : read_refs(root)) {
+        bool refused = false;
+        try { (void)vault.export_protected(ref, password); }
+        catch (const Error &error) { refused = std::string_view(error.what()) == "macOS file key vault requires explicit noninteractive process setup"; }
+        require(refused, "file vault did not refuse missing explicit process policy");
+      }
+      Boolean interactive = false;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      require(SecKeychainGetUserInteractionAllowed(&interactive) == errSecSuccess && interactive,
+              "vault changed process interaction policy implicitly");
+#pragma clang diagnostic pop
+#else
+      throw Error("policy-required fixture is specific to macOS");
+#endif
     }
     else if (mode == "cleanup") { for (const auto &ref : read_refs(root)) (void)vault.erase(ref); }
     else throw Error("unexpected vault test mode");

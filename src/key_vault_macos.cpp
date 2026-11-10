@@ -1,7 +1,6 @@
 #include "key_vault_backend.hpp"
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
-#import <LocalAuthentication/LocalAuthentication.h>
 
 namespace syrnck::detail {
 namespace {
@@ -16,6 +15,17 @@ struct Query {
   CF<CFMutableDictionaryRef> value{CFDictionaryCreateMutable(nullptr, 0,
       &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks)};
   explicit Query(const std::optional<fs::path> &keychain, const VaultKeyReference &ref, bool writing) {
+    // File-based keychains ignore LAContext and per-item authentication UI
+    // selectors (Apple TN3137 / libsecurity_keychain SecItem implementation).
+    // Require an explicit host decision, never toggle global UI policy here.
+    Boolean interactive = true;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    const auto interaction_status = SecKeychainGetUserInteractionAllowed(&interactive);
+#pragma clang diagnostic pop
+    if (interaction_status != errSecSuccess)
+      throw Error("cannot read macOS keychain interaction policy: " + std::to_string(interaction_status));
+    require(!interactive, "macOS file key vault requires explicit noninteractive process setup");
     require(value.value != nullptr, "cannot allocate system key vault query");
     const auto encoded = ref.encode();
     const CF<CFStringRef> account{CFStringCreateWithBytes(nullptr,
@@ -24,9 +34,6 @@ struct Query {
     CFDictionarySetValue(value.value, kSecClass, kSecClassGenericPassword);
     CFDictionarySetValue(value.value, kSecAttrService, CFSTR("org.syrnck.keys.v1"));
     CFDictionarySetValue(value.value, kSecAttrAccount, account.value);
-    LAContext *context = [[LAContext alloc] init];
-    context.interactionNotAllowed = YES;
-    CFDictionarySetValue(value.value, kSecUseAuthenticationContext, (__bridge CFTypeRef)context);
     if (keychain) {
       SecKeychainRef raw = nullptr;
       // SecItem has no replacement for opening an explicitly selected
@@ -50,8 +57,16 @@ struct Query {
 };
 }
 std::string_view vault_provider() noexcept { return "macos-keychain"; }
+void vault_disable_macos_interaction() {
+  // This deprecated API is the only supported process-level policy for the
+  // file-based keychain. The public entry point makes that effect explicit.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  const auto status = SecKeychainSetUserInteractionAllowed(false);
+#pragma clang diagnostic pop
+  if (status != errSecSuccess) throw Error("cannot configure macOS keychain interaction policy: " + std::to_string(status));
+}
 std::optional<Bytes> vault_read(const std::optional<fs::path> &keychain, const VaultKeyReference &ref) {
-  @autoreleasepool {
   Query query(keychain, ref, false);
   CFDictionarySetValue(query.value.value, kSecReturnData, kCFBooleanTrue);
   CFDictionarySetValue(query.value.value, kSecMatchLimit, kSecMatchLimitOne);
@@ -65,11 +80,9 @@ std::optional<Bytes> vault_read(const std::optional<fs::path> &keychain, const V
   require(CFDataGetLength(data) == static_cast<CFIndex>(vault_record_size), "invalid system key vault record");
   const auto bytes = CFDataGetBytePtr(data);
   return Bytes(bytes, bytes + vault_record_size);
-  }
 }
 void vault_write(const std::optional<fs::path> &keychain, const VaultKeyReference &ref,
     std::span<const std::uint8_t> record) {
-  @autoreleasepool {
   Query query(keychain, ref, true);
   // Borrow our bounded buffer for this synchronous call; the caller wipes it.
   const CF<CFDataRef> data{CFDataCreateWithBytesNoCopy(nullptr, record.data(),
@@ -78,15 +91,12 @@ void vault_write(const std::optional<fs::path> &keychain, const VaultKeyReferenc
   CFDictionarySetValue(query.value.value, kSecValueData, data.value);
   const auto status = SecItemAdd(query.value.value, nullptr);
   if (status != errSecSuccess) throw Error("cannot write system key vault: " + std::to_string(status));
-  }
 }
 bool vault_erase(const std::optional<fs::path> &keychain, const VaultKeyReference &ref) {
-  @autoreleasepool {
   Query query(keychain, ref, false);
   const auto status = SecItemDelete(query.value.value);
   if (status == errSecItemNotFound) return false;
   if (status != errSecSuccess) throw Error("cannot erase system key vault entry: " + std::to_string(status));
   return true;
-  }
 }
 } // namespace syrnck::detail

@@ -5,7 +5,7 @@ description: Guide : Binding Go.
 section: API
 order: 10
 parent: integrations
-sourceRevision: 13
+sourceRevision: 14
 ---
 
 # Binding Go du moteur C++ {#binding-go-du-moteur-c}
@@ -269,6 +269,33 @@ func restoreSealed(ctx context.Context, source, wire, destination *syrnck.Store,
 }
 ```
 
-Les rapports contiennent noms/IDs originaux privés et restent côté client. Transférer seulement `ObjectKey{Kind: "revision", ID: report.Snapshot}` et sa fermeture de transport ordinaire. Le helper `CopyMissing` existant permet de tester cette copie opaque localement sans clé maîtresse. Publication/réception HTTP reprenables de production utilisent actuellement le [workflow chiffré C++/CLI](doc:sealed-repositories#remote) ; ses wrappers CAS/sessions distants ne font pas partie de cette API Go. Agent résident et service de dossiers BEP attendent encore leur intégration chiffrée.
+Les rapports contiennent noms/IDs originaux privés et restent côté client. Transférer seulement `ObjectKey{Kind: "revision", ID: report.Snapshot}` et sa fermeture de transport ordinaire. Le helper `CopyMissing` existant permet de tester cette copie opaque localement sans clé maîtresse. Publication/réception HTTP reprenables de production utilisent actuellement le [workflow chiffré C++/CLI](doc:sealed-repositories#remote) ; ses wrappers CAS/sessions distants ne font pas partie de cette API Go. L'agent natif résident prend en charge le [transport scellé](doc:sealed-repositories#resident). Syncthing/BEP utilise son [format d'appareil chiffré indépendant](doc:syncthing#untrusted), avec le [récepteur opaque](doc:syncthing#opaque-receiver).
 
-Go sérialise propriétaire et Stores participants dans un ordre de Stores cohérent, avec attentes de verrou annulables par contexte. Close concurrent attend la fin de l'usage natif. L'annulation demande la source native unique et joint cette demande avant libération ; une publication réussie gagne sur une demande d'arrêt ultérieure. IO/allocation de sortie peuvent encore échouer après publication : relire les références et prouver le résultat avant une relance. Ces API ne fournissent ni rotation/révocation distribuée, ni coffre OS, ni retrait automatique de l'historique chiffré.
+Go sérialise propriétaire et Stores participants dans un ordre de Stores cohérent, avec attentes de verrou annulables par contexte. Close concurrent attend la fin de l'usage natif. L'annulation demande la source native unique et joint cette demande avant libération ; une publication réussie gagne sur une demande d'arrêt ultérieure. IO/allocation de sortie peuvent encore échouer après publication : relire les références et prouver le résultat avant une relance. Ces opérations scellées ne fournissent ni rotation/révocation distribuée ni retrait automatique de l'historique chiffré. La configuration des coffres système est séparée ci-dessous.
+
+## Propriétaires des coffres système {#system-vaults}
+
+`OpenSystemKeyVault("")` possède la configuration native du fournisseur, pas une session de compte déverrouillée. Un chemin absolu au constructeur choisit seulement un trousseau fichier macOS. `Provider()` indique le support compilé ; cela ne prouve pas l'accès aux identifiants du compte. Les [prérequis des plateformes](doc:key-files#system-vault) concernent le Gestionnaire d'identification Windows, les trousseaux fichiers macOS et Secret Service Linux. Aucune erreur ne provoque de repli vers une clé brute, un fichier ou un fournisseur en clair.
+
+Pour les trousseaux fichiers macOS, un hôte sans interface appelle explicitement `DisableMacOSKeychainInteraction()` une fois avant ses workers Trousseau. Cela change **toute interaction Trousseau du processus**, pas le compte OS ou une autre application. Aucun effet sur les autres plateformes. Ne pas réactiver les interactions pendant l'usage des coffres. Les appels refusent une configuration absente sans la modifier ; un hôte interactif doit prendre lui-même cette décision de règle du processus.
+
+`Generate(VaultStorageKey|VaultSigningKey|VaultSealedKey)` crée une clé native aléatoire et une `VaultReference` publique neuve. Conserver `ref.String()` dans la configuration locale ; `ParseVaultReference` vérifie version/usage/identifiant minuscule exacts. `ImportProtected` authentifie une enveloppe du bon usage de 104 octets et crée une référence différente. `ExportProtected` rend seulement une enveloppe authentifiée par mot de passe ; conserver et vérifier cette sauvegarde indépendante hors des fichiers de travail.
+
+```go
+func openVaultStore(encoded, path string) (*syrnck.Store, error) {
+    // L'hôte sans interface choisit la règle macOS une fois avant ses workers.
+    vault, err := syrnck.OpenSystemKeyVault("")
+    if err != nil { return nil, err }
+    defer vault.Close()
+    ref, err := syrnck.ParseVaultReference(encoded)
+    if err != nil { return nil, err }
+    key, err := vault.OpenSecret(ref)
+    if err != nil { return nil, err }
+    defer key.Close()
+    return key.Open(path, false)
+}
+```
+
+`OpenSecret` accepte les références de stockage, `OpenSigner` celles de signature et `OpenSealed` les maîtresses indépendantes. Chacun rend le propriétaire natif opaque existant. Les octets de stockage/graine/maîtresse n'entrent jamais dans Go. Configurer un signataire avec `NativeIdentityOptions.Signer` ; fermer fournisseur ou signataire n'invalide pas la signature détenue par les Stores. Une maîtresse sert à `SealSnapshot`/`OpenSnapshot`. `Erase` retire l'entrée OS exacte et renvoie false si absente ; cela ne révoque ni propriétaires ouverts ni sauvegardes exportées. `Close` est idempotent et sérialisé avec les appels ; les appels suivants renvoient `ErrSystemKeyVaultClosed`.
+
+La configuration BEP autonome et l'environnement du CLI natif ne choisissent pas encore les références de coffre. Les hôtes de bibliothèque réutilisent le propriétaire retourné dans les callbacks `OpenStore`. La fixture CTest optionnelle `key_vault_system` construit une sonde Go avec contrôle strict des pointeurs et exécute création/vérification/suppression dans des processus distincts avec les sondes C++ et C partagé/statique. Elle vérifie vrais Stores chiffrés, révisions signées, sauvegardes protégées et reconstruction scellée ; macOS vérifie aussi le refus du trousseau verrouillé.

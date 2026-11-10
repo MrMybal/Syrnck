@@ -5,7 +5,7 @@ description: Create, verify and rewrap key files; unlock native Stores without e
 section: Storage
 parent: storage
 order: 55
-revision: 5
+revision: 6
 ---
 
 ## Create a key file {#create}
@@ -63,12 +63,15 @@ The [C++ API](doc:api-password-keys) owns secret bytes through move-only `Secret
 
 ## System key vaults {#system-vault}
 
-The [native C++ vault API](doc:api-system-key-vault) can keep independent storage keys, signing seeds and sealed master keys in the current OS account. It is separate from the password-file providers above. CLI environment selection and the C/Go owners do not yet select this provider.
+The [native C++ vault API](doc:api-system-key-vault) can keep independent storage keys, signing keys and sealed master keys in the current OS account. [C owners](doc:api-c-abi#system-vaults) and the [Go binding](doc:go-binding#system-vaults) open these entries without exporting plaintext. It is separate from the password-file providers above. CLI environment selection and standalone BEP configuration do not yet select this provider.
 
 ```cpp
 #include <syrnck/key_vault.hpp>
 
 syrnck::SystemKeyVault vault;
+// Headless hosts explicitly opt into process-wide Keychain policy on macOS,
+// before Keychain workers; this is a no-op on Windows/Linux.
+syrnck::SystemKeyVault::disable_macos_interaction();
 auto reference = vault.generate(syrnck::VaultKeyPurpose::sealed);
 auto master = vault.open_secret(reference);
 // Keep reference.encode() as public local configuration.
@@ -81,13 +84,13 @@ auto backup = vault.export_protected(reference, backup_password);
 | Platform | Provider and requirements |
 | --- | --- |
 | Windows | Credential Manager generic credentials, current account on this host (`CRED_PERSIST_LOCAL_MACHINE`). A usable logon session is required; network-only/sandbox sessions can refuse access. No enterprise roaming is requested. |
-| macOS | Keychain generic passwords. The default keychain is used for creation; an optional absolute constructor path selects an existing keychain without changing the default or search list. Operations request failure instead of authentication UI. Unlock/trust policy must be configured by the account owner. |
+| macOS | File-based Keychain generic passwords. The default keychain is used for creation; an optional absolute constructor path selects an existing keychain without changing defaults/search lists. The host must explicitly call `disable_macos_interaction()` before Keychain workers; this disables **all** Keychain UI in this process and must not be reversed while vaults are in use. Vault operations check that policy and refuse if it is absent, without changing it. It is not an account-wide preference. File keychains ignore `LAContext`; the implementation isolates the required legacy policy/file-selector calls. Unlock/trust policy remains the account owner's responsibility. |
 | Linux | libsecret and the account's Secret Service session bus. Writes require an existing unlocked default collection. Reads do not request unlocking; duplicate matching records are refused. Library calls share a 30-second cancellation deadline per backend operation. Provider policy can require a prompt during creation/deletion; a resident host must arrange an unlocked authorized session. |
 
 Configure `SYRNCK_SYSTEM_KEY_VAULT=AUTO` (default), `ON` (required) or `OFF`. Linux builds use `libsecret-1` development files when present; an installed SDK built with this provider also requires libsecret development files. `SystemKeyVault::provider()` reports `windows-credential-manager`, `macos-keychain`, `linux-secret-service` or `unavailable`; it does not prove an account session is unlocked. A missing provider/session, locked vault, missing reference or malformed record fails explicitly, with no plaintext/file fallback. Provider storage, OS/library copies and account permissions remain subject to the OS. This is not hardware-backed key isolation or a guarantee that another process in the same account cannot read credentials. Windows' native write API replaces an exact existing target; Syrnck generates an unpredictable new ID and checks absence, rather than offering an atomic caller-selected create-if-absent contract.
 
-Deleting an entry does not invalidate existing native owners, rotate repository encryption, revoke exported copies or remove a server authorization. Export/verify independent protected backups before account changes. Ordinary Store backups do not capture the OS vault. Opt-in real-provider qualification uses `SYRNCK_TEST_SYSTEM_VAULT=ON` and `key_vault_system`; Linux runs a separate session bus/keyring, macOS creates and deletes a disposable selected keychain, and Windows creates/removes only its random synthetic test entries.
+Deleting an entry does not invalidate existing native owners, rotate repository encryption, revoke exported copies or remove a server authorization. Export/verify independent protected backups before account changes. Ordinary Store backups do not capture the OS vault. Opt-in real-provider qualification uses `SYRNCK_TEST_SYSTEM_VAULT=ON` and `key_vault_system`: C++, shared/static C and an optional Go probe create, reopen, export and erase disposable entries in separate processes. Linux runs a separate session bus/keyring; macOS selects a temporary keychain and checks missing policy/locked access before unlocking; Windows touches only its random synthetic entries. `SYRNCK_TEST_SYSTEM_VAULT_GO=ON` requires a local Go compiler and runs the real Go owner path with strict pointer checks, including signed revisions and sealed reconstruction. These tests remove only their own entries.
 
 ## Remaining security work {#limits}
 
-The password-file providers unlock existing at-rest encryption. The explicit [sealed workflow](doc:sealed-repositories) uses an independent master key and a distinct protected-key purpose for opaque transport. The separate C++ system vault does not yet integrate CLI/C/Go provider selection or distributed key rotation/revocation. Revision signing uses [separate protected signers](doc:signing-keys). Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).
+The password-file providers unlock existing at-rest encryption. The explicit [sealed workflow](doc:sealed-repositories) uses an independent master key and a distinct protected-key purpose for opaque transport. System vault owners do not yet integrate CLI/standalone BEP configuration or distributed key rotation/revocation. Revision signing uses [separate protected signers](doc:signing-keys). Checkout and persistent download staging can contain plaintext. See [current security limits](doc:limits#security).

@@ -55,5 +55,5 @@ Monocypher 4.0.3 includes the upstream EdDSA/Ed25519 signing timing fix. The opt
 Optional Linux system key vault support links to the platform's libsecret-1
 (LGPL-2.1-or-later) and GLib/GIO system libraries. These remain external system
 dependencies; their implementation is not vendored or relicensed here. Windows
-Credential Manager and macOS Security/CoreFoundation/LocalAuthentication are platform APIs. The macOS bridge uses the platform Objective-C runtime. Vault
+Credential Manager and macOS Security/CoreFoundation are platform APIs. Vault
 support can be required or disabled with `SYRNCK_SYSTEM_KEY_VAULT=ON|OFF`.

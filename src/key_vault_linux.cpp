@@ -73,6 +73,7 @@ Object<SecretItem> find(SecretService *vault, const VaultKeyReference &ref, Call
 }
 }
 std::string_view vault_provider() noexcept { return "linux-secret-service"; }
+void vault_disable_macos_interaction() {}
 std::optional<Bytes> vault_read(const std::optional<fs::path> &, const VaultKeyReference &ref) {
   Call call; ErrorState error;
   const auto vault = service(call, error);

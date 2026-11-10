@@ -1,6 +1,11 @@
 #include "key_vault_backend.hpp"
 namespace syrnck::detail {
 std::string_view vault_provider() noexcept { return "unavailable"; }
+void vault_disable_macos_interaction() {
+#ifdef __APPLE__
+  throw Error("system key vault support is not available in this build");
+#endif
+}
 std::optional<Bytes> vault_read(const std::optional<fs::path> &, const VaultKeyReference &) {
   throw Error("system key vault support is not available in this build");
 }

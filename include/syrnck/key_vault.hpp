@@ -27,6 +27,8 @@ struct VaultKeyReference {
  * `VaultKeyReference::parse` and `encode` validate the exact public format
  * `syrnck-vault:1:storage|signing|sealed:<64 lowercase hex digits>`.
  * `SystemKeyVault::provider()` reports the compiled provider, without opening a vault.
+ * macOS file keychains require explicit `disable_macos_interaction()` once before worker threads;
+ * this disables all Keychain interaction in the current process. Never re-enable it while vaults are in use.
  * An optional constructor path selects an existing macOS keychain only; other platforms refuse it.
  * Missing providers, sessions, locked vaults and missing entries fail without a file fallback.
  *
@@ -53,6 +55,8 @@ struct VaultKeyReference {
  * `VaultKeyReference::parse` et `encode` valident le format public exact
  * `syrnck-vault:1:storage|signing|sealed:<64 chiffres hexadécimaux minuscules>`.
  * `SystemKeyVault::provider()` indique le fournisseur compilé sans ouvrir de coffre.
+ * Les trousseaux fichiers macOS exigent `disable_macos_interaction()` explicitement avant les threads ;
+ * cela désactive toute interaction Trousseau du processus. Ne pas la réactiver pendant l'usage des coffres.
  * Un chemin optionnel au constructeur sélectionne uniquement un trousseau macOS existant ; les autres plateformes le refusent.
  * Un fournisseur ou une session absents, un coffre verrouillé ou une entrée absente échouent sans repli vers un fichier.
  *
@@ -70,6 +74,10 @@ class SystemKeyVault {
 public:
   explicit SystemKeyVault(std::optional<fs::path> macos_keychain = {});
   static std::string_view provider() noexcept;
+  // Explicit process-wide policy on macOS, not an OS-account preference. Call
+  // before starting workers; do not re-enable Keychain interaction concurrently.
+  // Other platforms do nothing. Vault operations never change this implicitly.
+  static void disable_macos_interaction();
   VaultKeyReference generate(VaultKeyPurpose) const;
   VaultKeyReference save(const SecretKey &, VaultKeyPurpose) const;
   VaultKeyReference import_protected(std::span<const std::uint8_t> envelope,

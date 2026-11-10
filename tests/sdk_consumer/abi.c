@@ -7,6 +7,7 @@ int main(int argc, char **argv) {
   SyrnckStore *store = NULL;
   SyrnckStore *wire = NULL;
   SyrnckSealedKey *key = NULL;
+  SyrnckSystemVault *vault = NULL;
   unsigned char envelope[SYRNCK_PROTECTED_KEY_SIZE];
   const unsigned char password[] = "Installed SDK fixture password";
   size_t length = 0;
@@ -20,6 +21,11 @@ int main(int argc, char **argv) {
     return 2;
   }
   if (sizeof(SyrnckSealedLimits) != 40) goto done;
+  if (syrnck_system_vault_open(NULL, &vault) != 0) goto done;
+  if (syrnck_system_vault_provider_json(vault, &result, &length) != 0 || !result || !strstr(result, "\"provider\":")) goto done;
+  syrnck_string_free(result); result = NULL;
+  if (syrnck_system_vault_close(vault) != 0) goto done;
+  vault = NULL;
   if (syrnck_sealed_key_protect(NULL, 0, password, sizeof(password)-1, NULL,
         envelope, sizeof(envelope), &length) != 0 || length != sizeof(envelope)) goto done;
   if (syrnck_sealed_key_open(envelope, length, password, sizeof(password)-1, &key) != 0) goto done;
@@ -37,6 +43,7 @@ int main(int argc, char **argv) {
   status = 0;
 done:
   if (status) fprintf(stderr, "%s\n", syrnck_last_error());
+  syrnck_system_vault_close(vault);
   if (result) syrnck_string_free(result);
   syrnck_sealed_key_close(key);
   syrnck_store_close(wire);

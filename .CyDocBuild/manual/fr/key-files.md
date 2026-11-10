@@ -5,7 +5,7 @@ description: Créer, vérifier et reprotéger les fichiers de clés ; ouvrir les
 section: Storage
 parent: storage
 order: 55
-sourceRevision: 5
+sourceRevision: 6
 ---
 
 ## Créer un fichier de clé {#create}
@@ -63,12 +63,15 @@ L'[API C++](doc:api-password-keys) détient les octets secrets dans `SecretKey`,
 
 ## Coffres de clés système {#system-vault}
 
-L'[API C++ native des coffres](doc:api-system-key-vault) conserve des clés de stockage, graines de signature et clés maîtresses scellées indépendantes dans le compte système courant. Elle est distincte des fournisseurs de fichiers protégés ci-dessus. La sélection par environnement CLI et les propriétaires C/Go ne choisissent pas encore ce fournisseur.
+L'[API C++ native des coffres](doc:api-system-key-vault) conserve des clés de stockage, de signature et des clés maîtresses scellées indépendantes dans le compte système courant. Les [propriétaires C](doc:api-c-abi#system-vaults) et le [binding Go](doc:go-binding#system-vaults) ouvrent ces entrées sans export en clair. Elle est distincte des fournisseurs de fichiers protégés ci-dessus. La sélection par environnement CLI et la configuration BEP autonome ne choisissent pas encore ce fournisseur.
 
 ```cpp
 #include <syrnck/key_vault.hpp>
 
 syrnck::SystemKeyVault vault;
+// Les hôtes sans interface choisissent explicitement la règle Trousseau du
+// processus macOS avant ses workers ; aucun effet sous Windows/Linux.
+syrnck::SystemKeyVault::disable_macos_interaction();
 auto reference = vault.generate(syrnck::VaultKeyPurpose::sealed);
 auto master = vault.open_secret(reference);
 // Conserver reference.encode() dans la configuration locale publique.
@@ -81,13 +84,13 @@ auto backup = vault.export_protected(reference, backup_password);
 | Plateforme | Fournisseur et prérequis |
 | --- | --- |
 | Windows | Identifiants génériques du Gestionnaire d'identification, compte courant sur cet hôte (`CRED_PERSIST_LOCAL_MACHINE`). Une session utilisable est nécessaire ; une session réseau seule ou cloisonnée peut refuser l'accès. Aucune itinérance d'entreprise demandée. |
-| macOS | Mots de passe génériques du Trousseau. La création utilise le trousseau par défaut ; un chemin absolu optionnel au constructeur choisit un trousseau existant sans modifier le défaut ni la liste de recherche. Les opérations demandent un échec plutôt qu'une fenêtre d'authentification. Le propriétaire du compte doit configurer déverrouillage et confiance. |
+| macOS | Mots de passe génériques des trousseaux fichiers. La création utilise le trousseau par défaut ; un chemin absolu optionnel choisit un trousseau existant sans modifier défauts/listes de recherche. L'hôte appelle explicitement `disable_macos_interaction()` avant les workers Trousseau ; cela désactive **toute** fenêtre Trousseau du processus et ne doit pas être annulé pendant l'usage des coffres. Les appels vérifient cette règle et refusent son absence, sans la modifier. Ce n'est pas une préférence du compte. Les trousseaux fichiers ignorent `LAContext` ; seuls les appels nécessaires de règle/sélection de fichier restent isolés en compatibilité. Déverrouillage et confiance relèvent du propriétaire du compte. |
 | Linux | libsecret et le bus de session Secret Service du compte. L'écriture exige une collection par défaut existante et déverrouillée. Les lectures ne demandent pas de déverrouillage ; plusieurs enregistrements correspondants sont refusés. Les appels partagent une échéance d'annulation de 30 secondes par opération du backend. Les règles du fournisseur peuvent exiger une invite à la création/suppression ; un hôte résident doit disposer d'une session autorisée déverrouillée. |
 
 Configurer `SYRNCK_SYSTEM_KEY_VAULT=AUTO` (défaut), `ON` (obligatoire) ou `OFF`. Sous Linux, les fichiers de développement `libsecret-1` présents activent le fournisseur ; un SDK installé construit ainsi exige aussi les fichiers de développement libsecret. `SystemKeyVault::provider()` indique `windows-credential-manager`, `macos-keychain`, `linux-secret-service` ou `unavailable` ; cela ne prouve pas que la session du compte est déverrouillée. Un fournisseur/une session absent, un coffre verrouillé, une référence absente ou un enregistrement invalide échoue explicitement, sans repli en clair ou vers un fichier. Le stockage du fournisseur, les copies système/bibliothèque et les permissions du compte relèvent de l'OS. Cela n'isole pas les clés dans du matériel et ne garantit pas qu'un autre processus du même compte ne lise pas les identifiants. L'API d'écriture Windows remplace une cible exacte existante ; Syrnck génère un nouvel identifiant imprévisible et vérifie son absence, sans proposer de contrat atomique de création exclusive à un nom choisi par l'appelant.
 
-Supprimer une entrée n'invalide pas les propriétaires natifs existants, ne renouvelle pas le chiffrement du dépôt, ne révoque pas les copies exportées et ne retire pas une autorisation serveur. Exporter/vérifier des sauvegardes protégées indépendantes avant un changement de compte. Les sauvegardes ordinaires du Store ne capturent pas le coffre OS. La qualification réelle optionnelle utilise `SYRNCK_TEST_SYSTEM_VAULT=ON` et `key_vault_system` ; Linux lance un bus/trousseau séparé, macOS crée et supprime un trousseau de test explicitement choisi, Windows crée/retire uniquement ses entrées synthétiques aléatoires.
+Supprimer une entrée n'invalide pas les propriétaires natifs existants, ne renouvelle pas le chiffrement du dépôt, ne révoque pas les copies exportées et ne retire pas une autorisation serveur. Exporter/vérifier des sauvegardes protégées indépendantes avant un changement de compte. Les sauvegardes du Store ne capturent pas le coffre OS. La qualification optionnelle utilise `SYRNCK_TEST_SYSTEM_VAULT=ON` et `key_vault_system` : C++, C partagé/statique et une sonde Go optionnelle créent, rouvrent, exportent et suppriment leurs entrées dans des processus distincts. Linux lance un bus/trousseau séparé ; macOS choisit un trousseau temporaire, vérifie règle absente/accès verrouillé puis déverrouille ; Windows touche seulement ses entrées synthétiques aléatoires. `SYRNCK_TEST_SYSTEM_VAULT_GO=ON` exige un compilateur Go local et vérifie les vrais propriétaires Go avec contrôle strict des pointeurs, révisions signées et reconstruction scellée. Ces tests retirent seulement leurs propres entrées.
 
 ## Travaux de sécurité restants {#limits}
 
-Les fournisseurs de fichiers protégés ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Le coffre système C++ séparé n'intègre pas encore la sélection des fournisseurs CLI/C/Go ni la rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).
+Les fournisseurs de fichiers protégés ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Les propriétaires des coffres système n'intègrent pas encore la configuration CLI/BEP autonome ni la rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).

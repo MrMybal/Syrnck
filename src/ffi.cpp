@@ -5,6 +5,7 @@
 #include <syrnck.h>
 #include <syrnck/core.hpp>
 #include <syrnck/keys.hpp>
+#include <syrnck/key_vault.hpp>
 #include <syrnck/signing_keys.hpp>
 #include <syrnck/sealed.hpp>
 #include <limits>
@@ -22,12 +23,16 @@ struct SyrnckSecretKey {
   explicit SyrnckSecretKey(syrnck::SecretKey value) : key(std::move(value)) {}
 };
 struct SyrnckSigningKey {
-  syrnck::SecretKey seed;
-  explicit SyrnckSigningKey(syrnck::SecretKey value) : seed(std::move(value)) {}
+  syrnck::SigningKey key;
+  explicit SyrnckSigningKey(syrnck::SigningKey value) : key(std::move(value)) {}
 };
 struct SyrnckSealedKey {
   syrnck::SecretKey key;
   explicit SyrnckSealedKey(syrnck::SecretKey value) : key(std::move(value)) {}
+};
+struct SyrnckSystemVault {
+  syrnck::SystemKeyVault vault;
+  explicit SyrnckSystemVault(std::optional<syrnck::fs::path> path) : vault(std::move(path)) {}
 };
 struct SyrnckCancellation { std::stop_source source; };
 struct SyrnckWorkspace {
@@ -76,6 +81,35 @@ template <class Operation> int boundary(const Operation &operation) noexcept {
 const char *checked(const char *s) {
   syrnck::require(s != nullptr, "null string");
   return s;
+}
+syrnck::SystemKeyVault &checked(SyrnckSystemVault *vault) {
+  syrnck::require(vault != nullptr, "null system key vault handle");
+  return vault->vault;
+}
+syrnck::VaultKeyPurpose vault_purpose(std::uint32_t value) {
+  switch (value) {
+  case SYRNCK_VAULT_STORAGE: return syrnck::VaultKeyPurpose::storage;
+  case SYRNCK_VAULT_SIGNING: return syrnck::VaultKeyPurpose::signing;
+  case SYRNCK_VAULT_SEALED: return syrnck::VaultKeyPurpose::sealed;
+  }
+  throw syrnck::Error("invalid system key vault purpose");
+}
+void vault_reference_buffer(char *out, std::size_t capacity, std::size_t *length) {
+  syrnck::require(length != nullptr, "null size output");
+  syrnck::require(out && capacity >= SYRNCK_VAULT_REFERENCE_CAPACITY, "insufficient output capacity");
+}
+// Allocate/validate everything before the OS write. Publishing the returned
+// public reference itself cannot fail due to a later string/JSON allocation.
+void vault_reference_output(const syrnck::VaultKeyReference &ref, char *out, std::size_t *length) noexcept {
+  constexpr std::string_view prefix = "syrnck-vault:1:";
+  const auto name = ref.purpose == syrnck::VaultKeyPurpose::storage ? std::string_view("storage") :
+      ref.purpose == syrnck::VaultKeyPurpose::signing ? std::string_view("signing") : std::string_view("sealed");
+  auto *cursor = std::copy(prefix.begin(), prefix.end(), out);
+  cursor = std::copy(name.begin(), name.end(), cursor);
+  *cursor++ = ':';
+  cursor = std::copy(ref.id.begin(), ref.id.end(), cursor);
+  *cursor = 0;
+  *length = static_cast<std::size_t>(cursor - out);
 }
 std::span<const std::uint8_t> key_password(const unsigned char *value, std::size_t length) {
   syrnck::require(value != nullptr && length >= 1 && length <= 4096, "key password must contain 1..4096 bytes");
@@ -381,8 +415,7 @@ int syrnck_signing_key_open(const unsigned char *envelope, std::size_t envelope_
   return boundary([&] {
     syrnck::require(out != nullptr, "null output handle");
     const auto input = key_envelope(envelope, envelope_length, true), pass = key_password(password, password_length);
-    *out = new SyrnckSigningKey(syrnck::detail::open_secret_for(input, pass,
-        syrnck::detail::SecretPurpose::signing_seed));
+    *out = new SyrnckSigningKey(syrnck::open_protected_signing_key(input, pass));
   });
 }
 int syrnck_signing_key_close(SyrnckSigningKey *key) { return boundary([&] { delete key; }); }
@@ -392,7 +425,7 @@ int syrnck_signing_key_public_json(const SyrnckSigningKey *key, char **out, std:
   return boundary([&] {
     syrnck::require(out != nullptr && length != nullptr, "null identity output");
     syrnck::require(key != nullptr, "null signing key handle");
-    const auto public_key = syrnck::SigningKey::from_seed(key->seed.view()).public_key();
+    const auto public_key = key->key.public_key();
     json_output(syrnck::Json{{"version", 1}, {"algorithm", "ed25519"}, {"public_key", syrnck::hex(public_key)},
         {"key_id", syrnck::signing_key_id(public_key)}}, out, length, {});
   });
@@ -407,6 +440,109 @@ int syrnck_secret_key_open(const unsigned char *envelope, std::size_t envelope_l
   });
 }
 int syrnck_secret_key_close(SyrnckSecretKey *key) { return boundary([&] { delete key; }); }
+int syrnck_system_vault_open(const char *keychain, SyrnckSystemVault **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    syrnck::require(out != nullptr, "null output handle");
+    std::optional<syrnck::fs::path> path;
+    if (keychain && *keychain) path = syrnck::path_from_utf8(keychain);
+    *out = new SyrnckSystemVault(std::move(path));
+  });
+}
+int syrnck_system_vault_close(SyrnckSystemVault *vault) { return boundary([&] { delete vault; }); }
+int syrnck_system_vault_disable_macos_interaction() {
+  return boundary([] { syrnck::SystemKeyVault::disable_macos_interaction(); });
+}
+int syrnck_system_vault_provider_json(const SyrnckSystemVault *vault, char **out, std::size_t *length) {
+  if (out) *out = nullptr;
+  if (length) *length = 0;
+  return boundary([&] {
+    syrnck::require(vault != nullptr, "null system key vault handle");
+    syrnck::require(out && length, "null output handle");
+    const auto name = syrnck::SystemKeyVault::provider();
+    json_output(syrnck::Json{{"version", 1}, {"provider", name}, {"available", name != "unavailable"}}, out, length, {});
+  });
+}
+int syrnck_system_vault_generate(SyrnckSystemVault *vault, std::uint32_t purpose,
+    char *out, std::size_t capacity, std::size_t *length) {
+  if (out && capacity) *out = 0;
+  if (length) *length = 0;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    const auto role = vault_purpose(purpose);
+    vault_reference_buffer(out, capacity, length);
+    const auto ref = owner.generate(role);
+    vault_reference_output(ref, out, length);
+  });
+}
+int syrnck_system_vault_import_protected(SyrnckSystemVault *vault, std::uint32_t purpose,
+    const unsigned char *envelope, std::size_t envelope_length,
+    const unsigned char *password, std::size_t password_length, char *out, std::size_t capacity, std::size_t *length) {
+  if (out && capacity) *out = 0;
+  if (length) *length = 0;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    const auto role = vault_purpose(purpose);
+    vault_reference_buffer(out, capacity, length);
+    syrnck::require(envelope && envelope_length == SYRNCK_PROTECTED_KEY_SIZE, "invalid protected key envelope");
+    const auto pass = key_password(password, password_length);
+    const auto ref = owner.import_protected({envelope, envelope_length}, pass, role);
+    vault_reference_output(ref, out, length);
+  });
+}
+int syrnck_system_vault_open_secret(SyrnckSystemVault *vault, const char *reference, SyrnckSecretKey **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    syrnck::require(out != nullptr, "null output handle");
+    const auto ref = syrnck::VaultKeyReference::parse(checked(reference));
+    syrnck::require(ref.purpose == syrnck::VaultKeyPurpose::storage, "system key vault reference is not a storage key");
+    *out = new SyrnckSecretKey(owner.open_secret(ref));
+  });
+}
+int syrnck_system_vault_open_signer(SyrnckSystemVault *vault, const char *reference, SyrnckSigningKey **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    syrnck::require(out != nullptr, "null output handle");
+    const auto ref = syrnck::VaultKeyReference::parse(checked(reference));
+    *out = new SyrnckSigningKey(owner.open_signer(ref));
+  });
+}
+int syrnck_system_vault_open_sealed(SyrnckSystemVault *vault, const char *reference, SyrnckSealedKey **out) {
+  if (out) *out = nullptr;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    syrnck::require(out != nullptr, "null output handle");
+    const auto ref = syrnck::VaultKeyReference::parse(checked(reference));
+    syrnck::require(ref.purpose == syrnck::VaultKeyPurpose::sealed, "system key vault reference is not a sealed key");
+    *out = new SyrnckSealedKey(owner.open_secret(ref));
+  });
+}
+int syrnck_system_vault_export_protected(SyrnckSystemVault *vault, const char *reference,
+    const unsigned char *password, std::size_t password_length, const SyrnckPasswordKdf *options,
+    unsigned char *out, std::size_t capacity, std::size_t *length) {
+  if (length) *length = 0;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    const auto ref = syrnck::VaultKeyReference::parse(checked(reference));
+    const auto pass = key_password(password, password_length);
+    const auto costs = key_costs(options);
+    if (!key_output(out, capacity, length)) return;
+    const auto envelope = owner.export_protected(ref, pass, costs);
+    std::memcpy(out, envelope.data(), envelope.size());
+    *length = envelope.size();
+  });
+}
+int syrnck_system_vault_erase(SyrnckSystemVault *vault, const char *reference, bool *removed) {
+  if (removed) *removed = false;
+  return boundary([&] {
+    auto &owner = checked(vault);
+    syrnck::require(removed != nullptr, "null output handle");
+    const auto ref = syrnck::VaultKeyReference::parse(checked(reference));
+    *removed = owner.erase(ref);
+  });
+}
 int syrnck_sealed_key_protect(const unsigned char *key, std::size_t key_length, const unsigned char *password,
                               std::size_t password_length, const SyrnckPasswordKdf *options,
                               unsigned char *out, std::size_t capacity, std::size_t *length) {
@@ -580,7 +716,7 @@ int syrnck_store_use_native_signer(SyrnckStore *p, const char *name, const char 
     syrnck::NativeIdentity identity{checked(name), checked(email), offset};
     identity.validate();
     std::optional<syrnck::SigningKey> signer;
-    if (key) signer.emplace(syrnck::SigningKey::from_seed(key->seed.view()));
+    if (key) signer.emplace(key->key.clone());
     store.use_native_identity(std::move(identity), std::move(signer), required);
   });
 }

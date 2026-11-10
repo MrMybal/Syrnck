@@ -137,3 +137,11 @@ files, gnome-keyring, dbus-run-session and gdbus; it launches a separate session
 bus and keyring. macOS selects a temporary keychain, and Windows needs a usable
 account logon session. The dedicated `System key vaults` workflow also qualifies
 relocated SDK consumers with the provider enabled and disabled on all three OSes.
+`SYRNCK_TEST_SYSTEM_VAULT_GO=ON` adds a Go test binary built with strict pointer
+checks and separate create/verify/erase processes; it requires Go locally.
+The real fixture covers C++, C shared/static and Go owners. macOS file-keychain
+hosts explicitly opt into process-wide noninteractive Keychain policy before
+Keychain workers; ordinary vault calls refuse missing policy without changing it.
+The fixture verifies this refusal and locked-keychain failure, then unlocks its
+own disposable keychain before verification/cleanup. No actual user keychain is
+locked or selected as the default.

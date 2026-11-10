@@ -52,7 +52,7 @@ func ChangeSigningKeyPassword(envelope, before, after []byte, options PasswordKd
 	return nativeChangeSigningKeyPassword(envelope, before, after, costs)
 }
 
-// SigningKey owns an authenticated Ed25519 seed in native memory without a raw
+// SigningKey owns an authenticated Ed25519 signing key in native memory without a raw
 // export. Do not copy it. Close explicitly; calls/Close are serialized. Reuse
 // with NativeIdentityOptions.Signer for short Store sessions without another KDF.
 // Each configured Store retains its own expanded key, independent of this owner.
