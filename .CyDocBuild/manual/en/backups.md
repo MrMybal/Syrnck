@@ -5,7 +5,7 @@ description: Verified offline backups, restore and missing-object repair guide.
 section: Storage
 order: 50
 parent: storage
-revision: 4
+revision: 5
 ---
 
 # Verified offline backups, restore and missing-object repair {#verified-offline-backups-restore-and-missing-object-repair}
@@ -124,6 +124,10 @@ Restore into a new Store when existing storage cannot be safely repaired.
 the current retained graph in a new verified Store, recovering missing/corrupt
 objects from an older backup while keeping intact newer source data. Neither
 input's existing objects, pack files or references are replaced.
+
+## Repair corrupted physical copies {#physical-repair}
+
+[In-place storage repair](doc:storage-repair) uses a bound preview to restore corrupt loose envelopes and rebuild affected packs, while preserving references and intact newer source data. `backup repair-storage-plan` audits every active physical copy; `backup repair-storage --expect-plan ID` applies. Missing-only repair and verified repair copies keep their existing contracts.
 
 ## Validation and limits {#validation-and-limits}
 

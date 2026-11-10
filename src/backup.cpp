@@ -189,6 +189,7 @@ Json copy(const Store &source, const fs::path &destination, std::optional<Key> k
   return report;
 }
 } // namespace
+void require_backup_quiescent(const Store &store, OperationOptions options) { quiescent(store, options); }
 Json create_backup(const Store &store, const fs::path &destination, std::optional<Key> key,
                    OperationOptions options) {
   return copy(store, destination, key, true, options);

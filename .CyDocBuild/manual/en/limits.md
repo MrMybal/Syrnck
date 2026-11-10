@@ -4,7 +4,7 @@ title: Current limits and planned work
 description: Current limits and planned work
 section: Syrnck
 order: 900
-revision: 35
+revision: 36
 ---
 
 ## Workspace and versioning {#workspace}
@@ -32,3 +32,5 @@ need resolution. The retained edit archive groups currently require manual
 retention management; automatic age/backup-based retirement remains unfinished.
 
 The separate [opaque BEP receiver](doc:syncthing#opaque-receiver) now retains encrypted metadata/blocks without a folder password and resumes complete block receipts. Its standalone role serves one configured peer; multi-peer CLI orchestration, incomplete-receipt retirement and private conflict resolution remain separate work.
+
+[Verified in-place repair](doc:storage-repair) now recovers missing/corrupt loose and packed payloads from a backup or healthy local alternate copy. It preserves retained roots and unaffected packs; automatic remote replica repair remains separate work.

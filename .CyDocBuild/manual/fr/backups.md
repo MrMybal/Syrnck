@@ -5,7 +5,7 @@ description: Guide : Sauvegardes, restauration et réparation.
 section: Stockage
 order: 50
 parent: storage
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 # Sauvegardes vérifiées et restauration {#verified-offline-backups-restore-and-missing-object-repair}
@@ -55,6 +55,10 @@ syrnck --store damaged-store backup repair snapshot-001 --apply
 syrnck --store damaged-store fsck
 ```
 
+
+## Réparer les copies physiques corrompues {#physical-repair}
+
+La [réparation du stockage sur place](doc:storage-repair) utilise un aperçu lié à l’état pour restaurer les enveloppes isolées corrompues et reconstruire les packs touchés, en gardant références et données récentes intactes. `backup repair-storage-plan` audite chaque copie physique active ; `backup repair-storage --expect-plan ID` applique. Réparation des seules absences et copies réparées vérifiées conservent leurs contrats.
 
 ## Limites {#validation-and-limits}
 

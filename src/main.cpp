@@ -532,6 +532,8 @@ Usage : syrnck [--lang en|fr] [--store CHEMIN] [--token JETON] [--ca PEM]
   backup repair STORE_SAUVEGARDE [--apply]   Prévisualiser/réparer les objets absents
   backup repair-copy-plan STORE_SAUVEGARDE  Vérifier les objets récupérables
   backup repair-copy STORE_SAUVEGARDE NOUVEAU_STORE  Reconstruire une copie vérifiée
+  backup repair-storage-plan STORE_SAUVEGARDE   Auditer toutes les copies physiques
+  backup repair-storage STORE_SAUVEGARDE --expect-plan ID  Réparer les objets corrompus
   backup checkout-retire-plan ID... --from SAUVEGARDE [--include-source-archives]
   backup checkout-retire ID... --from SAUVEGARDE --expect-plan PLAN [--include-source-archives]
   backup retire-plan ARCHIVE... --from SAUVEGARDE
@@ -781,6 +783,8 @@ Usage: syrnck [--lang en|fr] [--store PATH] [--token TOKEN] [--ca PEM] [--cache-
   backup repair BACKUP_STORE [--apply]   Preview/repair missing objects
   backup repair-copy-plan BACKUP_STORE  Inspect recoverable retained objects
   backup repair-copy BACKUP_STORE NEW_STORE  Rebuild a verified Store from both inputs
+  backup repair-storage-plan BACKUP_STORE   Audit every physical object copy
+  backup repair-storage BACKUP_STORE --expect-plan ID  Repair corrupt storage in place
   backup checkout-retire-plan ID... --from BACKUP [--include-source-archives]
   backup checkout-retire ID... --from BACKUP --expect-plan PLAN [--include-source-archives]
   backup retire-plan ARCHIVE... --from BACKUP
@@ -2595,6 +2599,12 @@ int run(Args args, Language language, std::unique_ptr<cli::OperationControl> &co
         print(
             create_repaired_copy(store, backup, path_from_utf8(args.values[1]), destination_key, operation));
       }
+    } else if (sub == "repair-storage-plan" || sub == "repair-storage") {
+      const auto expected = args.option("--expect-plan");
+      args.count(1);
+      require((sub == "repair-storage") == expected.has_value(), "storage repair apply requires --expect-plan; preview does not accept it");
+      Store backup(path_from_utf8(args.values[0]), secondary);
+      print(expected ? repair_storage(store, backup, *expected, operation) : plan_storage_repair(store, backup, operation));
     } else if (sub == "repair") {
       const auto apply = args.flag("--apply");
       args.count(1);

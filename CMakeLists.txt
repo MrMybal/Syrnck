@@ -806,6 +806,28 @@ if(SYRNCK_BUILD_TESTS)
     $<TARGET_FILE:syrnck_checkout_retention_crash_probe> $<TARGET_FILE:syrnck_checkout_retention_reader>)
   set_tests_properties(checkout_retention_crashes PROPERTIES TIMEOUT 120)
   add_executable(syrnck_repair_copy_tests tests/repair_copy_tests.cpp)
+  add_executable(syrnck_storage_repair_tests tests/storage_repair_tests.cpp)
+  target_include_directories(syrnck_storage_repair_tests PRIVATE src tests)
+  target_link_libraries(syrnck_storage_repair_tests PRIVATE syrnck_core)
+  add_test(NAME storage_repair COMMAND syrnck_storage_repair_tests)
+  set_tests_properties(storage_repair PROPERTIES TIMEOUT 120)
+  if(TARGET syrnck)
+    add_test(NAME storage_repair_cli COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage_repair.py $<TARGET_FILE:syrnck>)
+    set_tests_properties(storage_repair_cli PROPERTIES TIMEOUT 120)
+  endif()
+  add_executable(syrnck_storage_repair_crash_probe tests/storage_repair_crash_probe.cpp $<TARGET_OBJECTS:syrnck_crash_io>)
+  target_include_directories(syrnck_storage_repair_crash_probe PRIVATE src tests)
+  target_link_libraries(syrnck_storage_repair_crash_probe PRIVATE syrnck_core)
+  add_executable(syrnck_storage_repair_reader tests/storage_repair_crash_probe.cpp)
+  target_include_directories(syrnck_storage_repair_reader PRIVATE src tests)
+  target_link_libraries(syrnck_storage_repair_reader PRIVATE syrnck_core)
+  foreach(shard RANGE 0 3)
+    add_test(NAME storage_repair_crashes_${shard} COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage_repair_crashes.py
+      $<TARGET_FILE:syrnck_storage_repair_crash_probe> $<TARGET_FILE:syrnck_storage_repair_reader> --shard ${shard}/4)
+    set_tests_properties(storage_repair_crashes_${shard} PROPERTIES TIMEOUT 240 PROCESSORS 2)
+  endforeach()
   target_include_directories(syrnck_repair_copy_tests PRIVATE src tests)
   target_link_libraries(syrnck_repair_copy_tests PRIVATE syrnck_core)
   add_test(NAME repair_copy COMMAND syrnck_repair_copy_tests)
@@ -1082,7 +1104,8 @@ if(SYRNCK_BUILD_TESTS)
   add_test(NAME test_case_partitions COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_case_partitions.py
     --plan "${syrnck_case_plan}" --declarations "${CMAKE_CURRENT_BINARY_DIR}/CTestTestfile.cmake" --config "$<CONFIG>" ${syrnck_case_suites}
     --campaign checkout_edit_crashes 8 8 --campaign native_partial_stash_crashes 12 12
-    --campaign native_authorship_crashes 32 32 --campaign backup_crashes 6 6 ${syrnck_case_mode})
+    --campaign native_authorship_crashes 32 32 --campaign backup_crashes 6 6
+    --campaign storage_repair_crashes 4 6 ${syrnck_case_mode})
   set_tests_properties(test_case_partitions PROPERTIES TIMEOUT 30)
   add_executable(syrnck_cache_tests tests/cache_tests.cpp)
   target_link_libraries(syrnck_cache_tests PRIVATE syrnck_core)

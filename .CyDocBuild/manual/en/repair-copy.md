@@ -5,7 +5,7 @@ description: Rebuild a damaged Store in a verified new location guide.
 section: Storage
 order: 490
 parent: storage
-revision: 1
+revision: 2
 ---
 
 # Rebuild a damaged Store in a verified new location {#rebuild-a-damaged-store-in-a-verified-new-location}
@@ -110,3 +110,5 @@ Reports are limited to 16 MiB. Object identity sets and traversal metadata
 remain in memory; payloads are copied and verified one bounded CAS object at
 a time. Full preflight/copy/output verification deliberately reread retained
 data. This is a verified recovery path, without a production throughput claim.
+
+For repairs within an openable current Store, [storage repair](doc:storage-repair) can replace damaged envelopes and affected packs without creating a complete new copy.

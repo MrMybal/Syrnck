@@ -4,7 +4,7 @@ title: Limites actuelles et travail prévu
 description: Limites actuelles et travail prévu
 section: Syrnck
 order: 900
-sourceRevision: 35
+sourceRevision: 36
 ---
 
 ## Workspace et versionnage {#workspace}
@@ -32,3 +32,5 @@ ambiguës restent à résoudre. Les groupes d’archives d’édition demandent 
 une gestion manuelle ; leur retrait automatique selon âge/sauvegarde reste à finir.
 
 Le [récepteur BEP opaque](doc:syncthing#opaque-receiver) distinct conserve maintenant métadonnées/blocs chiffrés sans mot de passe de dossier et reprend les reçus de blocs terminés. Son rôle autonome sert un pair configuré ; orchestration CLI multipair, retrait des reçus incomplets et résolution des conflits privés restent distincts.
+
+La [réparation vérifiée sur place](doc:storage-repair) récupère maintenant les payloads absents/corrompus isolés ou empaquetés depuis une sauvegarde ou une autre copie locale saine. Elle conserve racines retenues et packs intacts ; la réparation automatique de répliques distantes reste un travail distinct.

@@ -10,6 +10,7 @@
 #include "native_materialization.hpp"
 #include "native_workspace_relocation.hpp"
 #include "native_authorship.hpp"
+#include <syrnck/backup.hpp>
 #include <algorithm>
 #include <blake3.h>
 #include <fstream>
@@ -1320,5 +1321,270 @@ Json Store::pack(PackOptions options, OperationOptions operation) const {
               {"loose_objects_removed", removed},
               {"obsolete_pack_files_removed", obsolete.first},
               {"obsolete_pack_bytes_removed", obsolete.second}};
+}
+
+namespace {
+using EnvelopeDecoder = std::function<Bytes(const ObjectKey &, std::span<const std::uint8_t>)>;
+struct StorageRepairPlan {
+  Refs references, donor_references;
+  Bytes config, donor_config;
+  Json settings, donor_settings;
+  std::vector<std::string> features, donor_features;
+  std::string backup_snapshot;
+  std::map<ObjectKey, Key> damaged_loose;
+  std::set<ObjectKey> damaged_packed, missing;
+  std::set<std::size_t> affected_packs;
+  Json report;
+};
+Key envelope_digest(std::span<const std::uint8_t> data) {
+  Key result{};
+  blake3_hasher h; blake3_hasher_init(&h);
+  blake3_hasher_update(&h, data.data(), data.size());
+  blake3_hasher_finalize(&h, result.data(), result.size());
+  return result;
+}
+fs::path repair_loose_path(const Store &store, const ObjectKey &key) {
+  auto directory = store.root() / "objects";
+  for (const auto &part : std::array<std::string, 3>{std::string{}, std::string(kind_name(key.kind)), key.id.substr(0, 2)}) {
+    if (!part.empty()) directory /= part;
+    std::error_code ec;
+    const auto status = fs::symlink_status(directory, ec);
+    if (status.type() == fs::file_type::not_found && (!ec || ec == std::errc::no_such_file_or_directory)) break;
+    require(!ec && fs::is_directory(status) && !native_link_like(directory, status),
+            "storage repair requires unlinked object directories");
+  }
+  return store.root() / "objects" / kind_name(key.kind) / key.id.substr(0, 2) / key.id;
+}
+void repair_pack_directory(const Store &source) {
+  const auto path = source.root() / "packs";
+  std::error_code ec;
+  const auto status = fs::symlink_status(path, ec);
+  if (status.type() == fs::file_type::not_found && (!ec || ec == std::errc::no_such_file_or_directory)) return;
+  require(!ec && fs::is_directory(status) && !native_link_like(path, status), "storage repair requires an unlinked pack directory");
+}
+Key repair_file_digest(const fs::path &path, std::stop_token stop) {
+  const auto status = fs::symlink_status(path);
+  require(fs::is_regular_file(status) && !native_link_like(path, status), "storage repair requires regular non-linked object files");
+  const auto size = fs::file_size(path);
+  std::ifstream input(path, std::ios::binary);
+  require(input.is_open(), "cannot read storage repair object");
+  std::array<char, 65536> buffer{};
+  blake3_hasher h; blake3_hasher_init(&h);
+  std::uint64_t total = 0;
+  while (input) {
+    throw_if_cancelled(stop);
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    const auto count = input.gcount();
+    if (count > 0) {
+      blake3_hasher_update(&h, buffer.data(), static_cast<std::size_t>(count));
+      total += static_cast<std::uint64_t>(count);
+    }
+  }
+  require(input.eof() && total == size && fs::file_size(path) == size, "storage repair object changed while reading");
+  Key result{}; blake3_hasher_finalize(&h, result.data(), result.size());
+  return result;
+}
+Bytes repair_payload(const Store &source, const Store &donor, PackStorage &packs,
+                     const EnvelopeDecoder &decode, const ObjectKey &key, std::stop_token stop,
+                     std::set<ObjectKey> *missing = nullptr) {
+  throw_if_cancelled(stop);
+  (void)repair_loose_path(source, key);
+  try { return source.get(key); }
+  catch (const MissingObject &) { if (missing) missing->insert(key); }
+  catch (const Error &) {}
+  // A corrupt loose copy must not hide a healthy packed copy of newer data
+  // that an older backup never contained.
+  if (packs.contains(key)) {
+    try { return decode(key, packs.read(key)); }
+    catch (const Error &) {}
+  }
+  return donor.get(key);
+}
+void storage_repair_unchanged(const Store &source, const Store &donor, const StorageRepairPlan &plan,
+                              OperationOptions options) {
+  require_backup_quiescent(source, options);
+  require_backup_quiescent(donor, options);
+  repair_pack_directory(source);
+  require(source.refs() == plan.references && read_bytes(source.root() / "config.json") == plan.config &&
+              source.settings().json() == plan.settings && source.required_features() == plan.features,
+          "storage repair source changed; refresh the plan");
+  require(donor.refs() == plan.donor_references && read_bytes(donor.root() / "config.json") == plan.donor_config &&
+              donor.settings().json() == plan.donor_settings && donor.required_features() == plan.donor_features &&
+              hash(read_bytes(donor.root() / "backup.json")) == plan.backup_snapshot,
+          "storage repair backup changed; refresh the plan");
+}
+StorageRepairPlan prepare_storage_repair(const Store &source, const Store &donor, PackStorage &packs,
+                                        const EnvelopeDecoder &decode, OperationOptions options) {
+  throw_if_cancelled(options.stop);
+  require(source.root() != donor.root(), "storage repair requires distinct stores");
+  require_backup_quiescent(source, options);
+  require(fs::symlink_status(source.root() / "backup.json").type() == fs::file_type::not_found,
+          "storage repair cannot modify an immutable backup");
+  StorageRepairPlan plan;
+  plan.references = source.refs(); plan.config = read_bytes(source.root() / "config.json");
+  plan.settings = source.settings().json(); plan.features = source.required_features();
+  plan.donor_references = donor.refs(); plan.donor_config = read_bytes(donor.root() / "config.json");
+  plan.donor_settings = donor.settings().json(); plan.donor_features = donor.required_features();
+  plan.backup_snapshot = hash(read_bytes(donor.root() / "backup.json"));
+  const auto verified_backup = verify_backup(donor, options);
+  require(verified_backup.at("snapshot").get<std::string>() == plan.backup_snapshot,
+          "storage repair backup changed; refresh the plan");
+  ObjectMarks verified(packs);
+  std::uint64_t checked_bytes = 0, physical_copies = 0;
+  auto read = [&](const ObjectKey &key) {
+    auto data = repair_payload(source, donor, packs, decode, key, options.stop, &plan.missing);
+    const std::string_view encoded(reinterpret_cast<const char *>(data.data()), data.size());
+    require(key.kind != Kind::revision || !encoded.starts_with("{\"version\":2,") ||
+                std::binary_search(plan.features.begin(), plan.features.end(), "authored-revisions-v1"),
+            "storage repair cannot add a required reader feature");
+    require(data.size() <= UINT64_MAX - checked_bytes, "storage repair byte count overflow");
+    checked_bytes += data.size();
+    report_progress(options, {ProgressPhase::verifying, key.id, checked_bytes});
+    return data;
+  };
+  auto check = [&](const ObjectKey &key) {
+    (void)walk_objects({key}, true, [&](const ObjectKey &item) { return verified.insert(item); }, read, options.stop);
+  };
+  for (const auto &[name, key] : plan.references) { (void)name; check(key); }
+  blake3_hasher physical; blake3_hasher_init(&physical);
+  auto digest_copy = [&](const IndexKey &key, const Key &digest) {
+    blake3_hasher_update(&physical, key.value.data(), key.value.size());
+    blake3_hasher_update(&physical, digest.data(), digest.size());
+    ++physical_copies;
+  };
+  {
+    auto session = packs.read_session();
+    for (std::size_t segment = 0; segment < packs.pack_count(); ++segment)
+      packs.visit(segment, [&](const ObjectKey &key, PackStorage::Position) {
+        throw_if_cancelled(options.stop);
+        const auto envelope = packs.read(key);
+        digest_copy(IndexKey::from(key), envelope_digest(envelope));
+        try { (void)decode(key, envelope); }
+        catch (const Error &) { plan.damaged_packed.insert(key); plan.affected_packs.insert(segment); (void)read(key); }
+        check(key);
+      });
+  }
+  // Only loose stamps need sorting. Pack indexes already supply canonical
+  // ordered visits; logical traversal uses one bitmap bit per packed object.
+  std::vector<std::pair<IndexKey, Key>> loose_stamps;
+  visit_loose_objects(source.root(), [&](const ObjectKey &key) {
+    throw_if_cancelled(options.stop);
+    const auto path = repair_loose_path(source, key);
+    const auto digest = repair_file_digest(path, options.stop);
+    loose_stamps.emplace_back(IndexKey::from(key), digest);
+    try { (void)decode(key, read_bytes(path)); }
+    catch (const Error &) { plan.damaged_loose.emplace(key, digest); (void)read(key); }
+    check(key);
+  }, {}, options.stop);
+  std::size_t comparisons = 0;
+  std::sort(loose_stamps.begin(), loose_stamps.end(), [&](const auto &a, const auto &b) {
+    if ((++comparisons & 4095) == 0) throw_if_cancelled(options.stop);
+    return a.first < b.first;
+  });
+  for (const auto &[key, digest] : loose_stamps) digest_copy(key, digest);
+  Key digest{}; blake3_hasher_finalize(&physical, digest.data(), digest.size());
+  auto list = [](const auto &objects) {
+    Json values = Json::array();
+    for (const auto &key : objects) { if (values.size() == 1000) break; values.push_back(key_json(key)); }
+    return values;
+  };
+  std::set<ObjectKey> damaged = plan.damaged_packed;
+  for (const auto &[key, value] : plan.damaged_loose) { (void)value; damaged.insert(key); }
+  plan.report = Json{{"version", 1}, {"operation", "repair-storage"}, {"ready", true}, {"applied", false},
+      {"source", utf8(source.root())}, {"references_hash", hash(bytes(encode_refs(plan.references).dump()))},
+      {"config_hash", hash(plan.config)}, {"settings_hash", hash(bytes(plan.settings.dump()))},
+      {"backup_snapshot", plan.backup_snapshot}, {"storage_hash", hex(digest)}, {"objects", verified.size()},
+      {"physical_copies", physical_copies}, {"missing_count", plan.missing.size()}, {"corrupt_count", damaged.size()},
+      {"corrupt_loose_copies", plan.damaged_loose.size()}, {"corrupt_packed_copies", plan.damaged_packed.size()},
+      {"packs_to_rewrite", plan.affected_packs.size()}, {"missing", list(plan.missing)}, {"corrupt", list(damaged)},
+      {"lists_truncated", plan.missing.size() > 1000 || damaged.size() > 1000}};
+  plan.report["plan"] = hash(bytes(plan.report.dump()));
+  storage_repair_unchanged(source, donor, plan, options);
+  return plan;
+}
+} // namespace
+
+Json plan_storage_repair(const Store &source, const Store &backup, OperationOptions options) {
+  CacheBypass bypass(source.impl_->bypass_cache);
+  source.impl_->load_config();
+  return prepare_storage_repair(source, backup, source.impl_->packs,
+      [&](const ObjectKey &key, std::span<const std::uint8_t> envelope) { return source.decode_envelope(key, envelope); }, options).report;
+}
+
+Json repair_storage(const Store &source, const Store &backup, std::string_view expected_plan,
+                    OperationOptions options) {
+  validate_id(expected_plan);
+  CacheBypass bypass(source.impl_->bypass_cache);
+  source.impl_->load_config();
+  const EnvelopeDecoder decode = [&](const ObjectKey &key, std::span<const std::uint8_t> envelope) {
+    return source.decode_envelope(key, envelope);
+  };
+  const auto plan = prepare_storage_repair(source, backup, source.impl_->packs, decode, options);
+  require(plan.report.at("plan").get<std::string>() == expected_plan, "storage repair plan changed; refresh the plan");
+  auto read = [&](const ObjectKey &key) { return repair_payload(source, backup, source.impl_->packs, decode, key, options.stop); };
+  auto before_write = [&](const ObjectKey &key) {
+    report_progress(options, {ProgressPhase::transferring, key.id});
+    storage_repair_unchanged(source, backup, plan, options);
+    (void)repair_loose_path(source, key);
+  };
+  std::size_t imported = 0, replaced = 0;
+  for (const auto &key : plan.missing) {
+    before_write(key);
+    if (source.import(key, read(key))) ++imported;
+    SYRNCK_IO_CHECKPOINT("repair_storage.missing_imported", source.object_path(key));
+  }
+  for (const auto &[key, digest] : plan.damaged_loose) {
+    const auto data = read(key);
+    const auto envelope = encode_object(key, data, source.impl_->key);
+    before_write(key);
+    require(repair_file_digest(source.object_path(key), options.stop) == digest,
+            "storage repair object changed; refresh the plan");
+    atomic_write(source.object_path(key), envelope, true, options.stop);
+    source.impl_->cache.erase(key); ++replaced;
+    SYRNCK_IO_CHECKPOINT("repair_storage.loose_replaced", source.object_path(key));
+  }
+  auto catalog = source.impl_->packs.catalog();
+  std::vector<fs::path> obsolete;
+  for (const auto segment : plan.affected_packs) {
+    auto next = [&] {
+      auto session = source.impl_->packs.read_session();
+      return PackStorage::build_stream(source.root(), source.impl_->packs.entry_count(segment),
+          [&](const PackStorage::KeyVisitor &emit) {
+            source.impl_->packs.visit(segment, [&](const ObjectKey &key, PackStorage::Position) { emit(key); });
+          },
+          [&](const ObjectKey &key) {
+            report_progress(options, {ProgressPhase::packing, key.id});
+            if (plan.damaged_packed.contains(key)) return encode_object(key, read(key), source.impl_->key);
+            auto envelope = source.impl_->packs.read(key); (void)decode(key, envelope); return envelope;
+          }, INT64_MAX, source.impl_->index_cache_budget, options.stop);
+    }();
+    {
+      auto session = next.read_session();
+      next.visit(0, [&](const ObjectKey &key, PackStorage::Position) { throw_if_cancelled(options.stop); (void)decode(key, next.read(key)); });
+    }
+    const auto name = catalog[segment].at("name").get<std::string>();
+    for (const auto suffix : {".syp", ".syi"}) obsolete.push_back(source.root() / "packs" / ("pack-" + name + suffix));
+    catalog[segment] = next.metadata();
+  }
+  if (!plan.affected_packs.empty()) {
+    PackStorage next(source.root(), source.impl_->index_cache_budget); next.load(catalog);
+    report_progress(options, {ProgressPhase::publishing, "repair-storage"});
+    storage_repair_unchanged(source, backup, plan, options);
+    source.impl_->publish_pack(std::move(next), options.stop);
+    SYRNCK_IO_CHECKPOINT("repair_storage.catalog_published", source.root() / "config.json");
+    // Publication is complete. Finish owned-file retirement without callbacks
+    // or cancellation; unrelated inactive packs and unknown bytes are preserved.
+    for (const auto &path : obsolete) {
+      require(fs::remove(path), "cannot retire repaired pack");
+      SYRNCK_IO_CHECKPOINT("repair_storage.old_pack_removed", path);
+    }
+    sync_directory(source.root() / "packs");
+  }
+  const auto objects = source.fsck({options.stop});
+  require(objects == plan.report.at("objects").get<std::size_t>(), "storage repair inventory changed");
+  auto report = plan.report;
+  report["applied"] = true; report["imported_objects"] = imported; report["replaced_loose_copies"] = replaced;
+  report["rewritten_packs"] = plan.affected_packs.size();
+  return report;
 }
 } // namespace syrnck

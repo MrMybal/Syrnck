@@ -4,6 +4,7 @@
 #include <syrnck/key_vault.hpp>
 #include <syrnck/signing_keys.hpp>
 #include <syrnck/sealed.hpp>
+#include <syrnck/backup.hpp>
 #include <algorithm>
 #include <iostream>
 
@@ -42,6 +43,14 @@ int main(int argc, char **argv) {
       syrnck::open_sealed_snapshot(wire, destination, opened_master, sealed["snapshot"].get<std::string>(),
                                     "sdk", "sealed/checkpoints/sdk");
       if (destination.get(retained) != bytes) return 9;
+      store.set_ref("sdk/object", retained);
+      const auto backup_path = syrnck::path_from_utf8(std::string(argv[1]) + "-backup");
+      syrnck::create_backup(store, backup_path, key);
+      syrnck::Store backup(backup_path, key);
+      const auto plan = syrnck::plan_storage_repair(store, backup);
+      if (plan["corrupt_count"] != 0 || plan["missing_count"] != 0) return 11;
+      const auto repaired = syrnck::repair_storage(store, backup, plan["plan"].get<std::string>());
+      if (!repaired["applied"].get<bool>() || store.get(retained) != bytes) return 12;
     }
     syrnck::Store reopened(syrnck::path_from_utf8(argv[1]), key);
     syrnck::wipe_secret(key);

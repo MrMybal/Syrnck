@@ -19,4 +19,11 @@ Json repair_from_backup(const Store &destination, const Store &backup, bool appl
 Json plan_repaired_copy(const Store &source, const Store &backup, OperationOptions = {});
 Json create_repaired_copy(const Store &source, const Store &backup, const fs::path &destination,
                           std::optional<Key> destination_key = {}, OperationOptions = {});
+// Audit all physical copies and the complete logical graph. Apply requires the
+// exact plan; only damaged loose envelopes and affected packs are replaced.
+// Per-object/config publication is atomic, not the whole repair. After an
+// interruption request a fresh plan; roots/settings and healthy packs survive.
+Json plan_storage_repair(const Store &, const Store &backup, OperationOptions = {});
+Json repair_storage(const Store &, const Store &backup, std::string_view expected_plan,
+                    OperationOptions = {});
 } // namespace syrnck

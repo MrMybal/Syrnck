@@ -5,7 +5,7 @@ description: Guide : Reconstruction d’un dépôt endommagé.
 section: Stockage
 order: 490
 parent: storage
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 # Reconstruire un Store endommagé ailleurs {#rebuild-a-damaged-store-in-a-verified-new-location}
@@ -55,3 +55,5 @@ auto plan = syrnck::plan_repaired_copy(source, backup, operation);
 auto result = syrnck::create_repaired_copy(source, backup, new_directory,
                                            destination_key, operation);
 ```
+
+Pour réparer un Store courant encore ouvrable, la [réparation du stockage](doc:storage-repair) remplace les enveloppes endommagées et les packs touchés sans créer une copie complète.

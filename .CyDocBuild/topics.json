@@ -1303,5 +1303,7 @@
   "vault import": "system-vaults#recovery",
   "vault export": "system-vaults#recovery",
   "vault inspect": "system-vaults#references",
-  "vault erase": "system-vaults#recovery"
+  "vault erase": "system-vaults#recovery",
+  "backup repair-storage-plan": "storage-repair#commands",
+  "backup repair-storage": "storage-repair#commands"
 }

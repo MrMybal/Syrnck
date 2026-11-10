@@ -30,6 +30,7 @@ void atomic_directory(const fs::path &, const std::function<void(const fs::path 
 void make_executable(const fs::path &);
 void move_exclusive(const fs::path &source, const fs::path &destination);
 void require_no_native_checkout(const Store &);
+void require_backup_quiescent(const Store &, OperationOptions);
 void sync_directory(const fs::path &);
 // Only call for unknown inventory names, never canonical metadata records.
 bool transient_metadata_disappeared(const fs::path &, std::stop_token = {});

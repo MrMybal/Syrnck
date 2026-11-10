@@ -742,6 +742,8 @@ public:
 
 private:
   struct Impl;
+  friend Json plan_storage_repair(const Store &, const Store &, OperationOptions);
+  friend Json repair_storage(const Store &, const Store &, std::string_view, OperationOptions);
   Json register_native_workspace_impl(const fs::path &, std::string_view, const fs::path &,
                                       const std::optional<std::vector<std::string>> &, OperationOptions) const;
   std::unique_ptr<Impl> impl_;

@@ -35,6 +35,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 - Authenticated Syncthing BEP device connections and reproducible live upstream daemon qualification, including differential transfers into encrypted engine storage.
 - Explicit deterministic conflict copies for native merges and bidirectional agents, preserving asset contents and signed recoverable candidates.
 - C++20 block storage shared by Git assets and native revisions: complete manifests, reusable chunks, verified ranges, packs, backups and explicit retention.
+- Bound in-place storage repair audits both physical copies, imports missing objects, replaces corrupt loose envelopes and rebuilds only affected packs from verified local/backup data. Roots, archived history and healthy packs remain intact; interrupted repairs resume through a fresh plan. Automatic remote replica repair remains separate work.
 - Native history and recoverable workspace workflows, plus an authenticated block server and resumable one-shot transfers.
 - Detached native HEAD with a private index, recoverable switching and retained detached histories.
 - Native authors/committers and optional Ed25519 signatures, with original authors preserved during rewrites and strict verification on object reads/imports.
