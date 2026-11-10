@@ -125,3 +125,15 @@ python scripts/test_go.py --library build/Release/syrnck_ffi.dll --module syncth
 Use Unix library locations on Unix. Prepare the adapter’s pinned dependencies with
 its module cache first. `SYRNCK_TEST_GO=OFF` disables core Go CTest checks;
 `SYRNCK_TEST_SYNCTHING=ON` enables the optional adapter suite.
+
+## System vault qualification
+
+`SYRNCK_SYSTEM_KEY_VAULT=AUTO|ON|OFF` selects native provider build support.
+`SYRNCK_TEST_SYSTEM_VAULT=ON` explicitly enables the real-provider CTest fixture;
+run `python scripts/build.py test -R "^key_vault_(references|system)$"` after
+building. This fixture creates disposable OS credentials, uses separate native
+processes and removes its selected entries. Linux needs libsecret development
+files, gnome-keyring, dbus-run-session and gdbus; it launches a separate session
+bus and keyring. macOS selects a temporary keychain, and Windows needs a usable
+account logon session. The dedicated `System key vaults` workflow also qualifies
+relocated SDK consumers with the provider enabled and disabled on all three OSes.

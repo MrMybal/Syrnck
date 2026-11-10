@@ -31,7 +31,7 @@ for (const locale of ['en', 'fr']) for (const name of await readdir(join(generat
 const hash = text => createHash('sha256').update(text).digest('hex');
 const reviewed = JSON.parse(await readFile(join(base, 'api-translations.json'), 'utf8'));
 const headers = ['include/syrnck.h', 'include/syrnck/core.hpp', 'include/syrnck/backup.hpp',
-                 'include/syrnck/workspace.hpp', 'include/syrnck/retention.hpp', 'include/syrnck/keys.hpp', 'include/syrnck/signing_keys.hpp', 'include/syrnck/sealed.hpp'];
+                 'include/syrnck/workspace.hpp', 'include/syrnck/retention.hpp', 'include/syrnck/keys.hpp', 'include/syrnck/signing_keys.hpp', 'include/syrnck/sealed.hpp', 'include/syrnck/key_vault.hpp'];
 const annotations = [];
 for (const header of headers) annotations.push(...extractComments(await readFile(join(root, header), 'utf8'), header));
 for (const page of annotations) {

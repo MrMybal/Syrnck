@@ -51,3 +51,9 @@ CyDoc, marked and Prism notices accompany the reader, together with the esbuild
 build-tool license. No optional media readers or Three.js are distributed.
 
 Monocypher 4.0.3 includes the upstream EdDSA/Ed25519 signing timing fix. The optional module supplies standard Ed25519 with SHA-512; the base EdDSA API uses BLAKE2b. Vendored files are unmodified; the release archive SHA-512 and per-file SHA-256 checksums are recorded in `third_party/monocypher/UPSTREAM.json`. The archive was verified against the checksum published by the official download site before copying these files.
+
+Optional Linux system key vault support links to the platform's libsecret-1
+(LGPL-2.1-or-later) and GLib/GIO system libraries. These remain external system
+dependencies; their implementation is not vendored or relicensed here. Windows
+Credential Manager and macOS Security/CoreFoundation are platform APIs. Vault
+support can be required or disabled with `SYRNCK_SYSTEM_KEY_VAULT=ON|OFF`.

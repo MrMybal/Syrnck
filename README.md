@@ -60,6 +60,7 @@ For an existing asset, `syrnck put Content/Map.uasset` retains its manifest and 
 - **Team transfers:** authenticated block server, configured identities/permissions, expiring asset locks, missing-object transfers, resumable sessions and fenced reference publication.
 - **Sealed repositories:** explicit C++/C/Go end-to-end snapshots and resumable C++/CLI opaque transfers, independent protected keys and retained-client rollback checks. [Scope and limits](Documentation/Documentation.html#/en/sealed-repositories). The native resident agent supports sealed transport; Syncthing uses its separate encrypted-device protocol.
 - **Retention and recovery:** archived history, verified backups/restores, repair copies and explicit retirement before collection.
+- **System key vault API:** purpose-separated native C++ owners backed by Windows Credential Manager, macOS Keychain or Linux Secret Service, with protected backup export. [Provider requirements](Documentation/Documentation.html#/en/key-files/system-vault); CLI/C/Go selection remains unfinished.
 - **BEP executable:** optional `syrnck-bep` captures offline changes, connects explicitly paired devices and resumes native working folders after restart. [Build and configure](Documentation/Documentation.html#/en/syncthing/standalone-service).
 - **Local help:** a complete English/French CyDoc manual with search, stable section links and contextual CLI help.
 

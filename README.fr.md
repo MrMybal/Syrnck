@@ -60,6 +60,7 @@ Pour un asset existant, `syrnck put Content/Map.uasset` conserve son manifeste e
 - **Transferts en équipe** : serveur de blocs authentifié, identités/permissions configurées, verrous temporaires d’assets, transfert des objets absents, sessions reprenables et publication de références protégée par jetons de génération.
 - **Dépôts chiffrés** : snapshots de bout en bout C++/C/Go explicites, transferts opaques C++/CLI reprenables, clés protégées indépendantes et contrôles locaux des retours en arrière. [Périmètre et limites](Documentation/Documentation.html#/fr/sealed-repositories). Transport chiffré disponible dans l’agent natif résident ; Syncthing utilise son protocole distinct pour appareils chiffrés.
 - **Rétention et récupération** : historique archivé, sauvegardes/restaurations vérifiées, copies réparées et retrait explicite avant collecte.
+- **API des coffres système** : propriétaires C++ natifs distincts par usage, adossés au Gestionnaire d’identification Windows, au Trousseau macOS ou à Secret Service Linux, avec export de sauvegarde protégé. [Prérequis](Documentation/Documentation.html#/fr/key-files/system-vault) ; sélection CLI/C/Go encore à terminer.
 - **Exécutable BEP** : `syrnck-bep` optionnel capture hors ligne, connecte les appareils associés et reprend les workspaces après redémarrage. [Construction et configuration](Documentation/Documentation.html#/fr/syncthing/standalone-service).
 - **Aide locale** : manuel CyDoc complet anglais/français, recherche, liens de section stables et aide contextuelle du CLI.
 

@@ -13,5 +13,8 @@
   },
   "sealed-repositories": {
     "englishSha256": "624d31c45637d6537c2f098efb642d74522272272b476c7f96084763a2032039"
+  },
+  "system-key-vault": {
+    "englishSha256": "f9f93b73512bf381e4d32381ef4e574a6038e30fdca1f3aa6dfc29ec672b6ce0"
   }
 }

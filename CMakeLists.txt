@@ -42,6 +42,7 @@ target_sources(syrnck_core PRIVATE src/native_workspace_archive.cpp src/native_w
 target_sources(syrnck_core PRIVATE src/native_directory_identity.cpp src/native_workspace_relocation.cpp)
 target_sources(syrnck_core PRIVATE src/signing.cpp)
 target_sources(syrnck_core PRIVATE src/keys.cpp src/signing_keys.cpp)
+include(cmake/key_vault.cmake)
 target_sources(syrnck_core PRIVATE src/sealed_crypto.cpp src/sealed_index.cpp src/sealed_snapshot.cpp src/sealed_keys.cpp)
 target_sources(syrnck_core PRIVATE src/native_renames.cpp)
 target_sources(syrnck_core PRIVATE src/native_rename_merge.cpp)
@@ -151,6 +152,20 @@ endif()
 if(SYRNCK_BUILD_TESTS)
   enable_testing()
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_executable(syrnck_key_vault_tests tests/key_vault_tests.cpp)
+  target_include_directories(syrnck_key_vault_tests PRIVATE src tests)
+  target_link_libraries(syrnck_key_vault_tests PRIVATE syrnck_core)
+  add_test(NAME key_vault_references COMMAND syrnck_key_vault_tests)
+  set_tests_properties(key_vault_references PROPERTIES TIMEOUT 30)
+  option(SYRNCK_TEST_SYSTEM_VAULT "Exercise real system vaults using disposable test credentials" OFF)
+  if(SYRNCK_TEST_SYSTEM_VAULT)
+    if(SYRNCK_VAULT_BACKEND STREQUAL "unavailable")
+      message(FATAL_ERROR "SYRNCK_TEST_SYSTEM_VAULT requires a system vault provider")
+    endif()
+    add_test(NAME key_vault_system COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/key_vault_system.py" "$<TARGET_FILE:syrnck_key_vault_tests>")
+    set_tests_properties(key_vault_system PROPERTIES TIMEOUT 120 RESOURCE_LOCK system_key_vault)
+  endif()
   add_test(NAME sdk_distribution COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/sdk_distribution.py"
     --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"

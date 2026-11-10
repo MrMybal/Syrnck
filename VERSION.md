@@ -17,6 +17,7 @@ Legacy objects v1, optional authored revisions v2, physical store formats v1/v2/
 - Bounded edited-rename detection across native history/blame, merge/replay/rebase/index and signed resident synchronization, with explicit structural conflicts and frozen checkout recovery.
 - Relocatable native CMake SDK with exported C++/C targets, bundled static dependencies and independent installed-consumer qualification.
 - Password-protected storage keys and separate signing seeds: bounded Argon2id envelopes, exclusive CLI key files and password changes, reusable C/Go native owners and resident/standalone BEP providers.
+- Native C++ system vault API for independent storage/signing/sealed keys, with protected backup export. Real Windows Release/Debug qualification; dedicated macOS/Linux provider qualification and CLI/C/Go provider selection remain pending.
 - C/Go handle-local native authors/signers and verified fresh revision preparation; required signatures block unsigned fallback while retained signed candidates recover without a private key.
 - Optional persistent BEP staging resumes verified ranges after connection/process loss, with an independent OS lease and completed-staging cleanup after catalog retention; plaintext staging requires explicit opt-in.
 - Optional standalone `syrnck-bep` with strict local configuration, EN/FR help, explicit device pinning, offline capture, process-restart qualification and packaged runtime source/license notices.
@@ -58,7 +59,7 @@ See [the complete current limits](Documentation/Documentation.html#/en/limits) a
 
 ## Platforms
 
-The current development build is Windows x64. CMake/CI configurations exist for Windows, Linux and macOS, with a separate Unix sanitizer configuration; those configurations do not establish that a released binary is available or validated on each target. Linux/macOS execution and other architectures still need target validation.
+The local development build is Windows x64. Linux CI for [`ccc06a4`](https://github.com/MrMybal/Syrnck/actions/runs/42800607349) passed all 456 tests and distribution installation. The Windows/macOS/sanitizer jobs of that run were still running when the system-vault milestone was prepared. This evidence predates the new vault providers; their dedicated CI checks actual providers and provider-free SDKs separately. CMake configurations and individual successful jobs do not establish a published or fully qualified release. Other architectures, including ARM64, still require target validation.
 
 The core Go binding has Windows DLL and Unix cgo backends. The optional Syncthing module has separate requirements. Neither backend declaration establishes ARM64 validation.
 

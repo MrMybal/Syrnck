@@ -1,6 +1,7 @@
 #include <syrnck/core.hpp>
 #include <syrnck/git.hpp>
 #include <syrnck/keys.hpp>
+#include <syrnck/key_vault.hpp>
 #include <syrnck/signing_keys.hpp>
 #include <syrnck/sealed.hpp>
 #include <algorithm>
@@ -9,6 +10,10 @@
 int main(int argc, char **argv) {
   try {
     if (argc != 2) return 1;
+    const auto vault_reference = syrnck::VaultKeyReference::parse("syrnck-vault:1:storage:" + std::string(64, 'a'));
+    if (vault_reference.purpose != syrnck::VaultKeyPurpose::storage ||
+        vault_reference.encode() != "syrnck-vault:1:storage:" + std::string(64, 'a') ||
+        syrnck::SystemKeyVault::provider().empty()) return 10;
     auto secret = syrnck::SecretKey::generate();
     syrnck::Key key{};
     std::copy(secret.view().begin(), secret.view().end(), key.begin());

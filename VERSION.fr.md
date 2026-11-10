@@ -17,6 +17,7 @@ Objets anciens v1, révisions facultatives avec auteurs v2, formats physiques v1
 - Renommages modifiés bornés pour historique/blame, merge/rejeu/rebase/index et synchronisation résidente signée ; conflits structurels explicites et reprise de checkout figé.
 - SDK CMake natif déplaçable : cibles C++/C exportées, dépendances statiques distribuées et qualification de consommateurs installés indépendants.
 - Clés de stockage et graines de signature séparées protégées par mot de passe : enveloppes Argon2id bornées, fichiers CLI exclusifs et changement de mot de passe, propriétaires natifs C/Go réutilisables et fournisseurs résidents/BEP autonomes.
+- API C++ native des coffres système pour clés de stockage/signature/scellées indépendantes, avec export de sauvegarde protégé. Qualification réelle Windows Release/Debug ; qualification dédiée des fournisseurs macOS/Linux et sélection CLI/C/Go encore en attente.
 - Auteurs/signataires natifs locaux aux handles C/Go et préparation vérifiée des révisions neuves ; signatures exigées sans repli non signé, reprise des candidats signés retenus sans clé privée.
 - Staging BEP persistant facultatif : reprise des plages vérifiées après déconnexion/arrêt de processus, verrou OS distinct et retrait après rétention du catalogue ; le staging en clair demande une activation explicite.
 - Exécutable optionnel `syrnck-bep` : configuration locale stricte, aide anglais/français, appareils épinglés, capture hors ligne, tests de redémarrage et sources/notices des dépendances distribuées.
@@ -58,7 +59,7 @@ Voir les [limites complètes](Documentation/Documentation.html#/fr/limits) et le
 
 ## Plateformes
 
-Le build de développement actuel est Windows x64. Des configurations CMake/CI existent pour Windows, Linux et macOS, avec une configuration sanitizer Unix séparée ; elles ne prouvent ni disponibilité d’un binaire publié ni validation de chaque cible. L’exécution Linux/macOS et les autres architectures demandent encore une validation sur cible.
+Le build local de développement est Windows x64. La CI Linux de [`ccc06a4`](https://github.com/MrMybal/Syrnck/actions/runs/42800607349) a réussi ses 456 tests et l’installation de la distribution. Les jobs Windows/macOS/sanitizers de cette exécution tournaient encore à la préparation du jalon des coffres système. Cette preuve précède les nouveaux fournisseurs ; leur CI dédiée vérifie séparément les vrais coffres et les SDK sans fournisseur. Configurations CMake et jobs individuels réussis ne prouvent pas une version publiée ou entièrement qualifiée. Les autres architectures, ARM64 comprise, exigent encore une validation sur cible.
 
 Le binding Go du cœur possède un backend DLL Windows et un backend cgo Unix. Le module Syncthing optionnel a ses exigences séparées. Déclarer un backend ne prouve pas une validation ARM64.
 

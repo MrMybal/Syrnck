@@ -5,7 +5,7 @@ description: Créer, vérifier et reprotéger les fichiers de clés ; ouvrir les
 section: Storage
 parent: storage
 order: 55
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Créer un fichier de clé {#create}
@@ -61,6 +61,33 @@ Les anciennes enveloppes restent utilisables avec leurs anciens mots de passe. C
 
 L'[API C++](doc:api-password-keys) détient les octets secrets dans `SecretKey`, déplaçable sans copie. L'[ABI C](doc:api-c-abi#protected-keys) et le [binding Go](doc:go-binding#protected-keys) fournissent des propriétaires natifs opaques : authentifier une fois, ouvrir des sessions Store courtes, puis fermer explicitement le propriétaire. Sa fermeture n'invalide pas les Stores ouverts, qui gardent leurs propres clés. Les buffers de mots de passe appartiennent toujours à l'appelant.
 
+## Coffres de clés système {#system-vault}
+
+L'[API C++ native des coffres](doc:api-system-key-vault) conserve des clés de stockage, graines de signature et clés maîtresses scellées indépendantes dans le compte système courant. Elle est distincte des fournisseurs de fichiers protégés ci-dessus. La sélection par environnement CLI et les propriétaires C/Go ne choisissent pas encore ce fournisseur.
+
+```cpp
+#include <syrnck/key_vault.hpp>
+
+syrnck::SystemKeyVault vault;
+auto reference = vault.generate(syrnck::VaultKeyPurpose::sealed);
+auto master = vault.open_secret(reference);
+// Conserver reference.encode() dans la configuration locale publique.
+// Exporter une sauvegarde protégée avant de dépendre du coffre de ce compte.
+auto backup = vault.export_protected(reference, backup_password);
+```
+
+`generate`, `save` et `import_protected` créent de nouvelles entrées avec des identifiants aléatoires de 256 bits. Aucune énumération, aucun nom de cible choisi par l'appelant, aucune mise à jour. Les références portent une version, un usage et un identifiant hexadécimal minuscule ; l'enregistrement associe ce même usage/identifiant au secret. `open_signer` rend un propriétaire natif de signature sans export de graine brute. `export_protected` utilise le format existant de 104 octets, authentifié et distinct par usage. L'appelant possède ses buffers de mots de passe et doit enregistrer la sauvegarde hors du workspace. Une référence seule ne restaure pas un compte ou une machine perdus.
+
+| Plateforme | Fournisseur et prérequis |
+| --- | --- |
+| Windows | Identifiants génériques du Gestionnaire d'identification, compte courant sur cet hôte (`CRED_PERSIST_LOCAL_MACHINE`). Une session utilisable est nécessaire ; une session réseau seule ou cloisonnée peut refuser l'accès. Aucune itinérance d'entreprise demandée. |
+| macOS | Mots de passe génériques du Trousseau. La création utilise le trousseau par défaut ; un chemin absolu optionnel au constructeur choisit un trousseau existant sans modifier le défaut ni la liste de recherche. Les opérations demandent un échec plutôt qu'une fenêtre d'authentification. Le propriétaire du compte doit configurer déverrouillage et confiance. |
+| Linux | libsecret et le bus de session Secret Service du compte. L'écriture exige une collection par défaut existante et déverrouillée. Les lectures ne demandent pas de déverrouillage ; plusieurs enregistrements correspondants sont refusés. Les appels partagent une échéance d'annulation de 30 secondes par opération du backend. Les règles du fournisseur peuvent exiger une invite à la création/suppression ; un hôte résident doit disposer d'une session autorisée déverrouillée. |
+
+Configurer `SYRNCK_SYSTEM_KEY_VAULT=AUTO` (défaut), `ON` (obligatoire) ou `OFF`. Sous Linux, les fichiers de développement `libsecret-1` présents activent le fournisseur ; un SDK installé construit ainsi exige aussi les fichiers de développement libsecret. `SystemKeyVault::provider()` indique `windows-credential-manager`, `macos-keychain`, `linux-secret-service` ou `unavailable` ; cela ne prouve pas que la session du compte est déverrouillée. Un fournisseur/une session absent, un coffre verrouillé, une référence absente ou un enregistrement invalide échoue explicitement, sans repli en clair ou vers un fichier. Le stockage du fournisseur, les copies système/bibliothèque et les permissions du compte relèvent de l'OS. Cela n'isole pas les clés dans du matériel et ne garantit pas qu'un autre processus du même compte ne lise pas les identifiants. L'API d'écriture Windows remplace une cible exacte existante ; Syrnck génère un nouvel identifiant imprévisible et vérifie son absence, sans proposer de contrat atomique de création exclusive à un nom choisi par l'appelant.
+
+Supprimer une entrée n'invalide pas les propriétaires natifs existants, ne renouvelle pas le chiffrement du dépôt, ne révoque pas les copies exportées et ne retire pas une autorisation serveur. Exporter/vérifier des sauvegardes protégées indépendantes avant un changement de compte. Les sauvegardes ordinaires du Store ne capturent pas le coffre OS. La qualification réelle optionnelle utilise `SYRNCK_TEST_SYSTEM_VAULT=ON` et `key_vault_system` ; Linux lance un bus/trousseau séparé, macOS crée et supprime un trousseau de test explicitement choisi, Windows crée/retire uniquement ses entrées synthétiques aléatoires.
+
 ## Travaux de sécurité restants {#limits}
 
-Ces fournisseurs ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Aucun de ces fournisseurs ne fournit de coffre OS ou de rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).
+Les fournisseurs de fichiers protégés ouvrent le chiffrement au repos existant. Le [workflow chiffré explicite](doc:sealed-repositories) utilise une clé maîtresse indépendante et une finalité de protection distincte pour le transport opaque. Le coffre système C++ séparé n'intègre pas encore la sélection des fournisseurs CLI/C/Go ni la rotation/révocation distribuée. La signature utilise des [signataires protégés distincts](doc:signing-keys). Checkout et staging de téléchargement persistant peuvent contenir du clair. Voir les [limites de sécurité actuelles](doc:limits#security).

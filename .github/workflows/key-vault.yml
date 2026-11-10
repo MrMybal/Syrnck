@@ -1,0 +1,47 @@
+name: System key vaults
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  vault:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        provider: ['ON', 'OFF']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Isolated Secret Service dependencies
+        if: runner.os == 'Linux' && matrix.provider == 'ON'
+        run: sudo apt-get install -y libsecret-1-dev gnome-keyring dbus-x11
+      - name: macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Fetch verified dependency archives
+        run: python scripts/fetch_dependencies.py
+      - name: Configure native vault qualification
+        run: >-
+          python scripts/build.py configure
+          -DSYRNCK_BUILD_NETWORK=OFF -DSYRNCK_BUILD_CLI=OFF
+          -DSYRNCK_BUILD_DOCUMENTATION=OFF -DSYRNCK_BUILD_BENCHMARKS=OFF
+          -DSYRNCK_TEST_GO=OFF -DSYRNCK_TEST_SYNCTHING=OFF
+          -DSYRNCK_SYSTEM_KEY_VAULT=${{ matrix.provider }}
+          -DSYRNCK_TEST_SYSTEM_VAULT=${{ matrix.provider }}
+      - name: Build native API and installed SDK targets
+        run: python scripts/build.py build --target syrnck_key_vault_tests syrnck_git syrnck_ffi syrnck_ffi_static
+      - name: Test actual vaults and relocated SDK consumers
+        run: python scripts/build.py test --output-on-failure -R "^(key_vault_references|key_vault_system|sdk_distribution)$"
+      - name: Retain diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: key-vault-${{ matrix.os }}-${{ matrix.provider }}
+          path: build/Testing/Temporary/**
+          if-no-files-found: ignore

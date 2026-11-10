@@ -1293,5 +1293,6 @@
   "sealed-go": "go-binding#sealed-repositories",
   "sealed-agent": "sealed-repositories#resident",
   "syncthing-untrusted": "syncthing#untrusted",
-  "syncthing-receiver": "syncthing#opaque-receiver"
+  "syncthing-receiver": "syncthing#opaque-receiver",
+  "system-key-vault": "key-files#system-vault"
 }
