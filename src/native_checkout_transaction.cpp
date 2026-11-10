@@ -1199,15 +1199,23 @@ void Transaction::cleanup(OperationOptions options) {
   const auto data = record.data(store_);
   std::vector<fs::path> owned;
   if (present(data)) {
-    for (const auto &entry : fs::directory_iterator(data))
+    for (const auto &entry : fs::directory_iterator(data)) {
+      if (transient_metadata_disappeared(entry.path(), options.stop))
+        continue;
       require(entry.path().filename() == "new" || entry.path().filename() == "old",
               "unexpected native checkout data");
+    }
     for (const auto *area : {"new", "old"}) {
       const auto parent = data / area;
       if (!present(parent))
         continue;
       for (const auto &entry : fs::directory_iterator(parent)) {
         throw_if_cancelled(options.stop);
+        // Foreign deletion backups can vanish between enumeration and status.
+        // Never delete or trust them; tolerate only observed disappearance of
+        // *.tmp names. Canonical files and persistent unknown entries stay strict.
+        if (transient_metadata_disappeared(entry.path(), options.stop))
+          continue;
         const auto name = utf8(entry.path().filename());
         const auto status = entry.symlink_status();
         require(fs::is_regular_file(status) && !native_link_like(entry.path(), status),

@@ -409,6 +409,37 @@ void missing_objects(const fs::path &project) {
               text(read_bytes(project / "asset.bin")) == "original",
           "missing target objects changed workspace or references");
 }
+
+void foreign_cleanup_entries(const fs::path &project) {
+  Store store(project / ".syrnck", {}, true);
+  write(project / "asset.bin", "original");
+  write(project / "script", "script");
+  const auto base = store.commit_directory(project, "main", "baseline");
+  const auto target = target_revision(store, base, "replacement");
+  hook = [](std::string_view phase, const fs::path &) {
+    if (phase == "checkout.committed")
+      throw Error("pause before private cleanup");
+  };
+  fails([&] { store.checkout_directory(project, "main", target); });
+  hook = {};
+  const auto status = store.checkout_status();
+  require(status["state"] == "committed", "cleanup fixture was not committed");
+  const auto data = store.root() / "checkouts" / status["id"].get<std::string>();
+  for (const auto &relative : {"foreign.tmp", "new/0.BIN.tmp", "old/foreign.tmp", "new/foreign.bin"}) {
+    const auto foreign = data / relative;
+    write(foreign, "unowned bytes");
+    fails([&] { store.recover_checkout(); });
+    require(text(read_bytes(foreign)) == "unowned bytes" &&
+                store.checkout_status()["state"] == "committed" &&
+                store.refs().at("heads/main").id == target,
+            "cleanup removed a persistent foreign entry or changed history");
+    require(fs::remove(foreign), "cannot remove owned cleanup fixture");
+  }
+  store.recover_checkout();
+  require(store.checkout_status()["pending"] == false &&
+              text(read_bytes(project / "asset.bin")) == "replacement",
+          "cleanup failed after explicit foreign-entry preservation");
+}
 } // namespace
 namespace syrnck::testing {
 void io_checkpoint(std::string_view phase, const fs::path &path) {
@@ -438,6 +469,7 @@ int main() {
                   storage);
       }
     missing_objects(root / "missing");
+    foreign_cleanup_entries(root / "foreign-cleanup");
     std::cout << "native checkout, recovery, races and retention passed\n";
   } catch (const std::exception &error) {
     hook = {};
